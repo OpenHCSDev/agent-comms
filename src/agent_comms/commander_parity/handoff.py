@@ -117,34 +117,36 @@ class FinishedHandoffCase:
             return UnverifiedParity("Finished-work transfer needs two real registered unit holders")
         cases = []
         for label, execute in (("current", cls.current), ("native", cls.native)):
-            with LifecycleRun.open(extra_threads=owners) as run:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    receiver = next(owner for owner in owners if owner != run.worker)
-                    delivered = run.complete(run.create())
-                    before = cls.state(run, delivered.id, receiver)
-                    document = OrderFile.read(run.document.read_text())
-                    document = replace(
-                        document,
-                        problems=(delivered.id,),
-                        order=replace(document.order, id=uuid4().hex),
+            with (
+                LifecycleRun.open(extra_threads=owners) as run,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                receiver = next(owner for owner in owners if owner != run.worker)
+                delivered = run.complete(run.create())
+                before = cls.state(run, delivered.id, receiver)
+                document = OrderFile.read(run.document.read_text())
+                document = replace(
+                    document,
+                    problems=(delivered.id,),
+                    order=replace(document.order, id=uuid4().hex),
+                )
+                run.decisions.write_text(json.dumps([receiver]))
+                reference = run.invoke(
+                    "from pathlib import Path; import sys; from agent_comms.comms import Comms; "
+                    "todo=Comms(Path(sys.argv[1])).goals.todos.get(sys.argv[2]); "
+                    "todo.order.require_transfer(todo)",
+                    str(run.commander.root),
+                    delivered.id,
+                )
+                attempt = execute(run, receiver, document, delivered.id)
+                cases.append(
+                    (
+                        label,
+                        reference.outcome,
+                        attempt.outcome,
+                        tuple(reference.stderr.decode(errors="replace").splitlines()[-1:]),
+                        tuple(attempt.stderr.decode(errors="replace").splitlines()[-1:]),
+                        before == cls.state(run, delivered.id, receiver),
                     )
-                    run.decisions.write_text(json.dumps([receiver]))
-                    reference = run.invoke(
-                        "from pathlib import Path; import sys; from agent_comms.comms import Comms; "
-                        "todo=Comms(Path(sys.argv[1])).goals.todos.get(sys.argv[2]); "
-                        "todo.order.require_transfer(todo)",
-                        str(run.commander.root),
-                        delivered.id,
-                    )
-                    attempt = execute(run, receiver, document, delivered.id)
-                    cases.append(
-                        (
-                            label,
-                            reference.outcome,
-                            attempt.outcome,
-                            tuple(reference.stderr.decode(errors="replace").splitlines()[-1:]),
-                            tuple(attempt.stderr.decode(errors="replace").splitlines()[-1:]),
-                            before == cls.state(run, delivered.id, receiver),
-                        )
-                    )
+                )
         return HandoffComparison(tuple(cases))
