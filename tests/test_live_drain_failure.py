@@ -118,7 +118,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
             await agent.inputs.drain_inbox("beta")
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
-        assert current.thread.active_turn.executing
+        assert current.thread.turn_record.read().executing
         assert current.presentation.status.working
         assert not current.presentation.status.details
         activity = (comms.root / "activity.jsonl").read_bytes()
@@ -241,10 +241,14 @@ async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monk
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", broken)
     try:
-        agent.inputs.ensure_live_drain("beta")
-        task = agent.inputs.state("beta").drain_task
+        # The error propagates from the task; retiring it clears the watcher
+        # without terminating the process.
+        task = asyncio.create_task(agent.inputs.observe("beta"))
+        agent.inputs.state("beta").drain_task = task
         with pytest.raises(ValueError, match="unexpected drain implementation failure"):
             await task
+        agent.inputs._retire_observer("beta", task)
+        assert agent.inputs.state("beta").observation_watcher is None
         assert isinstance(
             owner_view(comms).activity.readiness.source_diagnostic(),
             StoppedDrainDiagnostic,

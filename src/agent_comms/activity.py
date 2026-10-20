@@ -103,9 +103,11 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     @abstractmethod
     def recovery(self) -> str: ...
 
-    @property
-    def headline(self) -> str:
-        return "Inbox unavailable"
+    headline: ClassVar[str] = "Inbox unavailable"
+
+    @classmethod
+    def from_error(cls, owner: OwnerIdentity, error: Exception) -> Self:
+        return cls(owner, type(error).__name__, str(error), recorded_at=time.time())
 
     @property
     def summary(self) -> str:
@@ -125,12 +127,14 @@ class UnavailableDrainDiagnostic(DrainDiagnostic):
         return "Waiting for recovery"
 
 
+class FailedWakeDiagnostic(UnavailableDrainDiagnostic):
+    headline = "Wake failed"
+
+
 class NativeInputDrainDiagnostic(DrainDiagnostic):
     """A native request failure is not evidence that the inbox cannot be read."""
 
-    @property
-    def headline(self) -> str:
-        return "Native request failed"
+    headline = "Native request failed"
 
     @property
     def recovery(self) -> str:

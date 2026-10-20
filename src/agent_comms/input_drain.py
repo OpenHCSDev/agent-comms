@@ -25,7 +25,10 @@ from .acp_extension import (
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import IdentityConflict
-from .drain_failures import DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures
+from .drain_failures import (
+    DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures, record_drain_failure,
+)
+from .activity import FailedWakeDiagnostic
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
@@ -161,18 +164,47 @@ class ExecutionWaitingObservation(PrivateObservation):
 
 
 class TickState(ABC):
-    @abstractmethod
     async def next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> SettledTick | FullTick | FailedTick:
+        try:
+            return await self._next(observation, session_id, revision)
+        except UNAVAILABLE_DRAIN_ERRORS as error:
+            return FailedTick(error)
+
+    @abstractmethod
+    async def _next(
         self, observation: InputObservation, session_id: str, revision: TickRevision,
     ) -> SettledTick | FullTick: ...
 
 
 class UnsettledTick(TickState):
-    async def next(
+    async def _next(
         self, observation: InputObservation, session_id: str, revision: TickRevision,
     ) -> FullTick:
         read = await observation._own_entry(session_id)
         return FullTick(replace(revision, registry=read.revision), read.entry)
+
+
+@dataclass(frozen=True, slots=True)
+class FailedTick(TickState):
+    error: Exception
+
+    async def _next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> FullTick:
+        return await UnsettledTick()._next(observation, session_id, revision)
+
+    async def apply(
+        self, observation: InputObservation, session_id: str, watcher: WireWatch,
+    ) -> TickState:
+        thread = observation.sessions.require(session_id)
+        snapshot = await Coordination.run_worker(observation.comms.registry.snapshot)
+        owner = snapshot.owner_identity(thread)
+        await record_drain_failure(
+            observation.comms, thread, owner, FailedWakeDiagnostic, self.error,
+        )
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,16 +262,16 @@ class SettledTick(TickState):
     claimed_after_seq: int | None
     through_seq: int
 
-    async def next(
+    async def _next(
         self, observation: InputObservation, session_id: str, revision: TickRevision,
     ) -> SettledTick | FullTick:
         if revision.other != self.revision.other or not observation._quiescent(session_id):
-            return await UnsettledTick().next(observation, session_id, revision)
+            return await UnsettledTick()._next(observation, session_id, revision)
         if revision.registry != self.revision.registry:
             # A standby's wait graph also depends on other threads' entries.
             if observation.effects.turns.goals.in_standby(session_id):
-                return await UnsettledTick().next(observation, session_id, revision)
-            step = await UnsettledTick().next(observation, session_id, revision)
+                return await UnsettledTick()._next(observation, session_id, revision)
+            step = await UnsettledTick()._next(observation, session_id, revision)
             if step.entry != self.entry:
                 return step
         else:
@@ -260,6 +292,10 @@ class SettledTick(TickState):
 
 class InputObservation:
     """File-driven observation and process-local wake behavior."""
+
+    comms: Comms
+    sessions: SessionLifecycle
+    closing: bool
 
     def _tick_paths(self) -> TickRevisionPaths:
         configuration = self.sessions.config.configuration
