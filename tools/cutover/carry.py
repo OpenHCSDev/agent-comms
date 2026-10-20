@@ -35,7 +35,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
@@ -187,10 +187,14 @@ class StoreCarry(Carry):
 
 
     @classmethod
+    def has_store(cls, root: Path) -> bool:
+        return cls.store.path_in(root).exists()
+
+    @classmethod
     @contextmanager
     def store_transaction(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
         """None when this bus has no store; dry runs and errors always roll back."""
-        if not cls.store.path_in(root).exists():
+        if not cls.has_store(root):
             yield None
             return
         with closing(CoordinationStore.writer(cls.store.path_in(root))) as db:
@@ -226,10 +230,10 @@ class TodoRows(StoreCarry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        if not cls.has_store(root):
+            return cls.carried(root, 0, {}, apply=apply)
         with cls.todo_rows(root, apply=apply) as db:
-            if db is None:
-                return cls.carried(root, 0, {}, apply=apply)
-            return cls.carry_rows(root, db, apply=apply)
+            return cls.carry_rows(root, cast(sqlite3.Connection, db), apply=apply)
 
     @classmethod
     @abstractmethod
