@@ -11,6 +11,13 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .family_f import (
+    ConfigurationComparison,
+    TransferComparison,
+    commander_page,
+    multiple_commanders,
+    scheduled_wake,
+)
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
 
@@ -126,6 +133,10 @@ class ScheduledWakeParityRow(ParityRow):
     native = "Core-owned scheduled commander wake"
     phases = (ControlPlanePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return scheduled_wake()
+
 
 class StandingRulesParityRow(ParityRow):
     number = 15
@@ -196,6 +207,10 @@ class ConfigurationParityRow(ParityRow):
     native = "Core project and registry configuration"
     phases = (CutoverPhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return ConfigurationComparison.read()
+
 
 class CommanderPageParityRow(ParityRow):
     number = 22
@@ -203,6 +218,10 @@ class CommanderPageParityRow(ParityRow):
     current = "`fleet-board.md`, `order.py board`, `rotate.py`, `judge.py`"
     native = "Toad commander page rendering Core through `ui_model`"
     phases = (CommanderPagePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return commander_page()
 
 
 class ApplicationRunParityRow(ParityRow):
@@ -219,6 +238,10 @@ class TracedTransferParityRow(ParityRow):
     current = "scratch `order.py send --reassign --traced`"
     native = "Transfer reads Todo owner history and requires traced source location"
     phases = (RecordPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return TransferComparison.read()
 
 
 class UnitWordingParityRow(ParityRow):
@@ -322,3 +345,7 @@ class MultipleCommandersParityRow(ParityRow):
         "load, board, alarms and forks; raw-send guard; duplicate project commander refused"
     )
     phases = (OneOrderOwnerPhase, CutoverPhase)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return multiple_commanders()
