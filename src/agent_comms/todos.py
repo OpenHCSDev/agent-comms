@@ -49,6 +49,7 @@ from .field_codec import (
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from .maintenance_barrier import MaintenanceBarrier
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
