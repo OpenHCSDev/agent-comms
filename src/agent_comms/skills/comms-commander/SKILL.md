@@ -118,7 +118,7 @@ Update the board row, move on. One line per unit touched.
 ## Merging
 
 - **One merger, and it is not the commander.** A merge fork judges each PR when it is pushed and runs the batches; the commander orders units. Only the merger merges.
-- **The merge queue runs the ratchets; nobody else does.** Units and forks push and run only the tests they wrote or touched, never the full suite or the ratchets. A ready PR that merges cleanly enqueues itself (`gh pr merge N --merge`); the queue groups them. Install once after the landings. Per-PR full gates are serial waste (owner, 2026-10-20).
+- **The merge queue runs the ratchets; nobody else does.** Units and forks push and run only the tests they wrote or touched, never the full suite or the ratchets. A ready PR that merges cleanly enqueues itself (`gh pr merge N --auto`); the queue groups them. Install once after the landings. Per-PR full gates are serial waste (owner, 2026-10-20).
 - **Conflicting PRs land as one batch, never one by one.** When several PRs conflict with main, the merger merges every head into one branch from fresh main, resolves each conflict once, and enqueues one PR; landing them in sequence makes each one conflict again. Tristan, 2026-10-20: "why in order? why not batch?"
 - **A failing PR drops out and the rest land in the same run.** A batch is never abandoned in silence: every landing and every drop is posted to #comms with its time and reason.
 - **A conflict is resolved, never sent back.** A lone conflicting PR is resolved by whoever holds it; several go to the merger's batch.

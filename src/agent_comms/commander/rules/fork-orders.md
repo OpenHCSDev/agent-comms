@@ -8,7 +8,7 @@ type: feedback
 
 Every order starts with these steps, before its own:
 1. At the first commit: push, verify `git ls-remote` equals HEAD, open a draft PR. Keep pushing to it.
-2. Land through the merge queue: mark ready, `gh pr merge N --merge`. The queue's hosted ratchets are the only ratchet run; never run them locally, never run the full suite.
+2. Land through the merge queue: mark ready, `gh pr merge N --auto` (the queue refuses `--merge`). The queue's hosted ratchets are the only ratchet run; never run them locally, never run the full suite.
 3. Delete slop instead of rewriting it: tests that patch our own code, wording asserts, tests of deleted code, the superseded copy of any system. No compatibility shims or aliases.
 4. Merge main only when the queue reports a conflict; resolve it, never send it back. Several conflicting PRs go to the merger as one batch.
 
