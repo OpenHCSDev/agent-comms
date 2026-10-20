@@ -7,7 +7,7 @@ from contextlib import closing
 from unittest.mock import patch
 
 import pytest
-from tools.cutover import carry_context_store as conversion
+from cutover import carry_context_store as conversion
 
 from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.context_store import AbsentContext, ContextRequest
