@@ -664,9 +664,9 @@ class Commander(CommanderContext):
                 continue
             answer = self.reply(t.holder, ordered)
             due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-            late.append(f'{t.holder} ({due}, {work.line}{answer})')
-        alarm = f'OVERDUE: {", ".join(late)} -> push or merge unfinished work now'
-        return [alarm] * bool(late)
+            late.append(f'OVERDUE: {t.id} {t.holder} ({due}, {work.line}{answer}) '
+                        '-> push or merge unfinished work now')
+        return late
 
     def install_lines(self, held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
         """One INSTALL line naming every held order that waits on the fleet's install."""

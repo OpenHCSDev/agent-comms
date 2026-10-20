@@ -1351,6 +1351,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+    pull_request_problem_label: ClassVar[str] = "Agent-Comms-Problem:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
@@ -1365,7 +1366,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def pull_request_problems(cls, body: str) -> tuple[str, ...]:
         """Explicit body declarations and problem headings, never titles or incidental mentions."""
         return tuple(re.findall(
-            r"(?m)^(?:#{1,6} +|Agent-Comms-Problem: +|Problem: +)(P[1-9][0-9]*)(?=[:\s]|$)", body))
+            rf"(?m)^(?:#{{1,6}} +|{re.escape(cls.pull_request_problem_label)} +|Problem: +)"
+            r"(P[1-9][0-9]*)(?=[:\s]|$)", body))
 
     def reissued(self, at: float) -> PendingProblemOrder:
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
@@ -1556,7 +1558,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """The order creates its PR with the immutable identity every progress reader uses."""
         created = subprocess.run(
             ("gh", "pr", "create", "-R", todo.repo, "--title", title, "--body-file", "-"),
-            input=f"Agent-Comms-Problem: {todo.id}\n{self.pull_request_body(body)}", cwd=checkout,
+            input=f"{self.pull_request_problem_label} {todo.id}\n{self.pull_request_body(body)}",
+            cwd=checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
             raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
