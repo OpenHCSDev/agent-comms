@@ -97,7 +97,18 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         owner = comms.registry.require(name).require_process().pid
         assert owner != os.getpid() and os.getpgid(owner) == owner
         turn = asyncio.create_task(first.prompt(name, [{"type": "text", "text": "work"}]))
-        await asyncio.wait_for(started.wait(), 15)
+        provider_started = asyncio.create_task(started.wait())
+        try:
+            done, _ = await asyncio.wait(
+                (provider_started, turn), timeout=15,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if turn in done:
+                await turn  # Surface an admission error, not a misleading provider timeout.
+            assert provider_started in done, "Native owner never reached the loopback provider"
+        finally:
+            provider_started.cancel()
+            await asyncio.gather(provider_started, return_exceptions=True)
         await first.shutdown()
         turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
