@@ -94,7 +94,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsVerdictTool, {"problem": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
     yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead
-    yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",), 0))}, lead
+    yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",)))}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(3000),
         commander="lead", assigner=actor,

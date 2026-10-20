@@ -254,11 +254,15 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
     assert lines(comms, RulesDue) == [
         "RULES DUE (no rule review recorded for lead) -> agent-comms-commander rules review"
         " and answer the drawn rules before any order"]
-    review(DrawnRuleReviewEntry(("Declare each fact once", "Kinds are class families"), 1))
+    drawn = ("Declare each fact once and derive all consumers from its owner.",
+             "Kinds are class families whose declarations own their behavior and membership.")
+    review(DrawnRuleReviewEntry(drawn))
     with pytest.raises(ValueError, match="file:line or P-number"):
         review(AnsweredRuleReviewEntry(1, "This tick reads every open order before it sends any new one."))
-    review(AnsweredRuleReviewEntry(1, "This tick moves rules.py:47 into one typed Core record that Core owns."))
-    assert review(AnsweredRuleReviewEntry(2, "This tick sends no order until the review family answers it.")) == ()
+    review(AnsweredRuleReviewEntry(1, drawn[0] + " rules.py:47"))
+    with pytest.raises(ValueError, match="file:line or P-number"):
+        review(AnsweredRuleReviewEntry(2, drawn[1]))
+    assert review(AnsweredRuleReviewEntry(2, drawn[1] + " P275")) == ()
     assert lines(comms, RulesDue) == []
     later = time.time() + RulesDue.max_age + 60
     monkeypatch.setattr(time, "time", lambda: later)

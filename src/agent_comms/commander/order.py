@@ -19,41 +19,89 @@ and refuses to let a deadline lapse silently.
 """
 from __future__ import annotations
 
-import argparse, asyncio, os, re, subprocess, sys, time
+import argparse
+import asyncio
+import os
+import re
+import subprocess
+import sys
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
+from pydantic import PrivateAttr
+
+from agent_comms_hooks import ClaudeHook
+from agent_comms_hooks.watch import PeerSync
+
 from ..change_report import FileLine
-from ..comms import Comms
-from ..child_process import BoundedRun
+from ..child_process import BoundedRun, CheckPrinted
 from ..cli_commands import DeclaredOptions, option
+from ..comms import Comms
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
 from ..field_codec import boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
-from ..thread_identity import ThreadIncarnation
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
+from ..repo import Repo
 from ..standing_rules import HuntDue, RulesDue
 from ..storage_rules import UnitStorage
+from ..thread_identity import ThreadIncarnation
+from ..todos import (
+    ApplicationOrderRun,
+    AssignTodo,
+    BluntText,
+    CleanHunt,
+    CommitDelivery,
+    DirectiveText,
+    FileDeliveryEvidence,
+    InstallDeadline,
+    LocatedProblemFinding,
+    MechanicalOrderRun,
+    NoDeliveryEvidence,
+    NotifiedFirstCallEvent,
+    ObservedFirstCallEvent,
+    OperationDelivery,
+    OrderDeletion,
+    OrderedHunt,
+    OrderMessage,
+    OrderProgress,
+    OrderRun,
+    PendingProblemOrder,
+    PlannedInstallDeadline,
+    RecordFirstCallTodo,
+    Slop,
+    StrikeReason,
+    StrikeTodo,
+    Todo,
+    UnlocatedProblemFinding,
+    VerdictAudience,
+    VoidStrikeTodo,
+    WithdrawTodo,
+)
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
-                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
-                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, TodoList)
-from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
+from ..tools import (
+    CommsChangeProblemTool,
+    CommsFireTool,
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderServeTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsSendTool,
+    CommsTodoCreateTool,
+    CommsTodoListTool,
+    TodoList,
+)
 from . import capacity
-from ..repo import Repo
 from .config import CommanderConfig, CommanderRole
-from pydantic import PrivateAttr
+from .send_guard import CommanderSession
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -162,8 +210,10 @@ class CommanderContext(CommanderConfig):
 
     def post(self, audience: VerdictAudience, body: str) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        return self.call(CommsSendTool(sender=self.commander, target=target, body=body,
-                                  audience=audience.threads)).id
+        published = self.call(CommsSendTool(sender=self.commander, target=target, body=body,
+                                          audience=audience.threads))
+        PeerSync.sent(self, target)
+        return published.id
 
     def call(self, tool):
         return ThreadCaller(self.commander).invoke(tool, self.comms)
@@ -984,6 +1034,17 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         print(ctx.next_hunt())
+
+
+class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
+    """Run the hook against the selected commander's existing context and session owner."""
+
+    help = "inject or block when the selected commander owes its peer a relay"
+
+    def run(self, ctx: Commander) -> None:
+        hook = ClaudeHook.read()
+        if CommanderSession(hook.session_id, ctx).is_commander():
+            PeerSync.report(hook, ctx)
 
 
 class BoardVerb(OrderVerb):

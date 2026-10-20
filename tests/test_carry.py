@@ -65,6 +65,9 @@ class Repository:
         self.git("init", "-q")
         self.git("config", "user.email", "carry@example.invalid")
         self.git("config", "user.name", "Carry test")
+        declarations = self.path / STEPS / "carry.py"
+        declarations.parent.mkdir(parents=True, exist_ok=True)
+        declarations.write_bytes((REPO / STEPS / "carry.py").read_bytes())
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
@@ -90,7 +93,25 @@ def test_each_step_at_head_is_the_one_carry_its_module_declares():
         (declared,) = [value for value in vars(module).values() if isinstance(value, type)
                        and issubclass(value, Carry) and value.__module__ == module.__name__]
         assert (declared.__name__, declared.name()) == (step.declaration, step.name)
-        assert declared.__mro__[1] is step.family
+        assert declared.__mro__[1].__name__ == step.family.__name__
+
+
+def test_target_parent_and_its_ordering_arrive_with_first_step(tmp_path):
+    repo = Repository(tmp_path)
+    repo.commit({"carry_rows": step_source("TodoRows")})
+    declarations = tmp_path / STEPS / "carry.py"
+    declarations.write_text(
+        declarations.read_text()
+        + "\nraise AssertionError('target module must never be imported')\n"
+        + "class FutureParent(Carry):\n"
+        + "    @classmethod\n"
+        + "    def precedes(cls, later):\n"
+        + "        return issubclass(later, TodoRows)\n"
+    )
+    head = repo.commit({"carry_new": step_source("FutureParent")})
+    chain = CarryChain.at(tmp_path, head)
+    assert [step.name for step in chain.steps] == ["carry_new", "carry_rows"]
+    assert chain.steps[0].family.__name__ == "FutureParent"
 
 
 def test_steps_run_in_the_order_the_main_line_merged_them(tmp_path):
