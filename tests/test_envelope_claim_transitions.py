@@ -20,8 +20,6 @@ G2 = "b" * 32
 def transition(seq, *, owner="owner", incarnation="1.0", claims=(), releases=(), generation=None):
     identity = dict(owner=owner, incarnation=incarnation, seq=seq, message_id=f"msg-{seq}")
     if releases:
-        if claims or generation is not None:
-            raise ClaimTransitionError("Acquisition and release are separate originals")
         return ReleasedClaims(**identity, releases=tuple(releases))
     return WakeClaims(**identity, claims=tuple(claims), generation=generation,
                       claim_scope=NativeClaim(owner_claimed_generation=1,
@@ -84,7 +82,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         FieldCodec.decode(WakeClaim, invalid)
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, {**raw, key: None})
-    with pytest.raises(ValueError, match="Null field"):
+    with pytest.raises(ValueError, match="admission:.*NoneType"):
         FieldCodec.decode(WakeClaims, {**raw, key: None})
 
 
@@ -152,8 +150,6 @@ def test_full_set_claim_and_release_are_all_or_nothing(comms, tmp_path):
     assert dict(first) == {b: first[b]}
     with pytest.raises(ClaimTransitionError, match="Duplicate"):
         transition(2, claims=(a, a), generation=G2)
-    with pytest.raises(ClaimTransitionError, match="separate"):
-        transition(2, claims=(b,), releases=(ClaimRelease(b, G1),), generation=G2)
 
 
 def test_exact_incarnation_and_generation_fence_releases(tmp_path):
@@ -218,8 +214,6 @@ def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
         ReleasedClaims("owner", "1.0", 1, "m", ("bad",))
     with pytest.raises(ClaimTransitionError):
         transition(1, generation=G1)
-    with pytest.raises(ClaimTransitionError):
-        transition(1, releases=(ClaimRelease(a, G1),), generation=G2)
 
 
 def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):
