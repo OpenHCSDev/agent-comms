@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import CheckedProblemOrder, MergedProblemOrder, Todo
+from agent_comms.todos import CheckedProblemOrder, Todo
 from agent_comms.typed_table import TypedRow
 
 from .carry import Carried, TodoOrderShape
@@ -41,16 +41,18 @@ class MergedOrders(TodoOrderShape):
                     f" json_extract(t.\"order\", n.path || '.original') AS checked,"
                     f" json_extract(t.\"order\", n.path || '.sha') AS sha"
                     f' FROM "{Todo.declared_name}" t, json_tree(t."order") n'
-                    " WHERE n.key='kind' AND n.value=?"
+                    " WHERE n.key='kind' AND n.value='merged'"
                     " AND json_type(t.\"order\", n.path || '.original')='object'"
-                    " ORDER BY length(n.path) DESC",
-                    (MergedProblemOrder.declared_name,),
+                    " ORDER BY length(n.path) DESC"
+                    # 'merged' is the retired input tag; the checked order's
+                    # transition and codec own the current output declaration.
                 )
             )
             for row in saved:
                 merged = row.checked.merged(row.sha)
                 db.execute(
-                    f'UPDATE "{Todo.declared_name}" SET "order"=json_set("order", ?, json(?)) WHERE id=?',
+                    f'UPDATE "{Todo.declared_name}"'
+                    ' SET "order"=json_set("order", ?, json(?)) WHERE id=?',
                     (row.path, json.dumps(FieldCodec.encode(merged)), row.id),
                 )
             db.commit() if apply else db.rollback()
