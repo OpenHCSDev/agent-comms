@@ -58,23 +58,26 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, t
         UserTranscript("source request " * 1500, position=1, timestamp=timestamp),
         AssistantTranscript("source reply", position=2,
                             timestamp=None if timestamp is None else timestamp + 1.125),
-        NoticeTranscript("not portable conversation", position=3),
-        UserTranscript("", position=4),
+        NoticeTranscript("not portable conversation", position=3, timestamp=timestamp),
+        UserTranscript("", position=4, timestamp=timestamp),
     )
-    external.finish(turn_id="saved", item_id="item", events=events)
     root = tmp_path / "external-window"
     if timestamp is None:
-        with pytest.raises(ValueError, match="Copied conversation requires a recorded time"):
-            with CheckRoot(source, (owner.name,), root).open():
-                pytest.fail("An unknown source clock was rewritten as known time")
-    else:
-        with CheckRoot(source, (owner.name,), root).open() as copied:
-            session = Path(copied.registry.require(owner.name).session_file)
-            rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
-            assert [entry.message.text for entry in rows[1:]] == [event.text for event in events[:2]]
-            assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [
-                event.timestamp for event in events[:2]
-            ]
+        # Current records require a clock at their storage boundary, before copying.
+        with pytest.raises(TypeError, match="received NoneType"):
+            external.finish(turn_id="saved", item_id="item", events=events)
+        with external.reading() as original:
+            assert not original.has_records(original.cut().offset)
+        assert not root.exists()
+        return
+    external.finish(turn_id="saved", item_id="item", events=events)
+    with CheckRoot(source, (owner.name,), root).open() as copied:
+        session = Path(copied.registry.require(owner.name).session_file)
+        rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
+        assert [entry.message.text for entry in rows[1:]] == [event.text for event in events[:2]]
+        assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [
+            event.timestamp for event in events[:2]
+        ]
     with external.reading() as original:
         assert tuple(original.reverse(original.cut().offset))[0].events == events
     assert not root.exists()
