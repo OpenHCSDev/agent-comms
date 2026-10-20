@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections import deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import ClassVar
@@ -13,8 +12,6 @@ from typing import ClassVar
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
-from ..repo import Repo
-from ..repository_name import RepositoryName
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
@@ -166,7 +163,7 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
                      if todo.pending and not todo.holder)
         paired = cls.paired(comms, commander, rows, actor)
         assigned = {rule.todo.id for rule in paired}
-        return paired + tuple(cls(todo, WorkDispatch(
+        return paired + tuple(WaitingUnownedWheelSpin(todo, WorkDispatch(
             cls.order_for(todo, commander, actor), todo.revision))
             for todo in rows if todo.id not in assigned)
 
@@ -208,6 +205,20 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
             cls.after_stall(comms)
 
 
+class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
+    """A row needs a new unit; a proposed dispatch name is not an idle thread."""
+
+    def line(self) -> str:
+        return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
+
+    def heartbeat_group(self) -> object:
+        return type(self)
+
+    def heartbeat_line(self, current: Sequence[WaitingUnownedWheelSpin]) -> str:
+        rows = ", ".join(sorted(rule.todo.id for rule in current))
+        return f"{len(current)} unowned rows wait for a new unit: {rows}"
+
+
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     limit: ClassVar[int] = 30
@@ -217,81 +228,3 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         total = OrderEditCountRead.count(comms, commander)
         return str(total) if total > cls.limit else None
-
-
-@dataclass(frozen=True)
-class MergeGrowth(DatedStandingRule):
-    """A merge to a fleet repository's main that grew its source by more than the limit, judged by
-    its own first-parent diff and read from git on every read; nothing about it is stored."""
-
-    limit: ClassVar[int] = 40
-    window: ClassVar[str] = "12 hours ago"
-    repo: RepositoryName
-    sha: str
-    subject: str
-    merged: float
-    src: tuple[int, int]
-    tests: tuple[int, int]
-
-    @classmethod
-    def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Read first-parent growth in one local Git stream; updates own fetching.
-
-        Keep every first-parent commit, including zero-growth commits, rather
-        than letting a path filter simplify the merge history.
-        """
-        log = repo.git(
-            repo.checkout,
-            "log",
-            "--first-parent",
-            f"--since={cls.window}",
-            "--format=%H%x00%ct%x00%s",
-            "--numstat",
-            "-z",
-            "--no-renames",
-            "--diff-merges=first-parent",
-            "origin/main",
-        )
-        # -z keeps paths intact, including quoted names, tabs and newlines.
-        # A header starts with its SHA; each numstat row starts with two counts
-        # separated by tabs. Consume header fields before inspecting diff rows.
-        records = deque(log.split("\x00"))
-        while records:
-            sha = records.popleft().lstrip("\n")
-            if not sha:
-                continue
-            at, subject = records.popleft(), records.popleft()
-            src, tests = [0, 0], [0, 0]
-            while records and (not records[0] or "\t" in records[0]):
-                row = records.popleft().lstrip("\n")
-                if not row:
-                    continue
-                added, deleted, path = row.split("\t", 2)
-                if not (added.isdigit() and deleted.isdigit()):
-                    continue
-                for root, counts in ((repo.source, src), ("tests", tests)):
-                    if path == root or path.startswith(root.rstrip("/") + "/"):
-                        counts[0] += int(added)
-                        counts[1] += int(deleted)
-            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CommanderConfig.read_root(comms.root).repos
-                     for growth in cls.merges(repo) if growth.over)
-
-    @property
-    def over(self) -> bool:
-        net, tests = self.src[0] - self.src[1], self.tests[0] - self.tests[1]
-        return net > self.limit or tests > max(net, 0)
-
-    def began(self) -> float:
-        return self.merged
-
-    def line(self) -> str:
-        (a, d), (ta, td) = self.src, self.tests
-        return (
-            f"GROWTH {self.repo.to_wire()} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) "
-            f"tests +{ta}/-{td}: "
-            f"{self.subject[:90]} -> justify or send back the owner with a deletion order"
-        )

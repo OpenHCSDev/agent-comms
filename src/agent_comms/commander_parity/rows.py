@@ -1,6 +1,5 @@
 """Each native/current workflow declares its identity once."""
 
-from ..commander.standing import MergeGrowth
 from ..plan_phases import (
     CommanderPagePhase,
     ControlPlanePhase,
@@ -22,7 +21,7 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
-from .measurements import RuleComparison, StorageComparison, measured_load
+from .measurements import StorageComparison, measured_load
 from .story import StoryCase
 
 
@@ -176,18 +175,6 @@ class LoadForkingParityRow(ParityRow):
     @classmethod
     def verify(cls) -> ParityComparison:
         return LoadComparison.read()
-
-
-class GrowthAlarmParityRow(ParityRow):
-    number = 18
-    capability = "Growth alarm"
-    current = "`StandingRule.broken` growth delivery (formerly `growth_watch.py`)"
-    native = "`commander.standing.MergeGrowth.violations`: captured first-parent growth"
-    phases = (ControlPlanePhase,)
-
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return RuleComparison.read(MergeGrowth)
 
 
 class StorageHygieneParityRow(ParityRow):

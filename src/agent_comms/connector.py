@@ -388,8 +388,8 @@ class Connector:
             return tool.invoke(comms, arguments, caller=CALLER)
 
     def application(self) -> web.Application:
-        with self.opened_wire():
-            pass
+        with self.opened_wire() as comms:
+            CommanderHeartbeat.register(comms)
         app = web.Application()
         app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
@@ -407,7 +407,7 @@ class Connector:
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
-        heartbeat = CommanderHeartbeat(CALLER.name)
+        heartbeat = CommanderHeartbeat()
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
                 lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
