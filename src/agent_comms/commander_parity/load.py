@@ -10,6 +10,7 @@ from typing import ClassVar
 from ..child_process import BoundedRun
 from ..commander.config import CommanderConfig
 from ..field_codec import FieldCodec
+from ..launch_runtime import LaunchRuntime
 from ..private_path import FileRevision
 from . import ParityComparison, UnverifiedParity
 from .observations import CapacityObservation, MeasuredOutput
@@ -56,10 +57,12 @@ class CommandComparison(ParityComparison):
         before = state_files(config.state)
         # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
         # HOME and the environment stay unchanged; the actual CLI main runs.
+        runtime = LaunchRuntime.running()
         current = asyncio.run(
             BoundedRun.run(
-                (str(config.cli.parent / "python"), "-I", *arguments),
+                (str(runtime.interpreter), "-I", *arguments),
                 timeout=cls.timeout,
+                runtime=runtime,
             )
         )
         if not current.outcome.successful:
