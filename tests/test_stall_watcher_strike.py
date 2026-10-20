@@ -12,8 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
 from agent_comms.active_route import active_route_path
-from agent_comms.commander import standing
-from agent_comms.commander.config import CommanderConfig
+from agent_comms import todos
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.thread_identity import StallWatcherIncarnation
@@ -33,7 +32,7 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
     copied = original.with_name("copied-wire")
     shutil.copytree(original, copied)
     comms = Comms(copied)
-    standing.UnownedWheelSpin.after_stall(comms)
+    todos.UnownedWheelSpin.after_stall(comms)
     todo = comms.goals.todos.get("P1")
     assert [type(s) for s in todo.strikes] == [StrikeTodo]
     assert [type(r) for r in todo.released] == [ReleaseTodo]
@@ -76,10 +75,10 @@ def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(com
         if len(passes) == 2:
             raise asyncio.CancelledError
 
-    monkeypatch.setattr(standing.UnownedWheelSpin, "after_stall", classmethod(after_stall))
-    monkeypatch.setattr(standing.asyncio, "sleep", wait)
+    monkeypatch.setattr(todos.UnownedWheelSpin, "after_stall", classmethod(after_stall))
+    monkeypatch.setattr(todos.asyncio, "sleep", wait)
     try:
-        asyncio.run(standing.UnownedWheelSpin.watch(opened_wire))
+        asyncio.run(todos.UnownedWheelSpin.watch(opened_wire))
     except asyncio.CancelledError:
         pass
     assert len(passes) == 2 and not borrowed
@@ -87,13 +86,16 @@ def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(com
     assert "FileNotFoundError: no commander config" in caplog.text
 
 
-def test_parked_units_come_from_the_existing_commander_configuration(commander, commander_script):
+def test_parked_units_come_from_the_registry_on_every_reader(commander, commander_script):
     comms, _ = commander
-    config = CommanderConfig.installed().model_copy(update={"parked": frozenset({"worker"})})
-    config.write(Path.home())
-    CommanderConfig.installed.cache_clear()
+    other = Comms(comms.root)
+    comms.registry.set_parked('worker', True)
     working(comms, 'worker', 2.0)
-    assert standing.WheelSpin.idle(comms, "lead") == []
+    assert other.registry.require('worker').parked
+    assert todos.WheelSpin.idle(other, 'lead') == []
+    other.registry.set_parked('worker', False)
+    assert not comms.registry.require('worker').parked
+    assert [thread.name for thread in todos.WheelSpin.idle(comms, 'lead')] == ['worker']
 
 
 def test_blocked_held_orders_are_not_struck_or_released(commander, commander_script):
@@ -106,9 +108,9 @@ def test_blocked_held_orders_are_not_struck_or_released(commander, commander_scr
     copied = original.root.with_name('blocked-copy')
     shutil.copytree(original.root, copied)
     comms = Comms(copied)
-    standing.UnownedWheelSpin.after_stall(comms)
+    todos.UnownedWheelSpin.after_stall(comms)
     with pytest.raises(TodoConflict):
-        standing.UnownedWheelSpin(blocked, 'spare').assign(
+        todos.UnownedWheelSpin(blocked, 'spare').assign(
             comms, 'lead', comms.registry.require('spare'), StallWatcherIncarnation.watcher())
     assert comms.goals.todos.get('P1') == blocked == original.goals.todos.get('P1')
 
@@ -119,19 +121,19 @@ def test_commander_released_backlog_is_not_automatically_reassigned(commander):
     released = comms.goals.todos.apply('P1', ReleaseTodo(
         todo.revision, comms.registry.require('lead').incarnation, todo.held(),
         StrikeReason('Commander intentionally froze this unfinished order without authorizing automatic reassignment.')))
-    standing.UnownedWheelSpin.after_stall(comms)
+    todos.UnownedWheelSpin.after_stall(comms)
     assert comms.goals.todos.get('P1') == released
 
 
 def test_no_spare_leaves_the_old_holder_and_strikes_untouched(commander, commander_script):
     comms, _ = commander
     original = create(commander, 'P1')
-    standing.UnownedWheelSpin.after_stall(comms)
+    todos.UnownedWheelSpin.after_stall(comms)
     assert comms.goals.todos.get('P1') == original
     comms.registry.declare(comms.registry.new_thread("spare", frozenset({'comms'}), str(comms.root), created_at=3.0))
     working(comms, 'worker', 2.0)
     working(comms, 'spare', 3.0)
-    standing.UnownedWheelSpin.after_stall(comms)
+    todos.UnownedWheelSpin.after_stall(comms)
     assigned = comms.goals.todos.get('P1')
     assert assigned.holder == 'spare'
     assert len(assigned.strikes) == len(assigned.released) == 1
@@ -151,7 +153,7 @@ def test_refused_reassignment_keeps_the_original_owner_and_strikes(commander, co
     shutil.copytree(comms.root, copied)
     checks.rmdir()
     with pytest.raises(ValueError):
-        standing.UnownedWheelSpin.after_stall(Comms(copied))
+        todos.UnownedWheelSpin.after_stall(Comms(copied))
     assert Comms(copied).goals.todos.get('P1') == before == comms.goals.todos.get('P1')
 
 
@@ -198,7 +200,7 @@ finally:
             await asyncio.Future()
 
     active_route_path().parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(standing.asyncio, 'sleep', between)
+    monkeypatch.setattr(todos.asyncio, 'sleep', between)
     async with TestClient(TestServer(connector.application())):
         await asyncio.wait_for(done.wait(), timeout=30)
     assert 'Stall watcher pass failed' not in caplog.text
