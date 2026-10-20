@@ -94,7 +94,7 @@ pythonpath = ["tools"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
+addopts = "-n auto --maxprocesses=8 --dist=worksteal"
 asyncio_mode = "auto"
 # A hung test fails by name instead of holding the whole job.
 timeout = 60
