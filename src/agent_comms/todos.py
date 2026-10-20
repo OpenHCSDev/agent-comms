@@ -2565,9 +2565,7 @@ class Todo(TypedTable):
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
-        """Strike a replaced holder, never invent another release for already-unowned work."""
-        if self.assignment is None:
-            return assigned
+        """After assignment validation, fold its strike and release into the same row write."""
         owner, at = self.held(), RecordedEventTime(time.time())
         reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
                               f"Core reassigned the order to {assigned.held().owner}.")
