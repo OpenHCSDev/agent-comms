@@ -826,9 +826,11 @@ class StaleOrderGate(CommanderVerb):
         super().gate(ctx)
         stale = tuple(todo for todo in ctx.held_orders() if todo.overdue(time.time() - 30 * 60))
         if stale:
-            lines = (f'{todo.id}: holder {todo.holder}, deadline '
-                     f'{time.strftime("%Y-%m-%d %H:%M", time.localtime(todo.deadline.recorded_at("An order deadline")))}'
-                     for todo in stale)
+            lines = []
+            for todo in stale:
+                due = time.localtime(todo.deadline.recorded_at("An order deadline"))
+                lines.append(f'{todo.id}: holder {todo.holder}, deadline '
+                             f'{time.strftime("%Y-%m-%d %H:%M", due)}')
             sys.exit('REFUSED, nothing recorded: orders more than 30 minutes overdue:\n  '
                      + '\n  '.join(lines)
                      + '\nMove their deadlines or withdraw them before sending more work.')
