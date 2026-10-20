@@ -6,7 +6,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
@@ -14,6 +14,10 @@ from .native_tool_call import CodingCall, SelectedToolDenied
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
+    from .turn_goal_permission import TurnGoalPermission
 
 
 class NativeToolDeclaration(ToolDeclaration):
@@ -82,6 +86,9 @@ class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=N
 
     declared_name: str
     arguments: dict[str, object]
+
+    def published_goal(self, result: PiToolResult, permission: TurnGoalPermission) -> None:
+        result.published_goal(permission)
 
     def reads(self) -> str:
         return json.dumps(self.arguments)

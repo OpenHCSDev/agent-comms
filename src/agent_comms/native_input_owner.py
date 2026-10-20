@@ -24,6 +24,7 @@ from .private_send_rules import (
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .thread_identity import OwnerIdentity
+from .turn_goal_permission import GoalPermission, OwnerGoalPermission
 
 if TYPE_CHECKING:
     from .goals import Goal
@@ -37,6 +38,10 @@ class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
     thread: Thread
     claimed_generation: int
+
+    @property
+    def goal_permission(self) -> GoalPermission:
+        return OwnerGoalPermission(self.thread.goal)
 
     @property
     def turn_lease(self) -> TurnLeaseFence:
@@ -70,6 +75,7 @@ class RegistryOwner:
                 expected=expected, actual=self.thread,
                 expected_claim=claim_scope, claim_scope=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
+                goal_permission=OwnerGoalPermission(expected.goal),
             ).require_valid()
         except ReservationViolationError as error:
             raise RelationViolationError(f"live owner changed before turn claim: {error}") from error
@@ -108,6 +114,7 @@ class RegistryOwner:
                 expected_claim=self.claimed_generation,
                 claim_scope=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
+                goal_permission=self.goal_permission,
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"{reason}: {error}") from error

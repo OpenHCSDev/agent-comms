@@ -11,6 +11,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.coordinator import Coordination
 
@@ -36,6 +37,10 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
+from .turn_goal_permission import TurnGoalPermission
+
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,6 +49,10 @@ class CodingToolOwner(ABC):
     owner_name: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    @property
+    @abstractmethod
+    def goal_permission(self) -> TurnGoalPermission: ...
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
@@ -57,7 +66,9 @@ class CodingToolOwner(ABC):
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
         def check(store: Coordination) -> None:
-            self.verify(store, turn, self.comms.registry.snapshot())
+            snapshot = self.comms.registry.snapshot()
+            self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
+            self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
@@ -71,6 +82,10 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
+    def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
+        """The checked terminal shares its actual publication with this turn's grant."""
+        call.published_goal(result, self.goal_permission)
+
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
 
@@ -81,12 +96,13 @@ class CodingToolOwner(ABC):
         raise SelectedToolDenied("An ordinary input has no selected original")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
     claim_scope: WakeClaim
     session_dir: Path
     input_id: str
+    goal_permission: TurnGoalPermission = field()
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -167,6 +183,8 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
         _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        if not event.is_error:
+            self.owner.tool_completed(call, event.result)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

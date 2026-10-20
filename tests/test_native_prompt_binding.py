@@ -44,6 +44,7 @@ from agent_comms.native_pi import (
 )
 from agent_comms.native_prompt_binding import binding_store_path, install_prompt_binding_schema, native_request_digest
 from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.turn_goal_permission import OwnerGoalPermission
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -592,6 +593,7 @@ async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monk
                 owner_generation=generation,
                 committed_input_id=turn.input_id,
                 source_reads=source_reads,
+                goal_permission=OwnerGoalPermission(owner.goal),
             )
             is None
         )

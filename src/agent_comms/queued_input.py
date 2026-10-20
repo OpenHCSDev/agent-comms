@@ -32,7 +32,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
-from .turn_goal_permission import AcceptedGoalPermission
+from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 
 if TYPE_CHECKING:
@@ -104,7 +104,7 @@ class QueuedInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
         )
 
     @classmethod
@@ -320,7 +320,7 @@ class DeliveredInput(QueuedInput):
         return DeliveredFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=TurnGoalPermission(AcceptedGoalPermission(self.context.active_goal_id)),
             origins=(self.message,),
         )
 

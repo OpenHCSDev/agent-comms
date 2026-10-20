@@ -169,6 +169,7 @@ class SelectedAttempt:
             owner_name=participant.owner.thread.name,
             session_dir=session.directory,
             input_id=input_id,
+            goal_permission=participant.goal_permission,
         )
 
     async def prepare(self, session, action, write_authority):

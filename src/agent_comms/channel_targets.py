@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
     from .channels import Channel
     from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .history_result import HistoryPageResult
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DMConversation
     from .registry_provenance import RegistryProvenance
@@ -200,7 +200,6 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
-    history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
 
@@ -225,7 +224,9 @@ class ThreadTarget(NamedTarget):
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
-        return self.history_result_type.for_target(self.name, messages, has_older)
+        from .history_result import DmHistoryPageResult
+
+        return DmHistoryPageResult.for_target(self.name, messages, has_older)
 
     def contexts(self, declaration, channel):
         return declaration.selection_channels(channel, self.name)
