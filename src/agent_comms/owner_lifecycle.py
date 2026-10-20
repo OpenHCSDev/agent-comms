@@ -16,10 +16,6 @@ from typing import TYPE_CHECKING
 
 from .commander_heartbeat import CommanderHeartbeat
 
-if TYPE_CHECKING:
-    from .goal_management import Goals
-    from .messaging import Messaging
-
 from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState, SynchronousProcess
 from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
@@ -44,6 +40,10 @@ from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRe
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
+    from .messaging import Messaging
 
 _LOG = logging.getLogger(__name__)
 
