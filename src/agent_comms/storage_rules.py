@@ -26,8 +26,8 @@ from .storage_room import (
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .threads import Thread
     from .thread_identity import ThreadIncarnation
+    from .threads import Thread
 
 StoragePath = Annotated[Path, PathText]
 

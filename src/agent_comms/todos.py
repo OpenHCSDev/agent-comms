@@ -322,7 +322,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
         return (todo.id in self.problems
                 or any(identity in self.orders for identity in todo.held_order_ids))
 
-    def merged_commits_since(self, since: float) -> Iterator[str]:
+    def merged_commits(self) -> Iterator[str]:
         return iter(())
 
     async def delivery_merges(self, delivery: CommitDelivery,
@@ -339,9 +339,8 @@ class MergedPullRequest(PullRequest):
     merge: str
     merged_at: float
 
-    def merged_commits_since(self, since: float) -> Iterator[str]:
-        if self.merged_at >= since:
-            yield self.merge
+    def merged_commits(self) -> Iterator[str]:
+        yield self.merge
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -433,7 +432,8 @@ class PullRequests:
              f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
+            raise WorkBranchError(
+                listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
         rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
         for candidate in problems.values():
@@ -622,7 +622,7 @@ class PresentCheckout(ProgressCheckout):
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
-        """The actual check receipt links a head even without a problem token in its title."""
+        """A recorded check links a head even without a problem token in its title."""
         return (point for point in self.commits("", refs, *excluded)
                 if order.check.recorded(point.sha, str(self.path)))
 
@@ -924,7 +924,7 @@ class MergedProgress(FoundProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         return (cls(sha) for pr in source.requests("merged")
-                for sha in pr.merged_commits_since(source.since))
+                for sha in pr.merged_commits())
 
     @property
     def state(self) -> str:
@@ -3038,7 +3038,8 @@ class TodoStore(TypedStore):
         pulls = PullRequests(held)
         completed = tuple(closed for todo in held
                           for closed in todo.order.closed_by_merge(
-                              todo, tuple(repo for repo in repos if repo.holds(todo)), storage, pulls))
+                              todo, tuple(repo for repo in repos if repo.holds(todo)),
+                              storage, pulls))
         if not completed:
             return
         with self.writing() as db:

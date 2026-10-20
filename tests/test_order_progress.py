@@ -101,7 +101,7 @@ def test_unfinished_check_keeps_other_overdue_orders_visible(
     monkeypatch.setattr(OrderCheck, "timeout", 0.05)
     todo = replace(todo, order=replace(todo.order,
         check=OrderCheck(str(unit), "sleep 0.2; echo 0", CountCheckResult(0))))
-    monkeypatch.setattr(script.COMMS.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
+    monkeypatch.setattr(script.comms.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
     # The child really exceeds its timeout; partial stdout must never become a count.
     outcome = TimedOutOutcome(SignaledOutcome(9))
     assert isinstance(outcome.printed_count(b"0"), NoCountYetPrinted)

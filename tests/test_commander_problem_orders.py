@@ -108,7 +108,7 @@ def test_direct_creation_checks_defect_prose_before_writing(commander):
     lead = comms.registry.require('lead')
     with pytest.raises(ValueError, match='Soft wording'):
         comms.goals.todos.create(
-            'Psoft', 'OpenHCSDev/agent-comms', 'Please repair the store',
+            'Psoft', RepositoryName.from_wire('OpenHCSDev/agent-comms'), 'Please repair the store',
             creator=lead, owner=comms.registry.require('worker'), generation='ongoing',
             deadline=RecordedEventTime(1000), order=order(comms.root, 'soft-order'),
             goal=GoalRef(lead.name, lead.created_at, 'request'),

@@ -6,6 +6,7 @@ import pytest
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import ApplicationOrderRun, AssignTodo, GoalRef, MechanicalOrderRun, Todo, TodoStore
 from test_todos import order, thread
 
@@ -15,7 +16,8 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path):
     checked = replace(order(tmp_path), run=ApplicationOrderRun(planned))
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1)
-    todo = store.create('P1', 'OpenHCSDev/agent-comms', 'Repair the thread list',
+    todo = store.create('P1', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+        'Repair the thread list',
         creator=lead, owner=lead, generation='one', goal=GoalRef('lead', 1, 'one'), deadline=RecordedEventTime(1000),
         order=checked)
     assert FieldCodec.decode(Todo, FieldCodec.encode(todo)) == todo
@@ -27,7 +29,8 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path):
 def test_clean_transfers_keep_history_and_third_owner_needs_a_real_line(tmp_path):
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1)
-    first = store.create('P1', 'OpenHCSDev/agent-comms', 'Repair the thread list',
+    first = store.create('P1', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+        'Repair the thread list',
         creator=lead, owner=lead, generation='one', goal=GoalRef('lead', 1, 'one'), deadline=RecordedEventTime(1000),
         order=order(tmp_path))
     second = store.assign('P1', expected_revision=first.revision,
