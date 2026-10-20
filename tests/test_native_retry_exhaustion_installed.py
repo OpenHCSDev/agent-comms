@@ -64,6 +64,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     }}))
     (config / "settings.json").write_text(json.dumps({
         "compaction": {"enabled": False},
+        "nativeRecoveryBackoffMs": [1, 1, 1],
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
