@@ -5,18 +5,26 @@ from __future__ import annotations
 import io
 from collections.abc import Callable, Iterable
 from contextlib import redirect_stderr
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 
 from ..commander.config import CommanderConfig
-from ..commander.order import CommanderContext, refuse
+from ..commander.order import CommanderContext, OrderFile, refuse
 from ..comms import Comms
 from ..errors import RelationViolationError, ToolRefusedError
+from ..goal_actions import GoalActionContext, OrderGoalAction
 from ..messages import AlertKind, Message
 from ..task_sources import Decision
-from ..todos import OrderText, OrderWords, PlainText, Todo, WordingCorrection
+from ..todos import (
+    OrderText,
+    OrderWords,
+    PendingProblemOrder,
+    PlainText,
+    Todo,
+    WordingCorrection,
+)
 from ..tools import CommsDecisionTool, CommsProblemCloseTool
 from . import ParityComparison, UnverifiedParity
 
@@ -64,15 +72,18 @@ class WordingComparison(ParityComparison):
     observations: tuple[tuple[WordingOutcome, WordingOutcome], ...]
     owner: str
     native_owner: ClassVar[type[OrderWords]]
+    current_owner: ClassVar[Callable[..., object]] = refuse
 
     @property
     def passed(self) -> bool:
         return bool(self.observations) and all(a == b for a, b in self.observations)
 
     def describe(self) -> str:
+        different = sum(a != b for a, b in self.observations)
         return (
-            f"{len(self.observations)} retained texts through commander.order.refuse and "
-            f"{self.owner}; compared refusal and actual wording warnings; no publication"
+            f"{len(self.observations)} retained texts; mismatches={different}; "
+            f"current={self.current_owner.__module__}.{self.current_owner.__qualname__}; "
+            f"native={self.owner}; compared refusal and warnings; no publication"
         )
 
     @classmethod
@@ -101,14 +112,54 @@ class PlainWordsComparison(WordingComparison):
 
 class OrderWordingComparison(WordingComparison):
     native_owner = OrderText
+    current_owner = OrderFile.problems_found
+
+    @staticmethod
+    def native_request(context: CommanderContext, todo: Todo, text: str) -> object:
+        order = replace(todo.order.checked().copy_as(PendingProblemOrder), edits=(text,))
+        action = OrderGoalAction(
+            problem=todo.id,
+            expected_revision=todo.revision,
+            order=order,
+            request=context.comms.registry.require(context.commander).goal.require().id,
+            deadline=todo.deadline,
+            commander=context.commander,
+            assigner=context.incarnation,
+        )
+        return action.request_ref(
+            GoalActionContext(context.comms.goals, context.comms.registry.require(todo.holder))
+        )
 
     @classmethod
     def read(cls) -> ParityComparison:
-        return cls.compare_texts(
-            text
-            for todo in history(selected_context())
-            if todo.pending
-            for text in (*todo.order.checked().edits, todo.order.checked().report)
+        context = selected_context()
+        held = tuple(todo for todo in history(context) if todo.pending and todo.holder)
+        if not held:
+            return UnverifiedParity("No held order exists for the native pre-reservation check.")
+        todo = max(held, key=lambda item: item.order.checked().at.recorded_at("A live order"))
+        texts = tuple(
+            message.body
+            for message in messages(context.comms)
+            if cls.native_owner.refused(message.body)
+        )
+        if not texts:
+            return UnverifiedParity(
+                "No actual soft-worded message exists for a refusal comparison."
+            )
+        observed = []
+        for text in texts:
+            notes = io.StringIO()
+            with redirect_stderr(notes):
+                refused = OrderFile(
+                    todo.order.checked().copy_as(PendingProblemOrder), text, todo.text
+                ).problems_found(clean=True)
+            current = WordingOutcome(not refused, notes.getvalue())
+            native = WordingOutcome.read(lambda: cls.native_request(context, todo, text))
+            observed.append((current, native))
+        return cls(
+            tuple(observed),
+            "native ProblemOrderGoalAction.request_ref (no reservation/write); "
+            "current OrderFile.problems_found; OrderText selects actual refusal cases",
         )
 
 
