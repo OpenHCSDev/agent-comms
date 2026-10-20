@@ -94,7 +94,8 @@ class TranscriptRead[Result](ConversationPreparation):
         return self.thread.execution.prepare_conversation(self)
 
     def native(self) -> Result:
-        turns = self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
+        source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
+        turns = source.turns(self.bound)
         return self.from_turns(turns)
 
     def external(self) -> Result:
