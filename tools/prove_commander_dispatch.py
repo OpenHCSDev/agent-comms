@@ -21,12 +21,12 @@ from typing import Annotated, ClassVar
 from uuid import uuid4
 
 from agent_comms.change_report import FileLine
-from agent_comms.cli_commands import DeclaredOptions, option
+from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.commander import rotate
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import FieldCodec, PathText, option
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.messages import Message
@@ -280,7 +280,7 @@ def main() -> int:
     arguments = parser.parse_args()
     return (
         ProofCommand.member_named(arguments.command)
-        .from_namespace(arguments)
+        .from_arguments(arguments)
         .apply(Path(__file__).resolve().parents[1])
     )
 
