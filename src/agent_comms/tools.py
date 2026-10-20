@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -68,7 +69,7 @@ from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, Order
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole, SendableMessageKind
-from .native_tools import NativeToolDeclaration, NativeRequestTools
+from .native_tools import ArgumentTool, NativeToolDeclaration, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
 from .cli_result import ToolCatalogResult
@@ -293,7 +294,7 @@ def tool_field(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
-    ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
+    ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     description: ClassVar[str]
     bus_effect: ClassVar[str] = ("Changes the bus. Tristan has authorized claude-ai "
@@ -328,6 +329,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
                 },
             )
         return result
+
+    def cli_command(self, caller: str | None = None) -> InvokeCliCommand:
+        """Project this declaration into Core's existing external tool command."""
+        return InvokeCliCommand(caller=caller, tool=self.declared_name, arguments=self.arguments)
 
     @classmethod
     def invoke(
@@ -1387,6 +1392,15 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
     arguments: dict[str, object] = option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}")
+
+    def argv(self, root: Path) -> tuple[str, ...]:
+        """The CLI boundary owns its module, grammar and argument serialization."""
+        from . import cli
+
+        caller = ('--from', self.caller) if self.caller is not None else ()
+        return (sys.executable, '-m', cli.__name__, '--root', str(root),
+                self.declared_name, *caller, '--tool', self.tool,
+                '--arguments', json.dumps(self.arguments))
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,
