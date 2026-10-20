@@ -56,6 +56,9 @@ class Repository:
             [sys.executable, str(Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py"),
              "--root", self.root, "--base", base, "--head", head],
             cwd=self.path,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(
+                str(Path(path).resolve()) for path in os.environ["PYTHONPATH"].split(os.pathsep)
+            )},
             capture_output=True,
             text=True,
             timeout=120,  # Each comparison type-checks both revisions.
