@@ -1,7 +1,7 @@
 """The shared owner reconstructs prefixes, not the CLI decoders or the database."""
 import pytest
 
-from agent_comms.activity import ActivityState
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.runtime_updates import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
@@ -13,7 +13,7 @@ from test_codex_items import _output
 
 
 def start(turn, item, text='', accumulator=TextDraft):
-    return StartedItem(turn, item, ActivityState.WORKING, 'Replying',
+    return StartedItem(turn, item, ModelWaitPhase('Replying'),
                        accumulator.from_parts(AssistantTranscript, (text,), RecordedEventTime(1.0), item))
 
 
@@ -36,7 +36,7 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 
 def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp_path):
     output = _output(tmp_path)
-    activity = ActiveItem('t', 'a', ActivityState.WORKING, 'Replying')
+    activity = ActiveItem('t', 'a', ModelWaitPhase('Replying'))
     assert activity.accumulate(output) == (activity,)
     output.publish_batch([AppendDraftItem('t', 'a', 'suffix')])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
@@ -49,8 +49,8 @@ def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events == (AssistantTranscript('Hello!', timestamp=1.0, position='a'),)
-    assert ActiveItem('t', 'a', ActivityState.THINKING, 'stale').accumulate(output) == ()
+        assert row.events == (AssistantTranscript('Hello!', timestamp=9.0, position='a'),)
+    assert ActiveItem('t', 'a', ModelWaitPhase('stale')).accumulate(output) == ()
 
 
 def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_path):
@@ -83,36 +83,36 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
     output = _output(tmp_path)
     accumulator = ParagraphDraft.from_parts(ThinkingTranscript, [], RecordedEventTime(2.0), 'r')
     output.publish_batch([
-        StartedItem('t', 'r', ActivityState.THINKING, '', accumulator),
+        StartedItem('t', 'r', ModelWaitPhase(), accumulator),
         AppendDraftItem('t', 'r', 'Two', 1), AppendDraftItem('t', 'r', 'One', 0),
         AppendDraftItem('t', 'r', ' plus', 1),
     ])
     draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
     completed = ReasoningItem(id='r', type='reasoning', summary=['One', 'Two plus'])
-    assert draft.events[0].text == completed.events()[0].text == 'One\n\nTwo plus'
+    assert draft.events[0].text == completed.events(2.0)[0].text == 'One\n\nTwo plus'
     assert draft.events[0].timestamp == 2.0
 
 
 def test_non_text_items_never_acquire_invented_text(tmp_path):
     output = _output(tmp_path)
-    output.publish_batch([StartedItem('t', 'tool', ActivityState.WORKING, 'Run', DraftAccumulator(RecordedEventTime(1.0)))])
+    output.publish_batch([StartedItem('t', 'tool', ToolRunningPhase('Run'), DraftAccumulator(RecordedEventTime(1.0)))])
     with pytest.raises(ValueError, match='non-text item'):
         AppendDraftItem('t', 'tool', 'not a reply').accumulate(output)
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
 
-@pytest.mark.parametrize('started_at, expected', [
-    (RecordedEventTime(0.0), 0.0), (RecordedEventTime(1.0), 1.0), (UnrecordedEventTime(), 9.0),
+@pytest.mark.parametrize('started_at', [
+    RecordedEventTime(0.0), RecordedEventTime(1.0), UnrecordedEventTime(),
 ])
-def test_time_family_preserves_real_zero_and_unrecorded_completion_fallback(tmp_path, started_at, expected):
+def test_completion_keeps_its_original_clock_for_every_start_time(tmp_path, started_at):
     output = _output(tmp_path)
     output.publish_batch([
-        StartedItem('t', 'a', ActivityState.WORKING, '', DraftAccumulator(started_at)),
+        StartedItem('t', 'a', ModelWaitPhase(), DraftAccumulator(started_at)),
         CompletedItem('t', 'a', (AssistantTranscript('finished', timestamp=9.0, position='a'),)),
     ])
     with output.transcript.reading() as snapshot:
         row, = snapshot.forward(0, snapshot.cut().offset)
-        assert row.events[0].timestamp == expected
+        assert row.events[0].timestamp == 9.0
 
 
 @pytest.mark.parametrize('wire, state, expected', [
@@ -148,6 +148,6 @@ def test_wire_start_decoder_keeps_strict_integer_input(invalid):
 
 def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     output = _output(tmp_path)
-    output.publish_batch([FinishedItem('t', 'a', (AssistantTranscript('complete', position='a'),))])
+    output.publish_batch([FinishedItem('t', 'a', (AssistantTranscript('complete', timestamp=1.0, position='a'),))])
     assert not output.drafts
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
