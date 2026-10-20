@@ -110,7 +110,7 @@ class TacticalCommand(GuardedCommand):
 
     @staticmethod
     def _python_target(args: list[str]) -> tuple[str, str, list[str]]:
-        module = len(args) > 2 and args[1] == "-m"
+        module = len(args) > 2 and args[1] in ("-m",)
         target = args[2] if module else args[1] if len(args) > 1 else ""
         if not target or target.startswith("-"):
             return "", "", []
@@ -132,13 +132,15 @@ class TacticalCommand(GuardedCommand):
 
     @staticmethod
     def _systemctl_args(args: list[str]) -> list[str]:
-        while args and args[0] in ("--user", "--system", "--no-pager"):
+        global_options = {"--user": True, "--system": True, "--no-pager": True}
+        while args and global_options.get(args[0], False):
             args = args[1:]
         return [arg.removesuffix(".service") for arg in args[:2]]
 
     @staticmethod
     def _uv_args(args: list[str]) -> list[str]:
-        return args[1:] if args and args[0] in ("pip", "tool") else args
+        subcommands = {"pip": True, "tool": True}
+        return args[1:] if args and subcommands.get(args[0], False) else args
 
     @classmethod
     def runs(cls, words: Words) -> bool:
@@ -165,11 +167,11 @@ class TacticalCommand(GuardedCommand):
             "-n",
             "--adjustment",
         )
-        while args and (rule := prefixes.get(Path(args[0]).name)) is not None:
-            args.pop(0)
+        while args and Path(args[0]).name in prefixes:
+            rule = prefixes[Path(args.pop(0)).name]
             while args and args[0].startswith("-"):
                 option = args.pop(0)
-                if option == "--":
+                if option in ("--",):
                     break
                 if option in value_options and args:
                     args.pop(0)
