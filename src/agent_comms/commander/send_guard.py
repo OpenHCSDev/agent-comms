@@ -192,7 +192,7 @@ class SourceChangeCommand(TacticalCommand):
 
     @classmethod
     def refused(cls, words: Words, session: CommanderSession, cwd: Path) -> tuple[str, ...]:
-        if cls.landing(words, cwd) or Path(words[0]).name != "git":
+        if cls.landing(words, cwd) or Path(words[0]).name not in GitProgram.names:
             return ()
         invocation = GitProgram.invocation(list(words[1:]), cwd)
         if (
