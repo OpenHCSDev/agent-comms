@@ -176,6 +176,10 @@ class LifecycleRun:
                             "from reaching zero.",
                             "This is stupid because an unfinished copied decision must not count "
                             "as delivered work.",
+                            unplanned_reason=(
+                                "This disposable comparison scenario measures the requested parity "
+                                "workflow without implementing a phase task."
+                            ),
                         )
                     )
                 )
