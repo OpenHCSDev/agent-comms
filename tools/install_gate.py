@@ -277,11 +277,14 @@ class RouteDocument:
             raise GateError(f"Snapshot route version {self.version} is not supported")
 
 
-class Machine:
+class Machine(DeclaredFamily, affix="Machine"):
     name: ClassVar[str]
     hostname: ClassVar[str]
     address: ClassVar[str]
-    root: str
+
+    @property
+    @abstractmethod
+    def root(self) -> str: ...
 
     @property
     def transport(self) -> tuple[str, ...]:
@@ -914,7 +917,7 @@ class GateArguments(argparse.Namespace):
 def run_machines(
     args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
 ) -> dict[str, MachineResult]:
-    machines = tuple(host() for host in Machine.__subclasses__())
+    machines = tuple(host() for host in Machine.members_with(Machine))
     results.update((machine.name, UnfinishedMachineResult()) for machine in machines)
     with tempfile.TemporaryDirectory(dir=Path.home() / "wt", prefix="install-gate-") as directory:
         work = Path(directory)

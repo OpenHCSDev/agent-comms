@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from install_gate import (
     DEFAULT_SCRATCH,
     REPO,
+    Desktop,
     ExistingStatusChecks,
     FieldCodec,
     GateArguments,
@@ -28,7 +29,6 @@ from install_gate import (
     GateReport,
     InstallSurface,
     Laptop,
-    Desktop,
     Machine,
     MalformedRecord,
     MissingProtection,
@@ -50,10 +50,14 @@ from install_gate import (
 
 
 @dataclass(frozen=True)
-class IsolatedMachine(Machine):
+class IsolatedMachine(Machine, declared_name=None):
     name: str
-    root: str
+    bus: str
     transport: tuple[str, ...] = ()
+
+    @property
+    def root(self) -> str:
+        return self.bus
 
 
 class InstallGateTests(unittest.TestCase):
@@ -134,7 +138,10 @@ class InstallGateTests(unittest.TestCase):
                 )
 
     def test_laptop_root_comes_from_its_selected_route(self):
-        route = '{"root":"/actual/laptop/bus","version":2,"wire_root_id":"00000000000000000000000000000000"}'
+        route = (
+            '{"root":"/actual/laptop/bus","version":2,'
+            '"wire_root_id":"00000000000000000000000000000000"}'
+        )
         with (
             patch("install_gate.socket.gethostname", return_value="desktop"),
             patch("install_gate.run", return_value=route) as read,
