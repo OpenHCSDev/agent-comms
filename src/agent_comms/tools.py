@@ -330,9 +330,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             )
         return result
 
-    def cli_command(self, caller: str | None = None) -> InvokeCliCommand:
+    def cli_command(self, caller: ToolCaller) -> InvokeCliCommand:
         """Project this declaration into Core's existing external tool command."""
-        return InvokeCliCommand(caller=caller, tool=self.declared_name, arguments=self.arguments)
+        return InvokeCliCommand(caller=caller.acting_name(''),
+                                tool=self.declared_name, arguments=self.arguments)
 
     @classmethod
     def invoke(
@@ -1397,9 +1398,9 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         """The CLI boundary owns its module, grammar and argument serialization."""
         from . import cli
 
-        caller = ('--from', self.caller) if self.caller is not None else ()
+        caller = ToolCaller.from_actor(self.caller)
         return (sys.executable, '-m', cli.__name__, '--root', str(root),
-                self.declared_name, *caller, '--tool', self.tool,
+                self.declared_name, '--from', caller.acting_name(''), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
