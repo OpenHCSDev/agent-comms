@@ -30,7 +30,7 @@ class DirectiveAnswers(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
         store = RegistryStore.at(root)
-        return store.path, store.guard_path, GoalHistoryStore.path_in(root)
+        return store.path, store.guard_path, GoalHistoryStore.path_for(store.path)
 
     @classmethod
     def convert(cls, value: JsonValue) -> int:
@@ -55,7 +55,7 @@ class DirectiveAnswers(Carry):
         store = RegistryStore.at(root)
         changed = 0
         rewritten: list[str] = []
-        history = GoalHistoryStore.path_in(root)
+        history = GoalHistoryStore.path_for(store.path)
         if history.exists():
             connection = (
                 CoordinationStore.writer(history)

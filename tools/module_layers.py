@@ -157,7 +157,7 @@ class Package:
     @cached_property
     def unit_imports(self) -> tuple[Import, ...]:
         """Imports between units; the package root is read for reachability only."""
-        return tuple(edge for edge in self.imports if edge.source != PACKAGE)
+        return tuple(edge for edge in self.imports if edge.source in self.files)
 
     @cached_property
     def violations(self) -> tuple[Import, ...]:
