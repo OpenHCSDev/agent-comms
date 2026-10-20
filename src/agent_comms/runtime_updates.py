@@ -12,12 +12,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .activity import ActivityState
+from . import activity
 from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import LiveTextTranscript, TranscriptEvent
+from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -35,7 +36,7 @@ class DraftAccumulator:
 
     def started(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
         return (
-            *self.activity(ActiveItem(update.turn_id, update.item_id, update.state, update.detail)),
+            *self.activity(ActiveItem(update.turn_id, update.item_id, update.phase)),
             *self.snapshot(update.turn_id, update.item_id),
         )
 
@@ -49,9 +50,8 @@ class DraftAccumulator:
         raise ValueError("Received a text delta for a non-text item")
 
     def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
-        """Close on a full item, preserving provider time when no start was observed."""
-        events = tuple(self.started_at.stamp(event) for event in update.events)
-        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, events)
+        """Close with the completed record's own already decoded event times."""
+        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, update.events)
 
 
 class NoPrefixDraft(DraftAccumulator):
@@ -95,7 +95,8 @@ class TextDraft(DraftAccumulator):
             text for index in sorted(self.sections) if (text := "".join(self.sections[index]))
         )
         return (
-            (self.started_at.stamp(self.event_type(text, position=self.position)),) if text else ()
+            (self.event_type(text, position=self.position,
+                             timestamp=self.started_at.transcript_timestamp()),) if text else ()
         )
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
@@ -139,7 +140,7 @@ class KeyedItem:
 
 
 @dataclass(frozen=True)
-class ThreadOutput:
+class ThreadOutput(activity.ThreadOutput):
     """Where a CLI's output lands in Core: finished items and current activity."""
 
     transcript: ExternalTranscript
@@ -179,9 +180,9 @@ class ThreadOutput:
     def end_all_turns(self) -> None:
         self.drafts.clear()
 
-    def status(self, state: ActivityState, detail: str = "") -> None:
-        detail = " ".join(detail.split())
-        self.agents.set_activity(self.transcript.incarnation.name, state, detail)
+    @property
+    def activity_thread(self) -> str:
+        return self.transcript.incarnation.name
 
 
 class ReadingPhase(ABC):
@@ -238,14 +239,14 @@ class TurnStarted(StatusUpdate):
     detail: str = ""
 
     def publish(self, output: ThreadOutput) -> None:
-        output.status(ActivityState.WORKING, self.detail)
+        output.enter(ModelWaitPhase(self.detail))
 
 
 @dataclass(frozen=True)
 class TurnEnded(StatusUpdate):
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.end_turn()
-        output.status(ActivityState.IDLE)
+        output.enter(IdlePhase())
 
 
 @dataclass(frozen=True)
@@ -254,11 +255,10 @@ class ActiveItem(KeyedItem, StatusUpdate):
 
     turn_id: str
     item_id: str
-    state: ActivityState
-    detail: str
+    phase: TurnPhase
 
     def publish(self, output: ThreadOutput) -> None:
-        output.status(self.state, self.detail)
+        output.enter(self.phase)
 
     def accumulate(self, output: ThreadOutput) -> tuple[RuntimeUpdate, ...]:
         return output.active_item(self)

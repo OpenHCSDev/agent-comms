@@ -196,7 +196,7 @@ class BoardDisagrees(UndatedStandingRule):
     def line(self) -> str:
         return (
             f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
-            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+            f"but its linked PR merged as {self.merge[:9]} -> repair the progress read this wake"
         )
 
 

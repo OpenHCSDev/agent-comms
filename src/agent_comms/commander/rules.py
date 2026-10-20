@@ -15,17 +15,15 @@ actions are refused until its own review is answered, and all three of a fork's 
 import glob, os, random, re, sys
 from dataclasses import dataclass
 
-from ..cli_commands import option
 
+from ..field_codec import option
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
-from .order import COMMS, CommanderVerb
+from .order import Commander, CommanderVerb
 
-CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
@@ -48,12 +46,12 @@ def rules() -> list[str]:
     return found
 
 
-def record(who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), COMMS)
+def record(ctx: Commander, who: str, entry: RuleReviewEntry) -> None:
+    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), ctx.comms)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(who: str = ME):
+def review(ctx: Commander, who: str) -> None:
     every = rules()
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -61,19 +59,19 @@ def review(who: str = ME):
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
         print(f'  - {r}')
-    drawn = random.sample(paper, DRAWN) if who != ME else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    drawn = random.sample(paper, DRAWN) if who != ctx.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
     pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ME else 2))
+    record(ctx, who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ctx.commander else 2))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
 
 
-def answer(n: int, text: str, who: str = ME):
-    record(who, AnsweredRuleReviewEntry(n, text))
+def answer(ctx: Commander, n: int, text: str, who: str) -> None:
+    record(ctx, who, AnsweredRuleReviewEntry(n, text))
 
 
 class RulesVerb(CommanderVerb):
@@ -83,8 +81,8 @@ class RulesVerb(CommanderVerb):
 class ReviewVerb(RulesVerb):
     help = "print the standing rules and draw the required review"
 
-    def run(self) -> None:
-        review(self.who)
+    def run(self, ctx: Commander) -> None:
+        review(ctx, self.who(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,19 +91,20 @@ class AnswerVerb(RulesVerb):
     n: int = option("n", help="the drawn rule number")
     text: str = option("text", help="how this tick obeys or breaks that rule")
 
-    def run(self) -> None:
-        answer(self.n, self.text, self.who)
+    def run(self, ctx: Commander) -> None:
+        answer(ctx, self.n, self.text, self.who(ctx))
 
 
 class StaleVerb(RulesVerb):
     help = "show whether the acting commander's rule review is due"
 
-    def run(self) -> None:
-        print('\n'.join(due.why for due in RulesDue.violations(COMMS, self.who)) or 'fresh')
+    def run(self, ctx: Commander) -> None:
+        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx)))
+              or 'fresh')
 
 
-def main(a):
+def main(a, ctx):
     try:
-        RulesVerb.parse(a, __doc__).apply()
+        RulesVerb.parse(a, __doc__).apply(ctx)
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

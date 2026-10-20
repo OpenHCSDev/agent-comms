@@ -15,6 +15,7 @@ from collections.abc import Iterable, Iterator
 from functools import partial
 from pathlib import Path
 
+from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
@@ -59,10 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Iterable[str] = ProcessArguments()) -> int:
     try:
         arguments = list(argv)
-        args = build_parser().parse_args(arguments)
-        root = args.root()
-        record = LaunchRecord.client_startup(arguments, root)
-        command = CliCommand.member_named(args.command).from_namespace(args)
+        args = build_parser().parse_args(arguments, namespace=SendArguments())
+        record = LaunchRecord.client_startup(arguments, args.root())
+        command = CliCommand.member_named(args.command).from_arguments(args)
         with client_wire(record.root_selection.path) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:

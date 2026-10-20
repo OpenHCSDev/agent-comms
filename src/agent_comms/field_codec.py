@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import math
 import json
 import os
@@ -10,7 +11,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
+from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
 from functools import cache, cached_property, lru_cache, reduce
@@ -105,6 +106,62 @@ class FieldPlan:
             choices=metadata.get("wire_choices"),
             value=compile_decoder(annotation), annotation=annotation, declared=declared,
         )
+
+    @property
+    def constructor_required(self) -> bool:
+        return self.declared.default is MISSING and self.declared.default_factory is MISSING
+
+    def setting[V](self, name: str, default: V) -> V:
+        return cast(V, self.declared.metadata.get(name, default))
+
+    def current(self, record: object) -> object:
+        return cast(object, getattr(record, self.name))
+
+    def argument_payload(self, value: object) -> object:
+        convert: Callable[[object], object] = self.setting("normalize", self.value.argument_payload)
+        return convert(value)
+
+    def editor_payload(self, value: object) -> object:
+        convert: Callable[[object], object] = self.setting("normalize", self.value.decode_editor)
+        return convert(value)
+
+    def editor_default(self, value: object) -> object:
+        return self.setting(
+            "editor_format", self.value.encode_editor)(value)
+
+    @property
+    def description(self) -> str:
+        options = self.declared.metadata.get("parser_options", {})
+        return FieldCodec.decode(str, options.get(
+            "help", self.name.replace('_', ' ').capitalize()))
+
+    def add_argument(self, parser: argparse.ArgumentParser,
+                     groups: dict[str, argparse._MutuallyExclusiveGroup]) -> None:
+        metadata = self.declared.metadata
+        owner: argparse._ActionsContainer = parser
+        if "group" in metadata:
+            group = cast(str, metadata.get("group"))
+            if group not in groups:
+                groups[group] = parser.add_mutually_exclusive_group(required=True)
+            owner = groups[group]
+        supplied = metadata.get("parser_options", {})
+        options = {**({} if "action" in supplied else self.value.argument_options()), **supplied}
+        if "parser_default" in metadata:
+            options["default"] = metadata.get("parser_default")
+        elif "parser_default_factory" in metadata:
+            factory = cast(Callable[[], object], metadata.get("parser_default_factory"))
+            options["default"] = factory()
+        elif self.constructor_required:
+            options["required"] = True
+        else:
+            options["default"] = self.value.argument_text(
+                FieldCodec.encode(self.default(), self.annotation))
+        flags = metadata.get("flags") or ("--" + self.name.replace("_", "-"),)
+        if any(flag.startswith("-") for flag in flags):
+            options["dest"] = self.key
+        elif "required" in options:
+            del options["required"]
+        owner.add_argument(*flags, **options)
 
     def contribute(self, fields):
         fields.append(self)
@@ -727,6 +784,18 @@ def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
 
 
+def option(*flags: str, default: Any = MISSING, default_factory: Any = MISSING,
+           group: object = MISSING, normalize: object = MISSING, wire_name: object = MISSING,
+           parser_default: object = MISSING, parser_default_factory: object = MISSING,
+           multiline: object = MISSING, target_bound: object = MISSING,
+           editor_format: object = MISSING, editor: object = MISSING, catalog: object = MISSING,
+           **parser_options: object) -> Any:
+    """The signature declares field hints; remaining keywords belong to argparse."""
+    metadata = locals()
+    return field(default=metadata.pop("default"), default_factory=metadata.pop("default_factory"),
+                 metadata={name: value for name, value in metadata.items() if value is not MISSING})
+
+
 class FieldCodec(Sealed):
     """Family tags use their declared ``family_discriminator`` (default ``kind``); aliases
     use field(metadata={"wire_name": ...}).
@@ -783,7 +852,7 @@ class FieldCodec(Sealed):
 
     @staticmethod
     @cache
-    def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
+    def record_fields(cls: type) -> tuple[tuple[Field[object], str], ...]:
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
@@ -812,7 +881,7 @@ class FieldCodec(Sealed):
 
     @staticmethod
     @cache
-    def _types(declaration: type) -> dict[str, Any]:
+    def _types(declaration: type) -> dict[str, object]:
         return get_type_hints(declaration, include_extras=True)
 
     @overload
@@ -859,6 +928,30 @@ class FieldCodec(Sealed):
     def decode_record(cls, target: type[T], data: object) -> T:
         """Decode declared fields without reentering the record's wire representation."""
         return cast(T, _RecordDecoder(target).decode(data))
+
+    @classmethod
+    def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
+        return cls._record_plan(target).bindings
+
+    @classmethod
+    def add_arguments(cls, target: type, parser: argparse.ArgumentParser) -> None:
+        groups: dict[str, argparse._MutuallyExclusiveGroup] = {}
+        for entry in cls.argument_fields(target):
+            entry.add_argument(parser, groups)
+
+    @classmethod
+    def decode_arguments(cls, target: type[T], arguments: object) -> T:
+        """Argparse contributes only raw input; field plans own its conversion."""
+        raw = vars(arguments)
+        return cls.decode_record(target, {
+            entry.key: entry.argument_payload(raw[entry.key])
+            for entry in cls.argument_fields(target)
+        })
+
+    @classmethod
+    def editor_arguments(cls, target: type, values: Mapping[str, object]) -> dict[str, object]:
+        plans = {entry.key: entry for entry in cls.argument_fields(target)}
+        return {key: plans[key].editor_payload(value) for key, value in values.items()}
 
     @classmethod
     def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
@@ -1034,7 +1127,7 @@ class FieldCodec(Sealed):
         def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
             for entry in self.bindings:
-                current = getattr(value, entry.name)
+                current = entry.current(value)
                 metadata = entry.declared.metadata
                 if not metadata.get(f"{view}_exclude") and not entry.omitted(current):
                     result.update(entry.encoded(
@@ -1066,7 +1159,7 @@ class FieldCodec(Sealed):
             keys = entry.contribute(wire_fields)
             if entry.required:
                 required_keys.extend(keys)
-            if entry.declared.default is MISSING and entry.declared.default_factory is MISSING:
+            if entry.constructor_required:
                 init_required_keys.extend(keys)
         wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
@@ -1566,6 +1659,9 @@ class _DictDecoder(ValueDecoder[Any]):
     key: ValueDecoder[object]
     value: ValueDecoder[object]
     origins = (dict,)
+
+    def argument_options(self) -> dict[str, object]:
+        return {"type": FieldCodec.parse}
 
     @classmethod
     def from_annotation(cls, target, args):

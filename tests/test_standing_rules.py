@@ -6,12 +6,14 @@ import subprocess
 import sys
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig, Repo
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
@@ -23,9 +25,10 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
+    MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
+    Todo, UnmergedPullRequest, UnreadProgress)
 from agent_comms.connector import CALLER
-from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
+from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsChangeProblemTool
 
 from test_commander_problem_orders import create, native_judge_edits
 
@@ -37,7 +40,7 @@ def standing(commander, commander_script):
     for module in (judge, capacity):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
-    state = CommanderConfig.installed().state
+    state = CommanderConfig.read_root(commander[0].root).state
     return commander[0], state, module
 
 
@@ -55,13 +58,12 @@ def test_board_self_check_uses_order_progress_and_its_linked_merge(
         commander, standing, monkeypatch, reported, alarms):
     comms, caller = commander
     owned, pending, foreign = (create(commander, pid) for pid in ("P77", "P109", "P117"))
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(1581, "docs/module-layers", "b" * 40, "d" * 40,
-        stamp, stamp, owned.order.pull_request_body("Module layer map"))
-    opened = PullRequest.listed(1624, "ratchet/none-absence", "c" * 40, "", "",
-        stamp, pending.order.pull_request_body("Declared measure"))
-    other = PullRequest.listed(1629, "ratchet/decoder-marker", "e" * 40, "f" * 40,
-        stamp, stamp, "Agent-Comms-Order: another-order\n")
+    merged = MergedPullRequest(1581, "docs/module-layers", "b" * 40, merge="d" * 40,
+        merged_at=500, updated_at=500, orders=(owned.order.id,))
+    opened = UnmergedPullRequest(1624, "ratchet/none-absence", "c" * 40,
+        updated_at=500, orders=(pending.order.id,))
+    other = MergedPullRequest(1629, "ratchet/decoder-marker", "e" * 40, merge="f" * 40,
+        merged_at=500, updated_at=500, orders=("another-order",))
 
     def forge(self, repo, state, order):
         return (merged, other) if state == "merged" else (opened,)
@@ -143,6 +145,19 @@ def working(comms, name, created):
             name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
 
 
+def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standing, tmp_path):
+    from agent_comms.transcript_events import AssistantTranscript
+    comms, _, module = standing
+    for name in ("external-working", "external-empty"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.transcripts.external("external-working").finish(
+        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer", timestamp=time.time()),))
+    names = [thread.name for thread in module.WheelSpin.idle(comms, "lead")]
+    assert "external-working" in names
+    assert "external-empty" not in names and "worker" not in names
+
+
 def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
         commander, standing, tmp_path, monkeypatch):
     from agent_comms.storage_rules import StorageRule
@@ -176,20 +191,24 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     runs = tmp_path / "runs"
     check = f"echo run >> {runs}; cat left"
     todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
+    ordered_check = todo.order.checked().check
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
 
     def progress():
         return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())
 
     commit(2)
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
     assert "; distance 2, projected done " in progress().line
     assert isinstance(progress().distance_readings().trend, MovingTrend)
     commit(2)
+    ordered_check.at(git("rev-parse", "HEAD").strip(), str(unit))
     assert progress().line.endswith("; distance 2, not falling")
     assert runs.read_text().count("run") == 3  # once per commit: base, then each branch commit
 
     reader = ("import sys; from agent_comms.goals import CountCheckResult, OrderCheck; "
               "check = OrderCheck(sys.argv[1], sys.argv[2], CountCheckResult(0)); "
-              "print(check.at(sys.argv[3], sys.argv[1]).stdout.decode(), end='')")
+              "print(check.recorded(sys.argv[3], sys.argv[1])[0].stdout.decode(), end='')")
     second = subprocess.run([sys.executable, "-c", reader, str(unit), check,
                              git("rev-parse", "HEAD").strip()],
                             check=True, capture_output=True, text=True)
@@ -216,12 +235,14 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
 
 
 def test_unjudged_follows_the_unjudged_edits(commander, standing):
+    from agent_comms.commander import judge
     comms, state, module = standing
     assert lines(comms, module.Unjudged) == []
     create(commander, 'P1')
-    native_judge_edits(commander, module.judge, [dict(id=f'e{n}', at=200., path='a.py',
+    native_judge_edits(commander, judge, [dict(id=f'e{n}', at=200., path='a.py',
         hunks=[dict(old='before', new='after')]) for n in range(70)])
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
+
 
 
 def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monkeypatch):
@@ -250,7 +271,7 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 def test_defect_text_without_slop_line_needs_no_label():
     """Only a text that names a defect in a Slop: line needs its label outside that line."""
     assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
-    slop = "Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
+    slop = "Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
     assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
     assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
     assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
@@ -266,7 +287,7 @@ def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_revie
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, CALLER)
 
     for body, refusal in (
-        ("Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
+        ("Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
          "Read the count from its owner.", "Not blunt"),
         ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
         ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),
@@ -359,8 +380,9 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
-    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
-        Repo(checkout=checkout, github="fleet/growth"),)}))
+    config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)})
+    config.write(tmp_path / 'growth-home')
     big = git("rev-parse", "main~1")[:9]
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "

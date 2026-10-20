@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Type
@@ -23,7 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
-from .todos import TodoConflict, TodoStore
+from .todos import TodoError, TodoStore
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -89,7 +88,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except (TodoConflict, sqlite3.Error) as error:
+        except TodoError as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()
@@ -198,6 +197,5 @@ class Messaging:
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        # The bus owns capture under its read lock and the ledger validates that
-        # source. Nesting an exclusive wire hold deadlocks its snapshot reader.
+        # The bus owns capture under its read lock and the ledger validates that source.
         self.bus.mark_delivered_through(self.registry.require(name).name, sequence)

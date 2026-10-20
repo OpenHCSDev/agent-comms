@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import asyncio
 import json
 import os
@@ -10,16 +11,18 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Generic, Literal, Self, TypeVar
-
+from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.change_report import ChangeReport
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
@@ -32,19 +35,39 @@ from agent_comms.cli_protocol import (
     raise_child_exit,
 )
 from agent_comms.comms import Comms
+from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
-from agent_comms.launch_runtime import LaunchRecord, LaunchRuntime
+from agent_comms import field_codec
+from agent_comms.field_codec import FieldCodec, option
+from agent_comms.launch_runtime import LaunchRecord
 from agent_comms.active_route import at_root
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import InfoKind, Message, MessageKind
+from agent_comms import messages
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+
+class DeclaredOptions:
+    """The CLI adapter consumes FieldCodec's existing field plans."""
+    help: ClassVar[str]
+
+    @classmethod
+    def add_parser[P: argparse.ArgumentParser](
+            cls, subparsers: argparse._SubParsersAction[P]) -> None:
+        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        FieldCodec.add_arguments(cls, parser)
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        return FieldCodec.decode_arguments(cls, args)
 
 
 @dataclass(frozen=True)
@@ -111,7 +134,7 @@ class Options:
             command = commands.add_parser(operation.__name__.lower(), parents=[common])
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args()
+        arguments = parser.parse_args(namespace=SendArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -205,8 +228,8 @@ class DeliveryRow(TypedTable):
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
-    def message(self) -> Message:
-        return Message.from_wire(json.loads(self.payload))
+    def message(self) -> messages.Message:
+        return messages.Message.from_wire(json.loads(self.payload))
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
         with bridge.db:
@@ -218,22 +241,14 @@ OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 
 
 @dataclass(frozen=True)
-class Operation(ABC, Generic[OperationBridge]):
+class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
     def binding(self, arguments: argparse.Namespace) -> Binding | None:
         return Binding.from_arguments(arguments)
 
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        """Declare the options only this command takes."""
-
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return FieldCodec.decode(cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)})
-
     @abstractmethod
-    async def run(self, bridge: OperationBridge) -> None: ...
+    async def execute(self, bridge: OperationBridge) -> None: ...
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -253,21 +268,144 @@ class Operation(ABC, Generic[OperationBridge]):
 
 
 @dataclass(frozen=True)
-class Send(Operation):
-    target: str = field(metadata={'wire_name': 'to'})
-    body: str
-    kind: type[MessageKind] = field(metadata={'wire_name': 'type'})
+class TargetField:
+    """The declared field owns parsing, editor hints and requiredness."""
+    plan: field_codec.FieldPlan
+    value: object
 
     @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--to', required=True)
-        parser.add_argument('--body', required=True)
-        parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
+    def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
+        editor = (CatalogTargetField if 'catalog' in plan.declared.metadata
+                  else plan.setting('editor', cls))
+        return editor(plan, value)
 
-    async def run(self, bridge: CliBridge) -> None:
-        result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
-                                         self.target, self.body, self.kind)
-        await bridge.show_sent(result)
+    @property
+    def annotation(self) -> object:
+        return self.plan.annotation
+
+    @property
+    def name(self) -> str:
+        return self.plan.key
+
+    @property
+    def multiline(self) -> bool:
+        return self.plan.setting('multiline', False)
+
+    @property
+    def description(self) -> str:
+        return self.plan.description
+
+    @property
+    def editor_default(self) -> object:
+        return self.plan.editor_default(self.value)
+
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        """An unrestricted field does not declare a finite-choice editor."""
+        return ()
+
+    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
+        return self
+
+    @property
+    def required(self) -> bool:
+        return self.plan.constructor_required
+
+    def value_schema(self) -> dict[str, object]:
+        return FieldCodec.value_schema(self.annotation)
+
+    def json_schema(self) -> dict[str, object]:
+        return {**self.value_schema(), 'multiline': self.multiline,
+                'description': self.description, 'editor_default': self.editor_default}
+
+
+@dataclass(frozen=True)
+class ChoiceTargetField(TargetField):
+    """A prepared finite declaration, from its annotation or configuration catalog."""
+    options: tuple[SessionConfigSelectOption, ...] = ()
+
+    @property
+    def editor_declarations(self) -> tuple[object, ...]:
+        return ()
+
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...]:
+        return tuple((choice.name, choice.value) for choice in self.options)
+
+    async def prepare(self, catalogs: ConfigOptions,
+                      selection: CatalogSelection) -> ChoiceTargetField:
+        decoder = field_codec.compile_decoder(self.annotation)
+        options = (SessionConfigSelectOption(
+                       name=label, value=decoder.encode_editor(decoder.decode(value)))
+                   for label, value in decoder.editor_choices())
+        return replace(self, options=tuple(options))
+
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        return (choices(self),)
+
+
+class CatalogTargetField(ChoiceTargetField):
+    @property
+    def catalog(self) -> type[CatalogConfigOption]:
+        return self.plan.setting('catalog', CatalogConfigOption)
+
+    @property
+    def editor_declarations(self) -> tuple[object, ...]:
+        return (self.catalog,)
+
+    async def prepare(self, catalogs: ConfigOptions,
+                      selection: CatalogSelection) -> CatalogTargetField:
+        catalog = catalogs.catalog_for(self.catalog)
+        options = await catalog.display_choices(selection)
+        decoder = field_codec.compile_decoder(self.annotation)
+        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
+            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
+
+    def value_schema(self) -> dict[str, object]:
+        return {**FieldCodec.value_schema(self.annotation),
+                'configuration': FieldCodec.encode(self.catalog)}
+
+
+
+
+
+class SendArguments(argparse.Namespace):
+    command: str
+
+class SendReport(field_codec.SubclassUnion, affix=""):
+    def send(self, ctx: Comms, request: Send) -> SendResult:
+        return self.emit(partial(ctx.messaging.send, request.sender, request.target,
+                                 request.body, request.type, role=request.role()))
+
+    @abstractmethod
+    def emit(self, send: Callable[..., SendResult]) -> SendResult: ...
+
+
+class MissingReport(field_codec.NullMember, SendReport):
+    def emit(self, send: Callable[..., SendResult]) -> SendResult:
+        return send()
+
+
+@dataclass(frozen=True)
+class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
+    def emit(self, send: Callable[..., SendResult]) -> SendResult:
+        return send(report=self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Send(Operation):
+    help = "Send to a thread (DM), #channel, or #all"
+    sender: str = option("--from", default="")
+    target: str = option("--to")
+    body: str = option("--body")
+    type: builtins.type[messages.MessageKind] = option("--type", default=messages.InfoKind,
+        choices=messages.SendableMessageKind.names(), editor=ChoiceTargetField)
+    role: builtins.type[messages.SendableRole] = option("--role", default=messages.ConversationRole)
+    report: SendReport = option("--report", default=MissingReport(),
+        help="Change report fields as a JSON object", type=FieldCodec.parse)
+
+    async def execute(self, bridge: CliBridge) -> None:
+        request = replace(self, sender=bridge.binding.bus)
+        await bridge.show_sent(await asyncio.to_thread(request.report.send, bridge.comms, request))
 
 
 class Inbox(Operation[OperationBridge]):
@@ -279,7 +417,7 @@ class Inbox(Operation[OperationBridge]):
     def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup) -> None:
         tasks.create_task(bridge.watch())
 
-    async def run(self, bridge: OperationBridge) -> None:
+    async def execute(self, bridge: OperationBridge) -> None:
         # The claim records how this watch was started, so the session's hook can
         # name the re-arm command once the lease lapses.
         record = WatchRecord(bridge.binding.bus, bridge.binding.root,
@@ -309,7 +447,7 @@ class Watch(Inbox):
 
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
-    message: Message
+    message: messages.Message
 
     @property
     def text(self) -> str:
@@ -349,7 +487,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
-    async def accept(self, message: Message) -> None:
+    async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
         delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
@@ -392,7 +530,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         assert current is not None
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
         try:
-            await self.options.operation.run(self)
+            await self.options.operation.execute(self)
         except* BlockingIOError:
             raise
         except* (OSError, ValueError, CoordinationError) as group:
@@ -549,7 +687,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         # One reversible JSON string per line; no truncation or lost line breaks.
         return json.dumps(text, ensure_ascii=False)
 
-    async def deliver(self, message: Message) -> type[Outcome]:
+    async def deliver(self, message: messages.Message) -> type[Outcome]:
         parts = self.incoming_frame(message).parts
         with self.db:
             DeliveryRow.update(self.db, where='id=?', parameters=(message.message_id,), monitor=ReceivingMonitor(len(parts)))

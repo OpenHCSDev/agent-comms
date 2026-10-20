@@ -17,8 +17,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .child_process import (BoundedRun, ChildOutcome, ChildResult, ExitedOutcome, SignaledOutcome,
-                            TimedOutOutcome)
+from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
+                            ExitedOutcome, SignaledOutcome, TimedOutOutcome)
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
@@ -232,19 +232,17 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 class CheckResult(DeclaredFamily, affix="CheckResult"):
     def require(self, result: ChildResult) -> None:
-        distance = self.distance(result)
-        if distance:
-            raise ValueError(f"The order check is {distance} away from {self}.")
+        self.distance(result).require(self)
 
     @abstractmethod
-    def distance(self, result: ChildResult) -> int:
-        """How far this run is from the result the order requires; zero when it is met."""
+    def distance(self, result: ChildResult) -> CheckPrinted:
+        """The measured distance, or the run's declared missing-count state."""
 
 
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
-    def distance(self, result: ChildResult) -> int:
-        return int(result.outcome != ExitedOutcome(0) or bool(result.stdout))
+    def distance(self, result: ChildResult) -> CheckPrinted:
+        return CountPrinted(int(result.outcome != ExitedOutcome(0) or bool(result.stdout)))
 
 
 @dataclass(frozen=True)
@@ -255,7 +253,7 @@ class CountCheckResult(CheckResult):
         if self.expected < 0:
             raise ValueError("An expected count must be nonnegative.")
 
-    def distance(self, result: ChildResult) -> int:
+    def distance(self, result: ChildResult) -> CheckPrinted:
         return result.outcome.printed_count(result.stdout).distance(self.expected)
 
 
@@ -322,13 +320,16 @@ class OrderCheck:
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout, runtime=LaunchRuntime.running())
 
+    def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
+        """Read the check run result without starting the check."""
+        return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
+                     if checked.command == self.command)[:1]
+
     def at(self, revision: str, repository: str) -> ChildResult:
-        """The check on ``revision``: the result a git note on the commit records, or one run in
-        a throwaway detached checkout and recorded there for every later reader."""
+        """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
-        for checked in CheckedCommit.stored(repository, sha):
-            if checked.command == self.command:
-                return checked.result
+        for recorded in self.recorded(sha, repository):
+            return recorded
         with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
             tree = str(Path(scratch) / "tree")
             CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
