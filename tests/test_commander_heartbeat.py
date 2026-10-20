@@ -9,6 +9,7 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import RequestGoalOrder
+from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.standing_rules import DiskLow, RulesDue
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -66,8 +67,23 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, co
         changed = list(comms.bus.inbox("lead"))
         assert len(changed) == 2
         assert "Review next: @worker (P1, P3)" in changed[-1].body
+        assert "RULE HUNT DUE" not in changed[-1].body
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
         assert list(comms.bus.inbox("lead")) == changed
+        reviews = RuleReviews(comms.root)
+        reviews.write("lead", DrawnRuleReviewEntry(("Keep behavior with its owner.",), 0))
+        reviews.write(
+            "lead",
+            AnsweredRuleReviewEntry(
+                1, "This review uses the existing Core rule owner and actual inbox publication."
+            ),
+        )
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        changed = list(comms.bus.inbox("lead"))
+        assert len(changed) == 3
+        assert "NO LONGER CURRENT: RULES DUE" in changed[-1].body
+        assert "RULE HUNT DUE" not in changed[-1].body
+        assert not comms.registry.require("lead").goal.require().order.directives
     await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
     assert not heartbeat.reviews
     assert list(comms.bus.inbox("lead")) == changed

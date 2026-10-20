@@ -16,13 +16,12 @@ from .threads import Thread
 class CommanderReview:
     """One commander's last observed violations and its next review position."""
 
-    violations: frozenset[str] = frozenset()
+    violations: dict[str, StandingRule] = field(default_factory=dict)
     turn: int = 0
 
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
-        rules = StandingRule.broken(comms, commander.name)
-        found = frozenset(rule.wake_key() for rule in rules)
-        if found == self.violations:
+        found = {rule.wake_key(): rule for rule in StandingRule.broken(comms, commander.name)}
+        if found.keys() == self.violations.keys():
             return
         lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
         owed = comms.goals.todos.held_for_commander(commander.incarnation)
@@ -32,8 +31,15 @@ class CommanderReview:
             orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
             lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
             self.turn += 1
-        lines.extend(f"RULE {rule.line()}" for rule in rules)
-        if not rules:
+        lines.extend(
+            f"RULE {rule.line()}" for key, rule in found.items() if key not in self.violations
+        )
+        lines.extend(
+            f"NO LONGER CURRENT: {rule.line()}"
+            for key, rule in self.violations.items()
+            if key not in found
+        )
+        if not found:
             lines.append("Standing rules clear.")
         # A publication can fail after append. Remember the attempted set before sending;
         # unchanged observations must not replay an uncertain side effect.
