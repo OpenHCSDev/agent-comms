@@ -22,14 +22,17 @@ class Load(ToolResult):
     def of(cls, comms: Comms, commander: str) -> Load:
         snapshot, todos, now = comms.registry.snapshot(), comms.goals.todos, time.time()
         owner = snapshot.require(commander)
-        owed = tuple(t for t in todos.held_for_commander(owner.incarnation) if t.pending)
+        held = todos.held_for_commander(owner.incarnation)
+        owed = tuple(t for t in held if t.pending)
         forks = tuple(sorted(
             thread.name for thread in snapshot.threads.values()
             if thread.parent == owner.name and snapshot.statuses[thread.name].receiving
             and todos.held_for_commander(thread.incarnation)
         ))
-        return cls(len(owed), sum(t.overdue(now) for t in owed),
-                   OrderEditCountRead.count(comms, owner.name), forks)
+        unjudged = sum(
+            read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
+        )
+        return cls(len(owed), sum(t.overdue(now) for t in owed), unjudged, forks)
 
     @projected(view="wire")
     def total(self) -> float:
