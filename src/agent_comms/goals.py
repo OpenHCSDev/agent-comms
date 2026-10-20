@@ -456,17 +456,20 @@ class UnorderedGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class RequestDirective:
-    """One claude-ai message to the commander that the request answers. It is acted on once an
-    order sent after it serves the request, or the request closes; until then it is due by its
-    deadline."""
+    """One original directive; only a reply linked to that message answers it."""
 
     window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
     seq: int
     deadline: float
-    served: int  # orders serving the request when the directive arrived
 
-    def overdue(self, served: int, now: float) -> bool:
-        return served == self.served and self.deadline < now
+    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
+        if self.deadline >= now:
+            return False
+        with goals.bus.log.checked_read() as source:
+            original = source.delivery(self.seq).message.reference
+            replies = source.replies((original,))
+        return not any(reply.message.sender == owner.name and original in reply.message.answers
+                       for reply in replies)
 
 
 @dataclass(frozen=True)
@@ -498,14 +501,13 @@ class RequestGoalOrder(GoalOrder):
         """A closed request is replaced by one the directive opens; an open one records it."""
         if goal.state.terminal:
             return directive.request(goal, ctx)
-        served = len(ctx.goals.todos.for_request(ctx.thread.incarnation, goal.id))
         return replace(goal, revision=goal.revision + 1, order=replace(
-            self, directives=(*self.directives, directive.directive(served))))
+            self, directives=(*self.directives, directive.directive())))
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[RequestDirective, ...]:
-        served = len(goals.todos.for_request(owner, goal.id))
-        return tuple(directive for directive in self.directives if directive.overdue(served, now))
+        return tuple(directive for directive in self.directives
+                     if directive.overdue(goals, owner, now))
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

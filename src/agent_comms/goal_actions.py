@@ -491,12 +491,12 @@ class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
     def create(self, ctx: GoalActionContext) -> GoalDeclaration:
         return ctx.thread.goal
 
-    def directive(self, served: int) -> RequestDirective:
-        return RequestDirective(self.seq, self.at + RequestDirective.window, served)
+    def directive(self) -> RequestDirective:
+        return RequestDirective(self.seq, self.at + RequestDirective.window)
 
     def request(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ReplacementGoalAction.retire(goal, ctx)
-        order = RequestGoalOrder((self.directive(0),))
+        order = RequestGoalOrder((self.directive(),))
         return SetGoalAction(text=self.text, order=order).change(goal, ctx)
 
 
