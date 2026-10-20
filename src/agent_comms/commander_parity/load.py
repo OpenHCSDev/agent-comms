@@ -80,29 +80,26 @@ class LoadComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> ParityComparison:
-        try:
-            config = CommanderConfig.read(CommanderConfig.path())
-            before = state_files(config.state)
-            # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
-            # HOME and the environment stay unchanged; the actual CLI main runs.
-            current = subprocess.run(
-                (str(config.cli.parent / "python"), "-I", "-c", OBSERVE_CAPACITY, "capacity"),
-                capture_output=True,
-                text=True,
-                timeout=30,
+        config = CommanderConfig.read(CommanderConfig.path())
+        before = state_files(config.state)
+        # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
+        # HOME and the environment stay unchanged; the actual CLI main runs.
+        current = subprocess.run(
+            (str(config.cli.parent / "python"), "-I", "-c", OBSERVE_CAPACITY, "capacity"),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if current.returncode:
+            return UnverifiedParity(current.stderr)
+        observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
+        source = Path(observed.source)
+        if (
+            observed.root != str(config.root)
+            or observed.commander != config.commander
+            or not any(source.is_relative_to(repo.checkout) for repo in config.repos)
+        ):
+            return UnverifiedParity(
+                "The installed command used a different configuration or source"
             )
-            if current.returncode:
-                return UnverifiedParity(current.stderr)
-            observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
-            source = Path(observed.source)
-            if (
-                observed.root != str(config.root)
-                or observed.commander != config.commander
-                or not any(source.is_relative_to(repo.checkout) for repo in config.repos)
-            ):
-                return UnverifiedParity(
-                    "The installed command used a different configuration or source"
-                )
-            return cls(observed, before, state_files(config.state))
-        except (OSError, subprocess.TimeoutExpired) as error:
-            return UnverifiedParity(str(error))
+        return cls(observed, before, state_files(config.state))
