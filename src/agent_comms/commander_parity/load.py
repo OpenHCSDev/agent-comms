@@ -6,7 +6,6 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..commander.capacity import Load
 from ..commander.config import CommanderConfig
 from ..field_codec import FieldCodec
 from ..private_path import FileRevision
@@ -20,7 +19,6 @@ import contextlib, io, json, sys
 import agent_comms.commander.capacity as capacity
 from agent_comms.commander.cli import main
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.field_codec import FieldCodec
 measured = []
 def observe(frame, event, value):
     if event == 'return' and frame.f_code is capacity.Load.of.__func__.__code__:
@@ -35,7 +33,7 @@ finally:
 if len(measured) != 1:
     raise ValueError('Capacity must use exactly one native load measurement')
 config = CommanderConfig.installed()
-print(json.dumps(dict(current=output.getvalue(), load=FieldCodec.encode(measured[0]),
+print(json.dumps(dict(current=output.getvalue(), native=str(measured[0]),
                       source=capacity.__file__, root=str(config.root),
                       commander=config.commander)))
 """
@@ -52,7 +50,7 @@ def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
 @dataclass(frozen=True)
 class MeasuredOutput:
     current: str
-    load: Load
+    native: str
     source: str
     root: str
     commander: str
@@ -67,14 +65,14 @@ class LoadComparison(ParityComparison):
     @property
     def passed(self) -> bool:
         return (
-            self.observation.current.strip() == str(self.observation.load)
+            self.observation.current.strip() == self.observation.native
             and self.state_before == self.state_after
         )
 
     def describe(self) -> str:
         return (
             f"current={self.observation.current.strip()!r}; "
-            f"native={str(self.observation.load)!r}; owner={self.observation.source}; "
+            f"native={self.observation.native!r}; owner={self.observation.source}; "
             f"commander={self.observation.commander}; root={self.observation.root}; "
             f"private_state_unchanged={self.state_before == self.state_after}"
         )
