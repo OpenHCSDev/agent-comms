@@ -15,8 +15,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .child_process import (BoundedRun, ChildOutcome, ChildResult, ExitedOutcome, SignaledOutcome,
-                            TimedOutOutcome)
+from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
+                            ExitedOutcome, SignaledOutcome, TimedOutOutcome)
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
@@ -48,6 +48,8 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
     from .todos import Todo
+    from .messages import Message
+    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -230,19 +232,17 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 class CheckResult(DeclaredFamily, affix="CheckResult"):
     def require(self, result: ChildResult) -> None:
-        distance = self.distance(result)
-        if distance:
-            raise ValueError(f"The order check is {distance} away from {self}.")
+        self.distance(result).require(self)
 
     @abstractmethod
-    def distance(self, result: ChildResult) -> int:
-        """How far this run is from the result the order requires; zero when it is met."""
+    def distance(self, result: ChildResult) -> CheckPrinted:
+        """The measured distance, or the run's declared missing-count state."""
 
 
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
-    def distance(self, result: ChildResult) -> int:
-        return int(result.outcome != ExitedOutcome(0) or bool(result.stdout))
+    def distance(self, result: ChildResult) -> CheckPrinted:
+        return CountPrinted(int(result.outcome != ExitedOutcome(0) or bool(result.stdout)))
 
 
 @dataclass(frozen=True)
@@ -253,7 +253,7 @@ class CountCheckResult(CheckResult):
         if self.expected < 0:
             raise ValueError("An expected count must be nonnegative.")
 
-    def distance(self, result: ChildResult) -> int:
+    def distance(self, result: ChildResult) -> CheckPrinted:
         return result.outcome.printed_count(result.stdout).distance(self.expected)
 
 
@@ -266,6 +266,13 @@ class OrderCheck:
     def __post_init__(self):
         if not self.directory.strip() or not self.command.strip():
             raise ValueError("An order check requires a directory and command.")
+
+    def require_writable(self) -> None:
+        """New checks cannot select revisions; saved checks remain readable for correction."""
+        if any(self.git_command(words) in self.REVISION_COMMANDS
+               for words in self.simple_commands(self.command)):
+            raise ValueError("A check never checks out a revision: Core runs it at the "
+                             "delivered commit and at each branch commit. Drop the checkout.")
 
     def require_directory(self):
         if not Path(self.directory).is_dir():
@@ -283,11 +290,9 @@ class OrderCheck:
         found = cls.LINE.fullmatch(line.strip())
         if not found:
             return None
-        if any(cls.git_command(words) in cls.REVISION_COMMANDS
-               for words in cls.simple_commands(found[2])):
-            raise ValueError("A check line never checks out a revision: Core runs it at the "
-                             "delivered commit and at each branch commit. Drop the checkout.")
-        return cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check = cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check.require_writable()
+        return check
 
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
@@ -320,13 +325,16 @@ class OrderCheck:
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout)
 
+    def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
+        """Read the check run result without starting the check."""
+        return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
+                     if checked.command == self.command)[:1]
+
     def at(self, revision: str, repository: str) -> ChildResult:
-        """The check on ``revision``: the result a git note on the commit records, or one run in
-        a throwaway detached checkout and recorded there for every later reader."""
+        """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
-        for checked in CheckedCommit.stored(repository, sha):
-            if checked.command == self.command:
-                return checked.result
+        for recorded in self.recorded(sha, repository):
+            return recorded
         with tempfile.TemporaryDirectory(prefix="order-check-") as scratch:
             tree = str(Path(scratch) / "tree")
             CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
@@ -433,6 +441,9 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         """Only a thread holding owner requests records a claude-ai directive."""
         return goal
 
+    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
+        return ()
+
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[RequestDirective, ...]:
         return ()
@@ -455,17 +466,25 @@ class UnorderedGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class RequestDirective:
-    """One claude-ai message to the commander that the request answers. It is acted on once an
-    order sent after it serves the request, or the request closes; until then it is due by its
-    deadline."""
+    """One original directive; only a reply linked to that message answers it."""
 
     window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
     seq: int
     deadline: float
-    served: int  # orders serving the request when the directive arrived
 
-    def overdue(self, served: int, now: float) -> bool:
-        return served == self.served and self.deadline < now
+    def original(self, goals: Goals) -> Message:
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            return source.delivery(self.seq).message
+
+    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
+        if self.deadline >= now:
+            return False
+        original = self.original(goals).reference
+        with goals.bus.log.checked_read() as source:
+            replies = source.replies((original,))
+        return not any(reply.message.sender == owner.name and original in reply.message.answers
+                       for reply in replies)
 
 
 @dataclass(frozen=True)
@@ -497,14 +516,16 @@ class RequestGoalOrder(GoalOrder):
         """A closed request is replaced by one the directive opens; an open one records it."""
         if goal.state.terminal:
             return directive.request(goal, ctx)
-        served = len(ctx.goals.todos.for_request(ctx.thread.incarnation, goal.id))
         return replace(goal, revision=goal.revision + 1, order=replace(
-            self, directives=(*self.directives, directive.directive(served))))
+            self, directives=(*self.directives, directive.directive())))
+
+    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
+        return tuple(directive.original(goals) for directive in self.directives)
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[RequestDirective, ...]:
-        served = len(goals.todos.for_request(owner, goal.id))
-        return tuple(directive for directive in self.directives if directive.overdue(served, now))
+        return tuple(directive for directive in self.directives
+                     if directive.overdue(goals, owner, now))
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

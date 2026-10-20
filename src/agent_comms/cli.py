@@ -14,6 +14,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
@@ -48,8 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        args = build_parser().parse_args(argv)
-        command = CliCommand.member_named(args.command).from_namespace(args)
+        args = build_parser().parse_args(argv, namespace=SendArguments())
+        command = CliCommand.member_named(args.command).from_arguments(args)
         with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:

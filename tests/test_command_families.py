@@ -1,3 +1,5 @@
+
+from agent_comms.field_codec import FieldCodec, option
 """External contracts and adding commands without editing any consumer catalog."""
 
 import asyncio
@@ -9,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_commands import CliCommand, option
+from agent_comms.cli_commands import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
@@ -31,7 +33,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
 
     def parse(args):
         options = parser.parse_args(args)
-        return CliCommand.member_named(options.command).from_namespace(options)
+        return CliCommand.member_named(options.command).from_arguments(options)
 
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
     assert register.tags == frozenset({"x", "y"})

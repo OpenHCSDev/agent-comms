@@ -151,7 +151,7 @@ def test_checkpoint_schema_query_stays_local_but_external_names_still_discover()
                 for table in tables:
                     table.create(db)
                 checked_prefix = checkpoint.CheckedPrefix.capture(
-                    '0' * 32, os.fstat(source.fileno()), 0, bytes(32), '0' * 64)
+                    '0' * 32, checkpoint.FileRevision.from_file(source), 0, bytes(32), '0' * 64)
                 checked_prefix.insert(db)
                 assert checkpoint._saved(db) == checked_prefix.witness()
             assert 'agent_comms.acp' not in sys.modules

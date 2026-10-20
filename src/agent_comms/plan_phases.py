@@ -95,7 +95,7 @@ class ControlPlanePhase(PlanPhase):
 
 
 class CutoverPhase(PlanPhase):
-    after = (ReviewQueuePhase, StoryPhase, CommanderPagePhase, ControlPlanePhase)
+    after = (ReviewQueuePhase, ControlPlanePhase)
 
 
 class SkillPhase(PlanPhase):

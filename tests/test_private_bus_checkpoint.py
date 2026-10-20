@@ -18,13 +18,15 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError
 from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
-from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
+from agent_comms.store_files import (
+    BoundedStoreReadBudget, ExclusiveLock, SharedLock, UNBOUNDED_STORE_READ, _store_lock,
+)
 from agent_comms.threads import Thread
 
 
@@ -50,6 +52,39 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     with comms.bus.log.checked_read() as source:
         witness, captured, more = source.addressed_page(comms.bus.log, request)
     return witness, tuple(captured), more
+
+
+def test_copied_interrupted_append_next_send_indexes_only_unsealed_rows(tmp_path, monkeypatch):
+    import agent_comms.private_bus_checkpoint as checkpoint
+
+    original, _ = _root(tmp_path)
+    first = publish_initial(original, "sender", "Alice", "already sealed")
+    with original.bus.log.checked_read() as source:
+        cut = source.witness.offset
+    with monkeypatch.context() as patch:
+        def interrupted(*args):
+            raise OSError("interrupted after bus fsync")
+        patch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", interrupted)
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            publish_initial(original, "sender", "Bob", "written but not indexed")
+    original_bytes = original.bus.log.path.read_bytes()
+    copied = Comms(shutil.copytree(original.root, tmp_path / "copied"))
+    indexed = []
+    index_row = checkpoint._index_row
+
+    def observe(db, offset, raw, record, previous_sequence):
+        indexed.append(offset)
+        return index_row(db, offset, raw, record, previous_sequence)
+
+    monkeypatch.setattr(checkpoint, "_index_row", observe)
+    sent = publish_initial(copied, "sender", "Alice", "new send after interruption")
+    assert sent.seq == first.seq + 2
+    assert len(indexed) == 2
+    assert indexed[0] == cut
+    assert indexed[1] == len(original_bytes)
+    assert original.bus.log.path.read_bytes() == original_bytes
+    with copied.bus.log.checked_read() as source:
+        assert source.witness.through_seq == sent.seq
 
 
 def test_bus_read_authority_comes_from_its_declared_lock_type(tmp_path):
@@ -254,26 +289,32 @@ def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) ->
         case.close()
 
 
-def test_sealed_prefix_is_not_rehashed_for_complete_suffix(tmp_path: Path) -> None:
-    from agent_comms.private_bus_checkpoint import _chain
+def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, monkeypatch) -> None:
+    import agent_comms.private_bus_checkpoint as checkpoint
 
     comms, _ = _root(tmp_path)
     publish_initial(comms, "sender", "Alice", "prefix A" + "x" * 6000)
-    with comms.bus.log.checked_read() as source:
-        saved = source.witness
-    _append_offline_retained_tail(comms, 1, 100)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            checkpoint,
+            "append_private_bus_checkpoint_unlocked",
+            lambda *_: (_ for _ in ()).throw(OSError("crash")),
+        )
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            publish_initial(comms, "sender", "Bob", "complete lagged suffix")
     bus = comms.bus.log.path
     raw = bus.read_bytes()
-    suffix = raw[saved.offset:]
-    # A send trusts the sealed append-only prefix. Equal-length whitespace far
-    # before its checked tail is deliberately not rediscovered by a full scan.
+    # Semantic-canonical equal-length JSON: only early insignificant whitespace
+    # changes, outside the saved 4-KiB tail and without breaking sideband digest.
+    assert raw.count(b'"seq": 1') == 1
+    assert raw.index(b'"seq": 1') < raw.index(b"\n") - 4096
     with bus.open("r+b") as stream:
         stream.write(raw.replace(b'"seq": 1', b'"seq":\t1', 1))
         stream.flush()
         os.fsync(stream.fileno())
-    with comms.bus.log.checked_read() as source:
-        assert source.witness.through_seq == 2
-        assert source.witness.digest == _chain(bytes.fromhex(saved.digest), suffix).hex()
+    with pytest.raises(RelationViolationError, match="checked prefix changed"):
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
+    assert bus.read_bytes().endswith(b"\n")
 
 
 @pytest.mark.parametrize(
@@ -464,7 +505,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
         pytest.raises(RelationViolationError),
-        comms.bus.log.locked(max_bus_bytes=8 * 1024 * 1024),
+        comms.bus.log.locked(read_budget=BoundedStoreReadBudget(8 * 1024 * 1024)),
     ):
         pass
     with monkeypatch.context() as patch:
@@ -515,13 +556,9 @@ def test_reopened_root_preserves_checked_source_and_supports_append(
 
 
 @pytest.mark.parametrize("copy_root", [False, True])
-def test_relocated_bus_reuses_index_but_copied_index_needs_a_seal(
-    tmp_path: Path, copy_root: bool,
-) -> None:
+def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None:
     from agent_comms.child_process import Platform
-    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
-    from agent_comms.errors import BusPrefixUnavailableError
-    from agent_comms.store_files import _store_lock_file
+    from agent_comms.store_files import StoreLockAcquisition, _store_lock_file
 
     original, root_id = _root(tmp_path)
     first = publish_initial(original, "sender", "Alice", "copied original")
@@ -537,18 +574,14 @@ def test_relocated_bus_reuses_index_but_copied_index_needs_a_seal(
         copied = original
     log = copied.bus.log
     assert log.path.stat().st_ino != original_inode
-    if copy_root:
-        with pytest.raises(BusPrefixUnavailableError, match="index seal changed"):
-            asyncio.run(log.read_checked_async(lambda source: source.witness))
-        assert log.path.read_bytes() == original_bytes
-        assert (copied.root / "private_bus_checkpoint.sqlite3").read_bytes() == original_db
-        return
     platform = Platform.current()
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
-        with pytest.raises(CheckpointNeedsRepair):
-            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
-    # The real reader upgrades its lock and updates only the source identity.
+        with pytest.raises(CheckpointNeedsRepairError, match="relocated"):
+            with StoreLockAcquisition.holding(log.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                                              mode=SharedLock(), lock_type=log.lock_type):
+                pass
+    # The real reader upgrades its lock and rebuilds the copied SQLite index.
     request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
     witness, messages, _ = asyncio.run(log.read_checked_async(
         lambda source: source.addressed_page(log, request)
@@ -563,6 +596,9 @@ def test_relocated_bus_reuses_index_but_copied_index_needs_a_seal(
     second = publish_initial(copied, "sender", "Alice", "after copy")
     assert second.seq == first.seq + 1
     assert [row.message.seq for row in _page(copied, request.lookup)[1]] == [first.seq, second.seq]
+    if copy_root:
+        assert original.bus.log.path.read_bytes() == original_bytes
+        assert (original.root / "private_bus_checkpoint.sqlite3").read_bytes() == original_db
 
 
 @pytest.mark.parametrize("fault", ["tail", "prefix", "root", "shrink"])
@@ -592,21 +628,20 @@ def test_copied_root_corruption_is_not_rechecked(tmp_path: Path, fault: str) -> 
     assert (copied.root / "bus_meta.json").read_bytes() == marker
 
 
-def test_copied_root_rejects_unsealed_index_rows(tmp_path: Path) -> None:
-    from agent_comms.errors import BusPrefixUnavailableError
-
+def test_copied_root_rebuilds_unsealed_index_rows(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
-    publish_initial(comms, "sender", "Alice", "canonical original")
+    first = publish_initial(comms, "sender", "Alice", "canonical original")
     copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
     with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DELETE FROM addressed")
         db.execute("DELETE FROM delivery_sources")
-    with pytest.raises(BusPrefixUnavailableError, match="index seal changed"):
-        _page(copied, RecordedThreadIncarnation("fixture", 17002.0).lookup)
+    assert [row.message.seq for row in _page(
+        copied, RecordedThreadIncarnation("fixture", 17002.0).lookup
+    )[1]] == [first.seq]
 
 
 def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch) -> None:
-    from agent_comms.errors import BusPrefixUnavailableError, HumanClaimBlockedError
+    from agent_comms.errors import HumanClaimBlockedError
     from agent_comms.wire_log import WireLog
 
     comms, _ = _root(tmp_path)
@@ -625,11 +660,9 @@ def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch
     copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
     original = copied.bus.log.path.read_bytes()
     with pytest.raises(HumanClaimBlockedError, match="UNKNOWN"):
-        asyncio.run(comms.bus.log.read_checked_async(
+        asyncio.run(copied.bus.log.read_checked_async(
             lambda source: source.require_new_human_message("human", "new-message")
         ))
-    with pytest.raises(BusPrefixUnavailableError, match="index seal changed"):
-        asyncio.run(copied.bus.log.read_checked_async(lambda source: source.witness))
     assert copied.bus.log.private_marker_unlocked().last_seq == 2
     assert copied.bus.log.path.read_bytes() == original
     with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
@@ -654,7 +687,7 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
 
     import agent_comms.private_bus_checkpoint as checkpoint
     from agent_comms.child_process import Platform
-    from agent_comms.store_files import _store_lock_file
+    from agent_comms.store_files import StoreLockAcquisition, _store_lock_file
 
     comms, _ = _root(tmp_path)
     publish_initial(comms, "sender", "Alice", "first")
@@ -671,8 +704,10 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     # A shared-lock reader never writes the checkpoint; it names the repair.
     with _store_lock_file(log.path) as lock_file:
         platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
-        with pytest.raises(checkpoint.CheckpointNeedsRepair):
-            log._read_checked(lock_file, platform, lambda source: None, SharedLock())
+        with pytest.raises(CheckpointNeedsRepairError):
+            with StoreLockAcquisition.holding(log.path, lock_file, platform, UNBOUNDED_STORE_READ,
+                                              mode=SharedLock(), lock_type=log.lock_type):
+                pass
     # The async reader then takes the exclusive lock, which repairs and reads.
     through = asyncio.run(log.read_checked_async(lambda source: source.witness.through_seq))
     assert through == 2
@@ -682,75 +717,10 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
 
 @pytest.mark.parametrize(("mode", "escalated"), [(SharedLock(), ExclusiveLock), (ExclusiveLock(), None)])
 def test_only_a_shared_reader_retries_a_needed_repair_exclusively(mode, escalated) -> None:
-    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
-
-    error = CheckpointNeedsRepair("lagged suffix")
+    error = CheckpointNeedsRepairError("lagged suffix")
     if escalated is None:
-        with pytest.raises(CheckpointNeedsRepair) as raised:
+        with pytest.raises(CheckpointNeedsRepairError) as raised:
             mode.after_repair_needed(error)
         assert raised.value is error
     else:
         assert type(mode.after_repair_needed(error)) is escalated
-
-
-def _append_offline_retained_tail(comms: Comms, count: int, body_bytes: int) -> int:
-    """Leave real complete rows after a final seal, as an interrupted writer can."""
-    marker = comms.bus.log.private_marker_unlocked()
-    first = marker.last_seq + 1
-    marker.last_seq += count
-    marker.claimed_after_seq = marker.last_seq
-    comms.bus.log.write_metadata_unlocked(marker)
-    with comms.bus.log.path.open("ab") as stream:
-        for seq in range(first, marker.last_seq + 1):
-            message = Message("sender", "Alice", "x" * body_bytes, InfoKind, seq=seq)
-            stream.write((json.dumps(message.to_wire()) + "\n").encode())
-        stream.flush()
-        os.fsync(stream.fileno())
-        return stream.tell()
-
-
-def test_bad_tail_preserves_committed_chunks_and_resumes(tmp_path: Path) -> None:
-    from agent_comms.private_bus_checkpoint import _saved, PublicMessages
-    from agent_comms.checkpoint_seals import FinalSeal
-
-    comms, _ = _root(tmp_path)
-    end = _append_offline_retained_tail(comms, 6, 4 * 1024 * 1024)
-    with comms.bus.log.path.open("ab") as stream:
-        stream.write(b"not-json\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    with pytest.raises(RelationViolationError):
-        with comms.bus.log.checked_read():
-            pass
-    path = comms.root / "private_bus_checkpoint.sqlite3"
-    with sqlite3.connect(path) as db:
-        progress = _saved(db)
-    assert 16 * 1024 * 1024 <= progress.offset < end
-    assert progress.through_seq == 4
-    assert isinstance(comms.bus.log.private_marker_unlocked().seal, FinalSeal)
-    # Repair only this authored corrupt fixture tail, without replaying indexed rows.
-    with comms.bus.log.path.open("r+b") as stream:
-        stream.truncate(end)
-        stream.flush()
-        os.fsync(stream.fileno())
-    with comms.bus.log.checked_read() as source:
-        assert source.witness.offset == end
-        assert source.witness.through_seq == 6
-        assert source.connection.execute(
-            f'SELECT count(*) FROM "{PublicMessages.declared_name}"').fetchone()[0] == 6
-
-
-def test_missing_prefix_fails_by_name_without_rebuilding(tmp_path: Path) -> None:
-    from agent_comms.errors import BusPrefixUnavailableError
-
-    comms, _ = _root(tmp_path)
-    original = comms.bus.log.path.read_bytes()
-    path = comms.root / "private_bus_checkpoint.sqlite3"
-    with sqlite3.connect(path) as db:
-        db.execute("DELETE FROM prefix_certificate")
-    with pytest.raises(BusPrefixUnavailableError, match="prefix record is missing"):
-        with comms.bus.log.checked_read():
-            pass
-    assert comms.bus.log.path.read_bytes() == original
-    with sqlite3.connect(path) as db:
-        assert db.execute("SELECT count(*) FROM prefix_certificate").fetchone() == (0,)

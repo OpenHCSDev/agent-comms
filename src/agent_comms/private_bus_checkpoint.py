@@ -6,7 +6,7 @@ The saved bus marker binds the SQLite file identity and checked byte range;
 a matching bus revision alone does not make the SQL rows trustworthy.
 An unfinished write resumes from the last sealed prefix. Index only bytes after
 that prefix, sealing each committed chunk so interruption preserves progress.
-Reject unexpected changes to the index file instead of silently rebuilding. Reading this index neither
+Reject unexpected changes to the index file instead of rebuilding. Reading this index neither
 submits native input nor marks a message handled.
 """
 
@@ -26,14 +26,14 @@ from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
-from .checkpoint_seals import CheckpointSeal, FinalSeal, PendingSeal, PrefixSeal, PrefixSource
+from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
 )
 from .coordination_tables.publications import PublicationIntents
-from .errors import BusPrefixUnavailableError, HumanClaimBlockedError, RelationViolationError
+from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord
@@ -92,14 +92,68 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Checked bus prefix differs from its stored marker.")
 
     def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
-        """Check the sealed cut; moving the source does not discard its index."""
+        """Validate the logical prefix independently of its physical file identity."""
         if self.root_id != marker.root_id or info.st_size < self.offset:
-            raise BusPrefixUnavailableError("Private bus checkpoint root/size changed.")
+            raise RelationViolationError("Private bus checkpoint root/size changed.")
         if _tail(stream, self.offset) != self.tail:
-            raise BusPrefixUnavailableError("Private bus checkpoint prefix tail changed.")
+            raise RelationViolationError("Private bus checkpoint prefix tail changed.")
         if self.through_seq > marker.last_seq:
-            raise BusPrefixUnavailableError(
-                "Private bus checkpoint exceeds the durable sequence marker.")
+            raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
+
+    def rebind_source(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                      info: os.stat_result) -> PrefixWitness:
+        """Publish the unchanged prefix's new revision under the exclusive bus lock."""
+        rebound = replace(self, revision=replace(FileRevision.from_stat(info), size=self.offset))
+        return CheckedPrefix.commit_tail(bus, marker, db, self, rebound, [])
+
+    def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                   path: Path, info: os.stat_result) -> PrefixWitness:
+        """Continue the proved cut, committing bounded chunks without a prefix rescan."""
+        saved = self
+        if saved.offset == 0 and saved.digest != _SEED.hex():
+            raise RelationViolationError("Private bus has no proved empty prefix.")
+        digest = bytes.fromhex(saved.digest)
+        last_seq = saved.through_seq
+        additions: list[tuple[int, bytes, WireRecord]] = []
+        size = 0
+        end = marker.seal.recovery_end(info)
+        revision = FileRevision.from_stat(info)
+        with bus.path.open("rb") as stream:
+            def commit(cut: int) -> None:
+                nonlocal saved, additions, size
+                if (FileRevision.from_file(stream) != revision
+                        or FileRevision.from_stat(bus.path.stat()) != revision):
+                    raise RelationViolationError("Private bus changed during tail recovery.")
+                expected = replace(
+                    saved, revision=replace(revision, size=cut), through_seq=last_seq,
+                    digest=digest.hex(), tail=_tail(stream, cut))
+                saved = CheckedPrefix.commit_tail(bus, marker, db, saved, expected, additions)
+                additions, size = [], 0
+
+            def collect(offset: int, raw: bytes, record: WireRecord) -> None:
+                nonlocal digest, last_seq, size
+                digest = _chain(digest, raw)
+                last_seq = record.sequence_after(last_seq)
+                if last_seq > marker.last_seq:
+                    raise RelationViolationError("Private bus tail exceeds its reserved sequence.")
+                additions.append((offset, raw, record))
+                size += len(raw)
+                cut = offset + len(raw)
+                if marker.seal.chunk_complete(cut, size, len(additions)):
+                    commit(cut)
+
+            for _ in bus.verified_records_unlocked(
+                marker, on_row=collect, offset=saved.offset,
+                previous_sequence=saved.through_seq, end=end,
+            ):
+                pass
+            if additions or saved.revision != replace(revision, size=end):
+                commit(end)
+            else:
+                marker.seal.require_rebuilt(saved, saved)
+                marker.seal_with(FinalSeal.capture(saved, path))
+                bus.write_metadata_unlocked(marker)
+        return marker.seal.recover(bus, marker, db, path, saved, info)
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1085,8 +1139,9 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                             != FileRevision.from_stat(info)
                         ):
                             raise RelationViolationError("Private bus changed during checkpoint installation.")
-                        cls.capture(marker.root_id, info, through_seq, digest,
-                                    _tail(stream, info.st_size)).insert(db)
+                        cls.capture(
+                            marker.root_id, FileRevision.from_stat(info), through_seq,
+                            digest, _tail(stream, info.st_size)).insert(db)
             _directory_sync(staged)
             with closing(_connect(staged, readonly=True)) as db:
                 witness = _saved(db)
@@ -1112,10 +1167,10 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         try:
             row = cls.one(db, singleton=1)
             if row is None:
-                raise BusPrefixUnavailableError("Private bus checkpoint prefix record is missing.")
+                raise RelationViolationError("Private bus checkpoint prefix record is missing.")
             return row.witness()
         except MalformedRecord as error:
-            raise BusPrefixUnavailableError("Private bus checkpoint identity is malformed.") from error
+            raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
     def witness(self) -> PrefixWitness:
         with MalformedRecord.refusing("Invalid checked prefix record"):
@@ -1134,10 +1189,9 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
 
     @classmethod
     def capture(
-        cls, root_id: str, info: os.stat_result, seq: int, digest: bytes, tail: str
+        cls, root_id: str, revision: FileRevision, seq: int, digest: bytes, tail: str
     ) -> CheckedPrefix:
-        return cls.from_witness(PrefixWitness(
-            root_id, FileRevision.from_stat(info), seq, digest.hex(), tail))
+        return cls.from_witness(PrefixWitness(root_id, revision, seq, digest.hex(), tail))
 
     @classmethod
     def from_witness(cls, witness: PrefixWitness) -> CheckedPrefix:
@@ -1150,7 +1204,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
     def commit_tail(cls, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                     prior: PrefixWitness, expected: PrefixWitness,
                     additions: list[tuple[int, bytes, WireRecord]]) -> PrefixWitness:
-        """Publish one chunk through the same write intent as an ordinary append."""
+        """Commit one chunk through the same intent as an ordinary append."""
         path = _path(bus.path)
         marker.seal.require_rebuilt(prior, expected)
         marker.seal_with(PendingSeal.capture(prior, expected, path))
@@ -1160,7 +1214,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
             for offset, raw, record in additions:
                 sequence = _index_row(db, offset, raw, record, sequence)
             if sequence != expected.through_seq:
-                raise RelationViolationError("Indexed suffix differs from its sealed sequence.")
+                raise RelationViolationError("Indexed tail differs from its sealed sequence.")
             cls.from_witness(expected).upsert(db)
         _directory_sync(path)
         marker.seal_with(FinalSeal.capture(expected, path))
@@ -1191,7 +1245,7 @@ def _directory_sync(path: Path) -> None:
 
 def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     if path.is_symlink() or not path.exists():
-        raise BusPrefixUnavailableError("Private bus checkpoint is missing or redirected.")
+        raise RelationViolationError("Private bus checkpoint is missing or redirected.")
     info = path.lstat()
     if (
         not stat.S_ISREG(info.st_mode)
@@ -1219,7 +1273,7 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
         db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
     )
     if SQLiteSchemaObject.differences(actual, schema):
-        raise BusPrefixUnavailableError("Private bus checkpoint schema is unavailable.")
+        raise RelationViolationError("Private bus checkpoint schema is unavailable.")
     return CheckedPrefix.read_witness(db)
 
 
@@ -1271,79 +1325,14 @@ def checked_prefix_exists(bus_path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
-def _rebuild_checkpoint_unlocked(
-    bus: WireLog,
-    marker: WireMetadata,
-    db: sqlite3.Connection,
-    db_path: Path,
-    info: os.stat_result,
-    seal: CheckpointSeal,
-) -> PrefixWitness:
-    """Resume the index at its sealed cut, committing each verified tail chunk."""
-    saved = _saved(db)
-    if saved.offset == 0 and saved.digest != _SEED.hex():
-        raise BusPrefixUnavailableError("Private bus has no proved empty prefix.")
-    digest = bytes.fromhex(saved.digest)
-    last_seq = saved.through_seq
-    additions: list[tuple[int, bytes, WireRecord]] = []
-    size = 0
-    end = seal.recovery_end(info)
-    revision = FileRevision.from_stat(info)
-
-    with bus.path.open("rb") as stream:
-        def commit(cut: int) -> None:
-            nonlocal saved, additions, size
-            if FileRevision.from_stat(bus.path.stat()) != revision:
-                raise RelationViolationError("Private bus changed during suffix recovery.")
-            expected = PrefixWitness(saved.root_id, replace(revision, size=cut), last_seq,
-                                     digest.hex(), _tail(stream, cut))
-            saved = CheckedPrefix.commit_tail(bus, marker, db, saved, expected, additions)
-            additions, size = [], 0
-
-        def collect(offset: int, raw: bytes, record: WireRecord) -> None:
-            nonlocal digest, last_seq, size
-            digest = _chain(digest, raw)
-            last_seq = record.sequence_after(last_seq)
-            if last_seq > marker.last_seq:
-                raise RelationViolationError("Private bus suffix exceeds its reserved sequence.")
-            additions.append((offset, raw, record))
-            size += len(raw)
-            cut = offset + len(raw)
-            if marker.seal.chunk_complete(cut, size, len(additions)):
-                commit(cut)
-
-        for _ in bus.verified_records_unlocked(
-            marker, on_row=collect, offset=saved.offset,
-            previous_sequence=saved.through_seq, end=end,
-        ):
-            pass
-        if additions or saved.revision != replace(revision, size=end):
-            commit(end)
-        else:
-            # A crash after SQLite COMMIT needs only the final marker, not row replay.
-            marker.seal.require_rebuilt(saved, saved)
-            marker.seal_with(FinalSeal.capture(saved, db_path))
-            bus.write_metadata_unlocked(marker)
-    return marker.seal.recover(bus, marker, db, db_path, saved, info)
-
-
-class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
-    """A reader holding the shared bus lock found rows the checkpoint does not
-    cover yet, or an unfinished checkpoint write.
-
-    Only a holder of the exclusive bus lock may repair the checkpoint, so the
-    reader takes the exclusive lock and checks again.
-    """
-
-
 def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWitness:
     """Check a final, up-to-date checkpoint under the shared bus lock; never writes."""
     saved = _saved(db)
     info = os.fstat(stream.fileno())
     saved.require_source(marker, info, stream)
-    marker.seal.require_final(saved, path)
     if FileRevision.from_stat(info) != saved.revision:
-        raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
+        raise CheckpointNeedsRepairError("Bus revision requires exclusive checkpoint validation.")
+    marker.seal.require_final(saved, path)
     return saved
 
 
@@ -1386,7 +1375,7 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *,
     """Keep only this canonical lock's verified source/index resources open.
 
     Under the shared bus lock other readers run concurrently, so the check is
-    read-only and raises CheckpointNeedsRepair where an exclusive holder would
+    read-only and raises CheckpointNeedsRepairError where an exclusive holder would
     repair the checkpoint.
     """
     path = _path(bus.path)

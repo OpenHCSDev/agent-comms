@@ -19,10 +19,6 @@ class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
 
-class BusPrefixUnavailableError(RelationViolationError):
-    """No sealed bus prefix is available; a sender must not rebuild history."""
-
-
 class StoredHistoryUnreadable(RelationViolationError):  # noqa: N818 - nominal read failure
     """Stored wire bytes cannot be decoded as their declared history type."""
 
@@ -46,3 +42,7 @@ class HumanInitialUnknownError(RelationViolationError):
 
 class HumanClaimBlockedError(RelationViolationError):
     """A prior private reservation cannot be safely retried."""
+
+
+class CheckpointNeedsRepairError(Exception):
+    """A shared source requires exclusive checkpoint repair before it can open."""
