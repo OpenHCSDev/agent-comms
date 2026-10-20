@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
@@ -25,11 +23,8 @@ from ..standing_rules import (
 )
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import (
-    FlatTrend, OrderProgress, PullRequests, Todo,
-)
-from ..tools import CommsUnjudgedTool
-from ..turn_digests import TurnDigestRead, TurnsSince
+from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
+from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from .config import CommanderConfig
 
 
@@ -202,7 +197,7 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = CommsUnjudgedTool.count(comms, commander)
+        total = OrderEditCountRead.count(comms, commander)
         return str(total) if total > cls.limit else None
 
 
@@ -220,37 +215,33 @@ class MergeGrowth(DatedStandingRule):
     src: tuple[int, int]
     tests: tuple[int, int]
 
-    @staticmethod
-    def git(checkout: Path, *args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(checkout), *args], capture_output=True, text=True
-        ).stdout
-
-    @classmethod
-    def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
-        diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
-        counted = [
-            (int(a), int(d))
-            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
-            if a.isdigit()
-        ]
-        return sum(a for a, _ in counted), sum(d for _, d in counted)
-
     @classmethod
     def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Each first-parent commit on the repository's main inside the window, newest first."""
-        cls.git(repo.checkout, "fetch", "-q", "origin", "main")
-        log = cls.git(
-            repo.checkout,
-            "log",
-            "--first-parent",
-            f"--since={cls.window}",
-            "--format=%H %ct %s",
-            "origin/main",
+        """Read first-parent growth from one captured, already-fetched Git history.
+
+        Fetch belongs to the checkout's update owner, not a standing-rule read.
+        Git emits each commit's first-parent diff in this same process.
+        """
+        log = repo.git(
+            repo.checkout, "log", "--first-parent", f"--since={cls.window}",
+            "--format=%x1e%H%x00%ct%x00%s", "--numstat", "--no-renames",
+            "--diff-merges=first-parent", "origin/main", "--", repo.source, "tests",
         )
-        for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
-            src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
-            yield cls(repo.github, sha, subject, float(at), src, tests)
+        for record in log.split("\x1e")[1:]:
+            header, _, diff = record.partition("\n")
+            sha, at, subject = header.split("\x00", 2)
+            src, tests = [0, 0], [0, 0]
+            for row in diff.splitlines():
+                if not row:
+                    continue
+                added, deleted, path = row.split("\t", 2)
+                if not (added.isdigit() and deleted.isdigit()):
+                    continue
+                for root, counts in ((repo.source, src), ("tests", tests)):
+                    if path == root or path.startswith(root.rstrip("/") + "/"):
+                        counts[0] += int(added)
+                        counts[1] += int(deleted)
+            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
