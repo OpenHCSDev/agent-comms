@@ -67,7 +67,8 @@ def read(checkout, pulls=None):
 
 def test_uncounted_check_keeps_other_overdue_orders_visible(
         checkout, commander, commander_script, monkeypatch):
-    from agent_comms.goals import CountCheckResult, OrderCheck
+    import asyncio
+    from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
     from agent_comms.child_process import NoCountYetPrinted, SignaledOutcome, TimedOutOutcome
     script, _ = commander_script
     todo, unit = checkout
@@ -79,6 +80,9 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(
     # The child really exceeds its timeout; partial stdout must never become a count.
     outcome = TimedOutOutcome(SignaledOutcome(9))
     assert isinstance(outcome.printed_count(b"0"), NoCountYetPrinted)
+    run = asyncio.run(todo.order.check.run())
+    sha = subprocess.check_output(('git', '-C', str(unit), 'rev-parse', 'HEAD'), text=True).strip()
+    CheckedCommit(todo.order.check.command, run.outcome, run.stdout.decode()).store(str(unit), sha)
     work = OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), Listed())
     assert work.line.endswith("; no count yet")
     second = create(commander, "P2", deadline=1)
@@ -87,7 +91,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(
     assert len(lines) == 1
     assert "no count yet" in lines[0] and "no commit since the order" in lines[0]
     with pytest.raises(ValueError, match="no count yet"):
-        todo.order.check.result.require(todo.order.check.at("HEAD", str(unit)))
+        todo.order.check.result.require(run)
 
 
 def test_no_commit_since_the_order_is_explicit(checkout):
@@ -121,7 +125,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
     assert 'distance 0' not in alarm and 'projected done' not in alarm
     missing = NoIntegerPrinted()
     assert missing.distance(1) is missing and missing.plus(3) is missing
-    assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend('printf missing')
+    assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend(missing, 'printf missing')
     assert DistanceReadings((DistanceReading(1, missing), DistanceReading(2, CountPrinted(2)))).trend.projection == ''
 
 

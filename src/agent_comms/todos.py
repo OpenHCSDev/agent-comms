@@ -27,7 +27,7 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -451,7 +451,7 @@ class DistanceReadings:
         if not self.readings:
             return UnreadTrend()
         return self.readings[-1].distance.project(
-            self.counted_trend, lambda: UncountedTrend(self.readings[-1].command))
+            self.counted_trend, lambda printed: UncountedTrend(printed, self.readings[-1].command))
 
     def counted_trend(self, final: int) -> DistanceTrend:
         last = self.readings[-self.window:]
@@ -465,7 +465,7 @@ class DistanceReadings:
             rate = (previous - final) / max(latest.at - first.at, 1.0)
             return MovingTrend(final, latest.at + final / rate)
 
-        return first.distance.project(compared, UnreadTrend)
+        return first.distance.project(compared, lambda printed: UnreadTrend())
 
 
 class DistanceTrend(DeclaredFamily, affix="Trend"):
@@ -500,11 +500,12 @@ class FlatTrend(DistanceTrend):
 
 @dataclass(frozen=True)
 class UncountedTrend(DistanceTrend):
+    printed: NoIntegerPrinted
     command: str
 
     @property
     def projection(self) -> str:
-        return f"; check prints no integer: {self.command}"
+        return self.printed.progress(self.command)
 
 
 @dataclass(frozen=True)
