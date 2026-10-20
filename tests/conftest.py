@@ -312,8 +312,8 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     from agent_comms.tools import CommsRuleReviewTool
     from agent_comms.tool_caller import ThreadCaller
     caller = ThreadCaller('lead')
-    caller.invoke(CommsRuleReviewTool(entry=DrawnRuleReviewEntry(('Read the command root from its one declared owner.',), 1)), comms)
-    caller.invoke(CommsRuleReviewTool(entry=AnsweredRuleReviewEntry(1, 'P701 binds each command to this private root and preserves its original input and records.')), comms)
+    caller.invoke(CommsRuleReviewTool(entry=DrawnRuleReviewEntry(('Read the command root from its one declared owner.',))), comms)
+    caller.invoke(CommsRuleReviewTool(entry=AnsweredRuleReviewEntry(1, '"Read the command root from its one declared owner." P701')), comms)
     yield context, repo
 
 
