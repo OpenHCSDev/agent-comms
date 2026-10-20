@@ -1057,45 +1057,51 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     assert stalled() == []
 
 
-def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_serves_it(
-        commander, tmp_path, monkeypatch):
-    """claude-ai's sends through the connector are directives: one to a thread holding owner requests
-    is recorded on its open request with a deadline, or opens a new request once that one is done;
-    a thread holding no request records nothing. Past its deadline it alarms until an order serves
-    the request."""
-    from agent_comms import standing_rules
+def test_each_directive_requires_its_own_linked_answer(commander, tmp_path):
+    """An unrelated order answers neither ask; an order linked to one answers only that ask."""
     from agent_comms.connector import CALLER
-    from agent_comms.goal_actions import CompletedGoalAction
     from agent_comms.goals import RequestDirective
-    from agent_comms.tools import CommsSendTool
+
     comms, caller = commander
-    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
-    def direct(target, body):
-        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
+    comms.registry.declare(comms.registry.new_thread(
+        'claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+
+    def direct(body):
+        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': 'lead', 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
-    def unacted(after):
-        monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
-        return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
-    worker = comms.registry.require('worker').goal
-    seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
-    assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
+
+    first = direct('Make the slowdowns impossible by mechanism.')
+    second = direct('Clear the board without losing the unfinished requests.')
+    owner = comms.registry.require('lead').incarnation
     goal = comms.registry.require('lead').goal
-    (directive,) = goal.order.directives
-    assert (goal.id, directive.seq, directive.served) == ('request', seq, 0)
-    assert unacted(directive.deadline - 1) == []
-    due = time.strftime('%H:%M', time.localtime(directive.deadline))
-    assert unacted(directive.deadline + 1) == [
-        f'DIRECTIVE UNACTED: claude-ai {seq} on request request, due {due}'
-        ' -> order its next step or mark the request done']
+    now = max(item.deadline for item in goal.order.directives) + 1
+
+    def overdue():
+        current = comms.registry.require('lead').goal
+        return tuple(item.seq for item in current.order.overdue_directives(
+            current, comms.goals, owner, now))
+
+    assert overdue() == (first, second)
     create(commander, 'P1')
-    assert unacted(directive.deadline + 1) == []
-    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    assert overdue() == (first, second)
+    original = goal.order.directives[0].original(comms.goals)
+    reply = comms.messaging.send('lead', 'worker', 'P1 answers the slowdown directive.',
+                                answers=(original.reference,)).message
+    assert reply.answers == (original.reference,)
+    assert overdue() == (second,)
+    original = goal.order.directives[1].original(comms.goals)
+    comms.messaging.send('lead', 'claude-ai', 'The board directive is answered separately.',
+                         answers=(original.reference,))
+    assert overdue() == ()
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id,
+                      delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
-    seq = direct('lead', 'A second directive after the first request is done.')
+    third = direct('A new directive after the original request is done.')
     goal = comms.registry.require('lead').goal
-    assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
-    assert goal.order.directives == (RequestDirective(seq, goal.order.directives[0].deadline, 0),)
-    assert unacted(goal.order.directives[0].deadline + 1) != []
+    assert goal.id != 'request' and goal.state.active
+    assert goal.order.directives == (RequestDirective(third, goal.order.directives[0].deadline),)
+    assert goal.order.directives[0].overdue(comms.goals, owner,
+                                          goal.order.directives[0].deadline + 1)
 
 
 def stray(commander, problem, generation):
