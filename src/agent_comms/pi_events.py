@@ -307,8 +307,7 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
-        updates = self.outcome.apply(self, session)
-        session.record_retry(self.outcome.result(self.attempt, session.output.redact))
+        updates = session.provider_retry_ended(self)
         for event in updates:
             yield event
 
@@ -324,7 +323,7 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
 
 
 class NativeRetryEnd(AutoRetryEnd):
-    """Close native recovery; the retained assistant reports its final failure."""
+    """The retry outcome owns whether native recovery completes the request."""
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         async for event in super().apply(session):

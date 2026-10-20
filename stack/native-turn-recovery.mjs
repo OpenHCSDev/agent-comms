@@ -3,11 +3,15 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { OwnerToolConnection } from '../owner_tool_socket.mjs';
 
 class RecoveryBudget {
-    static retries = 3;
-    // Sustained provider outages survive only if the wait stretches to minutes.
-    static backoffMs = [1_000, 10_000, 60_000];
-    static get attempts() { return this.retries + 1; }
-    static delay(attempt) { return this.backoffMs[Math.min(attempt - 1, this.backoffMs.length - 1)]; }
+    constructor(backoffMs = [1_000, 10_000, 60_000]) {
+        if (!Array.isArray(backoffMs) || backoffMs.some(delay =>
+            !Number.isFinite(delay) || delay < 0))
+            throw new TypeError('Native recovery backoffs must be finite nonnegative milliseconds');
+        this.backoffMs = Object.freeze([...backoffMs]);
+    }
+    get retries() { return this.backoffMs.length; }
+    get attempts() { return this.retries + 1; }
+    delay(attempt) { return this.backoffMs[attempt - 1]; }
 }
 
 class NativeRunState {
@@ -31,7 +35,7 @@ class NothingProduced extends NativeRunState {
         if (!this.owner.tracked) return this;
         if (!this.owner.retryable(message)) return this.terminal(message);
         const reason = message.errorMessage || 'Provider request failed';
-        return (this.attempt < RecoveryBudget.attempts
+        return (this.attempt < this.owner.budget.attempts
             ? new RefusedNothingProduced(this.owner, this.attempt, reason)
             : new FailedProviderRequest(this.owner, this.attempt, reason)
         ).enter(message);
@@ -64,7 +68,7 @@ class RefusedNothingProduced extends RecoveringNothingProduced {
     refusal() { return this; }
     enter() {
         this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
-            maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
+            maxAttempts: this.owner.budget.retries, delayMs: this.owner.budget.delay(this.attempt),
             errorMessage: this.reason });
         return this;
     }
@@ -96,7 +100,7 @@ class BackoffNothingProduced extends RefusedNothingProduced {
         super.close();
     }
     async recover(message) {
-        const delayMs = RecoveryBudget.delay(this.attempt);
+        const delayMs = this.owner.budget.delay(this.attempt);
         try { await sleep(delayMs, undefined, { signal: this.controller.signal }); }
         catch (error) {
             if (error.name !== 'AbortError') throw error;
@@ -137,7 +141,8 @@ export class InactiveNativeTurnRun {
 
 /** Replaces the native tracked-input flag and owns per-request production and recovery. */
 export class NativeTurnRun {
-    constructor(agent, emit, retryable) {
+    constructor(agent, emit, retryable, backoffMs) {
+        this.budget = new RecoveryBudget(backoffMs);
         this.agent = agent;
         this.emit = emit;
         // AgentSession supplies its existing classifier, including context-

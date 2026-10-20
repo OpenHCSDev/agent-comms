@@ -156,6 +156,9 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     def recovery_events(self, session): ...
 
     @abstractmethod
+    def ends_request(self) -> bool: ...
+
+    @abstractmethod
     def finish_request(self, session) -> None: ...
 
     @abstractmethod
@@ -164,6 +167,9 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
 
 @dataclass(frozen=True)
 class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
+    def ends_request(self) -> bool:
+        return False
+
     def result(self, attempt: int, redact):
         from .acp_failure import ProviderRetryResult
 
@@ -187,6 +193,9 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
 class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     final_error: str = field(metadata={"wire_name": "finalError"})
 
+    def ends_request(self) -> bool:
+        return True
+
     def __post_init__(self) -> None:
         if not self.final_error.strip():
             raise ValueError("Failed provider retry end requires finalError")
@@ -199,14 +208,16 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         )
 
     def apply(self, event, session):
-        from .turn_phase import ModelWaitPhase
+        from .turn_phase import FailedPhase
 
         super().apply(event, session)
         session.watchdog.retry_recovery_pending = False
         return (
             *event.exhausted(session),
             session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
+                "failed", "provider_retry_exhausted", 0,
+                phase=FailedPhase(error=CodelessProviderDiagnosticError(
+                    session.output.redact(self.final_error))),
             ),
         )
 

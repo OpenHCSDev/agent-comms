@@ -61,6 +61,11 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
     from agent_comms.activity import NativeInputDrainDiagnostic
 
     native = native_backend
+    import json
+    settings_path = native.config / 'settings.json'
+    settings = json.loads(settings_path.read_text())
+    settings['nativeRecoveryBackoffMs'] = [1, 1]
+    settings_path.write_text(json.dumps(settings))
     await native.author_history()
     async with native.open_owner() as (agent, session_id):
         native.provider.status = 503
@@ -81,7 +86,7 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         finally:
             native.provider.response_gate = None
         failed_posts = native.provider.posts
-        assert failed_posts == 4  # One request plus Pi's three declared provider retries.
+        assert failed_posts == 3  # One request plus the two declared backoffs.
         comms = agent._comms
         owner = comms.registry.snapshot().owner_identity(session_id)
         # The warning is the original observer's retained diagnostic. Its presence

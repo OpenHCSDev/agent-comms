@@ -494,7 +494,7 @@ class NativeSession(MroDispatch, ABC):
                         "Pi native input-ID capability preflight ended before attestation."
                     )
                 )
-            self.finished = True
+            self.finish_request()
             return
         self.line = self.line.strip()
         if not self.line:
@@ -513,7 +513,7 @@ class NativeSession(MroDispatch, ABC):
                     )
                 )
                 await self.native.shutdown()
-                self.finished = True
+                self.finish_request()
                 return
             raise
 
@@ -534,12 +534,23 @@ class NativeSession(MroDispatch, ABC):
         ))
         self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
-        self.finished = True
+        self.finish_request()
         return updates
 
     def request_retried(self) -> None:
         """Pi compacted after an overflow and re-sends the same request."""
         self.output.request_retried()
+
+    def finish_request(self) -> None:
+        """The native session alone closes its running request."""
+        self.finished = True
+
+    def provider_retry_ended(self, event: pi.AutoRetryEnd) -> tuple[events.AgentEvent, ...]:
+        updates = event.outcome.apply(event, self)
+        self.record_retry(event.outcome.result(event.attempt, self.output.redact))
+        if event.outcome.ends_request():
+            self.finish_request()
+        return updates
 
     def record_retry(self, result: ProviderRetryResult) -> None:
         """The provider retry outcome decides whether this turn's failure may run again."""
@@ -613,7 +624,7 @@ class TurnSession(NativeSession):
             "failed", "prompt_rejected", 0, phase=ShutdownPhase()
         )
         yield error
-        self.finished = True
+        self.finish_request()
 
     def matches_original_input(self, message):
         return self.inputs.permits_interaction and message.matches_input(
@@ -631,7 +642,7 @@ class TurnSession(NativeSession):
                     failures.InputMissing("Pi input start did not match the durable attempt.")
                 )
                 await self.abort_stalled_rpc()
-                self.finished = True
+                self.finish_request()
                 return ()
             self.prompt_state = self.prompt_state.start(event)
             self.ensure_input_forwarding()
@@ -654,5 +665,5 @@ class TurnSession(NativeSession):
                 failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
         await self.abort_stalled_rpc()
-        self.finished = True
+        self.finish_request()
         return ()
