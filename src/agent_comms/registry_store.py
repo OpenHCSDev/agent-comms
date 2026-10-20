@@ -136,8 +136,6 @@ class RegistryGoalConversion(DocumentConversion):
     """The sole previous-to-current registry transformation."""
 
     source_version = 1
-    source_fingerprints = frozenset({
-        "3bef5bd6411c7028a599e2a9bd66cb8662ca2a8e24a4ff4f265cb171bd2d5bbd"})
 
     @classmethod
     def target_version(cls) -> int:
