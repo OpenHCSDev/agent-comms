@@ -6,19 +6,25 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolOwner
+from agent_comms.coordinator import Coordination
+from agent_comms.coordination_errors import StaleFence
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import OwnerInvocable, PausedGoalAction
 from agent_comms.goal_states import PausedGoal
 from agent_comms.goals import Goal, NoGoal
-from agent_comms.native_tools import CoordinationCall, ReadTool
+from agent_comms.native_tools import CoordinationCall, NativeToolDeclaration, ReadTool
+from agent_comms.native_runtime_input import CurrentNativeCursor
+from delivery_owner_fixture import reply_turn_finished
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.tools import GoalSet
 from agent_comms.turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
-from delivery_owner_fixture import reply_turn_finished
 
 
 @pytest.mark.parametrize('pause_by_owner', (False, True))
-async def test_turn_keeps_working_after_setting_its_own_goal(native_backend, monkeypatch, pause_by_owner):
+@pytest.mark.parametrize('route', ('ordinary', 'selected'))
+async def test_turn_keeps_working_after_setting_its_own_goal(
+    native_backend, monkeypatch, pause_by_owner, route,
+):
     native = native_backend
     await native.author_history()
     original = native.session.read_bytes()
@@ -35,9 +41,11 @@ async def test_turn_keeps_working_after_setting_its_own_goal(native_backend, mon
         return reservation
 
     monkeypatch.setattr(CodingToolOwner, 'allow', authorized)
-    async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
+    options = NativeToolDeclaration.extension_arguments(native.package.path)
+    async with native.open_owner(
+        runtime_enabled=True, auto_wake=route == 'selected', native_options=options,
+    ) as (owner, session):
         comms = owner._comms
-        comms.threads.claim_thread('requester', tags=frozenset(), worktree=str(native.project))
 
         def chunks():
             number = native.provider.posts
@@ -59,9 +67,20 @@ async def test_turn_keeps_working_after_setting_its_own_goal(native_backend, mon
             yield {}, 'tool_calls'
 
         monkeypatch.setattr(native.provider, 'response_chunks', chunks)
-        comms.messaging.send('requester', session, 'Set your private goal and read the file.').message
-        await owner.inputs.drain_inbox(session)
-        await asyncio.wait_for(reply_turn_finished(owner, session), 45)
+        if route == 'ordinary':
+            running = owner.turns.run_agent_turn(
+                session, session, 'Set your private goal and read the file.',
+                original_owner_input=True)
+        else:
+            comms.threads.claim_thread('requester', tags=frozenset(), worktree=str(native.project))
+            comms.messaging.send('requester', session, 'Set your private goal and read the file.')
+            await owner.inputs.drain_inbox(session)
+            running = reply_turn_finished(owner, session)
+        if pause_by_owner and route == 'selected':
+            with pytest.raises(StaleFence, match='registry_goal'):
+                await asyncio.wait_for(running, 45)
+        else:
+            await asyncio.wait_for(running, 45)
         rows = [json.loads(line) for line in native.session.read_text().splitlines()]
         results = [row['message'] for row in rows if row.get('message', {}).get('role') == 'toolResult']
         assert results[0]['toolName'] == 'comms_set_goal' and not results[0].get('isError')
@@ -77,7 +96,12 @@ async def test_turn_keeps_working_after_setting_its_own_goal(native_backend, mon
             assert checks == ['comms_set_goal', 'read', 'comms_goal']
             assert comms.registry.require(session).goal.require().state.declared_name == 'blocked'
         assert native.session.read_bytes().startswith(original)
-        assert len([row for row in rows if row.get('message', {}).get('inputId')]) == 1
+        users = [row['message'] for row in rows if row.get('message', {}).get('inputId')]
+        assert len(users) == 1
+        if route == 'selected' and not pause_by_owner:
+            with Coordination(comms.root / 'coordination.sqlite3') as store, store.session.read():
+                cursors = CurrentNativeCursor.select(store.session._connection)
+            assert len(cursors) == 1 and cursors[0].input_id == users[0]['inputId']
 
 
 def test_goal_publication_is_exact_and_coding_output_cannot_author_it():

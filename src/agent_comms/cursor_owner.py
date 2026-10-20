@@ -16,6 +16,7 @@ from .native_input_record import NativeInputReference
 from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
+from .turn_goal_permission import GoalPermission
 
 if TYPE_CHECKING:
     from .proven_source_coverage import ProvenSourceCoverage
@@ -25,6 +26,11 @@ if TYPE_CHECKING:
 class CursorOwner(RegistryOwner):
     wire_root_id: str
     generation: int
+    permission: GoalPermission
+
+    @property
+    def goal_permission(self) -> GoalPermission:
+        return self.permission
 
     def __post_init__(self):
         GenerationCounter.require_positive(self.generation)

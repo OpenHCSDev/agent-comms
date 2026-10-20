@@ -80,6 +80,7 @@ class CursorDelivery:
                 owner_claimed_generation=participant.owner.claimed_generation,
                 owner_generation=participant.identity.generation,
                 committed_input_id=input_id,
+                goal_permission=participant.goal_permission,
             )
 
     def close(self) -> None:

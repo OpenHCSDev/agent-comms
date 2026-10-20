@@ -62,7 +62,7 @@ class AcceptedGoalPermission(GoalPermission):
 
 
 @dataclass
-class TurnGoalPermission:
+class TurnGoalPermission(GoalPermission):
     """One live input's grant, advanced only by its authenticated tool publication.
 
     The returned declaration is the writer's receipt, not a reread of whatever
@@ -79,6 +79,14 @@ class TurnGoalPermission:
 
     def dependency_current(self, dependency, wait) -> bool:
         return self.captured.dependency_current(dependency, wait)
+
+    def require_current(self, current: GoalDeclaration) -> None:
+        from .ordinary_turn_rules import OrdinaryGoalRule
+        from .reservation_rules import ReservationViolationError
+        from .native_tool_call import SelectedToolDenied
+
+        if not self.allows(current):
+            raise SelectedToolDenied(str(ReservationViolationError(OrdinaryGoalRule())))
 
     def published(self, goal: GoalDeclaration) -> None:
         self.captured = PublishedGoalPermission(goal)

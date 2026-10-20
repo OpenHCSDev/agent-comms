@@ -11,6 +11,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.coordinator import Coordination
 
@@ -35,6 +36,7 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
+from .turn_goal_permission import TurnGoalPermission
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -43,6 +45,9 @@ class CodingToolOwner(ABC):
     owner_name: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    if TYPE_CHECKING:
+        goal_permission: TurnGoalPermission
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
@@ -56,7 +61,9 @@ class CodingToolOwner(ABC):
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
         def check(store: Coordination) -> None:
-            self.verify(store, turn, self.comms.registry.snapshot())
+            snapshot = self.comms.registry.snapshot()
+            self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
+            self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
@@ -71,7 +78,8 @@ class CodingToolOwner(ABC):
         return reservation
 
     def tool_completed(self, call, result) -> None:
-        """Selected tools cannot replace ordinary input's captured goal authority."""
+        """The checked terminal shares its actual publication with this turn's grant."""
+        call.published_goal(result, self.goal_permission)
 
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
@@ -89,6 +97,7 @@ class SelectedCodingToolOwner(CodingToolOwner):
     claim_scope: WakeClaim
     session_dir: Path
     input_id: str
+    goal_permission: TurnGoalPermission
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""

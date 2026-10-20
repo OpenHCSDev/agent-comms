@@ -37,6 +37,7 @@ from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
+from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 
 
 @dataclass
@@ -52,7 +53,11 @@ class SelectedParticipant(MroDispatch):
     sent_outcomes: tuple[SentMessageOutcome, ...]
     model: SelectedModel
     cursor_delivery: CursorDelivery
+    goal_permission: TurnGoalPermission = field(init=False, repr=False)
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
+
+    def __post_init__(self):
+        self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal))
 
     @handles(CompactionEvent)
     async def publish_compaction(self, event: CompactionEvent) -> None:
