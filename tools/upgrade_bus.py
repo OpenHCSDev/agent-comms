@@ -229,10 +229,13 @@ def carry_all(
 ) -> list[dict]:
     results = []
     for step in pending:
-        with _store_lock(root / "wire"):
-            result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.revision), step.name,
-                lambda: carry(step, root, stack, revisions, "--apply"))
+        try:
+            with _store_lock(root / "wire"):
+                result = CarryLedger(root).apply(
+                    CarryChain.at(revisions.repo, step.revision), step.name,
+                    lambda: carry(step, root, stack, revisions, "--apply"))
+        except UpgradeRefused as error:
+            raise UpgradeRefused(f"Conversion step {step.name} failed") from error
         results.append(result.report(step.name, True))
     return results
 

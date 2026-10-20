@@ -32,7 +32,8 @@ from itertools import islice
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
-from cutover.backup import UpgradeRefused
+from cutover.backup import StoreBackup, UpgradeRefused
+from cutover.carry import STEPS, CarryChain, CarryLedger
 from install_snapshot import SnapshotHome
 
 from agent_comms.active_route import ActiveRoute, CommsRoute
@@ -203,6 +204,7 @@ class InstallSurface:
             include(path)
         include(str(Path(__file__).relative_to(REPO)))
         include(str(SNAPSHOT.relative_to(REPO)))
+        include(str(STEPS))
         pending = [str(INSTALLER), *(hook.path for hook in build.hooks.values())]
         seen: set[str] = set()
         while pending:
@@ -247,7 +249,7 @@ class PracticeCopy:
     max_bytes: ClassVar[int] = 3 * 1024**3
 
     @contextmanager
-    def open(self) -> Iterator[Comms]:
+    def open(self, retained: tuple[Path, ...] = ()) -> Iterator[Comms]:
         roster = self.source.registry.snapshot()
         with self.source.bus.log.opened_wire_snapshot() as source:
             names = tuple(
@@ -265,6 +267,14 @@ class PracticeCopy:
         if shutil.disk_usage(self.into.parent).free < storage_floor():
             raise GateError("Insufficient free space before building the retained-tail copy")
         with CheckRoot(self.source, names, self.into).open() as copied:
+            required = sum(path.stat().st_size for path in retained)
+            if (required > self.max_bytes
+                    or shutil.disk_usage(copied.root).free < 2 * required + storage_floor()):
+                raise GateError(f"Insufficient space for {required} bytes of retained stores")
+            for path in retained:
+                destination = copied.root / path.relative_to(self.source.root)
+                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                StoreBackup.copy_file(path, destination)
             size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
             if size > self.max_bytes:
                 raise GateError(
@@ -278,7 +288,14 @@ class PracticeCopy:
         self, target: Path, previous: Path, head: str, python: Path, log: Path, work: Path
     ) -> CompletedRehearsal:
         """The practice command and desktop gate use the same private-root lifetime."""
-        with self.open() as copied:
+        ledger = CarryLedger(self.source.root)
+        pending = CarryChain.at(target, head).pending(ledger.applied())
+        files = {path for step in pending
+                 for path in step.current(target).backup_files(self.source.root)
+                 if path.is_file()}
+        if ledger.path.is_file():
+            files.add(ledger.path)
+        with self.open(tuple(sorted(files))) as copied:
             home = self.into.parent
             prepare_runtime_home(home)
             return rehearse(target, previous, head, copied.root, home, python, log, work)
