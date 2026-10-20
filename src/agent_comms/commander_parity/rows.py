@@ -22,7 +22,13 @@ from .lifecycle import (
 from .load import LoadComparison
 from .measurements import StorageComparison, measured_load
 from .story import StoryCase
-from .wording import OrderWordingComparison, PlainWordsComparison
+from .wording import (
+    ApplicationRunComparison,
+    DecisionAlertsComparison,
+    OrderWordingComparison,
+    PlainWordsComparison,
+    UnitWordingComparison,
+)
 from agent_comms.commander_parity.verdicts import VerdictComparison
 
 
@@ -226,9 +232,13 @@ class CommanderPageParityRow(ParityRow):
 class ApplicationRunParityRow(ParityRow):
     number = 23
     capability = "An order states the user-visible run that closes it"
-    current = "scratch `rts/order.py send` (`Works when:`)"
-    native = "`ApplicationOrderRun`, `InstallTodo`, `CommsProblemCloseTool`"
+    current = "`Commander.close` through the copied-bus command runner"
+    native = "`ApplicationOrderRun.require_closing`; `CommsProblemCloseTool.operation_for`"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return ApplicationRunComparison.read()
 
 
 class TracedTransferParityRow(ParityRow):
@@ -242,9 +252,13 @@ class TracedTransferParityRow(ParityRow):
 class UnitWordingParityRow(ParityRow):
     number = 25
     capability = "Unit wording gets a correction, not a strike"
-    current = "scratch `vibe_watch.py`"
-    native = "`PlainText`, `CommsCorrectWordingTool`: correction leaves strikes unchanged"
+    current = "`Commander.call(CommsCorrectWordingTool)`"
+    native = "`CommsCorrectWordingTool.apply`: correction message, unchanged strikes"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnitWordingComparison.read()
 
 
 class DecisionAlertsParityRow(ParityRow):
@@ -253,6 +267,10 @@ class DecisionAlertsParityRow(ParityRow):
     current = "none; every line interrupts"
     native = "`messages.AlertKind.require_publishable`, `tools.CommsDecisionTool`"
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return DecisionAlertsComparison.read()
 
 
 class MomentumParityRow(ParityRow):
