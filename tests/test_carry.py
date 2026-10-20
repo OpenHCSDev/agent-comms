@@ -674,11 +674,15 @@ def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(
 
     def run(*command):
         commands.append(command)
+        if command[3:5] == ("worktree", "add"):
+            (command[-2] / STEPS).mkdir(parents=True)
         return ""
 
     monkeypatch.setattr(upgrade_bus, "run", run)
     revisions = Revisions(tmp_path / "repo", tmp_path / "trees")
     selected = revisions.tree("abcdef123456")
+    assert (selected / STEPS / "step_worker.py").read_bytes() == (
+        REPO / STEPS / "step_worker.py").read_bytes()
     assert commands == [
         ("git", "-C", revisions.repo, "worktree", "add", "--detach", "-q", selected, "abcdef123456"),
         ("git", "-C", selected, "submodule", "update", "--init", "--recursive", "--checkout"),
@@ -703,6 +707,9 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
     commands = []
 
     class Installed(Stack):
+        def backup_files(self, root, pending, revisions):
+            return (datum,)
+
         def running_owners(self, root):
             return []
 
@@ -756,6 +763,9 @@ def test_failed_live_carry_restores_checkout_and_reports_original_error(
     calls = []
 
     class Installed(Stack):
+        def backup_files(self, root, pending, revisions):
+            return (datum,)
+
         def running_owners(self, root):
             return ["worker"]
 
@@ -933,6 +943,9 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
 
     class Installed(Stack):
+        def backup_files(self, root, pending, revisions):
+            return (path,)
+
         @contextmanager
         def practice_copy(self, root, into):
             # The fixture deliberately removes indexes before carrying; the current
@@ -975,6 +988,90 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         assert result["backup_bytes"] == sum(path.stat().st_size
                                               for path in backup.rglob('*') if path.is_file())
         assert result["backup_bytes"] > 0
+
+
+def test_practice_copy_includes_pending_step_stores(comms, tmp_path, monkeypatch):
+    from conftest import publish_initial
+    from install_gate import PracticeCopy
+    import upgrade_bus
+
+    sender = comms.registry.declare(comms.registry.new_thread(
+        "sender", frozenset({"team"}), str(tmp_path), execution=ExternalThreadExecution))
+    comms.messaging.initialize_private_initial_protocol()
+    publish_initial(comms, sender.name, "#team", "retained practice message")
+    store = TodoStore(comms.root)
+    lead = thread("lead", comms.root, 1.0)
+    store.create("todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "carry this store",
+                 creator=lead, owner=lead, generation="initial", goal=GoalRef("lead", 1.0, "goal-1"),
+                 deadline=RecordedEventTime(1000.0), order=order(comms.root))
+    store_path = TodoStore.path_in(comms.root)
+    checkout = tmp_path / "declared-store-checkout"
+    checkout.mkdir()
+    repo = Repository(checkout)
+    shutil.copy2(REPO / STEPS / "backup.py", checkout / STEPS / "backup.py")
+    shutil.copy2(REPO / STEPS / "step_worker.py", checkout / STEPS / "step_worker.py")
+    (checkout / "src").symlink_to(REPO / "src", target_is_directory=True)
+    current = repo.commit({})
+    target = repo.commit({"carry_store": (
+        "from cutover.carry import TodoRows\n\n"
+        "class Step(TodoRows):\n"
+        "    @classmethod\n"
+        "    def carry_rows(cls, root, db, *, apply):\n"
+        "        previous = db.execute('PRAGMA user_version').fetchone()[0]\n"
+        "        db.execute('PRAGMA user_version=1')\n"
+        "        return cls.carried(root, int(previous != 1), {}, apply=apply)\n"
+    )})
+    pending = CarryChain.at(checkout, target).pending(())
+    source_tree = tmp_path / "declared-step-source"
+    shutil.copytree(checkout / "tools", source_tree / "tools")
+    (source_tree / "src").symlink_to(REPO / "src", target_is_directory=True)
+    omitted = []
+
+    class FixtureRevisions(Revisions):
+        def tree(self, revision):
+            assert revision == target
+            return source_tree
+
+    class Installed(Stack):
+        @contextmanager
+        def practice_copy(self, root, into):
+            with PracticeCopy(Comms(root), into).open() as (copied, measurement):
+                assert not TodoStore.path_in(copied.root).exists()
+                omitted.append(True)
+                yield copied, measurement
+
+        def running_owners(self, root):
+            return []
+
+        def prepare_native(self):
+            pass
+
+        def publish(self):
+            pass
+
+        def verify(self, root):
+            with closing(CoordinationStore.read_snapshot(TodoStore.path_in(root))) as db:
+                return {"store_version": db.execute("PRAGMA user_version").fetchone()[0]}
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setattr(upgrade_bus, "prepare_runtime_home", lambda home: home.mkdir(parents=True))
+    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
+    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
+    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
+    revisions = FixtureRevisions(checkout, tmp_path / "unused-revisions")
+    stack = Installed(checkout)
+    rehearsal = upgrade_bus.rehearse(comms.root, stack, revisions, "worker", stack)
+    assert omitted == [True]
+    assert store_path.name in rehearsal["files"].names
+    assert rehearsal["read"] == {"store_version": 1}
+    with closing(CoordinationStore.read_snapshot(store_path)) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 0
+    repo.git("checkout", "--detach", current)
+    live = upgrade_bus.live(checkout, comms.root, current, target, pending, stack, stack, revisions,
+                            "worker", tmp_path, rehearsal["files"])
+    live["files"].require_rehearsal(rehearsal["files"])
+    assert live["read"] == {"store_version": 1}
+    assert (Path(live["backup"]) / "stores" / store_path.name).exists()
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

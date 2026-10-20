@@ -42,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated, TextIO, cast
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
@@ -59,7 +59,7 @@ from cutover.backup import (
     transcripts_held,
 )
 from cutover import practice_copy_worker
-from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
+from cutover.carry import Carried, Carry, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
 from install_gate import PracticeMeasurement, prepare_runtime_home
 
@@ -67,7 +67,7 @@ import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity run
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, Id128Text
+from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
@@ -278,6 +278,24 @@ class Stack:
                 f"Installed practice copy did not retire: {error}"
             ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
+    def call_step(self, step: Step, root: Path, revisions: Revisions,
+                  method: str, **arguments: bool) -> str:
+        """Run the declaration in its family's source with this stack's interpreter."""
+        tree = revisions.tree(step.family.source_revision(step))
+        output = run(self.python, "-m", "cutover.step_worker", f"cutover.{step.name}",
+                     step.declaration, method, root, json.dumps(arguments), cwd=tree,
+                     env=self.environment(tree / "src", tree / "tools"))
+        return output.strip().splitlines()[-1]
+
+    def backup_files(self, root: Path, pending: tuple[Step, ...],
+                     revisions: Revisions) -> tuple[Path, ...]:
+        return tuple(sorted({
+            path for step in pending for path in FieldCodec.decode(
+                tuple[Annotated[Path, PathText], ...], FieldCodec.parse(self.call_step(
+                    step, root, revisions,
+                    Carry.backup_files.__name__)))
+        }))
+
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         selected = run(self.python, "-c", """import json, sys
@@ -323,6 +341,10 @@ class Revisions:
             self.trees[revision] = path
         path = self.trees[revision]
         self.prepare(path)
+        # A historical regular cutover package cannot discover a worker from a
+        # second PYTHONPATH entry. Stage this transport helper, not new Core.
+        worker = Path(__file__).resolve().parent / "cutover" / "step_worker.py"
+        shutil.copy2(worker, path / "tools" / "cutover" / worker.name)
         return path
 
     def close(self) -> None:
@@ -338,17 +360,9 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
             root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
-    tree = revisions.tree(step.family.source_revision(step))
-    environment = stack.environment(tree / "src", tree / "tools")
-    worker = (
-        "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
-        "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
-        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
-    )
-    operation = "before_stop" if "--before-stop" in flags else "carry"
-    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
-                 operation, root, cwd=tree, env=environment)
-    return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
+    operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
+    output = stack.call_step(step, root, revisions, operation, apply=True)
+    return FieldCodec.decode(Carried, FieldCodec.parse(output))
 
 
 def before_stop(
@@ -389,6 +403,11 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
         stack.prepare_native()
         target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
         pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied.root).applied())
+        for path in stack.backup_files(root, pending, revisions):
+            destination = copied.root / path.relative_to(root)
+            if path.exists() and not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, destination)
         stopping = before_stop(copied.root, pending, stack, revisions)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
             MaintenanceOperator.current()).nonce
@@ -504,9 +523,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
          spill_dir: Path, rehearsal_files: RehearsalFiles) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    restore = RestoreSpace.measure(rehearsal_files.restore_bytes, root.parent)
-    expected = frozenset((*rehearsal_files.names, CarryLedger.name))
+    expected = frozenset((*rehearsal_files.names, CarryLedger.name)) | frozenset(
+        str(path.relative_to(root)) for path in staged.backup_files(root, pending, revisions))
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
+    restore = RestoreSpace.measure(max(
+        rehearsal_files.restore_bytes,
+        sum(path.stat().st_size for path in selected if path.exists()),
+    ), root.parent)
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
     running = installed.running_owners(root)
