@@ -1352,6 +1352,11 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+
+    def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
+        return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
+                       if item.name not in evidence}, **evidence)
 
     def reissued(self, at: float) -> PendingProblemOrder:
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
@@ -1389,7 +1394,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def folded(self, into: str, why: str) -> ProblemOrder:
         if self.pending:
             raise ValueError("The problem has open orders; link or drop them first.")
-        return FoldedProblemOrder(original=self, into=into, why=why)
+        return self.copy_as(FoldedProblemOrder, original=self, into=into, why=why)
 
     @staticmethod
     def request(sender: Thread, problems: tuple[str, ...]) -> str:
@@ -1446,7 +1451,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     run: OrderRun
     deletes: OrderDeletion = field(
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
-    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1473,10 +1477,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                        for path in touched)
         return sum(1 for edit in self.edits
                    if (named := self.NAMED_FILE.findall(edit)) and not any(map(changed, named)))
-
-    def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
-        return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
-                       if item.name not in evidence}, **evidence)
 
     def merged(self, sha: str) -> ProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
