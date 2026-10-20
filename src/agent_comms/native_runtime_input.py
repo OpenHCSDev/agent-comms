@@ -32,7 +32,7 @@ from .typed_table import (
     Column,
     DurableTables,
     IntegerStorage,
-    PrefixedTables,
+    SharedFileTables,
     TypedRow,
     TypedTable,
 )
@@ -42,11 +42,10 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(PrefixedTables, DurableTables):
+class NativeRuntimeTable(SharedFileTables, DurableTables):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
-    name_prefixes = ("native_runtime_", "current_native_cursor")
     schema_error = PublicationActivationBlocked
 
     @classmethod

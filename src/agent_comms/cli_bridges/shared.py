@@ -12,7 +12,7 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -47,10 +47,10 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
-from agent_comms.typed_table import Column, TypedTable
+from agent_comms.typed_table import Column, ExpressionIndex, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
-from ..locked_store import RegistryFile
+from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
     MonitorAttachment,
     MonitorPeer,
@@ -110,9 +110,8 @@ class Binding(TypedTable):
 
     @classmethod
     def bind(cls, db: CoordinationStore, requested: Binding | None) -> Binding:
-        with db:
-            if requested is not None:
-                db.execute('BEGIN IMMEDIATE')
+        # Only a requested binding may write; reading the existing one takes no writer.
+        with nullcontext(db) if requested is None else SQLiteFile.write_transaction(db):
             rows = cls.select(db)
             if not rows and requested is not None:
                 requested.insert(db)
@@ -212,23 +211,15 @@ class ObservedPart(TypedTable):
 
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
-    sequence_sql: ClassVar[str] = "json_extract(payload, '$.seq')"
-
-    @classmethod
-    def schema_objects(cls, *, if_not_exists: bool = False):
-        objects = super().schema_objects(if_not_exists=if_not_exists)
-        existence = 'IF NOT EXISTS ' if if_not_exists else ''
-        objects[f'{cls.declared_name}_sequence'] = (
-            f'CREATE INDEX {existence}"{cls.declared_name}_sequence" '
-            f'ON "{cls.declared_name}" ({cls.sequence_sql})')
-        return objects
+    sequence_sql: ClassVar[str] = "json_extract({payload}, '$.seq')"
+    indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
     def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
-            f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
+            f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
         return latest[0].message.reference if latest else None
 
     id: str = field(metadata={'sql': Column(primary_key=True)})

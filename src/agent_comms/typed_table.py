@@ -15,7 +15,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
@@ -265,18 +265,31 @@ class Column:
 
 @dataclass(frozen=True)
 class Index:
-    columns: tuple[str, ...]
-    unique: bool = False
-    where: str | None = None
+    """An index over the row's columns, named by field."""
+
+    terms: tuple[str, ...]
+    unique: bool = field(default=False, kw_only=True)
+    where: str | None = field(default=None, kw_only=True)
+
+    def term_sql(self, owner: type[TypedTable]) -> str:
+        return owner._column_list(self.terms)
 
     def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
             f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
-            f"({owner._column_list(self.columns)})"
+            f"({self.term_sql(owner)})"
             + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
+
+
+@dataclass(frozen=True)
+class ExpressionIndex(Index):
+    """An index over SQL expressions of the row's {field} names."""
+
+    def term_sql(self, owner: type[TypedTable]) -> str:
+        return ", ".join(owner._sql(term) for term in self.terms)
 
 
 @dataclass(frozen=True)
@@ -559,20 +572,6 @@ class SharedFileTables(TableSchema):
         return [item for row in cls.schema_rows() for item in row.stored_objects(db)]
 
 
-class PrefixedTables(TableSchema):
-    """Tables named under prefixes in a shared file: a stray object with a prefix also differs."""
-
-    __slots__ = ()
-    name_prefixes: ClassVar[tuple[str, ...]]
-
-    @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND ("
-            + " OR ".join("name LIKE ?" for _ in cls.name_prefixes) + ")",
-            tuple(f"{prefix}%" for prefix in cls.name_prefixes)))
-
-
 class AllObjectsTables(TableSchema):
     """A file that declares every object it holds, SQLite's own included."""
 
@@ -599,9 +598,8 @@ class DerivedTables(TableSchema):
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
         if cls.schema_differs(db):
-            db.execute("BEGIN IMMEDIATE")
-            cls.reset_schema(db)
-            db.execute("COMMIT")
+            with SQLiteFile.write_transaction(db):
+                cls.reset_schema(db)
 
 
 class DurableTables(TableSchema):
@@ -960,20 +958,12 @@ class StoreWriter(DurableFile, SQLiteFile, FileStore):
         """Watch committed row changes, never SQLite reader attachment or retirement."""
         return cls._source_paths(cls.path_in(root))
 
-    def _begin_transaction(self, connection: sqlite3.Connection) -> None:
-        connection.execute("BEGIN IMMEDIATE")
-
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        """The file's write transaction, and a touch of its watch file when rows changed."""
         before = connection.total_changes
-        self._begin_transaction(connection)
-        try:
+        with self.write_transaction(connection):
             yield connection
-            connection.execute("COMMIT")
-        except BaseException:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
         if connection.total_changes != before:
             self._source_paths(self.store.path)[0].write_bytes(b'')
 
@@ -1047,10 +1037,9 @@ class TypedStore(StoreWriter, TableSchema):
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
             if not self.stored_schema(connection):
-                connection.execute("BEGIN IMMEDIATE")
-                if not self.stored_schema(connection):
-                    self.create_schema(connection)
-                connection.execute("COMMIT")
+                with self.write_transaction(connection):
+                    if not self.stored_schema(connection):
+                        self.create_schema(connection)
             # Under the attachment boundary: a derived file is rebuilt, a durable one refused.
             self.reconcile_schema(connection)
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
