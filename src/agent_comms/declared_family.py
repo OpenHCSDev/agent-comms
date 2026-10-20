@@ -13,6 +13,13 @@ from metaclass_registry import (  # type: ignore[import-untyped]
 )
 
 
+def declared_words(stem: str) -> str:
+    """A class-name stem as its declared name: ``StallWatcher`` -> ``stall_watcher``."""
+    return re.sub(
+        r"([a-z0-9])([A-Z])", r"\1_\2", re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", stem)
+    ).lower()
+
+
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
     def __new__(
         mcs,
@@ -48,9 +55,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             namespace["declared_name"] = None
         elif root is not None:
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
-            derived = re.sub(
-                r"([a-z0-9])([A-Z])", r"\1_\2", re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", stem)
-            ).lower()
+            derived = declared_words(stem)
             # A slots dataclass recreates its declaration with the derived name in its namespace.
             namespace["declared_name"] = class_options.pop(
                 "declared_name", namespace.get("declared_name", derived)

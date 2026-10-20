@@ -47,10 +47,15 @@ class MergedClaim(ProgressClaim):
     timeout: ClassVar[float] = 30.0
 
     def verify(self, comms: Comms, worktree: Path) -> None:
-        command = ["git", "-C", str(worktree), "branch", "--remotes", "--contains", self.commit]
+        self.origin_branches(worktree)
+
+    def origin_branches(self, worktree: Path) -> tuple[str, ...]:
+        command = ["git", "-C", str(worktree), "for-each-ref",
+                   f"--contains={self.commit}", "--format=%(refname:strip=3)",
+                   "refs/remotes/origin/"]
         try:
             listed = subprocess.run(
-                [*command, "--list", "origin/*"],
+                command,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -65,6 +70,7 @@ class MergedClaim(ProgressClaim):
                 f"A merged claim needs a commit sha that resolves on origin; "
                 f"{self.commit!r} does not."
             )
+        return tuple(listed.stdout.splitlines())
 
 
 @dataclass(frozen=True)
