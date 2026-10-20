@@ -102,7 +102,7 @@ def test_unowned_heartbeat_identity_survives_time_and_unrelated_todo_fields(comm
     comms, _ = commander
     create(commander, "P1")
     create(commander, "P2")
-    comms.goals.fire("worker", StrikeReason("Release both checked orders for reassignment."), "lead")
+    comms.goals.fire("worker", StrikeReason("The unit stopped work on both orders and left their changes unfinished."), "lead")
     spare = comms.registry.declare(comms.registry.new_thread(
         "spare", frozenset({"comms"}), str(comms.root), created_at=3.0))
     working(comms, spare.name, spare.created_at)
