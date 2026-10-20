@@ -36,8 +36,8 @@ from install_snapshot import SnapshotHome
 
 from agent_comms.active_route import ActiveRoute, CommsRoute
 from agent_comms.check_root import CheckRoot
-from agent_comms.comms import Comms
 from agent_comms.child_process import Platform
+from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
     FieldCodec,
@@ -240,6 +240,7 @@ def affected(repo: Path, base: str, head: str) -> list[str]:
 @dataclass(frozen=True)
 class PracticeCopy:
     """A real retained tail, native session tails and the production indexes they build."""
+
     source: Comms
     into: Path
     max_bytes: ClassVar[int] = 3 * 1024**3
@@ -248,11 +249,15 @@ class PracticeCopy:
     def open(self) -> Iterator[Comms]:
         roster = self.source.registry.snapshot()
         with self.source.bus.log.opened_wire_snapshot() as source:
-            names = tuple(dict.fromkeys(
-                message.sender for message in islice(
-                    source.newest_messages(CheckRoot.max_bytes), CheckRoot.max_records)
-                if message.sender in roster.threads
-            ))
+            names = tuple(
+                dict.fromkeys(
+                    sender
+                    for message in islice(
+                        source.newest_messages(CheckRoot.max_bytes), CheckRoot.max_records
+                    )
+                    if (sender := roster.canonical_name(message.sender)) in roster.threads
+                )
+            )
         if not names:
             raise GateError("The retained bus tail has no registered participants")
         self.into.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -261,7 +266,9 @@ class PracticeCopy:
         with CheckRoot(self.source, names, self.into).open() as copied:
             size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
             if size > self.max_bytes:
-                raise GateError(f"Retained-tail copy is {size} bytes, over its {self.max_bytes} cap")
+                raise GateError(
+                    f"Retained-tail copy is {size} bytes, over its {self.max_bytes} cap"
+                )
             if shutil.disk_usage(self.into.parent).free < 2 * size + storage_floor():
                 raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
             yield copied
@@ -854,8 +861,9 @@ class GateCommand(DeclaredFamily, affix="GateCommand"):
 
 
 class CheckGateCommand(GateCommand):
-    def run(self, args: GateArguments, target: Target, report: Path,
-            results: dict[str, MachineResult]) -> GateResult:
+    def run(
+        self, args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
+    ) -> GateResult:
         return MachinesGateResult(run_machines(args, target, report, results))
 
     @abstractmethod
@@ -941,19 +949,34 @@ class RevisionGateCommand(CheckGateCommand):
 
 @dataclass(frozen=True)
 class PracticeGateCommand(RevisionGateCommand):
-    def run(self, args: GateArguments, target: Target, report: Path,
-            results: dict[str, MachineResult]) -> GateResult:
+    def run(
+        self, args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
+    ) -> GateResult:
         with tempfile.TemporaryDirectory(dir=args.scratch, prefix="practice-") as directory:
             private = Path(directory)
             home = private / "home"
-            with PracticeCopy(Comms(CommsRoute.current().root), home / ".agent-comms").open() as copied:
+            with PracticeCopy(
+                Comms(CommsRoute.current().root), home / ".agent-comms"
+            ).open() as copied:
                 prepare_runtime_home(home)
-                with tempfile.TemporaryDirectory(dir=Path.home() / "wt", prefix="practice-source-") as source:
+                with tempfile.TemporaryDirectory(
+                    dir=Path.home() / "wt", prefix="practice-source-"
+                ) as source:
                     work = Path(source)
-                    with (checkout(args.repo, target.base, work / "base") as previous,
-                          checkout(args.repo, target.head, work / "target") as tree):
-                        completed = rehearse(tree, previous, target.head, copied.root, home,
-                                             args.python, report.with_suffix(".log"), work)
+                    with (
+                        checkout(args.repo, target.base, work / "base") as previous,
+                        checkout(args.repo, target.head, work / "target") as tree,
+                    ):
+                        completed = rehearse(
+                            tree,
+                            previous,
+                            target.head,
+                            copied.root,
+                            home,
+                            args.python,
+                            report.with_suffix(".log"),
+                            work,
+                        )
                 return PracticeGateResult(completed)
 
 
