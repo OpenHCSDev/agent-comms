@@ -240,7 +240,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_start: NativeInputPosition = field(
         default_factory=UnrecordedNativePosition,
         metadata={
-            "sql": NativeInputLocation.pending_column(),
+            "sql": NativeInputLocation.position_column,
             "native_context": RecordedNativePosition,
         },
     )

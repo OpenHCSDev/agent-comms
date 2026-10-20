@@ -75,10 +75,13 @@ class NativeInputOffsets(Carry):
             old = {name: actual[name] for name in declared}
             if _digest(old) != digest:
                 raise ValueError("Native offset carry refuses a changed original runtime schema")
-            position = NativeInputLocation.position_field()
             columns = ",".join(
-                f'? AS "{position.name}"' if name == position.name else f'"{wire}"'
-                for name, wire in NativeRuntimeInput.column_projection().items()
+                (
+                    f'? AS "{item.wire_name}"'
+                    if item.column is NativeInputLocation.position_column
+                    else f'"{item.wire_name}"'
+                )
+                for item in NativeRuntimeInput._fields()
             )
             rows = list(
                 NativeRuntimeInput.read(

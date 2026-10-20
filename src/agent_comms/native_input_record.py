@@ -7,7 +7,7 @@ OwnerGenerations is the existing authority for that identity domain.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import Field, dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from typing import Annotated, ClassVar, Literal
 
 from .coordination_contracts import validate_execution_id
@@ -40,21 +40,13 @@ class NativeInputCommit:
 class NativeInputLocation(NativeInputCommit):
     """Emitted byte placement; only the original runtime input row persists it."""
 
-    position_column: ClassVar[Column] = Column(check="session_entry_start>0")
+    # SQL permits an uncommitted row; the emitted offset remains a required int.
+    position_column: ClassVar[Column] = Column(
+        check="session_entry_start>0", nullable=True, storage=IntegerStorage,
+    )
     session_entry_start: int = field(kw_only=True, metadata={
         "wire_name": "sessionEntryStart", "sql": position_column,
     })
-
-    @staticmethod
-    def position_field() -> Field[object]:
-        """The placement declaration supplies its name and storage constraints."""
-        position, = (item for item in fields(NativeInputLocation)
-                     if item.name in NativeInputLocation.__annotations__)
-        return position
-
-    @classmethod
-    def pending_column(cls) -> Column:
-        return replace(cls.position_column, nullable=True, storage=IntegerStorage)
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
