@@ -90,17 +90,28 @@ def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
 class FieldDirective:
     """An annotation owns its instructions by directive type, never a string key."""
 
+    @staticmethod
+    @cache
+    def on(annotation: object) -> Mapping[type[FieldDirective], tuple[FieldDirective, ...]]:
+        """Compile a declaration's directives once, indexed by their capabilities."""
+        found: dict[type[FieldDirective], list[FieldDirective]] = {}
+        if get_origin(annotation) is Annotated:
+            for directive in get_args(annotation)[1:]:
+                if isinstance(directive, FieldDirective):
+                    for capability in type(directive).__mro__:
+                        if issubclass(capability, FieldDirective):
+                            found.setdefault(capability, []).append(directive)
+        return types.MappingProxyType({kind: tuple(items) for kind, items in found.items()})
+
     @classmethod
     def find(cls, annotation: object) -> Self | None:
-        if get_origin(annotation) is not Annotated:
-            return None
-        matches = tuple(item for item in get_args(annotation)[1:] if isinstance(item, cls))
+        matches = cls.on(annotation).get(cls, ())
         if len(matches) > 1:
             raise TypeError(f"A field declares {cls.__name__} more than once")
-        return matches[0] if matches else None
+        return cast(Self, matches[0]) if matches else None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ValueDirective[V](FieldDirective):
     value: V
 
@@ -118,8 +129,8 @@ class FlagDirective(ValueDirective[bool]):
 class ViewName(ValueDirective[str], DeclaredFamily, affix="Name"):
     @classmethod
     def key_in(cls, annotation: object, view: str, default: str) -> str:
-        for directive in get_args(annotation)[1:]:
-            if isinstance(directive, cls) and type(directive).declared_name == view:
+        for directive in cls.on(annotation).get(cls, ()):
+            if type(directive).declared_name == view:
                 return directive.value
         return default
 
@@ -129,14 +140,23 @@ class ViewExclusion(FlagDirective, DeclaredFamily, affix="Exclude"):
     def excluded_in(cls, annotation: object, view: str) -> bool:
         return any(
             directive.value
-            for directive in get_args(annotation)[1:]
-            if isinstance(directive, cls) and type(directive).declared_name == view
+            for directive in cls.on(annotation).get(cls, ())
+            if type(directive).declared_name == view
         )
 
 
-class WireName(ViewName): pass
-class WireOrder(ValueDirective[int]): pass
-class WireRequired(FlagDirective): pass
+class WireName(ViewName):
+    pass
+
+
+class WireOrder(ValueDirective[int]):
+    pass
+
+
+class WireRequired(FlagDirective):
+    pass
+
+
 class NullPolicy(FieldDirective, ABC):
     @abstractmethod
     def rejects_null(self, declared: Field) -> bool: ...
@@ -150,40 +170,142 @@ class WireNonNull(FlagDirective, NullPolicy):
 class DefaultNonNull(NullPolicy):
     def rejects_null(self, declared: Field) -> bool:
         return declared.default is not None
-class WireChoices(ValueDirective[Callable[[], Iterable[str]]]): pass
-class WireOmitDefault(FlagDirective): pass
-class WireTransient(FlagDirective): pass
-class WireAbsentNone(FlagDirective): pass
-class WireContext(FlagDirective): pass
-class WireBind(ValueDirective[Mapping[str, str]]): pass
-class WireInline(FlagDirective): pass
-class Description(ValueDirective[str]): pass
-class WireExclude(ViewExclusion): pass
-class SnapshotExclude(ViewExclusion): pass
-class ContentExclude(ViewExclusion): pass
-class PublicationExclude(ViewExclusion): pass
-class PresenceExclude(ViewExclusion): pass
-class PublicExclude(ViewExclusion): pass
-class HistoryExclude(ViewExclusion): pass
-class ArtifactExclude(ViewExclusion): pass
-class CatalogExclude(ViewExclusion): pass
-class SealExclude(ViewExclusion): pass
-class SnapshotName(ViewName): pass
-class Normalize(ValueDirective[Callable[[object], object]]): pass
-class EditorFormat(ValueDirective[Callable[[object], object]]): pass
-class Editor(ValueDirective[type]): pass
-class Catalog(ValueDirective[type]): pass
-class Multiline(FlagDirective): pass
-class TargetBound(FlagDirective): pass
-class RegistrationPolicy(ValueDirective[type]): pass
-class SlicePolicy(ValueDirective[type]): pass
-class NativeContext(ValueDirective[object]): pass
-class NativeScope(FlagDirective): pass
-class RuntimeScope(FlagDirective): pass
-class WatchPaths(ValueDirective[Callable[..., tuple[Path, ...]]]): pass
-class WatchViews(ValueDirective[tuple[type, ...]]): pass
-class Differs(ValueDirective[Callable[[object, object], bool]]): pass
-class ContextSource(ValueDirective[type]): pass
+
+
+class WireChoices(ValueDirective[Callable[[], Iterable[str]]]):
+    pass
+
+
+class WireOmitDefault(FlagDirective):
+    pass
+
+
+class WireTransient(FlagDirective):
+    pass
+
+
+class WireAbsentNone(FlagDirective):
+    pass
+
+
+class WireContext(FlagDirective):
+    pass
+
+
+class WireBind(ValueDirective[Mapping[str, str]]):
+    pass
+
+
+class WireInline(FlagDirective):
+    pass
+
+
+class Description(ValueDirective[str]):
+    pass
+
+
+class WireExclude(ViewExclusion):
+    pass
+
+
+class SnapshotExclude(ViewExclusion):
+    pass
+
+
+class ContentExclude(ViewExclusion):
+    pass
+
+
+class PublicationExclude(ViewExclusion):
+    pass
+
+
+class PresenceExclude(ViewExclusion):
+    pass
+
+
+class PublicExclude(ViewExclusion):
+    pass
+
+
+class HistoryExclude(ViewExclusion):
+    pass
+
+
+class ArtifactExclude(ViewExclusion):
+    pass
+
+
+class CatalogExclude(ViewExclusion):
+    pass
+
+
+class SealExclude(ViewExclusion):
+    pass
+
+
+class SnapshotName(ViewName):
+    pass
+
+
+class Normalize(ValueDirective[Callable[[object], object]]):
+    pass
+
+
+class EditorFormat(ValueDirective[Callable[[object], object]]):
+    pass
+
+
+class Editor(ValueDirective[type]):
+    pass
+
+
+class Catalog(ValueDirective[type]):
+    pass
+
+
+class Multiline(FlagDirective):
+    pass
+
+
+class TargetBound(FlagDirective):
+    pass
+
+
+class RegistrationPolicy(ValueDirective[type]):
+    pass
+
+
+class SlicePolicy(ValueDirective[type]):
+    pass
+
+
+class NativeContext(ValueDirective[object]):
+    pass
+
+
+class NativeScope(FlagDirective):
+    pass
+
+
+class RuntimeScope(FlagDirective):
+    pass
+
+
+class WatchPaths(ValueDirective[Callable[..., tuple[Path, ...]]]):
+    pass
+
+
+class WatchViews(ValueDirective[tuple[type, ...]]):
+    pass
+
+
+class Differs(ValueDirective[Callable[[object, object], bool]]):
+    pass
+
+
+class ContextSource(ValueDirective[type]):
+    pass
 
 
 class ArgumentDefault(ABC):
@@ -218,7 +340,7 @@ class FactoryArgumentDefault(ArgumentDefault):
         options["default"] = self.factory()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Argument(FieldDirective):
     """The CLI's argument declaration, including its external argparse options."""
 
@@ -234,14 +356,21 @@ class Argument(FieldDirective):
     def description(self, name: str) -> str:
         return FieldCodec.decode(str, self.options.get("help", name.replace("_", " ").capitalize()))
 
-    def add_to(self, parser: argparse.ArgumentParser,
-               groups: dict[str, argparse._MutuallyExclusiveGroup], plan: FieldPlan) -> None:
+    def add_to(
+        self,
+        parser: argparse.ArgumentParser,
+        groups: dict[str, argparse._MutuallyExclusiveGroup],
+        plan: FieldPlan,
+    ) -> None:
         owner: argparse._ActionsContainer = parser
         if self.group is not None:
             if self.group not in groups:
                 groups[self.group] = parser.add_mutually_exclusive_group(required=True)
             owner = groups[self.group]
-        options = {**({} if "action" in self.options else plan.value.argument_options()), **self.options}
+        options = {
+            **({} if "action" in self.options else plan.value.argument_options()),
+            **self.options,
+        }
         self.default.apply(options, plan)
         flags = self.flags or ("--" + plan.name.replace("_", "-"),)
         if any(flag.startswith("-") for flag in flags):
@@ -292,7 +421,9 @@ class FieldPlan:
 
     @cached_property
     def value(self) -> ValueDecoder[object]:
-        return compile_decoder(self.annotation)
+        declared, representation = FieldCodec._representation(self.annotation)
+        annotation = declared if representation is None else Annotated[declared, representation]
+        return compile_decoder(annotation)
 
     @property
     def constructor_required(self) -> bool:
@@ -313,15 +444,15 @@ class FieldPlan:
         return convert(value)
 
     def editor_default(self, value: object) -> object:
-        return self.setting(
-            EditorFormat, self.value.encode_editor)(value)
+        return self.setting(EditorFormat, self.value.encode_editor)(value)
 
     @property
     def description(self) -> str:
         return Argument.declared(self.annotation).description(self.name)
 
-    def add_argument(self, parser: argparse.ArgumentParser,
-                     groups: dict[str, argparse._MutuallyExclusiveGroup]) -> None:
+    def add_argument(
+        self, parser: argparse.ArgumentParser, groups: dict[str, argparse._MutuallyExclusiveGroup]
+    ) -> None:
         Argument.declared(self.annotation).add_to(parser, groups, self)
 
     def contribute(self, fields):
@@ -352,8 +483,12 @@ class FieldPlan:
 
     def default(self) -> object:
         declared = self.declared
-        return declared.default if declared.default is not MISSING else (
-            declared.default_factory() if declared.default_factory is not MISSING else MISSING
+        return (
+            declared.default
+            if declared.default is not MISSING
+            else (
+                declared.default_factory() if declared.default_factory is not MISSING else MISSING
+            )
         )
 
     def omitted(self, value: object) -> bool:
@@ -380,7 +515,9 @@ class FieldPlan:
         return self.decoded(data)
 
     def decoded_selected(self, data, keys, selections):
-        return self.decoded_using(data, lambda value: self.value.decode_keys(value, keys, selections))
+        return self.decoded_using(
+            data, lambda value: self.value.decode_keys(value, keys, selections)
+        )
 
     def decoded_using(self, data: object, decode: Callable[[object], object]) -> dict[str, object]:
         captured = self.captured(data)
@@ -470,14 +607,15 @@ class BoundFieldPlan(DeclaredFieldPlan):
 
 
 class InlineFieldPlan(DeclaredFieldPlan):
-    """An InlineRecord type's or ``wire_inline`` field's keys, written beside its parent's."""
+    """An InlineRecord type's or WireInline field's keys, written beside its parent's."""
 
     directive = WireInline
 
     @cached_property
     def inlined(self) -> type:
-        inline = cast("type[InlineRecord] | None", FieldCodec._representation(self.annotation)[1])
-        return cast(type, self.annotation) if inline is None else inline.wire_record()
+        declared, representation = FieldCodec._representation(self.annotation)
+        inline = cast("type[InlineRecord] | None", representation)
+        return cast(type, declared) if inline is None else inline.wire_record()
 
     @cached_property
     def record(self):
@@ -505,8 +643,12 @@ class InlineFamilyPlan(InlineFieldPlan):
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        return (super().claims(declared, annotation)
-                and isinstance(annotation, type) and issubclass(annotation, DeclaredFamily))
+        value_type = FieldCodec._representation(annotation)[0]
+        return (
+            super().claims(declared, annotation)
+            and isinstance(value_type, type)
+            and issubclass(value_type, DeclaredFamily)
+        )
 
     @cached_property
     def family(self) -> type[DeclaredFamily]:
@@ -517,9 +659,18 @@ class InlineFamilyPlan(InlineFieldPlan):
 
     @cached_property
     def wire_keys(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((self.family.family_discriminator, *(
-            entry.key for member in self.family.members_with(self.family)
-            for entry in FieldCodec._record_plan(member).fields))))
+        return tuple(
+            dict.fromkeys(
+                (
+                    self.family.family_discriminator,
+                    *(
+                        entry.key
+                        for member in self.family.members_with(self.family)
+                        for entry in FieldCodec._record_plan(member).fields
+                    ),
+                )
+            )
+        )
 
 
 class FieldRepresentation(ABC):
@@ -589,7 +740,7 @@ class SingleFieldValue(WireValue):
 
     @classmethod
     def wire_field(cls):
-        entry, = FieldCodec._record_plan(cls).fields
+        (entry,) = FieldCodec._record_plan(cls).fields
         return entry
 
     @classmethod
@@ -713,8 +864,11 @@ class JsonShapeFamily(WireValue):
         cls._json_owners = {}
         if issubclass(cls, JsonShapeMember):
             shape, annotation = cls._json_shape()
-            owners = [base for base in cls.__mro__ if issubclass(base, JsonShapeFamily)
-                      and "_json_owners" in vars(base)]
+            owners = [
+                base
+                for base in cls.__mro__
+                if issubclass(base, JsonShapeFamily) and "_json_owners" in vars(base)
+            ]
             if any(shape in base._json_owners for base in owners):
                 raise TypeError(f"Two {cls.__name__} owners for {shape.__name__}")
             for base in owners:
@@ -722,8 +876,11 @@ class JsonShapeFamily(WireValue):
 
     @classmethod
     def _json_shape(cls) -> tuple[type, object]:
-        hints = {name: hint for name, hint in get_type_hints(cls, include_extras=True).items()
-                 if hint is not ClassVar and get_origin(hint) is not ClassVar}
+        hints = {
+            name: hint
+            for name, hint in get_type_hints(cls, include_extras=True).items()
+            if hint is not ClassVar and get_origin(hint) is not ClassVar
+        }
         if tuple(hints) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
         annotation = hints["value"]
@@ -740,7 +897,8 @@ class JsonShapeFamily(WireValue):
             member, annotation = cls._json_owners[type(data)]
         except KeyError:
             raise MalformedRecord(
-                f"Expected one {cls.__name__} owner for {type(data).__name__}") from None
+                f"Expected one {cls.__name__} owner for {type(data).__name__}"
+            ) from None
         owner = cast(type[JsonShapeMember], member)
         result = owner.from_json_value(FieldCodec.decode(annotation, data))
         if not isinstance(result, cls):
@@ -749,8 +907,9 @@ class JsonShapeFamily(WireValue):
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
-        alternatives = [FieldCodec.value_schema(annotation)
-                        for _, annotation in cls._json_owners.values()]
+        alternatives = [
+            FieldCodec.value_schema(annotation) for _, annotation in cls._json_owners.values()
+        ]
         return FieldCodec.alternatives_schema("anyOf", alternatives)
 
     def to_wire(self):
@@ -952,13 +1111,12 @@ class FieldCodec(Sealed):
     int). Missing fields use declared defaults. Tuple fields round-trip as JSON
     arrays. Init fields and explicitly projected wire properties participate;
     projected values are derived again on decode. ClassVars are not stored.
-    ``wire_nonnull`` rejects an explicit null while allowing an omitted default.
-    ``wire_inline`` writes a nested record's keys into its parent's object (a clash is a
+    WireNonNull rejects an explicit null while allowing an omitted default.
+    WireInline writes a nested record's keys into its parent's object (a clash is a
     TypeError).
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
-
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -971,7 +1129,8 @@ class FieldCodec(Sealed):
         else:
             target, metadata = annotation, ()
         representations = [
-            item for item in metadata
+            item
+            for item in metadata
             if isinstance(item, type) and issubclass(item, FieldRepresentation)
         ]
         if len(representations) > 1:
@@ -1004,8 +1163,9 @@ class FieldCodec(Sealed):
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
-        declared = tuple(plan for plan in FieldCodec.field_plans(cls)
-                         if plan.declared.init and plan.records)
+        declared = tuple(
+            plan for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records
+        )
         if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
             raise TypeError("Wire field names must be nonempty strings.")
         return tuple(
@@ -1023,7 +1183,8 @@ class FieldCodec(Sealed):
         hints = cls._types(record)
         return tuple(
             cls._field_plan(declared, hints[declared.name])(
-                declared=declared, annotation=hints[declared.name],
+                declared=declared,
+                annotation=hints[declared.name],
             )
             for declared in fields(record)
         )
@@ -1096,10 +1257,13 @@ class FieldCodec(Sealed):
     def decode_arguments(cls, target: type[T], arguments: object) -> T:
         """Argparse contributes only raw input; field plans own its conversion."""
         raw = vars(arguments)
-        return cls.decode_record(target, {
-            entry.key: entry.argument_payload(raw[entry.key])
-            for entry in cls.argument_fields(target)
-        })
+        return cls.decode_record(
+            target,
+            {
+                entry.key: entry.argument_payload(raw[entry.key])
+                for entry in cls.argument_fields(target)
+            },
+        )
 
     @classmethod
     def editor_arguments(cls, target: type, values: Mapping[str, object]) -> dict[str, object]:
@@ -1107,7 +1271,9 @@ class FieldCodec(Sealed):
         return {key: plans[key].editor_payload(value) for key, value in values.items()}
 
     @classmethod
-    def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
+    def decode_selected(
+        cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]
+    ) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
         return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
 
@@ -1162,7 +1328,8 @@ class FieldCodec(Sealed):
 
     @staticmethod
     def alternatives_schema(
-        combinator: Literal["anyOf", "oneOf"], alternatives: list[dict[str, Any]],
+        combinator: Literal["anyOf", "oneOf"],
+        alternatives: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """An alternative schema with no possible member rejects every value."""
         return {combinator: alternatives} if alternatives else {"not": {}}
@@ -1173,9 +1340,11 @@ class FieldCodec(Sealed):
         alternatives = []
         for member in target.members_with(target):
             tag = member.family_discriminator
-            alternatives.append(cls._record_schema(
-                member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
-            ))
+            alternatives.append(
+                cls._record_schema(
+                    member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
+                )
+            )
         return cls.alternatives_schema("oneOf", alternatives)
 
     @classmethod
@@ -1212,15 +1381,29 @@ class FieldCodec(Sealed):
                 return cls.value_schema(members[0])
             return cls.alternatives_schema("anyOf", [cls.value_schema(item) for item in members])
         if origin is Literal:
-            return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
+            return {
+                **cls.value_schema(type(args[0])),
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
         if origin is dict:
             if args[0] is str:
                 return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
-            return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
+            return {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "prefixItems": [cls.value_schema(arg) for arg in args],
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            }
         if origin is type and args and issubclass(cast(type, args[0]), DeclaredFamily):
-            return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
+            return {
+                "type": "string",
+                "enum": [value for _, value in compile_decoder(annotation).editor_choices()],
+            }
         if isinstance(annotation, type) and issubclass(annotation, Enum):
             values = [value for _, value in compile_decoder(annotation).editor_choices()]
             return {**cls.value_schema(type(values[0])), "enum": values}
@@ -1253,9 +1436,11 @@ class FieldCodec(Sealed):
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             result = cls._tag(value)
-            result.update(cls._record_plan(type(value)).encoded(
-                value, view, lambda entry, current: cls.project(current, view, entry.annotation)
-            ))
+            result.update(
+                cls._record_plan(type(value)).encoded(
+                    value, view, lambda entry, current: cls.project(current, view, entry.annotation)
+                )
+            )
             properties = cls._projections(type(value), view)
             result.update(
                 (member.wire_name, cls.project(getattr(value, name), view))
@@ -1281,10 +1466,15 @@ class FieldCodec(Sealed):
             result: dict[str, object] = {}
             for entry in self.bindings:
                 current = entry.current(value)
-                if not ViewExclusion.excluded_in(entry.annotation, view) and not entry.omitted(current):
-                    result.update(entry.encoded(
-                        encode_value(entry, current), key=ViewName.key_in(entry.annotation, view, entry.key)
-                    ))
+                if not ViewExclusion.excluded_in(entry.annotation, view) and not entry.omitted(
+                    current
+                ):
+                    result.update(
+                        entry.encoded(
+                            encode_value(entry, current),
+                            key=ViewName.key_in(entry.annotation, view, entry.key),
+                        )
+                    )
             return result
 
         def schema_fields(self, properties, required):
@@ -1326,7 +1516,9 @@ class FieldCodec(Sealed):
         claimed = {plan for plan in FieldPlan._plans if plan.claims(field, annotation)}
         selected = claimed - {base for plan in claimed for base in plan.__mro__[1:]}
         if len(selected) != 1:
-            raise TypeError(f"Field {field.name} must have exactly one declared field plan: {selected}")
+            raise TypeError(
+                f"Field {field.name} must have exactly one declared field plan: {selected}"
+            )
         return selected.pop()
 
     @staticmethod
@@ -1334,12 +1526,15 @@ class FieldCodec(Sealed):
     def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
-        return types.MappingProxyType({
-            name: member
-            for base in reversed(declaration.__mro__)
-            for name, member in vars(base).items()
-            if isinstance(member, Projected) and member.view == view
-        })
+        return types.MappingProxyType(
+            {
+                name: member
+                for base in reversed(declaration.__mro__)
+                for name, member in vars(base).items()
+                if isinstance(member, Projected) and member.view == view
+            }
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ValueDecoder[T](ABC):
@@ -1369,17 +1564,24 @@ class ValueDecoder[T](ABC):
 
     @classmethod
     def with_representation(
-        cls, annotation: object, target: object, args: tuple[object, ...],
+        cls,
+        annotation: object,
+        target: object,
+        args: tuple[object, ...],
         representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
         return _RepresentedDecoder(
-            annotation, representation,
+            annotation,
+            representation,
             cast(ValueDecoder[object], cls.representation_plan(target, args, representation)),
         )
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+        cls,
+        target: object,
+        args: tuple[object, ...],
+        representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
         return cls.from_annotation(target, args)
 
@@ -1452,6 +1654,7 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
     def argument_options(self) -> dict[str, object]:
         return {"choices": [self.argument_text(value) for _, value in self.editor_choices()]}
 
+
 @dataclass(frozen=True, slots=True)
 class _ScalarDecoder(ValueDecoder[Any]):
     """A plain target accepts no wire value unless a scalar below declares it."""
@@ -1466,6 +1669,7 @@ class _ScalarDecoder(ValueDecoder[Any]):
 
     def encode(self, value: object) -> object:
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
 
 class _ExactScalarDecoder(_ScalarDecoder):
     """A JSON scalar decoded only from its own type."""
@@ -1484,6 +1688,7 @@ class _ExactScalarDecoder(_ScalarDecoder):
             raise TypeError(f"Expected {self.target}, received {type(value).__name__}")
         return value
 
+
 class _TextDecoder(_ExactScalarDecoder):
     __slots__ = ()
     annotations = (str,)
@@ -1494,6 +1699,7 @@ class _TextDecoder(_ExactScalarDecoder):
     def decode_editor(self, value):
         return value
 
+
 class _FlagDecoder(_ExactScalarDecoder):
     __slots__ = ()
     annotations = (bool,)
@@ -1501,12 +1707,14 @@ class _FlagDecoder(_ExactScalarDecoder):
     def argument_options(self) -> dict[str, object]:
         return {"action": "store_true"}
 
+
 class _NumberDecoder(_ExactScalarDecoder):
     __slots__ = ()
     annotations = (int,)
 
     def argument_options(self) -> dict[str, object]:
         return {"type": self.target}
+
 
 class _RealDecoder(_NumberDecoder):
     """A finite number; an integer is a real number on the wire."""
@@ -1517,12 +1725,14 @@ class _RealDecoder(_NumberDecoder):
     def accepts(self, data: object) -> bool:
         return type(data) in (int, float) and math.isfinite(cast(float, data))
 
+
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder[Any]):
     """A declared representation capability; null without one decodes structurally."""
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+
     def encode(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
 
@@ -1541,6 +1751,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
                 # WireValue's pre-validation would traverse each subtree again.
                 return representation.from_wire(data)
             return representation.decode(data)
+
 
 class _JsonValueRepresentation(FieldRepresentation):
     """An opaque JSON declaration validates JSON, not Python object representations."""
@@ -1611,7 +1822,10 @@ class _TypeDecoder(_ScalarDecoder):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+        cls,
+        target: object,
+        args: tuple[object, ...],
+        representation: type[FieldRepresentation],
     ) -> ValueDecoder[object]:
         return cls(target, cast(type, args[0]))
 
@@ -1630,6 +1844,7 @@ class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
         if type(data) is not str:
             raise MalformedRecord("Expected a declared family name.")
         return _declared_member(self.bound, data)
+
 
 @dataclass(frozen=True, slots=True)
 class _LiteralDecoder(_ChoiceDecoder[Any]):
@@ -1658,6 +1873,7 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
             return data
         raise MalformedRecord(f"Value does not match {self.target}")
 
+
 @dataclass(frozen=True, slots=True)
 class UnionDecoder[T](ValueDecoder[T]):
     origins = (Union, types.UnionType)
@@ -1669,7 +1885,10 @@ class UnionDecoder[T](ValueDecoder[T]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+        cls,
+        target: object,
+        args: tuple[object, ...],
+        representation: type[FieldRepresentation],
     ) -> ValueDecoder[T]:
         alternatives = tuple(compile_decoder(Annotated[item, representation]) for item in args)
         return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
@@ -1712,6 +1931,7 @@ class UnionDecoder[T](ValueDecoder[T]):
             # graph for a later UI-thread garbage collection.
             first_error = None
 
+
 @dataclass(frozen=True, slots=True)
 class _ArrayDecoder(ValueDecoder[Any]):
     container: ClassVar[type]
@@ -1723,7 +1943,10 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+        cls,
+        target: object,
+        args: tuple[object, ...],
+        representation: type[FieldRepresentation],
     ) -> ValueDecoder[object]:
         return _ScalarDecoder(cls.container)
 
@@ -1744,6 +1967,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
     def decode_items(self, data):
         return (self.items[0].decode(value) for value in data)
 
+
 class _FrozenSetDecoder(_ArrayDecoder):
     origins = (frozenset,)
     container = frozenset
@@ -1751,9 +1975,11 @@ class _FrozenSetDecoder(_ArrayDecoder):
     def encode(self, value: frozenset[object]) -> list[object]:
         return self.encode_items(sorted(value))
 
+
 class _ListDecoder(_ArrayDecoder):
     origins = (list,)
     container = list
+
 
 class _TupleDecoder(_ArrayDecoder):
     origins = (tuple,)
@@ -1767,8 +1993,10 @@ class _TupleDecoder(_ArrayDecoder):
             return _VariadicTupleDecoder(target, (compile_decoder(args[0]),))
         return _FixedTupleDecoder(target, tuple(compile_decoder(item) for item in args))
 
+
 class _VariadicTupleDecoder(_TupleDecoder):
     """The inherited item decoder applies to every tuple element."""
+
 
 class _FixedTupleDecoder(_TupleDecoder):
     def encode_items(self, items: Iterable[object]) -> list[object]:
@@ -1778,6 +2006,7 @@ class _FixedTupleDecoder(_TupleDecoder):
         if len(data) != len(self.items):
             raise MalformedRecord("Tuple length does not match declaration.")
         return (item.decode(value) for item, value in zip(self.items, data, strict=True))
+
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result = dict(pairs)
@@ -1818,7 +2047,10 @@ class _DictDecoder(ValueDecoder[Any]):
 
     @classmethod
     def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
+        cls,
+        target: object,
+        args: tuple[object, ...],
+        representation: type[FieldRepresentation],
     ) -> ValueDecoder[object]:
         return _ScalarDecoder(dict)
 
@@ -1830,9 +2062,14 @@ class _DictDecoder(ValueDecoder[Any]):
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
-        return {self.key.decode(key): self.value.decode_selected(
-                    value, selections, fields=self.value.field_names)
-                for key, value in self.entries(data) if key in encoded}
+        return {
+            self.key.decode(key): self.value.decode_selected(
+                value, selections, fields=self.value.field_names
+            )
+            for key, value in self.entries(data)
+            if key in encoded
+        }
+
 
 class _StringKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_entries)
@@ -1844,16 +2081,17 @@ class _StringKeyDictDecoder(_DictDecoder):
         return {key: self.value.encode_document(item) for key, item in value.items()}
 
     def decode_document(self, data: object) -> dict[str, object]:
-        return {self.key.decode(key): self.value.decode_document(value)
-                for key, value in self.entries(data)}
+        return {
+            self.key.decode(key): self.value.decode_document(value)
+            for key, value in self.entries(data)
+        }
 
 
 class _PairKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_or_pair_entries)
 
     def encode(self, value: dict[object, object]) -> list[list[object]]:
-        return [[self.key.encode(key), self.value.encode(item)]
-                for key, item in value.items()]
+        return [[self.key.encode(key), self.value.encode(item)] for key, item in value.items()]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1866,8 +2104,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         return {**value.record_tag(), **_member_decoder(type(value)).encode(value)}
 
     def editor_choices(self):
-        return tuple((member.label, {self.target.family_discriminator: member.declared_name})
-                     for member in self.target.members_with(self.target))
+        return tuple(
+            (member.label, {self.target.family_discriminator: member.declared_name})
+            for member in self.target.members_with(self.target)
+        )
 
     def argument_options(self) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
@@ -1896,6 +2136,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
+
 
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
     """A directly declared leaf document omits its family selector."""
@@ -1932,10 +2173,17 @@ class _RecordDecoder(ValueDecoder[Any]):
         schemas: dict[str, object] = {}
         if missing:
             plan.schema_fields(schemas, [])
-        problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
-                         f"fix: supply {json.dumps(schemas[key])}" for key in missing}
-        problems.update({key: "Unknown fields; fix: remove this field"
-                         for key in data.keys() - plan.accepted_keys})
+        problems = {
+            key: f"Missing required fields for {self.target.__name__}: {key}; "
+            f"fix: supply {json.dumps(schemas[key])}"
+            for key in missing
+        }
+        problems.update(
+            {
+                key: "Unknown fields; fix: remove this field"
+                for key in data.keys() - plan.accepted_keys
+            }
+        )
         return problems
 
     def checked(self, data: object) -> dict:
@@ -1966,13 +2214,17 @@ class _RecordDecoder(ValueDecoder[Any]):
                 continue
             key = (target, entry.name)
             try:
-                values.update(entry.decoded_selected(data, selections[key], selections)
-                              if key in selections else entry.decoded_bound(data, context))
+                values.update(
+                    entry.decoded_selected(data, selections[key], selections)
+                    if key in selections
+                    else entry.decoded_bound(data, context)
+                )
             except MalformedRecord as error:
                 problems.update(error.located(entry.key, f"supply {entry.annotation}"))
         if problems:
             raise RecordProblems(problems)
         return FieldCodec.construct(target, values)
+
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Any]):
@@ -1994,24 +2246,23 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
 
+
 @overload
 def compile_decoder[T](annotation: type[T]) -> ValueDecoder[T]: ...
 @overload
 def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
-def compile_decoder(annotation: object) -> ValueDecoder[object]:
-    """Field directives do not change a value's representation or its cache key."""
-    return _compile_value_decoder(*FieldCodec._representation(annotation))
-
-
 @lru_cache(maxsize=None)
-def _compile_value_decoder(declared: object, representation: type[FieldRepresentation] | None) -> ValueDecoder[object]:
+def compile_decoder(annotation: object) -> ValueDecoder[object]:
+    """Compile each immutable declaration once; value paths never parse it again."""
+    declared, representation = FieldCodec._representation(annotation)
     if representation is None:
         return _structural_decoder(declared)
     try:
         owner = ValueDecoder.annotation_class(declared)
     except KeyError:
         owner = _ScalarDecoder
-    return owner.with_representation(Annotated[declared, representation], declared, get_args(declared), representation)
+    return owner.with_representation(annotation, declared, get_args(declared), representation)
+
 
 def _structural_decoder(annotation: object) -> ValueDecoder[object]:
     try:
@@ -2022,12 +2273,17 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
         return decoder.from_annotation(annotation, get_args(annotation))
     if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
         members = annotation._member_declarations()
-        leaf_document = annotation.decodes_tagged_records() and annotation in members and not any(
-            other is not annotation and issubclass(other, annotation) for other in members
+        leaf_document = (
+            annotation.decodes_tagged_records()
+            and annotation in members
+            and not any(
+                other is not annotation and issubclass(other, annotation) for other in members
+            )
         )
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
         return plan(annotation)
     return _member_decoder(annotation)
+
 
 @lru_cache(maxsize=None)
 def _member_decoder(target: object) -> ValueDecoder[object]:

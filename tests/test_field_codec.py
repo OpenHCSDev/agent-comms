@@ -70,15 +70,18 @@ def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims(
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
     from agent_comms.field_codec import DeclaredFieldPlan
 
+    class ProbeDirective(field_codec.FlagDirective):
+        pass
+
     class ProbePlan(DeclaredFieldPlan):
-        metadata_flag = "wire_registry_probe"
+        directive = ProbeDirective
 
         def omitted(self, value):
             return value == "omit" or super().omitted(value)
 
     @dataclass
     class Record:
-        value: typing.Annotated[str, object()]
+        value: typing.Annotated[str, ProbeDirective()]
 
     assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
     assert FieldCodec.encode(Record("omit")) == {}

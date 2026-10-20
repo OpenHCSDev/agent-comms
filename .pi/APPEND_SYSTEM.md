@@ -57,6 +57,7 @@ You are one of several agents coordinating through agent-comms. Tristan owns pro
 ## Ownership, code, and delivery
 
 - Do not merge main into feature branches. When your own branch conflicts with main, rebase it onto origin/main that turn, keep main's side where main deleted or moved code, push the owned branch, and report its new head. Do not ask again for that routine authorization. Do not make formatting-only or re-budget-only commits.
+- One-shot converters and proof scripts run once and are deleted before their PR is done. Record their commands and results in the PR body; do not leave another executable authority in `tools/` or `tests/`.
 - Fresh-environment practice installs belong to the merger, on the pushed head. Workers prove the affected behavior on a copy of the bus using existing dependencies and report precisely which installation proof the merger still owes.
 - Line growth is a measurement, not a defect or merge gate. Do not request a line budget. Fix duplicated authorities, type filters and strings replacing declared identities; the existing measure owner decides which findings block.
 - P269 practice installation uses a retained bus tail with its production indexes, bounded to 3 GiB and measured against actual free space. It does not require a 26 GiB whole-desktop copy or GitHub configuration changes. Preserve original sessions, inputs and stores; never turn short storage into a skipped success.

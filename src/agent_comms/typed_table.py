@@ -496,7 +496,7 @@ class SQLiteUserVersion(TypedRow):
 class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"):
     """The row declaration owns its table; no separate table/schema registry.
 
-    Fields may declare ``metadata={"sql": Column(...)}``. Composite keys derive
+    Fields declare SQL capabilities with ``Annotated[T, Column(...)]``. Composite keys derive
     from primary-key fields in declaration order. Table-wide constraints and
     indexes live on the same row declaration. SQL predicates contain trusted
     source expressions; values always use bound parameters.

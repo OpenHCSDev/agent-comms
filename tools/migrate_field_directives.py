@@ -42,6 +42,9 @@ class Source:
         self.edits: list[tuple[int, int, str]] = []
         self.imports: set[str] = set()
         self.changed = 0
+        owner = Path(__file__).resolve().parents[1] / "src/agent_comms/field_codec.py"
+        self.directive_types = {node.name for node in ast.parse(owner.read_text()).body
+                                if isinstance(node, ast.ClassDef)}
 
     def start(self, node: ast.AST) -> int:
         # AST columns are UTF-8 bytes, while source edits use Python string offsets.
@@ -64,10 +67,12 @@ class Source:
         self.imports.add("from agent_comms import field_codec")
         return f"field_codec.{directive_name(key)}({self.code(value)})"
 
-    def field_call(self, function: str, keywords: list[tuple[str, ast.AST]]) -> str:
+    def field_call(self, function: str, keywords: list[tuple[str, ast.AST | str]]) -> str:
         if not keywords:
             return ""
-        return f" = {function}(" + ", ".join(f"{key}={self.code(value)}" for key, value in keywords) + ")"
+        return f" = {function}(" + ", ".join(
+            f"{key}={value if isinstance(value, str) else self.code(value)}"
+            for key, value in keywords) + ")"
 
     def migrate(self) -> str:
         for node in ast.walk(self.tree):
@@ -83,8 +88,22 @@ class Source:
                 if any(not isinstance(key, ast.Constant) or not isinstance(key.value, str)
                        for key in metadata.keys):
                     raise ValueError(f"{self.path}:{node.lineno}: dynamic field metadata")
-                extras = [self.directive(key.value, value)
-                          for key, value in zip(metadata.keys, metadata.values)]
+                known, foreign = [], []
+                for key, value in zip(metadata.keys, metadata.values):
+                    owned = (key.value in ("sql", "wire_registry_probe")
+                             or directive_name(key.value) in self.directive_types)
+                    (known if owned else foreign).append((key, value))
+                extras = [self.directive(key.value, value) for key, value in known]
+                retained = [(key.arg, key.value) for key in call.keywords if key.arg != "metadata"]
+                if foreign:
+                    # Other libraries' metadata is their external contract, not ours.
+                    retained.append(("metadata", "{" + ", ".join(
+                        f"{key.value!r}: {self.code(value)}" for key, value in foreign) + "}"))
+                default = self.field_call(self.code(call.func), retained)
+            elif (isinstance(metadata, ast.Call) and isinstance(metadata.func, ast.Name)
+                  and metadata.func.id == "saved_as"):
+                self.imports.add("from agent_comms import field_codec")
+                extras = [f"field_codec.WireName({self.code(metadata.args[0])})"]
                 default = self.field_call(self.code(call.func), [
                     (key.arg, key.value) for key in call.keywords if key.arg != "metadata"
                 ])
@@ -143,7 +162,9 @@ class Source:
             annotation = self.code(node.annotation)
             if (isinstance(node.annotation, ast.Subscript)
                     and ast.unparse(node.annotation.value) in ("Annotated", "typing.Annotated")):
-                annotation = annotation[:annotation.rfind("]")] + ", " + ", ".join(extras) + "]"
+                last = node.annotation.slice.elts[-1]
+                position = self.end(last) - self.start(node.annotation)
+                annotation = annotation[:position] + ", " + ", ".join(extras) + annotation[position:]
             else:
                 annotation = "typing.Annotated[" + annotation + ", " + ", ".join(extras) + "]"
             self.edits.append((self.start(node.annotation), self.end(call), annotation + default))
@@ -174,8 +195,11 @@ def main() -> None:
     parser.add_argument("roots", nargs="*", default=["src", "tools", "tests"])
     options = parser.parse_args()
     total = 0
+    updates = []
     for root in options.roots:
-        for path in sorted(Path(root).rglob("*.py")):
+        target = Path(root)
+        paths = [target] if target.is_file() else target.rglob("*.py")
+        for path in sorted(paths):
             if "skills" in path.parts or path == Path(__file__):
                 continue
             source = Source(path, path.read_text())
@@ -183,8 +207,11 @@ def main() -> None:
             if source.changed:
                 print(f"{path}: {source.changed}")
                 total += source.changed
-                if options.write:
-                    path.write_text(result)
+                updates.append((path, result))
+    if options.write:
+        # Validate the whole batch before changing any source file.
+        for path, result in updates:
+            path.write_text(result)
     print(f"fields converted: {total}")
 
 

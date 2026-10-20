@@ -321,8 +321,10 @@ def tool_field(
     wire_name=None,
     binding: type[ContextBinding] | None = None,
     choices=None,
-):
-    directives = [field_codec.Description(description), field_codec.DefaultNonNull()]
+) -> tuple[field_codec.FieldDirective, ...]:
+    directives: list[field_codec.FieldDirective] = [
+        field_codec.Description(description), field_codec.DefaultNonNull(),
+    ]
     if wire_name is not None:
         directives.append(field_codec.WireName(wire_name))
     if binding is not None:
