@@ -135,7 +135,7 @@ def test_folded_provenance_retains_phase_without_acceptance(
     todo = create(commander, "P1")
     declared = replace(todo, order=todo.order.for_phase(phase))
     monkeypatch.setattr(phase, "task", task(declared))
-    original = accepted(declared).order if installed else declared.order
+    original = accepted(declared).order if installed else declared.order.merged("a" * 40)
     folded = original.folded("P2", "Keep one owner")
     nested = folded.folded("P3", "Keep the retained provenance")
     for order in (folded, nested):
