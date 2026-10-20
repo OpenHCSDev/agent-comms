@@ -16,12 +16,18 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
     async def observe(thread, state, info):
         observed.append((state, info))
 
-    state = await owner.prepare(observe)
-    assert observed == [(state, observed[0][1])]
-    assert state.session_file == str(owner.session) and state.session_id
-    assert state.is_streaming is False and state.is_compacting is False
-    assert owner.persistent.available and owner.persistent.child_state.child.proc.alive()
-    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 0
+    async with owner.open_owner() as (agent, session_id):
+        native = agent.turns.persistent_backends[session_id]
+        await native.close()
+        native.observe = observe
+        thread = agent.sessions.require(session_id)
+        state = await native.prepare(thread)
+        owner.children.append(native.child_state.child.proc)
+        assert observed == [(state, observed[0][1])]
+        assert state.session_file == str(owner.session) and state.session_id
+        assert state.is_streaming is False and state.is_compacting is False
+        assert native.available and native.child_state.child.proc.alive()
+        assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 0
 
 
 async def test_actual_no_tool_turn_rejects_provider_tool_call(native_backend):

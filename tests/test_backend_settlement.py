@@ -22,8 +22,9 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSI
 async def test_followup_outlives_previous_native_settlement(
     tmp_path, start_before_settlement, inject_during_stats
 ):
-    session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","version":3,"id":"same"}\n')
+    from agent_comms.native_session_files import create_fresh_private_session
+    session = create_fresh_private_session(tmp_path / 'sessions', worktree=tmp_path).path
+    session_id = json.loads(session.read_text().splitlines()[0])['id']
     stub = tmp_path / "pi-stub"
     stub.write_text(f"#!{sys.executable}\n" + f"""
 import json, sys, threading, time
@@ -51,7 +52,7 @@ for line in sys.stdin:
     if kind == "get_state":
         send({{"type":"response", "command":kind, "id":command.get("id"),
               "success":True, "data":{{"nativeInputProofCapability":
-              "pi-native-input-v1-live-only", "sessionId":"same",
+              "pi-native-input-v1-live-only", "sessionId":{session_id!r},
               "sessionFile":{str(session)!r}, "isStreaming":busy}}}})
     elif kind == "get_session_stats":
         send({{"type":"response", "command":kind, "id":command.get("id"),

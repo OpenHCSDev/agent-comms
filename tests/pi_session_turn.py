@@ -53,10 +53,7 @@ async def backend_events(owner, task, cwd, env_extra=None, *, session_file=None,
     thread = replace(owner.comms.registry.require('native-fixture'),
                      worktree=str(cwd), session_file=session_file)
     delivery = TurnDelivery(
-        worktree=str(cwd), environment={
-            **thread.native_environment(owner.comms.root, owner.comms.registry.snapshot(), str(cwd)),
-            **dict(env_extra or {}),
-        },
+        worktree=str(cwd), environment=dict(env_extra or {}),
         inbox=steering_queue if steering_queue is not None else TurnInbox(),
         finish_event=finish_event if finish_event is not None else asyncio.Event(),
         send_boundary=send_boundary, interrupt_boundary=interrupt_boundary,

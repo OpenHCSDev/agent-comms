@@ -394,8 +394,12 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(sav
         try:
             await asyncio.wait_for(entered.wait(), timeout=4)
             await proxies[0].close()
-            disconnected = await asyncio.wait_for(pending, timeout=4)
-            assert disconnected["_meta"]["answer"]["cancelled"] is True
+            # Closing the request owner cancels its requests; it cannot receive
+            # another successful RPC response after its connection has closed.
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(pending, timeout=4)
+            from native_backend_fixture import wait_for
+            await wait_for(lambda: not owner._comms.registry.require(session_id).turn_record.read().phase.busy)
             assert not calls[1]
         finally:
             pending.cancel()
