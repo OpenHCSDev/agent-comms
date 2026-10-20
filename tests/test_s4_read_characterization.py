@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import native_reader
 from agent_comms.registry_document import DEFAULT_ROSTER
 from native_unread_fixture import completed_counts, completed_snapshot
@@ -56,17 +57,18 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     index_owner.close()
     index_owner.index_path.unlink()
     rebuilt = native_reader(comms.bus.reads.path)
+    expected_counts = {"worker": ReplyUnread(1), "receiver": ReplyUnread(0)}
     try:
-        assert completed_counts(rebuilt, viewer).counts == {"worker": 1, "receiver": 0}
+        assert completed_counts(rebuilt, viewer).counts == expected_counts
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         comms.views.mark_page_read(page, worktree=str(tmp_path))
-        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
+        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == expected_counts
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
         references = tuple(message.reference for message in comms.bus.inbox("receiver"))
         comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", CommandTarget.named("#team")) == 0
-        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": 1, "receiver": 0}
+        assert rebuilt.counts(viewer, registry=comms.registry.snapshot(), document=rebuilt.reads.read(), visibility=DEFAULT_ROSTER).counts == expected_counts
     finally:
         rebuilt.close()

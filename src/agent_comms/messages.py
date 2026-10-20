@@ -373,6 +373,11 @@ class Message:
         self.task.require_target(self.target, snapshot)
         self.task.require_publication(sender, snapshot, original_source)
 
+    @property
+    def history_snapshot(self) -> Message:
+        """Retain display facts, never another root's resource-claim authority."""
+        return replace(self, claim_transition=None)
+
     def checkpoint_rows(self, previous_sequence: int):
         """The envelope declares both publication and optional claim facts."""
         from .private_bus_checkpoint import ClaimCommits, PublicMessages
