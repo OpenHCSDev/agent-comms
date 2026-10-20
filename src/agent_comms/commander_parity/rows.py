@@ -22,6 +22,7 @@ from .lifecycle import (
     verify_order_progress,
 )
 from .load import LoadComparison
+from .verdicts import VerdictComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
 from .story import StoryCase
 
@@ -97,6 +98,7 @@ class VerdictParityRow(ParityRow):
     current = "`judge.py ok`, `back`; `verdicts.jsonl`"
     native = "Order `Verdict`; send-back revises the Goal and records its strike atomically"
     phases = (RecordPlanePhase,)
+    comparison = VerdictComparison.read
 
 
 class PlainWordsParityRow(ParityRow):
