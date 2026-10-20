@@ -207,7 +207,7 @@ class NamedTarget(CommandTarget):
         """Non-direct targets impose no exact-recipient requirement."""
 
 
-class ThreadTarget(NamedTarget, ConversationPreparation["ThreadTarget"]):
+class ThreadTarget(NamedTarget, ConversationPreparation[NamedTarget]):
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"

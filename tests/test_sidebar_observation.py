@@ -3,6 +3,7 @@
 import pytest
 
 from agent_comms.display_order import NameChannelSort
+from agent_comms.read_ledger import NoReadNotice
 from agent_comms.ui_model.sidebar import FailedSidebar, SidebarModel, WaitingSidebar
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 
@@ -11,7 +12,7 @@ def test_waiting_and_failed_sidebar_answer_without_a_snapshot():
     failure = ValueError("sidebar source could not be read")
     for observation in (WaitingSidebar(), FailedSidebar(failure)):
         assert observation.channel_order() is NameChannelSort
-        assert observation.read_marker_notice() == ""
+        assert observation.read_marker_notice() == NoReadNotice()
         assert observation.channel_unread("#any") == UnobservedUnread()
         assert observation.bus_unread("person") == UnobservedUnread()
     with pytest.raises(RuntimeError, match="has not been observed"):

@@ -138,7 +138,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     modified = bus_path.stat().st_mtime_ns
     bus_path.write_bytes(original)
     os.utime(bus_path, ns=(modified + 1_000_000_000, modified + 1_000_000_000))
-    BusRouteCounts(bus_path).path.unlink()
+    assert not BusRouteCounts(bus_path).path.exists()
 
     def projection_bytes():
         paths = [
@@ -167,13 +167,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     request.receive(service)
     results = []
     original_snapshot = comms.views.viewer_snapshot
-    from agent_comms.bus_route_counts import RouteIndexRebuilding
     from agent_comms.private_path import FileRevision
-    from agent_comms.ui_model.observation import ReadAnswered, ReadRequest
-
-    class ForegroundRead(ReadRequest):
-        def read(self, service_comms):
-            return service_comms.registry.require("bob").name
 
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     attempts = []
@@ -187,19 +181,9 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         first = next(value for value in results if isinstance(value, SidebarObserved))
         assert {reference.name for reference, shown in first.snapshot.unread.items() if shown.pending} >= {"bob", "#team"}
         assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
-        if not attempts:
-            assert projection_bytes() == before
-        else:
-            # The same observer serves actual foreground work between the two
-            # authorized index units, with no append, expiry tick or new request.
-            assert any(isinstance(value, ReadAnswered) and value.request_id == 9976
-                       and value.value == "bob" for value in results)
+        assert projection_bytes() == before
         attempts.append(True)
-        try:
-            return original_snapshot(*args, **kwargs)
-        except RouteIndexRebuilding:
-            ForegroundRead(str(comms.root), request_id=9976).receive(service)
-            raise
+        return original_snapshot(*args, **kwargs)
 
     try:
         with patch.object(comms.views, "viewer_snapshot", side_effect=complete):
@@ -209,7 +193,8 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         completed = [value for value in results if isinstance(value, SidebarObserved)][-1]
         assert completed.snapshot == expected
         assert {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending} == frozenset()
-        assert len(attempts) == 2
+        assert len(attempts) == 1
+        assert not BusRouteCounts(bus_path).path.exists()
         assert FileRevision.from_stat(comms.bus.activity_index.path.stat()) == activity_revision
         assert service.interest.observations[SidebarReading].request is request
     finally:
@@ -243,7 +228,9 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         while receiver.poll():
             answers.append(receiver.recv())
         initial = [answer for answer in answers if isinstance(answer, SidebarObserved)]
-        assert len(initial) == 1 and {reference.name for reference, shown in initial[0].snapshot.unread.items() if shown.pending}
+        assert len(initial) == 2
+        assert {reference.name for reference, shown in initial[0].snapshot.unread.items() if shown.pending}
+        assert not {reference.name for reference, shown in initial[-1].snapshot.unread.items() if shown.pending}
         await service.observe(set())
         while receiver.poll():
             answers.append(receiver.recv())
@@ -567,7 +554,9 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     # The untagged human inbox still excludes channel rows.
     assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == expected
+        snapshot = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        assert {reference.name: shown.count for reference, shown in snapshot.unread.items()
+                if type(reference) is ThreadTarget and shown.count} == expected
         assert decode.call_count == 0
     ledger = comms.bus.reads.read()
     receiver, connection = Pipe()
@@ -690,6 +679,6 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     with comms.bus.snapshot(viewer=NamedViewer('Alice')) as (basis, source):
         assert source.through == first.seq < source.metadata.last_seq
         assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
-    with pytest.raises(RelationViolationError, match='differs from its durable marker'):
+    with pytest.raises(RelationViolationError, match='differs from its stored marker'):
         with comms.bus.log.checked_read() as source:
             source.require_current()
