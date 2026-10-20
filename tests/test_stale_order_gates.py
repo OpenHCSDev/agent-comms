@@ -105,6 +105,13 @@ def test_pr_uses_actual_owned_checkout_instead_of_an_invented_problem_directory(
     comms, _ = commander
     context, repo = commander_script
     todo = create(commander, 'P287')
+    (comms.root / 'storage.json').write_text(json.dumps({
+        'checkout_base': str(tmp_path / 'wt'),
+    }))
+    context = type(context).read_root(comms.root)
+    owned = context.comms.registry.storage_rule.order_checkout(todo.held().owner, todo.id)
+    owned.parent.mkdir(parents=True, exist_ok=True)
+    repo = repo.rename(owned)
     body = tmp_path / 'pull-request.md'
     body.write_text('The retained order owns its immutable pull request identity.')
     seen = []

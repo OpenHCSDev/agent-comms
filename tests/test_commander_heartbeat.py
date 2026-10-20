@@ -212,12 +212,21 @@ async def test_directive_backlog_ignores_order_revision_and_summarizes_new_direc
         assert ordered.revision > initial.revision
         assert ordered.id == initial.id and ordered.order.directives == initial.order.directives
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
-        assert received() == first
+        ordered_wakes = received()
+        assert len(ordered_wakes) == 2
+        assert ordered_wakes[0] == first[0]
+        # P2 is deliberately historical: adding it adds real order alarms, not directives.
+        assert 'RULE ORDER OVERDUE P2 worker' in ordered_wakes[-1].body
+        assert 'DIRECTIVE UNACTED:' not in ordered_wakes[-1].body
+        # Now change only request progress: the violation set really is unchanged.
+        comms.goals.update_goal('lead', ActiveGoalAction(progress='Reviewed P2 without a new order.'))
+        await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
+        assert received() == ordered_wakes
 
         direct(60)
         await Coordination.run_worker(lambda: heartbeat.watch_pass(opened))
         changed = received()
-        assert len(changed) == 2
+        assert len(changed) == 3
         directive_lines = [line for line in changed[-1].body.splitlines()
                            if "DIRECTIVE UNACTED:" in line]
         assert len(directive_lines) == 1 and "61 claude-ai directives" in directive_lines[0]

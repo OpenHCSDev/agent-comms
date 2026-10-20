@@ -5,6 +5,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
+from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import ApplicationOrderRun, AssignTodo, GoalRef, MechanicalOrderRun, Todo, TodoStore
@@ -55,6 +56,7 @@ def test_send_requires_a_declared_run_including_mechanical_orders(commander_scri
     data = {'defect': 'The real thread list disappears after opening saved history',
             'why_stupid': 'The repeated parser is wrong because Core declares these fields.',
             'order': {'kind': 'pending', 'owner': f'{__file__}:1',
+                      'serves': RecordPlanePhase.declared_name,
                       'check': {'directory': str(repo), 'command': 'printf 0',
                                 'result': {'kind': 'count', 'expected': 1}},
                       'edits': ['Repair the counter value.'],
