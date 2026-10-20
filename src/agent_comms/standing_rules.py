@@ -138,7 +138,7 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
 
         todos, now = cls.todos(comms, commander), time.time()
         pulls = PullRequests(todos)
-        return tuple(cls(todo.id, todo.holder, todo.order.id, due)
+        return tuple(cls(todo.id, todo.held().owner, todo.order.checked().id, due)
                      for todo in todos
                      if (due := cls.due(comms, todo, now, pulls)).before(now))
 
@@ -170,33 +170,44 @@ class OrderOverdue(HeldOrderDue):
 class FirstCallMissing(HeldOrderDue):
     @classmethod
     def due(cls, comms: Comms, todo: Todo, now: float, pulls: PullRequests) -> EventTime:
-        if not todo.pending or not todo.order.first_call_deadline.before(now):
+        if not todo.pending:
             return UnrecordedEventTime()
-        thread = comms.registry.require(todo.holder)
+        order = todo.order.checked()
+        if not order.first_call_deadline.before(now):
+            return UnrecordedEventTime()
+        thread = comms.registry.require(todo.held().owner)
         last = thread.execution.last_tool_call(comms, thread)
-        if last.since(todo.order.at.recorded_at("An order")):
+        if last.since(order.at.recorded_at("An order")):
             return UnrecordedEventTime()
-        return todo.order.first_call_deadline
+        return order.first_call_deadline
 
     def line(self) -> str:
         return (f"FIRST CALL MISSING {self.problem} {self.holder}, due {self.since.clock()}, "
                 f"order {self.order} -> push the work or reassign it")
 
 
-class OwnerIdle(HeldOrderDue):
+@dataclass(frozen=True)
+class OwnerIdle(DatedStandingRule):
     seconds: ClassVar[int] = 1200
+    holder: str
+    since: float
 
     @classmethod
-    def due(cls, comms: Comms, todo: Todo, now: float, pulls: PullRequests) -> EventTime:
-        thread = comms.registry.require(todo.holder)
-        last = thread.execution.last_tool_call(comms, thread)
-        if not last.before(now - cls.seconds):
-            return UnrecordedEventTime()
-        return RecordedEventTime(last.recorded_at("A tool call") + cls.seconds)
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        now = time.time()
+        threads = (comms.registry.require(holder)
+                   for holder in sorted({todo.held().owner for todo in cls.todos(comms, commander)}))
+        calls = ((thread.name, thread.execution.last_tool_call(comms, thread))
+                 for thread in threads)
+        return tuple(cls(holder, last.recorded_at("A tool call") + cls.seconds)
+                     for holder, last in calls if last.before(now - cls.seconds))
+
+    def began(self) -> float:
+        return self.since
 
     def line(self) -> str:
-        return (f"OWNER IDLE {self.problem} {self.holder}, since {self.since.clock()}, "
-                f"order {self.order} -> push or reassign the work")
+        return (f"OWNER IDLE {self.holder}, since {RecordedEventTime(self.since).clock()}"
+                " -> push or reassign the work")
 
 
 @dataclass(frozen=True)

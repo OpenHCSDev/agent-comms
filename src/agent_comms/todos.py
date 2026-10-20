@@ -961,10 +961,6 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
 
     @abstractmethod
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        """One INSTALL line for every order waiting on install; it strikes nobody."""
-
-    @abstractmethod
     def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         """Why the commander may not run the installer's work; none when it is the installer."""
 
@@ -976,9 +972,6 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
 class UnplannedInstallDeadline(InstallDeadline):
     def overdue(self, now: float) -> tuple[str, ...]:
         return ("no install is planned on this bus",)
-
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
     def refusals(self, work: str, commander: str) -> tuple[str, ...]:
         return (f"{work.capitalize()} is the installer's work, and no install is planned. "
@@ -1009,14 +1002,6 @@ class PlannedInstallDeadline(InstallDeadline):
         return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
                 f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
                 f"{self.installer}, naming the {work} to run.",) * (self.installer != commander)
-
-    def alarm(self, waiting: list[str], now: float) -> list[str]:
-        if not waiting:
-            return []
-        if now > self.at.at:
-            return [f"INSTALL LATE (due {self.at.clock()}), not the orders; "
-                    f"waiting: {', '.join(waiting)}"]
-        return [f"INSTALL due {self.at.clock()}; waiting: {', '.join(waiting)}"]
 
 
 @dataclass(frozen=True)
