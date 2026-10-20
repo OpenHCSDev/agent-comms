@@ -180,10 +180,10 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
-        """Assign first: refused or unavailable replacements leave the old holder untouched."""
-        stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
-        for commander in {todo.creator_identity.name for todo in stalled}:
-            mine = (todo for todo in stalled if todo.creator_identity.name == commander)
+        """Assign eligible work; refused replacements preserve the observed row."""
+        available = comms.goals.todos.reassignable(comms.registry.storage_rule)
+        for commander in {todo.creator_identity.name for todo in available}:
+            mine = (todo for todo in available if todo.creator_identity.name == commander)
             for rule in cls.paired(comms, commander, mine, StallWatcherIncarnation.watcher()):
                 rule.enforce(comms, commander)
 
@@ -191,6 +191,7 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
+            comms.goals.todos.advance_objective_failures(comms.goals)
             cls.after_stall(comms)
 
 

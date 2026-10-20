@@ -311,11 +311,11 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
         script.done('P2', side, seen=working(comms)[0].screenshot)
     script.done('P2', late, seen=working(comms)[0].screenshot)
     struck = comms.goals.todos.get('P2')
-    assert commander_order.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
+    assert commander_order.struck(struck, 'worker') == 0
 
 
-def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_script):
-    """P136 was due 21:20:00 and delivered 21:20:35; its strike read "due 21:20 delivered 21:20"."""
+def test_delivery_retains_commit_seconds_without_inventing_deadline_strikes(commander, commander_script):
+    """Recording delivery retains its exact commit time; only progress can prove no work."""
     comms, _ = commander
     script, _ = commander_script
 
@@ -325,7 +325,6 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
                                         *args), env=env, stderr=subprocess.DEVNULL).decode().strip()
     git('init', '-q', '-b', 'main')
     git('commit', '-q', '--allow-empty', '-m', 'base', at=500)
-    clock = lambda at: time.strftime('%H:%M:%S', time.localtime(at))  # noqa: E731
     for pid, at in (('P1', 2000), ('P2', 2035)):
         create(commander, pid, deadline=2000)
         git('commit', '-q', '--allow-empty', '-m', f'{pid} delivered', at=at)
@@ -333,28 +332,21 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
         git('update-ref', 'refs/remotes/origin/main', delivered)
         script.done(pid, delivered, seen=working(comms)[0].screenshot)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 0
-    (strike,) = comms.goals.todos.get('P2').strikes
-    assert strike.reason.startswith(f'P2 order order-P2 late by 35 s: due {clock(2000)}, '
-                                    f'delivered {clock(2035)} as {delivered}')
+    delivered_order = comms.goals.todos.get('P2').order
+    assert delivered_order.delivery.at == RecordedEventTime(2035)
+    assert comms.goals.todos.get('P2').strikes == ()
 
 
-def test_each_delivery_declares_the_strikes_it_carries(commander):
-    """A commit delivered after the deadline strikes its holder once; one on time strikes nobody,
-    and an operation strikes nobody, whenever it is recorded."""
+def test_progress_owns_deadline_strikes_not_delivery_records(commander):
+    from agent_comms.todos import MissedDeadlineStrike, PullRequests
+    from agent_comms.thread_identity import StallWatcherIncarnation
     comms, _ = commander
-    create(commander, 'P1', deadline=2000)
-    todo = comms.goals.todos.get('P1')
-    lead = comms.registry.require('lead').incarnation
-
-    def strikes(delivery, at):
-        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, todo.order.id, lead)
-
-    commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
-    (late,) = strikes(commit, 2035)
-    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
-    assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
-    assert strikes(commit, 2000) == ()
-    assert strikes(OperationDelivery(), 9000) == ()
+    todo = create(commander, 'P1', deadline=2000)
+    (late,) = MissedDeadlineStrike.observe(comms.goals, todo, 2035, PullRequests((todo,)))
+    assert (late.previous, late.actor, late.expected_revision) == (
+        todo.held(), StallWatcherIncarnation.watcher(), todo.revision)
+    assert 'late by 35 s' in late.reason
+    assert MissedDeadlineStrike.observe(comms.goals, todo, 2000, PullRequests((todo,))) == ()
 
 
 @pytest.mark.parametrize('retained_problem', [None, 'P197', 'P1970'])
@@ -388,8 +380,8 @@ def test_done_distinguishes_non_git_home_from_exact_order_checkout(
         assert not comms.goals.todos.get('P197').pending
 
 
-def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
-    """Core strikes a late delivered commit in the revision that records it; no script is needed."""
+def test_a_verified_commit_delivery_does_not_invent_a_deadline_strike(commander):
+    """Delivered source is work; its recording path never creates an absence-of-work strike."""
     comms, caller = commander
 
     def git(*args, at=1000):
@@ -413,9 +405,7 @@ def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander
 
     assert done('P1', on_time).strikes == ()
     delivered = done('P2', late)
-    (strike,) = delivered.strikes
-    assert not delivered.pending and strike.previous.owner == 'worker'
-    assert strike.reason.startswith('P2 order order-P2 late by 35 s') and late in strike.reason
+    assert not delivered.pending and delivered.strikes == ()
 
 
 def test_a_main_merge_is_never_the_delivered_commit(commander):
@@ -736,7 +726,6 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = order_body(repo, 'grep -c two count.txt -> 1')
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -753,10 +742,15 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     fixed = git('rev-parse', 'HEAD')
     with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=1\)\.'):
         script.done('P1', fixed, seen=working(comms)[0].screenshot)
+    failed = comms.goals.todos.get('P1')
+    from agent_comms.todos import FailedCheckStrike
+    assert len(failed.strikes) == 1 and isinstance(failed.strikes[0], FailedCheckStrike)
+    assert (failed.order.id, failed.assignment, failed.deadline) == (
+        sent.order.id, sent.assignment, sent.deadline)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
     assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
-        sent.order.id, sent.assignment, sent.deadline, sent.strikes)
+        failed.order.id, failed.assignment, failed.deadline, failed.strikes)
     [record] = current.order.check_corrections
     assert (record.previous, record.check, record.reason) == (
         sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)

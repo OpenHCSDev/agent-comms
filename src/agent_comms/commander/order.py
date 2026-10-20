@@ -617,9 +617,6 @@ class Commander(CommanderContext):
             claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid,
             order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-        delivered_todo = self.comms.goals.todos.get(pid)
-        for late in delivered_todo.strikes[len(todo.strikes):]:
-            self.posted(unit, delivered_todo, late)
         print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
     def first_calls(self, held, activity):

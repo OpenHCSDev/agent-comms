@@ -232,7 +232,9 @@ class StallWatcherIncarnation(BirthlessIncarnation):
         """The Core watcher may advance stalled orders without a commander turn."""
 
     def assigned(self, previous: Todo, assigned: Todo) -> Todo:
-        return previous.reassigned(assigned, self)
+        if previous.holder:
+            return previous.reassigned(assigned, self)
+        return assigned
 
     @classmethod
     def watcher(cls) -> StallWatcherIncarnation:
