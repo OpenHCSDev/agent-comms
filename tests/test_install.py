@@ -89,3 +89,12 @@ def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(pri
         for name in copied.keys() - databases:
             assert (copy / name).read_bytes() == (root / name).read_bytes()
     assert bus_files(root) == saved
+
+
+def test_install_report_encodes_its_registered_harnesses() -> None:
+    # The live install printed nothing: its report's field type had no codec.
+    from agent_comms.cli_commands import InstallResult
+    from agent_comms.field_codec import FieldCodec
+
+    report = InstallResult("/config.json", {"claude-code": ("skill", "tools")})
+    assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report

@@ -591,7 +591,7 @@ class SubagentsImportedResult(CliResult):
 @dataclass(frozen=True)
 class InstallResult(CliResult):
     config: str
-    registered: Mapping[str, tuple[str, ...]]
+    registered: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
