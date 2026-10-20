@@ -50,10 +50,8 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   user journey; controlled provider replies are allowed, real UI/transport/state
   are required. A fork check includes immediate opening and its first actual reply.
 - Ship substantial useful checkpoints: implementation owners merge and send
-  Codex the Core/Toad SHAs. Codex alone builds and installs the paired runtime,
-  switches its pointer and operates its restart queue. Other agents may verify
-  supplied builds, but must not run `relink.sh`, publication commands or
-  restart-queue writes, including one-off helpers.
+  the installer the Core/Toad SHAs.
+  Installs run through tools/upgrade_bus.py, by whichever unit the commander assigns, on either machine.
   Deferred CI and final latency targets do not hold those checkpoints.
 - Retain warm rendered bodies across tab returns within the existing resource
   limits. Scroll preparation follows velocity and destination intent, then shrinks
