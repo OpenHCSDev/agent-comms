@@ -95,6 +95,20 @@ def test_two_serialized_conflicting_entrants_have_one_winner_and_one_synchronous
         first[a] = None
 
 
+def test_same_holder_moves_scope_but_another_holder_cannot(tmp_path):
+    _, resource, _ = resources(tmp_path)
+    held = transition(1, claims=(resource,), generation=G1).apply(ClaimProjection())
+    moved = transition(2, claims=(resource,), generation=G2).apply(held)
+    assert held[resource].generation == G1
+    assert moved[resource].generation == G2
+    for changed in ({"owner": "other"}, {"incarnation": "new-birth"}):
+        with pytest.raises(ClaimConflict):
+            transition(3, claims=(resource,), generation=G1, **changed).apply(moved)
+    with pytest.raises(ClaimTransitionError, match="exact owner"):
+        transition(3, releases=(ClaimRelease(resource, G1),)).apply(moved)
+    assert dict(transition(3, releases=(ClaimRelease(resource, G2),)).apply(moved)) == {}
+
+
 def test_full_set_claim_and_release_are_all_or_nothing(tmp_path):
     _, a, b = resources(tmp_path)
     first = transition(1, claims=(b,), generation=G1).apply(ClaimProjection())

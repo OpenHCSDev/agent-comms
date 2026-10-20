@@ -22,7 +22,6 @@ from .coordination_cohort import _claim_record
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
-    ClaimConflict,
     ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
@@ -30,6 +29,10 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .messages import ClaimNoticeKind
+from .message_bus import MessageBus
+from .publisher import Publisher
+from .registry_document import RegistrySnapshot
+from .wire_metadata import WireMetadata
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock, _store_lock
@@ -125,7 +128,9 @@ def _committed_source(
 @contextmanager
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
-):
+) -> Iterator[
+    tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]
+]:
     """One wire/bus/registry boundary for selected claim acquisition."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
@@ -179,13 +184,10 @@ def publish_selected_resource_claim(
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
             if existing is not None:
-                if (
-                    existing.claim_scope == claim_scope
-                    and existing.incarnation == str(owner.created_at)
-                    and existing.owner == owner.name
-                ):
+                existing.require_holder(owner.name, str(owner.created_at))
+                # Same-operation lookup; holder identity was already checked above.
+                if claim_scope == existing.claim_scope:
                     return existing
-                raise ClaimConflict(existing)
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
         committed = bus.publisher._publish_claim_envelope_unlocked(
@@ -198,15 +200,7 @@ def publish_selected_resource_claim(
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None
-        return ClaimOwner(
-            resource,
-            transition.owner,
-            transition.incarnation,
-            transition.generation,
-            committed.seq,
-            committed.message_id,
-            claim_scope,
-        )
+        return transition.claimed(resource)
 
 
 @contextmanager

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireValue
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
+    from .todos import Todo
 
 T = TypeVar("T")
 
@@ -90,6 +91,12 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
     ) -> T:
         return otherwise()
+
+    def require_may_change(self, todo: Todo) -> None:
+        todo.require_commander(self)
+
+    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
+        return assigned
 
     def selects_lookup(self, lookup: str) -> bool:
         return False
@@ -162,15 +169,36 @@ class RecordedThreadIncarnation(ThreadIncarnation):
         return hashlib.sha256(identity).hexdigest()[:32]
 
 
-@dataclass(frozen=True)
-class DeletedThreadIncarnation(ThreadIncarnation):
-    """A deleted participant retains only its name, never a lookup capability."""
+class BirthlessIncarnation(ThreadIncarnation):
+    """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
-    WIRE_BIRTH: ClassVar[float] = -1.0
+    Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
+
+    WIRE_BIRTH: ClassVar[float]
+    members: ClassVar[dict[float, type[BirthlessIncarnation]]] = {}
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.WIRE_BIRTH in BirthlessIncarnation.members:
+            raise TypeError(f"Wire birth {cls.WIRE_BIRTH} is already declared")
+        BirthlessIncarnation.members[cls.WIRE_BIRTH] = cls
 
     @property
     def wire_birth(self) -> float:
         return self.WIRE_BIRTH
+
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        raise ValueError("Thread incarnation requires a positive recorded birth")
+
+    def renamed(self, name: str) -> Self:
+        return type(self)(name)
+
+
+@dataclass(frozen=True)
+class DeletedThreadIncarnation(BirthlessIncarnation):
+    """A deleted participant retains only its name, never a lookup capability."""
+
+    WIRE_BIRTH: ClassVar[float] = -1.0
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return snapshot.canonical_name(self.name) not in snapshot.threads
@@ -178,36 +206,42 @@ class DeletedThreadIncarnation(ThreadIncarnation):
     def resolved(self, snapshot: RegistryProvenance) -> DeletedThreadIncarnation:
         return self
 
-    def require_recorded(self) -> RecordedThreadIncarnation:
-        raise ValueError("Thread incarnation requires a positive recorded birth")
-
     @property
     def birth_description(self) -> str:
         return "deleted declaration"
 
-    def renamed(self, name: str) -> DeletedThreadIncarnation:
-        return DeletedThreadIncarnation(name)
-
 
 @dataclass(frozen=True)
-class UnrecordedThreadIncarnation(ThreadIncarnation):
+class UnrecordedThreadIncarnation(BirthlessIncarnation):
     """Historical zero-birth evidence cannot select a live recipient."""
 
     WIRE_BIRTH: ClassVar[float] = 0.0
 
     @property
-    def wire_birth(self) -> float:
-        return self.WIRE_BIRTH
-
-    def require_recorded(self) -> RecordedThreadIncarnation:
-        raise ValueError("Thread incarnation requires a positive recorded birth")
-
-    @property
     def birth_description(self) -> str:
         return "birth unrecorded"
 
-    def renamed(self, name: str) -> UnrecordedThreadIncarnation:
-        return UnrecordedThreadIncarnation(name)
+
+@dataclass(frozen=True)
+class StallWatcherIncarnation(BirthlessIncarnation):
+    """Core's own stall watcher: it strikes and releases stalled orders, and is never a thread."""
+
+    WIRE_BIRTH: ClassVar[float] = -2.0
+
+    def require_may_change(self, todo: Todo) -> None:
+        """The Core watcher may advance stalled orders without a commander turn."""
+
+    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
+        return previous.reassigned(assigned, self)
+
+    @classmethod
+    def watcher(cls) -> StallWatcherIncarnation:
+        """Named by its class: ``StallWatcherIncarnation`` is ``stall_watcher``."""
+        return cls(declared_words(cls.__name__.removesuffix("Incarnation")))
+
+    @property
+    def birth_description(self) -> str:
+        return "Core's stall watcher"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -273,10 +307,8 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        if self.created_at == DeletedThreadIncarnation.WIRE_BIRTH:
-            return DeletedThreadIncarnation(self.name)
-        if self.created_at == UnrecordedThreadIncarnation.WIRE_BIRTH:
-            return UnrecordedThreadIncarnation(self.name)
+        if self.created_at in BirthlessIncarnation.members:
+            return BirthlessIncarnation.members[self.created_at](self.name)
         return RecordedThreadIncarnation(self.name, self.created_at)
 
     @classmethod

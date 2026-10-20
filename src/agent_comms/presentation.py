@@ -825,6 +825,11 @@ class WireRevision(ReadState):
         }
         return cls(**captured, expiry_tick=expiry_tick)
 
+    def selection_reusable_from(self, earlier: WireRevision) -> bool:
+        return ((self.registry, self.catalog, self.history) ==
+                (earlier.registry, earlier.catalog, earlier.history)
+                and not self.changed_since(BusSourceView(), earlier))
+
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
                         activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
         """Attribute changes using the retained observation and existing route rows."""

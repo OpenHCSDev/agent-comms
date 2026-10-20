@@ -14,38 +14,31 @@ import re
 import shlex
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing
-from dataclasses import MISSING, Field, dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, cast, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
-from acp.schema import SessionConfigSelectOption
 
 from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
-from .change_report import ChangeReport
-from .check_root import CheckRoot
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
-from .channels import ANY_CHANNEL
-from .channels import Channel
+from .channels import ANY_CHANNEL, Channel
+from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, Send, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
-from .history_result import HistoryPageResult
-from .send_result import SendResult
-from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
 from .comms import Comms
 from .config_options import (
-    CatalogConfigOption,
-    CatalogSelection,
     ConfigOptions,
     ModelConfigOption,
     ThinkingLevelConfigOption,
@@ -62,23 +55,29 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
-from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
+from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
 from .harness_install import Harness, HarnessInstalled
+from .history_result import HistoryPageResult
+from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import MessageReference
-from .page_traversal import OlderTraversal, PageCursor
-from .messages import InfoKind, Message, MessageKind
+from .messages import (
+    Message,
+)
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .page_traversal import OlderTraversal, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
+from .repo import Repo
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .send_result import SendResult
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
     ArchiveOwnerControl,
@@ -118,18 +117,6 @@ def _duration_seconds(value: str) -> float:
     return amount * {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}[match.group(2)]
 
 
-def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value)
-    if not isinstance(result, dict):
-        raise ValueError("--arguments must be a JSON object")
-    return result
-
-
-def _report_fields(value: str | None) -> dict[str, Any] | None:
-    """The report JSON stays a raw object; its declared record decodes once."""
-    return None if value is None else _json_object(value)
-
-
 def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
@@ -148,146 +135,6 @@ def _message_reference(value: str) -> dict[str, object]:
     if int(sequence) <= 0 or not message_id:
         raise ValueError("Source must be a committed sequence:message_id reference")
     return {"seq": int(sequence), "message_id": message_id}
-
-
-@dataclass(frozen=True)
-class TargetField:
-    """The declared field owns parsing, editor hints and requiredness."""
-    declaration: Field
-    annotation: object
-    value: object
-
-    @property
-    def name(self) -> str:
-        return FieldCodec.wire_key(self.declaration)
-
-    @property
-    def multiline(self) -> bool:
-        return CommandOption.of(self.declaration).multiline
-
-    @property
-    def description(self) -> str:
-        return CommandOption.of(self.declaration).parser_options.get(
-            'help', self.name.replace('_', ' ').capitalize())
-
-    @property
-    def editor_default(self):
-        formatter = CommandOption.of(self.declaration).editor_format
-        return formatter(self.value) if formatter else compile_decoder(self.annotation).encode_editor(self.value)
-
-    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
-        """An unrestricted field does not declare a finite-choice editor."""
-        return ()
-
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
-        return self
-
-    @property
-    def required(self) -> bool:
-        return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
-
-    def value_schema(self) -> dict[str, object]:
-        return FieldCodec.value_schema(self.annotation)
-
-    def json_schema(self) -> dict[str, object]:
-        return {**self.value_schema(), 'multiline': self.multiline,
-                'description': self.description, 'editor_default': self.editor_default}
-
-
-@dataclass(frozen=True)
-class ChoiceTargetField(TargetField):
-    """A prepared finite declaration, from its annotation or configuration catalog."""
-    options: tuple[SessionConfigSelectOption, ...] = ()
-
-    @property
-    def editor_declarations(self) -> tuple[object, ...]:
-        return ()
-
-    @property
-    def choices(self) -> tuple[tuple[str, str | None], ...]:
-        return tuple((choice.name, choice.value) for choice in self.options)
-
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        decoder = compile_decoder(self.annotation)
-        options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
-                   for label, value in decoder.editor_choices())
-        return replace(self, options=tuple(options))
-
-    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
-        return (choices(self),)
-
-
-class CatalogTargetField(ChoiceTargetField):
-    @property
-    def catalog(self) -> type[CatalogConfigOption]:
-        return cast(type[CatalogConfigOption], CommandOption.of(self.declaration).catalog)
-
-    @property
-    def editor_declarations(self) -> tuple[object, ...]:
-        return (self.catalog,)
-
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
-        catalog = catalogs.catalog_for(self.catalog)
-        options = await catalog.display_choices(selection)
-        decoder = compile_decoder(self.annotation)
-        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
-
-    def value_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
-
-
-@dataclass(frozen=True)
-class CommandOption:
-    """The declared CLI and editor properties of one command field."""
-
-    multiline: bool
-    target_bound: bool
-    editor_format: Callable[[Any], str] | None
-    flags: tuple[str, ...]
-    parser_options: Mapping[str, Any]
-    group: str | None
-    normalize: Callable[..., Any] | None
-    parser_default: Any
-    parser_default_factory: Any
-    editor: type[TargetField]
-    catalog: type[CatalogConfigOption] | None
-
-    @staticmethod
-    def of(declaration: Field) -> CommandOption:
-        return declaration.metadata[CommandOption]
-
-    def argument_flags(self, declaration: Field) -> tuple[str, ...]:
-        """The declared flags; a field that declares none is the option its own name spells."""
-        return self.flags or ("--" + declaration.name.replace("_", "-"),)
-
-
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    editor: type[TargetField] = TargetField,
-    catalog: type[CatalogConfigOption] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata: dict[object, object] = {CommandOption: CommandOption(
-        multiline=multiline, target_bound=target_bound, editor_format=editor_format,
-        flags=flags, parser_options=parser_options, group=group, normalize=normalize,
-        parser_default=parser_default, parser_default_factory=parser_default_factory,
-        editor=CatalogTargetField if catalog is not None else editor, catalog=catalog,
-    )}
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True)
@@ -752,68 +599,9 @@ class NativeContextInspection(CliResult):
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 
-class DeclaredOptions(Command):
-    """option() fields own a declaration's argparse subcommand and its decoding from the namespace.
-
-    A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
-    the member."""
-    help: ClassVar[str]
-    __dataclass_fields__: ClassVar[dict[str, Field[object]]]
-
-    @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
-        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
-        groups: dict[str, Any] = {}
-        hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
-            option = CommandOption.of(declared)
-            group = option.group
-            owner = parser
-            if group is not None:
-                if group not in groups:
-                    groups[group] = parser.add_mutually_exclusive_group(required=True)
-                owner = groups[group]
-            annotation = hints[declared.name]
-            decoder = compile_decoder(annotation)
-            # An option that declares its own argparse action owns its argument's shape.
-            options = {**({} if "action" in option.parser_options else decoder.argument_options()),
-                       **option.parser_options}
-            if option.parser_default is not MISSING:
-                options["default"] = option.parser_default
-            elif option.parser_default_factory is not MISSING:
-                options["default"] = option.parser_default_factory()
-            else:
-                default = (declared.default_factory() if declared.default_factory is not MISSING
-                           else declared.default)
-                if default is MISSING:
-                    options["required"] = True
-                else:
-                    options["default"] = decoder.argument_text(
-                        FieldCodec.encode(default, annotation)
-                    )
-            flags = option.argument_flags(declared)
-            if any(flag.startswith("-") for flag in flags):
-                options["dest"] = FieldCodec.wire_key(declared)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*flags, **options)
-
-    @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
-        hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
-            key = FieldCodec.wire_key(declared)
-            value = getattr(args, key)
-            normalize = CommandOption.of(declared).normalize
-            payload[key] = (normalize(value) if normalize is not None
-                            else compile_decoder(hints[declared.name]).argument_payload(value))
-        return cls.from_payload(payload)
-
-
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
-    DeclaredFamily, DeclaredOptions, affix="CliCommand", discovery_package="agent_comms"
+    DeclaredFamily, DeclaredOptions, Command, affix="CliCommand", discovery_package="agent_comms"
 ):
     multiple_targets: ClassVar[bool] = False
 
@@ -828,10 +616,10 @@ class CliCommand(
         return TargetSelection.decode(raw, multiple=cls.multiple_targets)
 
     @classmethod
-    def channel_fields(cls) -> tuple[Field, ...]:
+    def channel_fields(cls) -> tuple[FieldPlan, ...]:
         """The declared target-bound channel parameters own membership scope."""
-        return tuple(item for item, key in FieldCodec.record_fields(cls)
-                     if key == 'channel' and CommandOption.of(item).target_bound)
+        return tuple(entry for entry in FieldCodec.argument_fields(cls)
+                     if entry.key == 'channel' and entry.setting('target_bound', False))
 
     @classmethod
     def selection_channels(cls, channel: ChannelSelection,
@@ -897,9 +685,9 @@ class CliCommand(
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
-        hints = get_type_hints(type(self), include_extras=True)
-        return tuple(CommandOption.of(item).editor(item, hints[item.name], getattr(self, item.name))
-                     for item in fields(self) if not CommandOption.of(item).target_bound)
+        return tuple(TargetField.of(entry, entry.current(self))
+                     for entry in FieldCodec.argument_fields(type(self))
+                     if not entry.setting('target_bound', False))
 
     async def prepare_fields(self) -> tuple[TargetField, ...]:
         catalogs = ConfigOptions.configured()
@@ -921,14 +709,7 @@ class CliCommand(
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
-        hints = get_type_hints(cls, include_extras=True)
-        declared = {key: item for item, key in FieldCodec.record_fields(cls)}
-        result = {}
-        for key, text in values.items():
-            item = declared[key]
-            normalize = CommandOption.of(item).normalize
-            result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
-        return result
+        return FieldCodec.editor_arguments(cls, values)
 
     def confirmation(self) -> str:
         return ''
@@ -943,8 +724,8 @@ class CliCommand(
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
-        bound = {key for declared, key in FieldCodec.record_fields(type(self))
-                 if CommandOption.of(declared).target_bound}
+        bound = {entry.key for entry in FieldCodec.argument_fields(type(self))
+                 if entry.setting('target_bound', False)}
         if bound & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
         editable = {item.name for item in self.editable_fields}
@@ -1052,26 +833,15 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(CliCommand):
-    help = "Send to a thread (DM), #channel, or #all"
+class SendCliCommand(Send, CliCommand):
     sender: str = option("--from")
-    target: str = option("--to")
-    body: str = option("--body")
-    type: Type[MessageKind] = option(
-        "--type", default=InfoKind, choices=MessageKind.sendable_names(), editor=ChoiceTargetField
-    )
-    report: dict[str, Any] | None = option(
-        "--report", help="Change report fields as a JSON object", default=None,
-        normalize=_report_fields,
-    )
 
-    def apply(self, ctx: Comms) -> CliResult:
-        result = ctx.messaging.send(
-            self.sender, self.target, self.body, self.type,
-            report=None if self.report is None
-            else FieldCodec.decode(ChangeReport, self.report),
-        )
-        return MessageSentResult(result)
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return False
+
+    def apply(self, ctx: Comms) -> MessageSentResult:
+        return MessageSentResult(self.report.send(ctx, self))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1462,7 +1232,7 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .commander.config import CommanderConfig, Repo
+        from .commander.config import CommanderConfig
 
         home = Path.home()
         project = self.project.resolve()
@@ -1774,7 +1544,7 @@ class ContextCliCommand(CliCommand):
         parser.add_argument("--imported", action="store_true")
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
+    def from_arguments(cls, args: argparse.Namespace) -> ContextCliCommand:
         if args.imported:
             if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")
@@ -1904,7 +1674,7 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
         normalize=list)
     operation: str = option('--operation')
     arguments: dict[str, Any] = option('--arguments', default_factory=dict,
-                                     parser_default='{}', normalize=_json_object)
+                                     parser_default='{}')
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:

@@ -1,5 +1,7 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
+import shutil
 import subprocess
+import shlex
 import time
 
 from dataclasses import replace
@@ -7,13 +9,18 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.commander import order as commander_order
+from agent_comms.child_process import CountPrinted
+from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    PullRequest, PullRequests, PushedProgress, UnreadProgress)
+    MergedPullRequest, PresentCheckout, ProgressPoint, ProgressSource, PullRequest, PullRequests,
+    PushedProgress, UnmergedPullRequest, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
+from agent_comms.work_branches import WorkBranchError
 from test_commander_problem_orders import create, working
 
 
@@ -59,10 +66,68 @@ def read(checkout, pulls=None):
     return OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), pulls or Listed())
 
 
+def test_unfinished_check_keeps_other_overdue_orders_visible(
+        checkout, commander, commander_script, monkeypatch):
+    import asyncio
+    from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
+    from agent_comms.child_process import NoCountYetPrinted, SignaledOutcome, TimedOutOutcome
+    script, _ = commander_script
+    todo, unit = checkout
+    commit(unit)
+    monkeypatch.setattr(OrderCheck, "timeout", 0.05)
+    todo = replace(todo, order=replace(todo.order,
+        check=OrderCheck(str(unit), "sleep 0.2; echo 0", CountCheckResult(0))))
+    monkeypatch.setattr(script.COMMS.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
+    # The child really exceeds its timeout; partial stdout must never become a count.
+    outcome = TimedOutOutcome(SignaledOutcome(9))
+    assert isinstance(outcome.printed_count(b"0"), NoCountYetPrinted)
+    run = asyncio.run(todo.order.check.run())
+    sha = subprocess.check_output(('git', '-C', str(unit), 'rev-parse', 'HEAD'), text=True).strip()
+    CheckedCommit(todo.order.check.command, run.outcome, run.stdout.decode()).store(str(unit), sha)
+    work = OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), Listed())
+    assert work.line.endswith("; no count yet")
+    second = create(commander, "P2", deadline=1)
+    lines = script.deadline_lines([todo, second],
+                                 {todo.id: work, second.id: NoCommitProgress()}, time.time())
+    assert len(lines) == 1
+    assert "no count yet" in lines[0] and "no commit since the order" in lines[0]
+    with pytest.raises(ValueError, match="no count yet"):
+        todo.order.check.result.require(run)
+
+
 def test_no_commit_since_the_order_is_explicit(checkout):
     progress = read(checkout)
     assert progress == NoCommitProgress()
     assert progress.line == 'no commit since the order'
+
+
+def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander_script, checkout, monkeypatch):
+    from agent_comms.child_process import NoIntegerPrinted
+    from agent_comms.todos import DistanceReading, UncountedTrend
+
+    script, _ = commander_script
+    todo, unit = checkout
+    comms, _ = commander
+    monkeypatch.setattr(script.comms.registry, 'storage_rule', StorageRule(checkout_base=unit.parent))
+    monkeypatch.setattr(PullRequests, 'read', lambda *args: ())
+    broken = replace(todo.order, check=replace(todo.order.check, command="printf 'no count here'"))
+    with comms.goals.todos.writing() as db:
+        replace(todo, order=broken).upsert(db)
+    create(commander, 'P2', deadline=1)
+    commit(unit)
+    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit))
+
+    progress = read((comms.goals.todos.get('P1'), unit))
+    assert progress.line.endswith("; check prints no integer: printf 'no count here'")
+    lines = deadline_lines(script)
+    alarm = next(line for line in lines if line.startswith('OVERDUE:'))
+    assert "order order-P1" in alarm and "order order-P2" in alarm
+    assert "check prints no integer: printf 'no count here'" in alarm
+    assert 'distance 0' not in alarm and 'projected done' not in alarm
+    missing = NoIntegerPrinted()
+    assert missing.distance(1) is missing and missing.plus(3) is missing
+    assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend(missing, 'printf missing')
+    assert DistanceReadings((DistanceReading(1, missing), DistanceReading(2, CountPrinted(2)))).trend.projection == ''
 
 
 def test_an_unpushed_commit_names_its_sha_and_time(checkout):
@@ -80,72 +145,115 @@ def test_a_pushed_commit_with_no_pr_says_so(checkout):
 
 
 def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
-    pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40, orders=('order-P10',)), PullRequest(7, 'fix/p1', 'a' * 40,
+    pulls = Listed(open=(UnmergedPullRequest(12, 'fix/p10', 'f' * 40, orders=('order-P10',)), UnmergedPullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0, orders=('order-P1',))))
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
+def test_removed_checkout_uses_only_retained_pr_and_present_git_errors_propagate(checkout):
+    _, unit = checkout
+    shutil.rmtree(unit)
+    pulls = Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40,
+                                    updated_at=400.0, orders=('order-P1',)),))
+    progress = read(checkout, pulls)
+    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
+    assert progress.line == 'PR #7 open at aaaaaaaaa'
+    assert progress.distance_readings() == DistanceReadings()
+    assert read(checkout) == NoCommitProgress()
+    # Absence is represented, not permission to hide a real Git error.
+    unit.mkdir()
+    with pytest.raises(ValueError, match='not a git repository'):
+        read(checkout, pulls)
+    with pytest.raises(ValueError, match='not a git repository'):
+        read(checkout)
+
+
 def test_an_order_owns_the_pr_from_its_identity_whatever_the_branch_says(checkout):
     # #7 was renamed without its P-number; #9 is titled "P1: ..." but comes from another order's branch.
-    pulls = Listed(open=(PullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0, orders=('order-P2',)),
-                         PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',))))
+    pulls = Listed(open=(UnmergedPullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0, orders=('order-P2',)),
+                         UnmergedPullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',))))
     assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_a_detached_checkout_still_reads_its_order_pr(checkout):
     git(checkout[1], 'switch', '-q', '--detach')
-    assert read(checkout, Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',)),))) == OpenPrProgress(7, 'a' * 9, at=400.0)
+    assert read(checkout, Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',)),))) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
 def test_an_open_pr_untouched_since_the_order_belongs_to_an_earlier_one(checkout):
-    assert read(checkout, Listed(open=(PullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0, orders=('order-P1',)),))) == NoCommitProgress()
+    assert read(checkout, Listed(open=(UnmergedPullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0, orders=('order-P1',)),))) == NoCommitProgress()
 
 
 def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
-    pulls = Listed(merged=(PullRequest(3, 'fix/p1', 'b' * 40, 'c' * 40, 99.0, 600.0, orders=('order-P1',)),))
+    pulls = Listed(merged=(MergedPullRequest(3, 'fix/p1', 'b' * 40, merge='c' * 40, merged_at=99.0, updated_at=600.0, orders=('order-P1',)),))
     assert read(checkout, pulls) == NoCommitProgress()
 
 
-def test_a_merged_order_still_awaits_its_record(checkout):
-    progress = read(checkout, Listed(merged=(PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)))
-    assert progress == MergedProgress('d' * 9)
-    assert progress.line == 'merged as ddddddddd, awaiting record'
+def test_a_merge_not_yet_installed_waits_only_on_install(checkout):
+    progress = read(checkout, Listed(merged=(MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)))
+    assert progress == MergedProgress('d' * 40)
+    assert progress.line == 'merged as ddddddddd, waiting on install'
 
 
 def test_unread_github_is_explicit(checkout):
     pulls = Listed()
-    pulls.states = ValueError('gh: not logged in')
+    pulls.states = WorkBranchError('gh: not logged in')
     progress = read(checkout, pulls)
     assert progress == UnreadProgress('gh: not logged in')
 
 
-def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
+def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
+    todo, unit = checkout
+    marker = tmp_path / 'explicit-check-count'
+    check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
+                       CountCheckResult(0))
+    todo = replace(todo, order=replace(todo.order, check=check))
+    source = ProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
+    assert not source.readings().readings
+    assert not marker.exists()
+    check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
+    assert marker.read_text() == 'x'
+    assert len(source.readings().readings) == 1
+    assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
+    assert marker.read_text() == 'x'
+
+
+def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
+    bad = tmp_path / 'not-a-repository' / 'worker--P1'
+    bad.mkdir(parents=True)
+    source = ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
+    assert isinstance(source.checkout, PresentCheckout)
+    with pytest.raises(GitCommandFailed):
+        source.readings()
+
+
+def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     # worker's P1 checkout, on the branch its merged PR came from.
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
     create(commander, 'P1', deadline=1)
-    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
+    merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
-    assert "awaiting record" in deadline_lines(script)[0]
-    script.board()
-    assert '| merged as ddddddddd, awaiting record |' in (tmp_path / 'board.md').read_text()
+    assert "waiting on install" in deadline_lines(script)[0]
+    script.write_board()
+    assert '| merged as ddddddddd, waiting on install |' in (tmp_path / 'board.md').read_text()
 
 
 def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, commander_script, monkeypatch, tmp_path):
     comms, _ = commander
     script, _ = commander_script
     before = create(commander, 'P1', deadline=1)
-    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: None)
     with pytest.raises(SystemExit, match='8\\+ words'):
         script.due('P1', '23:59', 'too short')
     script.due('P1', '23:59', 'the owner widened the order to the rotation line too')
     moved = comms.goals.todos.get('P1')
-    assert script.hhmm(moved.deadline) == '23:59' and moved.revision == before.revision + 1
+    assert commander_order.hhmm(moved.deadline) == '23:59' and moved.revision == before.revision + 1
     assert 'P1 order order-P1 due ' in (tmp_path / 'narrative.md').read_text()
 
 
@@ -154,15 +262,16 @@ class HeldSource:
     since = 100.0
 
     def commits(self, *excluded):
-        commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
+        commits = {('--remotes',): ProgressPoint('a' * 40, 1000.0),
+                   ('origin/HEAD',): ProgressPoint('e' * 40, 1000.0)}
         yield commits[excluded]
 
     def readings(self):
         return DistanceReadings()
 
     def requests(self, state):
-        return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
-                'merged': [PullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
+        return {'open': [UnmergedPullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
+                'merged': [MergedPullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
 
 
 class EmptySource:
@@ -182,7 +291,7 @@ MOVED = time.strftime('%H:%M', time.localtime(1000.0))
     (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed', 1900, None),
     (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR', 1900, None),
     (OpenPrProgress, 'PR #7 open at bbbbbbbbb', 1900, 1300),
-    (MergedProgress, 'merged as ccccccccc, awaiting record', None, None),
+    (MergedProgress, 'merged as ccccccccc, waiting on install', None, None),
 ])
 def test_each_found_member_says_from_its_class_whether_it_stalls_and_is_untouched(
         member, line, stalls_at, untouched_at):
@@ -266,13 +375,13 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     installed order does not. Nobody is struck, and a late install is named, not the orders."""
     comms, caller = commander
     script, _ = commander_script
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    monkeypatch.setattr(script.comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')
     for pid in ('P1', 'P2', 'P3'):
         create(commander, pid, deadline=1)
-    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
+    merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     for pid in ('P2', 'P3'):
         CommsOrderDoneTool(problem=pid, order_id=comms.goals.todos.get(pid).order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
@@ -286,7 +395,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     assert script.install_lines(held, read, 2001.0) == [
         f'INSTALL LATE (due {due}), not the orders; waiting: P1 worker, P2 worker']
     assert script.install_lines(held[2:], read, 2001.0) == []
-    assert "awaiting record" in deadline_lines(script)[0]
+    assert "waiting on install" in deadline_lines(script)[0]
 
 
 @pytest.mark.parametrize("pid,branch,number,subject", [
@@ -299,7 +408,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     script, _ = commander_script
     todo = create(commander, pid, deadline=1)
     storage = StorageRule(checkout_base=tmp_path / "wt")
-    monkeypatch.setattr(script.COMMS.registry, "storage_rule", storage)
+    monkeypatch.setattr(script.comms.registry, "storage_rule", storage)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)
     bodies = []
@@ -312,18 +421,18 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
         return original(command, **arguments)
 
     monkeypatch.setattr(subprocess, "run", forge)
-    script.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).run()
+    commander_order.PullRequestVerb(pid=pid, title=subject, body_file=str(body_file)).apply(script)
     assert todo.order.pull_request_ids(bodies[0]) == (todo.order.id,)
-    stamp = "1970-01-01T00:08:20Z"
-    merged = PullRequest.listed(number, branch, "b" * 40, "d" * 40, stamp, stamp, bodies[0])
+    merged = MergedPullRequest(number, branch, "b" * 40, merge="d" * 40,
+        merged_at=500, updated_at=500, orders=todo.order.pull_request_ids(bodies[0]))
     foreign = replace(merged, number=number + 1, merge="f" * 40, orders=("another-order",))
     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order:
                         (foreign, merged) if state == "merged" else ())
     assert not storage.order_checkout("worker", pid).exists()
     work = OrderProgress.read(todo, storage, PullRequests())
-    assert work == MergedProgress("d" * 9)
-    script.board()
-    assert "merged as ddddddddd, awaiting record" in (tmp_path / "board.md").read_text()
+    assert work == MergedProgress("d" * 40)
+    script.write_board()
+    assert "merged as ddddddddd, waiting on install" in (tmp_path / "board.md").read_text()
     for state in (work, PushedProgress("b" * 9, at=500.0), NoCommitProgress()):
         alarms = script.deadline_lines([todo], {pid: state}, time.time() + 100)
         assert alarms[0].startswith("OVERDUE:") and state.line in alarms[0]

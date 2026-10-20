@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
+from .turn_failure import ProviderTransportFailed
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
 from .pi_vocabulary import (
@@ -33,6 +34,7 @@ from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
+    from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
 
 
@@ -277,10 +279,10 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
 
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         return []
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         return []
 
     wire_tag = "type"
@@ -303,15 +305,15 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(self.text, position=position)]
+        return [UserTranscript(self.text, position=position, timestamp=timestamp)]
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import AssistantTranscript
 
-        return [AssistantTranscript(self.text, position=position)]
+        return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
@@ -324,10 +326,10 @@ class TextContent(PiContent):
 
 @dataclass(frozen=True)
 class ThinkingContent(PiContent):
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import ThinkingTranscript
 
-        return [ThinkingTranscript(self.thinking, position=position)]
+        return [ThinkingTranscript(self.thinking, position=position, timestamp=timestamp)]
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
@@ -343,11 +345,11 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
-    def assistant_transcript(self, position: int):
+    def assistant_transcript(self, position: int, timestamp: float):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(position=position, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+            ToolStartTranscript(position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
                                 tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
@@ -359,10 +361,10 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
 @dataclass(frozen=True)
 class ImageContent(PiContent):
-    def user_transcript(self, position: int):
+    def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
-        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position)]
+        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
 
     data: str
     mime_type: str = wire_field("mimeType")
@@ -424,15 +426,29 @@ class UnrecognizedTransportStage(ProviderTransportStage):
 
 
 @dataclass(frozen=True)
-class ProviderDiagnosticError(PiPayload):
+class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
-    code: int | str
     name: str | None = None
+
+    @classmethod
+    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
+        return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
 
     @property
     def description(self) -> str:
-        name = self.name or "Provider transport error"
-        return f"{name} (code {self.code})"
+        return self.name or "Provider transport error"
+
+@dataclass(frozen=True)
+class CodelessProviderDiagnosticError(ProviderDiagnosticError):
+    """Pi reported a provider error without a code."""
+
+@dataclass(frozen=True, kw_only=True)
+class CodedProviderDiagnosticError(ProviderDiagnosticError):
+    code: int | str
+
+    @property
+    def description(self) -> str:
+        return f"{super().description} (code {self.code})"
 
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):
@@ -490,6 +506,9 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def refine_model_request_failure(self, failure):
         return failure
 
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
+        return phase
+
     @property
     def description(self) -> str:
         return ""
@@ -502,9 +521,11 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     details: ProviderTransportDetails
     timestamp: int | None = None
 
-    def refine_model_request_failure(self, failure):
-        from .turn_failure import ProviderTransportFailed
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
+        from .turn_phase import FailedPhase
+        return FailedPhase(error=self.error)
 
+    def refine_model_request_failure(self, failure):
         return ProviderTransportFailed(failure.text)
 
     @property
@@ -540,7 +561,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def unread_reply(self) -> bool:
         return False
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         return []
 
     wire_tag = "role"
@@ -676,14 +697,14 @@ class AssistantMessage(PiMessage):
     def unread_reply(self) -> bool:
         return bool(self.text.strip() or self.error_notice)
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
         if notice := self.error_notice:
-            return [NoticeTranscript(f"[agent error] {notice}", position=context.position)]
+            return [NoticeTranscript(f"[agent error] {notice}", position=context.position, timestamp=timestamp)]
         events = []
         for part in self.parts:
-            for event in part.assistant_transcript(context.position):
+            for event in part.assistant_transcript(context.position, timestamp):
                 if (
                     isinstance(event, AssistantTranscript)
                     and events
@@ -707,7 +728,7 @@ class UserMessage(PiMessage):
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .transcript_events import ContextTranscript
 
         routing, display = context.routing, context.input_display
@@ -722,7 +743,7 @@ class UserMessage(PiMessage):
         events = []
         if display is not None:
             if raw_text and raw_text != display.text:
-                events.append(ContextTranscript(raw_text, position=context.position))
+                events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
             if display.text is None:
                 return events
             parts = (
@@ -730,7 +751,7 @@ class UserMessage(PiMessage):
                 *(part for part in parts if not isinstance(part, TextContent)),
             )
         for part in parts:
-            events.extend(part.user_transcript(context.position))
+            events.extend(part.user_transcript(context.position, timestamp))
         return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
@@ -751,7 +772,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     is_error: bool = wire_field("isError", False)
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
-    def transcript_events(self, context):
+    def transcript_events(self, context, timestamp: float):
         from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
@@ -761,7 +782,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
-                position=context.position,
+                position=context.position, timestamp=timestamp,
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -39,7 +39,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
-from .turn_phase import PreparingPhase, TurnPhase
+from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
 
@@ -261,32 +261,27 @@ class AgentActivity:
             try:
                 phase = PreparingPhase(detail)
                 lease.record.transition(lease, phase)
-                self._record_turn_activity(leased.name, (phase,))
+                self._emit_activity(phase.activity_event(leased.name))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
-    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
-        """Changed phases are real activity events, just like CLI status reports."""
-        for phase in phases:
-            self._emit_activity(phase.activity_event(name))
+    def _turn_phase_effects(
+        self, lease: TurnLeaseFence, phase: TurnPhase,
+        transition: Callable[[TurnLeaseFence, TurnPhase], tuple[TurnState, ...]],
+    ) -> tuple[TurnState, ...]:
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
+            effects = transition(lease, phase)
+        for state in effects:
+            state.active.phase.phase_effects(self, lease)
+        return effects
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = lease.record.transition(lease, phase)
-            self._record_turn_activity(
-                lease.identity.incarnation.name, (state.active.phase for state in effects)
-            )
-            return effects
+        return self._turn_phase_effects(lease, phase, lease.record.transition)
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = lease.record.observe_native_phase(lease, phase)
-            self._record_turn_activity(
-                lease.identity.incarnation.name, (state.active.phase for state in effects)
-            )
-            return effects
+        return self._turn_phase_effects(lease, phase, lease.record.observe_native_phase)
 
     def finish_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
         """Persist this lease's terminal identity before publishing idle activity."""
@@ -294,7 +289,7 @@ class AgentActivity:
             released, fence = self.registry.release_turn(lease)
             if not released:
                 return NoFinishedTurn()
-            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
+            self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
             return fence
 
     def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
