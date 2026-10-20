@@ -121,7 +121,7 @@ class BoardFacts:
             cls(
                 f"{todo.id}: {todo.text}",
                 todo.order.owner.to_wire(),
-                todo.holder,
+                todo.holder or "",
                 todo.order.id,
                 hhmm(todo.deadline),
                 listed.progress[todo.id].line if todo.id in listed.progress else "-",
