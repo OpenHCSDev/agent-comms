@@ -246,23 +246,25 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
     source = Comms(root)
     parent = source.registry.storage_rule.initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch:
-        with PracticeCopy(source=source, into=Path(scratch) / "bus").open() as (copied, measurement):
-            home = Path(scratch) / "home"
-            prepare_runtime_home(home)
-            marker = copied.bus.log.private_marker_unlocked()
-            publish_active_route(ActiveRoute(copied.root, marker.root_id),
-                                 home / ROUTE.relative_to(Path.home()))
-            (home / ".claude").symlink_to(Path.home() / ".claude")
-            stack = replace(stack, home=home)
-            stack.prepare_native()
-            os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
-                MaintenanceOperator.current()).nonce
-            with transcripts_held(copied.root):
-                before = bus_files(copied.root)
-            stopping = before_stop(copied.root, pending, stack, revisions)
-            report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
-            return {**report, "copy": asdict(measurement)}
+    with (
+        tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
+        PracticeCopy(source=source, into=Path(scratch) / "bus").open() as (copied, measurement),
+    ):
+        home = Path(scratch) / "home"
+        prepare_runtime_home(home)
+        marker = copied.bus.log.private_marker_unlocked()
+        publish_active_route(ActiveRoute(copied.root, marker.root_id),
+                             home / ROUTE.relative_to(Path.home()))
+        (home / ".claude").symlink_to(Path.home() / ".claude")
+        stack = replace(stack, home=home)
+        stack.prepare_native()
+        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
+            MaintenanceOperator.current()).nonce
+        with transcripts_held(copied.root):
+            before = bus_files(copied.root)
+        stopping = before_stop(copied.root, pending, stack, revisions)
+        report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
+        return {**report, "copy": asdict(measurement)}
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,

@@ -23,8 +23,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import tomllib
 import time
+import tomllib
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, contextmanager
