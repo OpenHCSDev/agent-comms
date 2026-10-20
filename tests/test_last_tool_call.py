@@ -10,7 +10,6 @@ from agent_comms.external_transcript import ExternalTranscript, ExternalEventRow
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcript_events import ToolStartTranscript, AssistantTranscript
-from agent_comms.coordination_database import CoordinationStore
 
 
 def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnight(tmp_path):

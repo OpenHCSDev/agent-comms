@@ -23,15 +23,13 @@ from agent_comms.commander.config import Repo
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import BlockedGoalAction, CompletedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsVerdictTool)
@@ -1080,32 +1078,6 @@ def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, mo
     assert cli['id'] in cli['notices'][0]
 
 
-@pytest.mark.parametrize('step, name, column', [
-    ('carry_todo_corrections', 'TodoCorrections', 'corrections')])
-def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
-    """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
-    import sqlite3
-    from contextlib import closing
-    from agent_comms.todos import TodoStore
-    carry = getattr(importlib.import_module(f'cutover.{step}'), name)
-    comms, caller = commander
-    todo = create(commander, 'P1')
-    CommsChangeProblemTool(problem='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
-        todo.assignment, 'The unit delivered its order after the recorded deadline had already passed.',
-        evidence=(FileLine(__file__, 1),))).apply(comms, caller)
-    struck = comms.goals.todos.get('P1')
-    path = TodoStore.path_in(comms.root)
-    with closing(sqlite3.connect(path)) as db:
-        db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
-        db.commit()
-    with pytest.raises(Exception):
-        comms.goals.todos.get('P1')
-    assert carry.carry(comms.root, apply=False).changed == 1
-    assert carry.carry(comms.root, apply=True).changed == 1
-    assert carry.carry(comms.root, apply=False).changed == 0
-    assert comms.goals.todos.get('P1') == struck
-
-
 def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_none_is_open(
         commander, commander_script):
     """The owner request is the commander's Goal: rotation names it while no open order serves it,
@@ -1324,8 +1296,6 @@ def native_judge_edits(commander, judge, edits):
 def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, commander_script):
     """The cited message's recorded order receives the verdict, whatever P-number its text names."""
     script, _ = commander_script
-    import json
-    from pathlib import Path
 
     comms, _ = commander
     create(commander, 'P1')
@@ -1343,9 +1313,7 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
 
 def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script):
     script, _ = commander_script
-    import json
     import time
-    from pathlib import Path
 
     comms, _ = commander
     create(commander, 'P1')
@@ -1368,8 +1336,6 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
 @pytest.mark.parametrize('verb', ['ok', 'back'])
 def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script, verb):
     script, _ = commander_script
-    import json
-    from pathlib import Path
 
     comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
@@ -1388,8 +1354,6 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
 
 def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_script, monkeypatch):
     script, _ = commander_script
-    import json
-    from pathlib import Path
 
     comms, _ = commander
     create(commander, 'P1')

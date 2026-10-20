@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import closing
 from dataclasses import replace
 from multiprocessing import Manager
 from pathlib import Path
@@ -12,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
@@ -20,9 +18,9 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AssignTodo, Assignment, ChangeTodoState, DoneTodoState, GoalRef,
+    Assignment, ChangeTodoState, DoneTodoState, GoalRef,
     MechanicalOrderRun, PendingProblemOrder,
-    BlockedTodoState, DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
+    DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
     Todo, TodoConflict, TodoError, TodoState, TodoStore, WithdrawTodo,
 )
 

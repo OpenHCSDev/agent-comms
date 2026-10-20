@@ -28,7 +28,7 @@ def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(tmp_path)
     assert log.fresh()
     Comms(root).messaging.initialize_private_initial_protocol()
     assert not log.fresh()
-    chain = CarryChain.at(REPO, "HEAD")
+    chain = CarryChain.at(REPO)
     CarryLedger(root).start(chain)
     assert chain.pending(CarryLedger(root).applied()) == ()
 
@@ -70,7 +70,8 @@ def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(tmp
     with practice_copy(root, tmp_path / "practice/bus") as (copy, measurement):
         copied = bus_files(copy)
         assert copied.keys() == {name for name in saved.keys() - witnesses
-                                 if name.removesuffix("-wal") not in databases}
+                                 if not (name.endswith("-wal")
+                                         and name.removesuffix("-wal") in databases)}
         assert measurement.bytes > 0
         for name in databases:
             query = "SELECT name FROM sqlite_schema ORDER BY name"

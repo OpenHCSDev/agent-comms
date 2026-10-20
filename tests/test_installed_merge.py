@@ -1,20 +1,13 @@
 """Merge observation closes the real stored order, without a completion request."""
 from agent_comms.repository_name import RepositoryName
-from dataclasses import fields, replace
-import json
+from dataclasses import replace
 import subprocess
 
 import pytest
 
 from agent_comms.repo import Repo
-from agent_comms.field_codec import FieldCodec
-from agent_comms.plan_phases import RecordPlanePhase
-from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
-                               MergedPullRequest, PullRequests, UnorderedProblemOrder)
-from agent_comms.tools import CommsOrderDoneTool, CommsOrderServeTool
-from agent_comms.recorded_time import RecordedEventTime
-from test_commander_problem_orders import working
-from test_order_progress import checkout, commit, order_alarms, git
+from agent_comms.todos import (DoneTodoState, MergedProblemOrder, MergedPullRequest, PullRequests, UnorderedProblemOrder)
+from test_order_progress import checkout, commit, git  # noqa: F401  (checkout is a fixture)
 
 
 def test_order_reads_stay_unchanged_during_install_until_reconciliation(

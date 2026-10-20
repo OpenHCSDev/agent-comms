@@ -13,7 +13,7 @@ from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
-    StringIdentity, python_paths,
+    python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard

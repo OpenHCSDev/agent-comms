@@ -23,7 +23,6 @@ from agent_comms.maintenance_barrier import (
     MaintenancePhase,
     MaintenanceState,
     PausedPhase,
-    ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, SharedLock, _async_store_lock, _store_lock
 

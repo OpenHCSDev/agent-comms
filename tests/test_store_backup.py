@@ -80,10 +80,10 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
 
 def test_ledger_does_not_repeat_a_recorded_conversion(tmp_path):
     checkout = Path(__file__).resolve().parents[1]
-    chain = CarryChain.at(checkout, 'HEAD')
+    chain = CarryChain.at(checkout)
     ledger = CarryLedger(tmp_path)
     for step in chain.steps:
-        ledger.record(step.name)
+        ledger.record(step.name())
     def repeated():
         raise AssertionError('a recorded conversion must not run again')
-    assert ledger.apply(chain, chain.steps[-1].name, repeated).changed == 0
+    assert ledger.apply(chain.steps[-1].name(), repeated).changed == 0
