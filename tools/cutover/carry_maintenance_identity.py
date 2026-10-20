@@ -4,6 +4,7 @@ A legacy active hold contains no PID or birth time. It cannot honestly be called
 abandoned; this one-time converter refuses it rather than fabricating an owner.
 There is no legacy reader in the runtime barrier.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,8 +42,12 @@ class OldReadyState(OldMarker):
         if marker != expected or self.root != str(barrier.registry_path.parent.resolve()):
             raise RelationViolationError("Legacy maintenance witnesses do not identify this root")
         converted = MaintenanceState(
-            version=2, root=self.root, generation=self.generation + 1,
-            operator=MaintenanceOperator.current(), nonce=Id128Text.mint(), phase=ReadyPhase,
+            version=2,
+            root=self.root,
+            generation=self.generation + 1,
+            operator=MaintenanceOperator.current(),
+            nonce=Id128Text.mint(),
+            phase=ReadyPhase,
         )
         if apply:
             barrier._write_unlocked(converted)
