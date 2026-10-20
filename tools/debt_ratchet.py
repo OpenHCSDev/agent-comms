@@ -57,6 +57,11 @@ class Side(enum.Enum):
 
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
+    def applies_to(cls, production_changed: bool) -> bool:
+        """Source measures need a production edit; repository policies may apply otherwise."""
+        return production_changed
+
+    @classmethod
     def blocks(cls, delta: dict[str, int]) -> bool:
         return any(value > 0 for key, value in delta.items()
                    if key.partition(":")[0] == cls.__name__)
@@ -108,6 +113,37 @@ class ChangeMeasure(Measure):
                 root: str) -> tuple[dict[str, int], dict[str, int]]:
         before, after = results[0]
         return before, after
+
+
+class CommittedArtifacts(ChangeMeasure):
+    """Head may hold no generated board, narrative, handoff or run-output files.
+
+    This is a hard prohibition, not old debt: its accepted baseline is zero,
+    so deleting one output can never pay for retaining or adding another.
+    Source modules and declaration evidence mentioning a handoff are not notes.
+    """
+
+    @classmethod
+    def applies_to(cls, production_changed: bool) -> bool:
+        return True
+
+    @staticmethod
+    def forbidden(filename: str) -> bool:
+        path = Path(filename)
+        name = path.name.casefold()
+        if name in {"stdout", "stderr", "results.json"} or set(name.split(".")) & {
+            "log", "stdout", "stderr",
+        }:
+            return True
+        if path.suffix.casefold() not in {".md", ".txt", ".rst", ".json", ".yaml", ".yml"}:
+            return False
+        words = re.split(r"[-_.]", path.stem.casefold())
+        return bool({words[0], words[-1]} & {"board", "narrative", "handoff"}) or name == "pr-body.md"
+
+    @classmethod
+    def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        paths = git(repo, "ls-tree", "-rz", "--name-only", head).decode().split("\0")
+        return {cls.__name__: 0}, {cls.__name__: sum(cls.forbidden(path) for path in paths if path)}
 
 
 class RevisionMeasure(Measure):
@@ -1723,12 +1759,9 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
     after: dict[str, int] = {}
     introduced: dict[str, int] = {}
     introduced_lines: dict[str, list[int]] = {}
-    # Every measure reads production Python paths only, so with none touched each would
-    # report no change.
-    if not touched & (production_paths(repo, base) | production_paths(repo, head)):
-        return Comparison(root, base, head, (), before, after, introduced, introduced_lines)
-
-    measures = Measure.members_with(Measure)
+    production_changed = bool(touched & (production_paths(repo, base) | production_paths(repo, head)))
+    measures = tuple(measure for measure in Measure.members_with(Measure)
+                     if measure.applies_to(production_changed))
     # Forked workers start from this already-imported module instead of importing it again.
     with ProcessPoolExecutor(mp_context=multiprocessing.get_context("fork")) as pool:
         parts = {measure: [pool.submit(part)

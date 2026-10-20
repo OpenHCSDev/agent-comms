@@ -166,8 +166,6 @@ class RunProofCommand(ProofCommand):
             root=root,
             cli=Path(sys.executable).with_name("agent-comms"),
             state=root.parent / "state",
-            board=root.parent / "board.md",
-            narrative=root.parent / "narrative.md",
             repos=(),
             worktrees=comms.registry.storage_rule.checkout_base,
             scratch=root.parent,

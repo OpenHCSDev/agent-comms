@@ -63,8 +63,6 @@ def test_failed_real_children_remain_named_unverified(tmp_path, program, expecte
         commander="reader",
         root=tmp_path / "bus",
         state=tmp_path / "state",
-        board=tmp_path / "board.md",
-        narrative=tmp_path / "narrative.md",
         repos=(),
         worktrees=tmp_path / "projects",
         scratch=tmp_path / "scratch",

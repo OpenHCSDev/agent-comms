@@ -1,3 +1,5 @@
+"""Carry switch-era orders; delete when both machines run the native commander."""
+
 from __future__ import annotations
 
 import argparse

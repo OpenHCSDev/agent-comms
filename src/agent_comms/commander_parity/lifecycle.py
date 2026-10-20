@@ -133,8 +133,6 @@ class LifecycleRun:
                 commander=config.commander,
                 root=root,
                 state=root / "commander-state",
-                board=root / "board.md",
-                narrative=root / "narrative.md",
                 repos=config.repos,
                 worktrees=root / "projects",
                 scratch=root / "scratch",

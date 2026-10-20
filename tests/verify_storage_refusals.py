@@ -43,9 +43,8 @@ def main() -> None:
         copy_store(source, root / source.name)
     first = StorageRefusals.carry(root, apply=True)
     assert StorageRefusals.carry(root, apply=True).changed == 0
-    context = Commander(**config.model_dump(exclude={'root', 'state', 'board', 'narrative'}),
-                        root=root, state=root/'state', board=root/'fleet.md',
-                        narrative=root/'fleet-narrative.md')
+    context = Commander(**config.model_dump(exclude={'root', 'state'}),
+                        root=root, state=root/'state')
     assert unit in context.units()
     session = context.comms.registry.require(unit).session_file
     assert session

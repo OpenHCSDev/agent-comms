@@ -43,8 +43,7 @@ def scenario(comms: Comms, project, monkeypatch):
     # Commander-specific rules read this bus's record, never the machine's installed config.
     from agent_comms.commander.config import CommanderConfig
     CommanderConfig(commander="lead", root=comms.root,
-        state=comms.root / "state", board=comms.root / "board.md",
-        narrative=comms.root / "narrative.md", skill=comms.root / "skill.md",
+        state=comms.root / "state", skill=comms.root / "skill.md",
         rules=(), repos=(), worktrees=comms.root / "wt", scratch=comms.root / "scratch",
         disk=comms.root).write(project / "commander-home")
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))

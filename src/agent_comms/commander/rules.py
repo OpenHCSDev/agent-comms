@@ -5,8 +5,7 @@ in `rules/`, and paper 1's correct-maintenance results (the packaged correct-mai
 `review` prints every rule with its file:line and draws three, two always from the paper, to be
 answered with how the current tick obeys or breaks each. Core records each review and answer
 (CommsRuleReviewTool); a stale or unanswered review shows as RULES DUE in rotate and in
-`rules stale`. No commander action is refused for it. The archived originals in `rules-archive/`
-are never read.
+`rules stale`. No commander action is refused for it.
 
   agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
   agent-comms-commander rules answer N "<8+ quoted rule words and file:line or P-number>" [--fork FORK]

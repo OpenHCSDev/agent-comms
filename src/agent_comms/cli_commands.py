@@ -1256,7 +1256,6 @@ class InstallCliCommand(CliCommand):
         config = CommanderConfig(
             commander=self.commander, root=ctx.root,
             state=home / ".local/state/agent-comms/commander",
-            board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
