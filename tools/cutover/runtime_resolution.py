@@ -1,4 +1,5 @@
 """Compare the installed build's resolved packages with a synced staged lock."""
+
 from __future__ import annotations
 
 import subprocess
@@ -33,14 +34,16 @@ class CommitRecord(BaseModel):
     commit_id: str
 
 
-class ArchiveRecord(BaseModel):
+class SourceRecord(BaseModel):
     url: str
 
+
+class ArchiveRecord(SourceRecord):
     def pin(self, version: str) -> PackagePin:
         return ArchivePin(version, self.url)
 
 
-class GitRecord(ArchiveRecord):
+class GitRecord(SourceRecord):
     vcs_info: CommitRecord
 
     def pin(self, version: str) -> PackagePin:
@@ -75,7 +78,7 @@ class GitSource(BaseModel):
     def pin(self, version: str, core: str) -> PackagePin:
         commit = urlsplit(self.git).fragment
         if not commit:
-            raise ValueError('A resolved Git lock entry must name its commit')
+            raise ValueError("A resolved Git lock entry must name its commit")
         return GitPin(version, commit)
 
 
@@ -83,8 +86,8 @@ class EditableSource(BaseModel):
     editable: str
 
     def pin(self, version: str, core: str) -> PackagePin:
-        if self.editable != '..':
-            raise ValueError(f'Unrecorded editable source: {self.editable}')
+        if self.editable != "..":
+            raise ValueError(f"Unrecorded editable source: {self.editable}")
         return GitPin(version, core)
 
 
@@ -92,18 +95,21 @@ class VirtualSource(BaseModel):
     virtual: str
 
     def pin(self, version: str, core: str) -> PackagePin:
-        raise ValueError('A virtual project is not an installed distribution')
+        raise ValueError("A virtual project is not an installed distribution")
 
 
 class LockedPackage(BaseModel):
     name: str
     version: str
     source: RegistrySource | GitSource | EditableSource | VirtualSource
-    markers: list[str] = Field(default_factory=list, alias='resolution-markers')
+    markers: list[str] = Field(default_factory=list, alias="resolution-markers")
 
     def selects(self, name: str, version: str) -> bool:
-        return (canonicalize_name(self.name) == name and self.version == version
-                and (not self.markers or any(Marker(marker).evaluate() for marker in self.markers)))
+        return (
+            canonicalize_name(self.name) == name
+            and self.version == version
+            and (not self.markers or any(Marker(marker).evaluate() for marker in self.markers))
+        )
 
 
 class ResolvedLock(BaseModel):
@@ -114,7 +120,7 @@ class ResolvedLock(BaseModel):
         for name, version in selected.items():
             candidates = [entry for entry in self.package if entry.selects(name, version)]
             if len(candidates) != 1:
-                raise ValueError(f'Lock selects {len(candidates)} entries for {name}=={version}')
+                raise ValueError(f"Lock selects {len(candidates)} entries for {name}=={version}")
             (entry,) = candidates
             result[name] = entry.source.pin(version, core)
         return result
@@ -125,16 +131,21 @@ class RuntimeResolution(InstalledBuildManifest):
 
     @classmethod
     def record_path(cls) -> Path:
-        return LaunchRuntime.current_pointer() / 'build.json'
+        return LaunchRuntime.current_pointer() / "build.json"
 
     @classmethod
     def installed(cls) -> RuntimeResolution:
         return cls.model_validate_json(cls.record_path().read_bytes())
 
     def pins(self) -> dict[str, PackagePin]:
-        result = {canonicalize_name(name): record.pin() for name, record in self.packages.items()}
+        result: dict[str, PackagePin] = {
+            canonicalize_name(name): record.pin() for name, record in self.packages.items()
+        }
         # Wheel URLs locate build output, not the source revisions recorded by this owner.
-        for name, commit in (('agent-comms', self.core_commit), ('batrachian-toad', self.toad_commit)):
+        for name, commit in (
+            ("agent-comms", self.core_commit),
+            ("batrachian-toad", self.toad_commit),
+        ):
             result[name] = GitPin(self.packages[name].version, commit)
         return result
 
@@ -142,9 +153,15 @@ class RuntimeResolution(InstalledBuildManifest):
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
-        selected = TypeAdapter(dict[str, str]).validate_json(subprocess.check_output([
-            python, '-c', 'import importlib.metadata as m,json; '
-            'from packaging.utils import canonicalize_name as n; '
-            'print(json.dumps({n(d.metadata["Name"]):d.version for d in m.distributions()}))',
-        ]))
+        selected = TypeAdapter(dict[str, str]).validate_json(
+            subprocess.check_output(
+                [
+                    python,
+                    "-c",
+                    "import importlib.metadata as m,json; "
+                    "from packaging.utils import canonicalize_name as n; "
+                    'print(json.dumps({n(d.metadata["Name"]):d.version for d in m.distributions()}))',
+                ]
+            )
+        )
         return self.pins() == resolved.pins(selected, core)
