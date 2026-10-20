@@ -90,13 +90,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return cls.for_name(name).label + (' ' + reads if reads else '')
 
     @classmethod
-    def call_digest(cls, name: str, tool: ToolDeclaration | None,
-                    arguments: Mapping[str, object], *, call_id: str) -> str:
-        """A call keeps its declaration's digest and its original recorded arguments."""
-        return (tool.recorded_digest(arguments, call_id=call_id) if tool
-                else f'{name} {one_line(json.dumps(arguments), 260)}')
-
-    @classmethod
     def result_diff(cls, result, ok):
         """Opaque metadata cannot invent edit evidence."""
         return None
@@ -111,3 +104,6 @@ class UndeclaredTool(ToolDeclaration, declared_name=None):
     @property
     def label(self) -> str:
         return self.name
+
+    def recorded_digest(self, arguments: Mapping[str, object], *, call_id: str) -> str:
+        return f'{self.name} {one_line(json.dumps(arguments), 260)}'

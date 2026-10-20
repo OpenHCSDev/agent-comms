@@ -368,8 +368,8 @@ class ToolStartTranscript(ToolTranscript):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
-            digest = tool_declaration.ToolDeclaration.call_digest(
-                self.tool_name, self.tool, self.raw_input, call_id=self.tool_call_id)
+            declaration = self.tool or tool_declaration.UndeclaredTool(self.tool_name)
+            digest = declaration.recorded_digest(self.raw_input, call_id=self.tool_call_id)
             calls[self.tool_call_id] = OrderCall(
                 self.tool_call_id, self.tool_name, digest, RunningCallState)
 
