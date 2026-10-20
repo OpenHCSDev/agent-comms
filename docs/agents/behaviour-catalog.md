@@ -7,18 +7,23 @@ Each behaviour failure pattern is declared once in Core with its signature (what
 
 A pending check records a known gap, not enforcement. Adding a pattern means adding one `BehaviourPattern` subclass; membership and this document derive from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.
 
-The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) names these failures; coverage below derives from the patterns that cite them:
+The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) and October 19 commander incidents record these failures; coverage below derives from the patterns that cite them:
 
-- [Failure 1](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It rewrote the framework instead of questioning its own design: no pattern cites it yet
-- [Failure 2](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It added states instead of removing them: no pattern cites it yet
-- [Failure 3](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It wrote down the right principle and then violated it: no pattern cites it yet
-- [Failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It measured the wrong thing and reported it as progress: `uncounted_check`, `wrong_measure`
-- [Failure 5](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It redefined "the real app" until something passed: no pattern cites it yet
-- [Failure 6](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It ignored direct orders: no pattern cites it yet
-- [Failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
-- [Failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It drowned the work in ceremony: `plain_text`, `undeclared_audience`
-- [Failure 9](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It merged over its own checks and broke things in circles: no pattern cites it yet
-- [Failure 10](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It invented rules and blamed them on Tristan: no pattern cites it yet
+- Failure 1, It rewrote the framework instead of questioning its own design: no pattern cites it yet
+- Failure 2, It added states instead of removing them: no pattern cites it yet
+- Failure 3, It wrote down the right principle and then violated it: no pattern cites it yet
+- Failure 4, It measured the wrong thing and reported it as progress: `uncounted_check`, `wrong_measure`
+- Failure 5, It redefined "the real app" until something passed: no pattern cites it yet
+- Failure 6, It ignored direct orders: no pattern cites it yet
+- Failure 7, It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
+- Failure 8, It drowned the work in ceremony: `plain_text`, `undeclared_audience`
+- Failure 9, It merged over its own checks and broke things in circles: no pattern cites it yet
+- Failure 10, It invented rules and blamed them on Tristan: no pattern cites it yet
+- Failure 11, It hid known failures until asked: no pattern cites it yet
+- Failure 12, It turned deadline ceilings into appointments: no pattern cites it yet
+- Failure 13, It routed around gates instead of obeying them: no pattern cites it yet
+- Failure 14, It ignored alarms because its board had rotted: no pattern cites it yet
+- Failure 15, It recited rules instead of following them: no pattern cites it yet
 
 ## plan_idle
 
@@ -38,7 +43,7 @@ Checked by:
 
 - standing rule `board_disagrees` (`agent_comms.standing_rules.BoardDisagrees`)
 
-Learned from: P170 (c9c0c04db); [Codex postmortem, failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+Learned from: P170 (c9c0c04db); Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
 ## tactical_command
 
@@ -58,7 +63,7 @@ Checked by:
 
 - check in `agent_comms.todos.PlainText`
 
-Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; [Codex postmortem, failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
 
 ## undeclared_audience
 
@@ -68,7 +73,7 @@ Checked by:
 
 - check in `agent_comms.channel_targets.ChannelTarget.addressed`
 
-Learned from: commit dc4fb3bfa; [Codex postmortem, failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+Learned from: commit dc4fb3bfa; Failure 8: October 9 postmortem: repeated permission exchanges and reports replaced delivery; one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence lines were committed in one night.
 
 ## repeated_strike
 
@@ -101,7 +106,7 @@ Checked by:
 - check in `agent_comms.child_process.NoIntegerPrinted.unproven`
 - check in `agent_comms.child_process.CountPrinted.unproven`
 
-Learned from: P114 (d889df612); [Codex postmortem, failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md); [Codex postmortem, failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+Learned from: P114 (d889df612); Failure 4: October 9 postmortem: 451 measurement-related commits and 716 evidence files yielded only three comparable files; headline 11.7 ms median timings measured terminal writes, not total frames.; Failure 7: October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", "canonical" or "authoritative" while the same constant remained hand-written in three places; commit titles supplied no frame-time proof.
 
 ## strike_on_named_problem
 
@@ -131,7 +136,7 @@ Checked by:
 
 - not enforced here: P197 (#1733)
 
-Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); [Codex postmortem, failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); Failure 4: October 9 postmortem: 451 measurement-related commits and 716 evidence files yielded only three comparable files; headline 11.7 ms median timings measured terminal writes, not total frames.
 
 ## commander_overloaded
 
