@@ -17,8 +17,10 @@ Owner: pi-cn-phase2. PR #1965. Rebased onto requested main `15ba6edce`.
   with numstat, not a fetch followed by two subprocesses per revision.
   `repo.py:Repo.git` owns bounded checked execution and remote discovery.
 - Main's `CommanderContext`, argument parser, order lifecycle and recorded-check
-  progress implementations are preserved. The obsolete identity/cutoff changes
-  from the old checkpoint are not restored over moved owners.
+  progress implementations are preserved. `ToolCaller.acting_name` selects the
+  explicitly bound caller or the context's configured commander. The CLI uses
+  the existing concrete caller states and FieldCodec normalization, not a nullable
+  name or a second context. Checked order reads obtain their cutoff from the order.
 
 Before-rebase AST evidence uses the existing audit Package/Repository parser
 across Core, tools and tests: `p241-2200-ast-before.txt` in this unit's scratch.
@@ -36,6 +38,20 @@ Current checks use the shared interpreter, background `timeout 300` commands,
 and the unchanged checker against the requested main. Results and application
 receipts are retained under `/home/ts/.cache/agent-scratch/pi-cn-phase2/` with
 prefix `p241-2200-`. No installation or provider input is performed here.
+
+Final source checkpoint `d00ab51d7`: **49 tests passed** under background
+`timeout 300`; source ratchet **1 solely SourceLines +8**, with no introduced
+findings; tools ratchet **0**. Both ran separately against `15ba6edce`, with
+`--head` supplied. Before/after AST acquisition reported no parse omissions.
+
+Actual configured saved-state native handler read **32 open / 30 overdue /
+1,860 unjudged / total 278.0**. The real CLI then read **32 / 30 / 1,861**;
+the count increased by one between reads, so this is not a frozen parity sample. The
+focused test checks exact native/CLI equality on one retained fixture. This is
+not an installed native-transport or provider-process verification.
+
+The 22:10 readiness deadline was missed: the final fork argument representation
+needed correction. No failed or running check was represented as successful.
 
 This delivers the shared load/growth checkpoint. Broader timing/alert parity and
 P244's comparisons are not claimed complete. Earlier native/CLI samples are
