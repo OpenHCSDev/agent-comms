@@ -431,7 +431,8 @@ class Commander(CommanderContext):
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
             verdict = document.prose.strip()
-            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
+            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict} '
+                        f'({order.owner.to_wire()})')
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
@@ -530,7 +531,8 @@ class Commander(CommanderContext):
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
         self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
-                                      f'{why} (caught by {caught})'), answers)
+                                      f'{why} (caught by {caught})',
+                                      evidence=FileLine.scan(why)), answers)
 
     def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
                  answers: tuple[MessageReference, ...] = ()) -> None:
@@ -587,9 +589,6 @@ class Commander(CommanderContext):
             claim = WorkingClaim(evidence.artifact())
         else:
             delivered_commit = revision(repo, sha)
-            if subprocess.run(['git', '-C', repo, 'merge-base', '--is-ancestor',
-                               delivered_commit, 'HEAD']).returncode:
-                sys.exit(f'Refused: {delivered_commit} is not in {repo} HEAD.')
             delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
                                       delivered_commit=delivered_commit, evidence=evidence)
             claim = MergedClaim(delivery.delivered)

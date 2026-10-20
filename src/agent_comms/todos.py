@@ -39,6 +39,7 @@ from .child_process import (
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
+from .progress_claims import MergedClaim, ProgressClaim
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -122,7 +123,13 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return claims
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
         order = todo.order.checked()
         check = order.check
@@ -211,20 +218,29 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
-        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
-                                "--list", "origin/*")
-        if not pushed.strip():
-            raise ValueError(
-                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
-        verified = await super().verified(todo, registry)
-        merge = await self.merge_state(todo, registry)
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return (*claims, MergedClaim(self.delivered))
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
+        try:
+            branches = verified_claims[MergedClaim(self.delivered)]
+        except KeyError as error:
+            raise ValueError(
+                "Commit delivery requires the order-done claim verification."
+            ) from error
+        verified = await super().verified(todo, registry, verified_claims)
+        merge = await self.merge_state(todo, registry, branches)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
                                      at=verified.at, evidence=self.evidence, merge=merge,
                                      proof_build=verified.proof_build)
 
-    async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
+    async def merge_state(
+        self, todo: Todo, registry: Registration, branches: tuple[str, ...],
+    ) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
 
         Git proves ordinary merges to main. The order's merged PR also proves squash merges
@@ -232,9 +248,6 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         whose owner is WorkBranches, not a second branch policy in the delivery tool.
         """
         check = todo.order.checked().check
-        branches = (await self.run(
-            check, "git", "for-each-ref", f"--contains={self.delivered}",
-            "--format=%(refname:strip=3)", "refs/remotes/origin/")).splitlines()
         if WorkBranches.main in branches:
             return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
@@ -2195,7 +2208,20 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(TodoOperation, StoryEvent):
+class CitedStrike(TodoOperation, declared_name=None):
+    evidence: tuple[FileLine, ...] = field(default=(), kw_only=True,
+                                         metadata={"wire_omit_default": True})
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        if not self.evidence:
+            raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
+        for cited in self.evidence:
+            cited.require_exists()
+        return self
+
+
+@dataclass(frozen=True)
+class StrikeTodo(CitedStrike, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -2235,7 +2261,7 @@ class StallStrike(StrikeTodo):
     def make(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Self:
         return cls(todo.revision, actor, todo.held(),
                    f"{todo.holder} stopped making progress on {todo.id}; "
-                   "Core struck the order.", at)
+                   "Core struck the order.", at, evidence=(todo.order.checked().owner,))
 
     @classmethod
     def ensure(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Todo:
@@ -2256,7 +2282,8 @@ class ObjectiveStrike(StrikeTodo, declared_name=None):
     @classmethod
     def make(cls, todo: Todo, now: float, reason: str) -> Self:
         return cls(todo.revision, StallWatcherIncarnation.watcher(), todo.held(), reason,
-                   RecordedEventTime(now), order_id=todo.order.checked().id)
+                   RecordedEventTime(now), order_id=todo.order.checked().id,
+                   evidence=(todo.order.checked().owner,))
 
     @classmethod
     def observe(cls, goals: Goals, todo: Todo, now: float,
@@ -2500,7 +2527,7 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict):
+class SendBackVerdict(ToolCallVerdict, CitedStrike):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
@@ -2510,7 +2537,7 @@ class SendBackVerdict(ToolCallVerdict):
 
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return (StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
-                           self.at),)
+                           self.at, evidence=self.evidence),)
 
     def story_text(self) -> str:
         return f"{super().story_text()} (strike recorded)"
@@ -2636,13 +2663,17 @@ class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
+    verified_claims: dict[ProgressClaim, tuple[str, ...]] = field(
+        default_factory=dict, kw_only=True, repr=False, compare=False,
+        metadata={"wire_transient": True},
+    )
 
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        verified = self.delivery.verified(current, goals.registry)
+        verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)
         except OrderCheckFailedError as error:
