@@ -49,10 +49,36 @@ class ClaudeHook(HookRecord):
 
     session_id: str
     hook_event_name: str
+    events: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def read(cls) -> Self:
-        return cls.decode(json.load(sys.stdin))
+        record = json.load(sys.stdin)
+        kind = next(
+            (kind for kind in cls.__subclasses__() if record["hook_event_name"] in kind.events), cls
+        )
+        return kind.decode(record)
+
+    def warn(self, reason: str) -> None:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": self.hook_event_name,
+                        "additionalContext": reason,
+                    }
+                }
+            )
+        )
+
+
+class ClaudeStopHook(ClaudeHook):
+    """A Stop warning asks Claude Code to continue the turn, rather than end it."""
+
+    events = ("Stop",)
+
+    def warn(self, reason: str) -> None:
+        print(json.dumps({"decision": "block", "reason": reason}))
 
 
 @dataclass(frozen=True)

@@ -65,7 +65,7 @@ class WatchClaim:
 
 
 class WatchState:
-    def report(self, event: str) -> None:
+    def report(self, hook: ClaudeHook) -> None:
         """Silent unless the conversation is meant to be watched and is not."""
 
 
@@ -92,9 +92,8 @@ class LapsedWatch(WatchState):
             f"(to stop watching on purpose, remove {self.claim.path})"
         )
 
-    def report(self, event: str) -> None:
-        context = {"hookEventName": event, "additionalContext": self.warning}
-        print(json.dumps({"hookSpecificOutput": context}))
+    def report(self, hook: ClaudeHook) -> None:
+        hook.warn(self.warning)
 
 
 class WatchGuard(ClaudeHookProgram):
@@ -160,19 +159,7 @@ def peer_sync_main() -> None:
         return
     if not PeerSync.overdue(config):
         return
-    if hook.hook_event_name == "Stop":
-        print(json.dumps({"decision": "block", "reason": PeerSync.warning}))
-    else:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": hook.hook_event_name,
-                        "additionalContext": PeerSync.warning,
-                    }
-                }
-            )
-        )
+    hook.warn(PeerSync.warning)
 
 
 def main() -> None:
@@ -180,4 +167,4 @@ def main() -> None:
 
     A failure exits nonzero, which Claude Code reports without blocking the session."""
     hook = ClaudeHook.read()
-    WatchClaim(hook.session_id).state().report(hook.hook_event_name)
+    WatchClaim(hook.session_id).state().report(hook)
