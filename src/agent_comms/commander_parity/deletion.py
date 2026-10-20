@@ -6,7 +6,6 @@ import contextlib
 import io
 import json
 import shlex
-import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
@@ -14,7 +13,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..change_report import FileLine
-from ..child_process import CountPrinted
+from ..child_process import CountPrinted, ExitedOutcome
 from ..commander.order import OrderFile, deadline
 from ..field_codec import FieldCodec
 from ..goal_actions import CreateProblemGoalAction
@@ -142,9 +141,7 @@ class DeletionPath(ABC):
             family + "def decisions():\n    return []\n",
             "Repair the caller but leave one obsolete family site",
         )
-        refused = subprocess.run(
-            cls.delivery_command(run, before, partial), capture_output=True, text=True, timeout=90
-        )
+        refused = run.invoke_command(cls.delivery_command(run, before, partial))
         after_refusal = run.commander.comms.goals.todos.get(before.id)
         remaining = count.recorded(partial, str(repository))
         complete = cls.commit(
@@ -152,9 +149,7 @@ class DeletionPath(ABC):
             "def decisions():\n    return []\n",
             "Delete the last obsolete family declaration",
         )
-        accepted = subprocess.run(
-            cls.delivery_command(run, before, complete), capture_output=True, text=True, timeout=90
-        )
+        accepted = run.invoke_command(cls.delivery_command(run, before, complete))
         after_acceptance = run.commander.comms.goals.todos.get(before.id)
         zero = count.recorded(complete, str(repository))
         primary = order.check.recorded(partial, str(repository))
@@ -169,13 +164,16 @@ class DeletionPath(ABC):
                 "partial commit retained one family site",
                 bool(remaining) and count.result.distance(remaining[0]) == CountPrinted(1),
             ),
-            ("nonzero delivery refused", refused.returncode != 0),
+            ("nonzero delivery refused", refused.outcome == ExitedOutcome(1)),
             ("refusal preserved pending order", before == after_refusal and after_refusal.pending),
             (
                 "zero count checked on delivered commit",
                 bool(zero) and count.result.distance(zero[0]) == CountPrinted(0),
             ),
-            ("zero delivery accepted", accepted.returncode == 0 and not after_acceptance.pending),
+            (
+                "zero delivery accepted",
+                accepted.outcome == ExitedOutcome(0) and not after_acceptance.pending,
+            ),
             (
                 "accepted delivery names the zero-site commit",
                 isinstance(delivered, DeliveredProblemOrder)
@@ -189,8 +187,10 @@ class DeletionPath(ABC):
             len((refused, accepted)),
             checks,
             output.getvalue() + f"partial={partial}; zero={complete}; "
-            f"refused={refused.returncode}: {refused.stdout}{refused.stderr}; "
-            f"accepted={accepted.returncode}: {accepted.stdout}{accepted.stderr}",
+            f"refused={refused.outcome.summary}: "
+            f"{refused.stdout.decode(errors='replace')}{refused.stderr.decode(errors='replace')}; "
+            f"accepted={accepted.outcome.summary}: "
+            f"{accepted.stdout.decode(errors='replace')}{accepted.stderr.decode(errors='replace')}",
         )
 
 
