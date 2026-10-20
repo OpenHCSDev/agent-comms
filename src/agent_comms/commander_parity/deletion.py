@@ -141,7 +141,9 @@ class DeletionPath(ABC):
             family + "def decisions():\n    return []\n",
             "Repair the caller but leave one obsolete family site",
         )
-        refused = run.invoke_command(cls.delivery_command(run, before, partial))
+        refused = run.invoke_command(
+            cls.delivery_command(run, before, partial), env=run.python_environment()
+        )
         after_refusal = run.commander.comms.goals.todos.get(before.id)
         remaining = count.recorded(partial, str(repository))
         complete = cls.commit(
@@ -149,7 +151,9 @@ class DeletionPath(ABC):
             "def decisions():\n    return []\n",
             "Delete the last obsolete family declaration",
         )
-        accepted = run.invoke_command(cls.delivery_command(run, before, complete))
+        accepted = run.invoke_command(
+            cls.delivery_command(run, before, complete), env=run.python_environment()
+        )
         after_acceptance = run.commander.comms.goals.todos.get(before.id)
         zero = count.recorded(complete, str(repository))
         primary = order.check.recorded(partial, str(repository))
