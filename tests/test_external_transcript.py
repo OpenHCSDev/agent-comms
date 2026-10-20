@@ -5,7 +5,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
-from agent_comms.transcripts import TranscriptReadIdentity
+from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
 
 
@@ -135,3 +135,23 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     transcript.end_turn()
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).external_row() is None
+
+
+def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_path):
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external("codex")
+    for index, text in enumerate(("first", "second", "third")):
+        transcript.finish(turn_id="t1", item_id=text,
+                          events=(AssistantTranscript(text, timestamp=float(index), position=text),))
+
+    async def loader(**bounds):
+        return comms.transcripts.thread_transcript_page("codex", max_messages=1, **bounds)
+
+    unread = UnreadTranscriptCursor()
+    newest = asyncio.run(unread.read_page(loader))
+    older = asyncio.run(unread.read_page(loader, before=newest.before))
+    later = asyncio.run(unread.read_page(loader, after=older.after))
+    assert [event.text for event in newest.events] == ["third"]
+    assert [event.text for event in older.events] == ["second"]
+    assert [event.text for event in later.events] == ["third"]
