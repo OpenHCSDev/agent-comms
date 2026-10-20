@@ -24,6 +24,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 13, It routed around gates instead of obeying them: no pattern cites it yet
 - Failure 14, It ignored alarms because its board had rotted: no pattern cites it yet
 - Failure 15, It recited rules instead of following them: no pattern cites it yet
+- Failure 16, It deleted state without checking who was using it: no pattern cites it yet
 
 ## plan_idle
 

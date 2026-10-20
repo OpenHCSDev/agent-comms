@@ -1,6 +1,6 @@
 ---
 name: coordination
-description: "one order per owner holding every problem on its surface; work goes to bus units, forks only help command; check other fleets' open PRs first; never block on a question; mind Claude usage; record new owner targets at once"
+description: "one order per owner holding every problem on its surface; fixes go to bus units, test and mechanical work may go to forks; check other fleets' open PRs first; never block on a question; mind Claude usage; record new owner targets at once"
 type: hard-rule
 ---
 
