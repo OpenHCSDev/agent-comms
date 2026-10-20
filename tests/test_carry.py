@@ -751,7 +751,7 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
     output.status(ActivityState.WORKING, "before the drain")
     with transcript.writing():
         pass
-    MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator("drain-test"))
+    MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator.current())
     before = bus_files(comms.root)
     monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
     with transcripts_held(comms.root):
