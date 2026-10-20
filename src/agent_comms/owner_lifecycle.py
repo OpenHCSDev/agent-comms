@@ -90,7 +90,7 @@ class OwnerRestartSelection:
         platform.require(process)
         return cls(
             snapshot.owner_identity(owner.name), process,
-            snapshot.claimed_generations[owner.name], interpreter,
+            snapshot.claim_generation(owner.name), interpreter,
         )
 
     @classmethod
@@ -112,7 +112,7 @@ class OwnerRestartSelection:
             snapshot.require_owner_process(self.identity, self.process)
         except RelationViolationError as error:
             raise OwnerSelectionChangedRefusal() from error
-        if snapshot.claimed_generations[self.name] != self.claimed_generation:
+        if snapshot.claim_generation(self.name) != self.claimed_generation:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
 
@@ -183,7 +183,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
             return False
         if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
             return False
-        return self.after == snapshot.claimed_generations[self.name] and snapshot.status(self.name).stopped
+        return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
 
     def require_native_loss(self, snapshot, source) -> None:
@@ -435,7 +435,7 @@ class OwnerLifecycle:
                 else:
                     self.registry.unregister(thread.name)
                 return None
-            return thread, snapshot.claimed_generations[thread.name]
+            return thread, snapshot.claim_generation(thread.name)
 
     def stop(self, *names: str) -> None:
         owners = tuple(owner for name in dict.fromkeys(names)
@@ -539,11 +539,11 @@ class OwnerLifecycle:
         snapshot = self.registry.snapshot()
         owner = snapshot.threads[canonical]
         owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
-        before = snapshot.claimed_generations[canonical]
+        before = snapshot.claim_generation(canonical)
         self._retire_owner_unlocked(owner, before)
 
     def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        self.releases.record(after.threads[thread.name], before, after.claimed_generations[thread.name])
+        self.releases.record(after.threads[thread.name], before, after.claim_generation(thread.name))

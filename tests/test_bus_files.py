@@ -28,7 +28,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path) -> None:
             boundary.bus_lock, boundary.registry, owner,
             ExistingFileClaim(resource).normalized(tmp_path),
             NativeClaim(
-                owner_claimed_generation=boundary.registry.claimed_generations[owner.name],
+                owner_claimed_generation=boundary.registry.claim_generation(owner.name),
                 operation_id="a" * 32, turn_id="declared-files", input_id="declared-file-input",
             ),
             activity=boundary.activity,

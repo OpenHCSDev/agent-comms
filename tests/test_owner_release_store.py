@@ -9,7 +9,7 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
     comms = Comms(tmp_path)
     originals = [comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
                  for name in ('worker', 'other')]
-    generation = comms.registry.snapshot().claimed_generations['worker']
+    generation = comms.registry.snapshot().claim_generation('worker')
     for thread in originals:
         comms.owners.stop(thread.name)
     snapshot = comms.registry.snapshot()

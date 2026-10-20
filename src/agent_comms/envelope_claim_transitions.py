@@ -450,7 +450,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         return any(
             registry.status(thread.name).active
             and thread.process_alive
-            and self.claim_scope.held_at(registry.claimed_generations[thread.name])
+            and self.claim_scope.held_at(registry.claim_generation(thread.name))
             for thread in registry.threads_for(incarnation)
         )
 

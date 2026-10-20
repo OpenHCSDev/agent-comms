@@ -82,7 +82,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
                 threads={"renamed": renamed},
                 aliases={"project": "renamed"},
                 statuses={"renamed": snapshot.statuses["project"]},
-                claimed_generations={"renamed": claim_scope.claim_scope},
+                _claimed_generations={"renamed": claim_scope.claim_scope},
             ),
         ).require_valid()
         with claim_scope(None, "a" * 32, args[2]) as allowed:

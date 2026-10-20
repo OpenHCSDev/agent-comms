@@ -302,7 +302,7 @@ class ClaimedOwnerBatch:
             captured = []
             for thread in threads:
                 thread.require_restart_owner(snapshot.status(thread.name))
-                generation = snapshot.claimed_generations[thread.name]
+                generation = snapshot.claim_generation(thread.name)
                 lifecycle.require_restart_idle(thread)
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)

@@ -35,7 +35,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         "acp:earlier-uncertain",
         seq=None,
         owner="project",
-        claim_scope=wired.registry.snapshot().claimed_generations["project"],
+        claim_scope=wired.registry.snapshot().claim_generation("project"),
         target="project",
         text="Do not replay this input",
     )

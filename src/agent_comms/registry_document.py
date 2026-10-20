@@ -668,8 +668,17 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     last_seen: Mapping[str, float]
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
-    claimed_generations: Mapping[str, int]
+    _claimed_generations: Mapping[str, int] = field(repr=False)
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+
+    def claim_generation(self, name: str) -> int:
+        """The allocated input generation follows this registry's alias lineage."""
+        return self._claimed_generations[self.canonical_name(name)]
+
+    @property
+    def retired_names(self) -> tuple[str, ...]:
+        """Deleted declarations keep their generation without exposing its store."""
+        return tuple(name for name in self._claimed_generations if name not in self.threads)
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
@@ -679,7 +688,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             thread
             for thread in self.threads_for(fence.identity.incarnation.require_recorded())
             if self.status(thread.name).active
-            and thread.latest_idle_turn(fence, self.claimed_generations.get(thread.name, 0))
+            and thread.latest_idle_turn(fence, self.claim_generation(thread.name))
         )
 
     @classmethod
@@ -697,7 +706,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
-            claimed_generations=MappingProxyType(dict(document.claims.generations)),
+            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
             by_lookup=MappingProxyType(indexed),
         )
 
@@ -735,7 +744,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
-        return name not in self.threads and name in self.claimed_generations
+        return name in self.retired_names
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
@@ -756,7 +765,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return ClaimedIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
+        return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)
@@ -780,5 +789,5 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
-        if self.claimed_generations[expected.name] != claim_scope:
+        if self.claim_generation(expected.name) != claim_scope:
             raise RelationViolationError("Stopping owner claim_scope changed")

@@ -14,7 +14,7 @@ from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .private_send_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
@@ -48,7 +48,7 @@ class RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-        claim_scope = snapshot.claimed_generations[thread.name]
+        claim_scope = snapshot.claim_generation(thread.name)
         thread.turn_record.read().require_current(claim_scope, thread.turn_generation)
         return cls(thread=thread, claimed_generation=claim_scope)
 
@@ -89,12 +89,11 @@ class RegistryOwner:
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
-        canonical = snapshot.canonical_name(name)
-        thread = snapshot.threads.get(canonical)
-        claim_scope = snapshot.claimed_generations.get(canonical)
-        if thread is None or claim_scope is None:
-            raise StaleFence(reason)
-        owner = cls(thread=thread, claimed_generation=claim_scope)
+        try:
+            thread = snapshot.require(name)
+        except UnregisteredThreadError as error:
+            raise StaleFence(reason) from error
+        owner = cls(thread=thread, claimed_generation=snapshot.claim_generation(name))
         owner.require_snapshot(snapshot, reason)
         return owner
 
@@ -124,7 +123,7 @@ class RegistryOwner:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.claimed_generations.get(actual.name), reason, check)
+        self._require_current(actual, snapshot.claim_generation(self.thread.name), reason, check)
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:

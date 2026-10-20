@@ -164,7 +164,7 @@ class OwnedTurn:
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        claim_scope=snapshot.claimed_generations[self.thread_name],
+                        claim_scope=snapshot.claim_generation(self.thread_name),
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases

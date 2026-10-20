@@ -25,7 +25,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     after = comms.registry.snapshot()
     assert after.owner_generations == before.owner_generations
-    assert after.claimed_generations == before.claimed_generations
+    assert after.claim_generation('worker') == before.claim_generation('worker')
     assert after.threads["worker"].turn_lease == first
     assert comms.registry.require("worker").require_process().pid == os.getpid()
     comms.agents.activity.emit(

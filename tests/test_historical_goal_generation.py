@@ -29,7 +29,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
     thread = comms.registry.declare(comms.registry.new_thread('legacy', frozenset({'test'}), str(tmp_path), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
     inputs = InputDispositions(comms.root)
     inputs.record('acp:unknown-original', seq=None, owner=thread.name,
-                  claim_scope=comms.registry.snapshot().claimed_generations[thread.name],
+                  claim_scope=comms.registry.snapshot().claim_generation(thread.name),
                   target=thread.name, text='This uncertain original must not replay')
     original_inputs = inputs.path.read_bytes()
     original_registry = (comms.root / 'registry.json').read_bytes()

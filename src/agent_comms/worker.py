@@ -65,7 +65,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
                 owner = snapshot.threads[name]
                 row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
-                    owner.incarnation, snapshot.claimed_generations[name], row.source_text
+                    owner.incarnation, snapshot.claim_generation(name), row.source_text
                 ):
                     raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row

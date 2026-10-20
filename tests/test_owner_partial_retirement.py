@@ -72,7 +72,7 @@ class AuthoredRetirement(OwnerLifecycle):
             t.require_process(), '/authored/python', {'AGENT_COMMS_AGENT_BIN': '/authored/pi'},
         ) for t in self.originals)
         return FencedOwnerBatch(
-            self, tuple((t, self.registry.snapshot().claimed_generations[t.name])
+            self, tuple((t, self.registry.snapshot().claim_generation(t.name))
                         for t in self.originals), launches,
             OwnerRestartRequest(), RestartEnvironment.inherit({}),
         )

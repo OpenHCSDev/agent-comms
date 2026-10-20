@@ -258,7 +258,7 @@ class QueuedInput:
         snapshot.status(owner.name).require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.turn_record.read().require_idle()
-        claim_scope = snapshot.claimed_generations[owner.name]
+        claim_scope = snapshot.claim_generation(owner.name)
         if not self.current(owner, claim_scope):
             raise RelationViolationError("Queued input acceptance context changed")
         if not row.queued_for(owner.incarnation, claim_scope, self.text):

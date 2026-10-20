@@ -575,7 +575,7 @@ async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monk
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
     owner = comms.registry.require("alpha")
-    claimed_generation = comms.registry.snapshot().claimed_generations["alpha"]
+    claimed_generation = comms.registry.snapshot().claim_generation("alpha")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         generation = store.participants.get(lookup).participant_generation

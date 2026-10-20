@@ -43,7 +43,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         def acquire(name):
             with NativeBoundary(c.bus) as boundary:
                 owner = boundary.registry.require(name)
-                scope = NativeClaim(owner_claimed_generation=boundary.registry.claimed_generations[name],
+                scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
                                     operation_id=secrets.token_hex(16), turn_id=f"create-{name}",
                                     input_id=f"create-input-{name}")
                 return c.bus.publisher._publish_acquisition_unlocked(boundary.bus_lock,
@@ -81,7 +81,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         with NativeBoundary(comms.bus) as boundary:
             owner = boundary.registry.require(name)
             scope = NativeClaim(
-                owner_claimed_generation=boundary.registry.claimed_generations[name],
+                owner_claimed_generation=boundary.registry.claim_generation(name),
                 operation_id=secrets.token_hex(16), turn_id=f"turn-{name}",
                 input_id=f"input-{name}",
             )
