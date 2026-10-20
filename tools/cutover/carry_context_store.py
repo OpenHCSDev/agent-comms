@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sqlite3
 import tempfile
 from abc import abstractmethod
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, ClassVar
 
 from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.context_store import ContextEntry, ContextStore
@@ -164,6 +163,8 @@ class ContextMove:
 
 
 class ContextManifests(Carry):
+    staging_reserve_bytes: ClassVar[int] = 1024**3
+
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
         return (
@@ -208,6 +209,14 @@ class ContextManifests(Carry):
         """
         log = WireLog(root / "bus.jsonl")
         index_path = _path(log.path)
+        required = log.path.stat().st_size + index_path.stat().st_size + cls.staging_reserve_bytes
+        filesystem = os.statvfs(root)
+        available = filesystem.f_bavail * filesystem.f_frsize
+        if required > available:
+            raise OSError(
+                f"Context conversion requires {required} bytes; "
+                f"available {available} bytes on {root}"
+            )
         old_tables: tuple[type[TypedTable], ...] = (
             ContextEntrySources,
             RecordedContextManifestSources,
@@ -258,9 +267,7 @@ class ContextManifests(Carry):
                 os.chmod(output_path, 0o600)
                 move = ContextMove(stream, context_db, store)
                 stream.seek(0)
-                for number, (offset, raw) in enumerate(
-                    WireRecord.rows(stream, end=witness.offset), 1
-                ):
+                for offset, raw in WireRecord.rows(stream, end=witness.offset):
                     old_digest = _chain(old_digest, raw)
                     value = FieldCodec.decode(dict[str, object], FieldCodec.parse(raw))
                     if FieldCodec.record_key(ContextEnvelope, "observation") in value:
@@ -281,10 +288,6 @@ class ContextManifests(Carry):
                             )
                         output.write(raw)
                         new_digest = _chain(new_digest, raw)
-                    if number % 256 == 0 and shutil.disk_usage(root).free < 10 * 1024**3:
-                        raise OSError(
-                            "Context conversion stopped before exhausting the 10GiB floor"
-                        )
                 if (
                     old_digest.hex() != witness.digest
                     or scan.previous_sequence != witness.through_seq

@@ -219,3 +219,24 @@ def test_failed_preparation_preserves_source_and_leaves_no_partial_store(tmp_pat
     assert not list(comms.root.glob(".move-context-*"))
     with _store_lock(comms.root / "wire"):
         assert conversion.ContextManifests.carry(comms.root, apply=True).detail["requests"] == 2
+
+
+def test_insufficient_space_refuses_before_staging_without_changing_root(tmp_path, monkeypatch):
+    comms, _, _ = old_copy(tmp_path)
+    filesystem = os.statvfs(comms.root)
+    # Ask for more than the entire real filesystem, without mocking statvfs.
+    reserve = filesystem.f_blocks * filesystem.f_frsize + 1
+    monkeypatch.setattr(conversion.ContextManifests, "staging_reserve_bytes", reserve)
+    required = (
+        comms.bus.log.path.stat().st_size + _path(comms.bus.log.path).stat().st_size + reserve
+    )
+    with _store_lock(comms.root / "wire"):
+        paths = set(comms.root.rglob("*"))
+        original = {path: path.read_bytes() for path in paths if path.is_file()}
+        with pytest.raises(OSError) as refusal:
+            conversion.ContextManifests.carry(comms.root, apply=True)
+        assert f"requires {required} bytes; available " in str(refusal.value)
+        assert f"bytes on {comms.root}" in str(refusal.value)
+        assert set(comms.root.rglob("*")) == paths
+        assert {path: path.read_bytes() for path in original} == original
+        assert not list(comms.root.glob(".move-context-*"))
