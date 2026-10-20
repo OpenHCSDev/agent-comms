@@ -9,14 +9,15 @@ its check drops those leading commands. No other field of a saved order changes.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping
 from dataclasses import replace
+from pathlib import Path
 from typing import cast
 
 from . import carry
+from .carry import Carried
 
 from agent_comms.goals import OrderCheck
-from agent_comms.todos import Todo
+from agent_comms.todos import Todo, TodoStore
 
 LEADING: frozenset[str] = frozenset({"fetch", *OrderCheck.REVISION_COMMANDS})
 
@@ -35,18 +36,23 @@ def revision_free(command: str) -> str:
 class CheckRevisions(carry.TodoRows):
     """Each open order's check line drops the checkout that chose its revision."""
 
+
     @classmethod
-    def converted(cls, db: sqlite3.Connection) -> Mapping[str, int]:
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
         changed = 0
-        for todo in cast("list[Todo]", Todo.select(db)):
-            check = todo.order.check
-            command = revision_free(check.command)
-            if not todo.pending or command == check.command:
-                continue
-            changed += 1
-            order = replace(todo.order, check=replace(check, command=command))
-            Todo.update(db, where="{id} = ?", parameters=(todo.id,), order=order)
-        return {"open": changed}
+        if not TodoStore.path_in(root).exists():
+            return Carried(0)
+        with cls.todo_rows(root, apply=apply) as db:
+            rows = cast("sqlite3.Connection", db)  # the store exists, so its rows are open
+            for todo in cast("list[Todo]", Todo.select(rows)):
+                check = todo.order.check
+                command = revision_free(check.command)
+                if not todo.pending or command == check.command:
+                    continue
+                changed += 1
+                order = replace(todo.order, check=replace(check, command=command))
+                Todo.update(rows, where="{id} = ?", parameters=(todo.id,), order=order)
+        return cls.carried(root, changed, {"open": changed}, apply=apply)
 
 
 if __name__ == "__main__":

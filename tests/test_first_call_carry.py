@@ -33,8 +33,8 @@ from test_todos import order, thread
         TodoOpenIndexes,
     ),
 )
-def test_row_step_absence_and_transaction_are_owned_by_todo_rows(tmp_path, monkeypatch, step):
-    assert step.carry.__func__ is TodoRows.carry.__func__
+def test_row_steps_do_not_convert_missing_stores(tmp_path, monkeypatch, step):
+    assert FirstCalls.carry.__func__ is TodoRows.carry.__func__
     monkeypatch.setattr(step, "converted", lambda db: pytest.fail("No store to convert"))
     result = step.carry(tmp_path, apply=True)
     assert result.changed == 0 and result.detail == {} and result.rewritten == ()

@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, boundary_decoder
 from agent_comms.todos import Todo, TodoStore
 from agent_comms.typed_table import TypedStore
 from .backup import StoreBackup
@@ -230,7 +230,9 @@ class TodoRows(StoreCarry):
         return step.revision
 
     @classmethod
+    @boundary_decoder
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        """Decode the external store through its conversion before admitting typed rows."""
         counts: Mapping[str, int] = {}
         with cls.store_transaction(root, apply=apply) as db:
             if db is not None:
@@ -243,6 +245,16 @@ class TodoRows(StoreCarry):
     @abstractmethod
     def converted(cls, db: sqlite3.Connection) -> Mapping[str, int]:
         """Convert an open store; the family owns absence, validation and commit."""
+
+    @classmethod
+    @contextmanager
+    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        """Retain the original entrypoint for immutable, already-published steps."""
+        with cls.store_transaction(root, apply=apply) as db:
+            yield db
+            if db is not None:
+                for _row in Todo.stream(db):
+                    pass
 
 
 @dataclass(frozen=True)

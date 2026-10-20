@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from collections import Counter
-from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 from . import carry
+from .carry import Carried
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, ProblemOrder, Todo
@@ -42,22 +42,27 @@ def declared_run(body: str) -> OrderRun:
 class OrderRuns(carry.TodoRows):
     """Saved problem orders gain their declared closing run; no other stored field changes."""
 
+
     @classmethod
-    def converted(cls, db: sqlite3.Connection) -> Mapping[str, int]:
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
         counts: Counter[str] = Counter()
-        lacking = """json_type("{order}", '$.run') IS NULL"""
-        saved = cast("list[SavedOrder]", Todo.select(db, where=lacking, row_type=SavedOrder))
-        for row in saved:
-            run = declared_run(row.text)
-            counts[run.declared_name] += 1
-            order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
-            Todo.update(
-                db,
-                where="{id} = ?",
-                parameters=(row.id,),
-                order=FieldCodec.decode(ProblemOrder, order),
-            )
-        return counts
+        with cls.todo_rows(root, apply=apply) as db:
+            if db is not None:
+                lacking = """json_type("{order}", '$.run') IS NULL"""
+                saved = cast(
+                    "list[SavedOrder]", Todo.select(db, where=lacking, row_type=SavedOrder)
+                )
+                for row in saved:
+                    run = declared_run(row.text)
+                    counts[run.declared_name] += 1
+                    order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
+                    Todo.update(
+                        db,
+                        where="{id} = ?",
+                        parameters=(row.id,),
+                        order=FieldCodec.decode(ProblemOrder, order),
+                    )
+        return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
 
 
 if __name__ == "__main__":
