@@ -7,7 +7,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import PiCommand, Prompt
-from agent_comms.pi_payloads import PiOmitted
+from agent_comms.pi_payloads import AnonymousRequest, RequestId
 
 
 def prompt(**options):
@@ -30,13 +30,13 @@ def test_images_use_the_declared_pi_tag_for_encoding_and_decoding():
         PiCommand.from_wire(missing)
 
 
-@pytest.mark.parametrize("identity,declared", [(None, PiOmitted()), ("opaque-id", "opaque-id")])
+@pytest.mark.parametrize("identity,declared", [(None, AnonymousRequest()), ("opaque-id", RequestId("opaque-id"))])
 def test_unknown_command_reads_its_id_through_the_declared_field(identity, declared):
     raw = {"type": "future_command", "id": identity, "payload": "kept"}
     command = PiCommand.from_wire(raw)
     assert command.id == declared and command.to_rpc() == raw
     raw.pop("id")
-    assert PiCommand.from_wire(raw).id == PiOmitted()
+    assert PiCommand.from_wire(raw).id == AnonymousRequest()
     assert PiCommand.from_wire(raw).to_rpc() == raw
     with pytest.raises(ValueError):
         PiCommand.from_wire({**raw, "id": 3})
@@ -46,6 +46,6 @@ def test_anonymous_wire_command_keeps_its_anonymous_id():
     raw = prompt().to_rpc()
     raw.pop("id")
     decoded = PiCommand.from_wire(raw)
-    assert decoded.id == PiOmitted()
+    assert decoded.id == AnonymousRequest()
     assert decoded.to_rpc() == raw
     assert prompt().id and prompt().id != prompt().id

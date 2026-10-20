@@ -315,8 +315,8 @@ class TestNativeInputBinding:
         assert pending.accept(unrelated) is pending
         assert pending.observe(unrelated.data.require_payload()) is pending
         with pytest.raises(AttestationError):
-            pending.accept(response(pending.request.id, 'unsupported'))
-        assert pending.accept(response(pending.request.id)).observed
+            pending.accept(response(pending.request.require_id(), 'unsupported'))
+        assert pending.accept(response(pending.request.require_id())).observed
 
 
 

@@ -247,7 +247,7 @@ def test_opened_cut_rejects_context_and_unknown_observations(tmp_path, kind, *, 
     tmp_path.chmod(0o700)
     log = WireLog(tmp_path / 'bus.jsonl')
     from agent_comms.wire_metadata import WireMetadata
-    log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
+    log.write_metadata_unlocked(WireMetadata.private_root('0' * 32))
     owner = thread_registration.new_thread('author', frozenset(), str(tmp_path), created_at=17003.0)
     recorded, _entries = AbsentContext().capture(manifest(owner))
     row = {'observation': {'kind': kind, 'manifest': FieldCodec.encode(recorded)}}

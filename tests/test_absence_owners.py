@@ -1,5 +1,6 @@
 """Behaviour-bearing absence belongs to the state that owns the operation."""
 
+from agent_comms.pi_payloads import AnonymousRequest, RequestId
 import asyncio
 
 import pytest
@@ -122,8 +123,8 @@ def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
 
 
 def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
-    command = GetState(id=None)
+    command = GetState(id=AnonymousRequest())
     assert "id" not in command.to_rpc()
     with pytest.raises(ValueError):
         command.require_id()
-    assert GetState(id="correlated").require_id() == "correlated"
+    assert GetState(id=RequestId("correlated")).require_id() == "correlated"

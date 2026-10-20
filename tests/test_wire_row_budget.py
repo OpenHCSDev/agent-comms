@@ -34,10 +34,7 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
     assert WireRecord.max_row_bytes == 8 * 1024 * 1024
     raw = _row(WireRecord.max_row_bytes + extra, newline)
     # A retained public entry: valid before private claim_scope, not a live claim.
-    metadata = WireMetadata(
-        last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
-        wire_root_id='0' * 32,
-    )
+    metadata = WireMetadata.private_root('0' * 32, last_seq=1, claimed_after_seq=1)
     scanned = lambda: [WireScan(metadata).read(row) for _, row in WireRecord.rows(io.BytesIO(raw))]
     if extra:
         with pytest.raises(RelationViolationError):
@@ -98,7 +95,7 @@ def test_every_row_reader_refuses_a_bad_physical_row(tmp_path, reader, bad):
     raw = {'oversized': _row(WireRecord.max_row_bytes + 1, True),
            'no newline': _row(200, False),
            'cut mid-row': good + good[:100]}[bad]
-    metadata = WireMetadata(last_seq=1, claimed_after_seq=1, writer_protocol_version=1, wire_root_id='0' * 32)
+    metadata = WireMetadata.private_root('0' * 32, last_seq=1, claimed_after_seq=1)
     path = tmp_path / 'row.jsonl'
     path.write_bytes(raw)
     path.chmod(0o600)
@@ -121,7 +118,7 @@ def _message_row(seq: int) -> bytes:
 ])
 def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expected):
     rows = [_message_row(seq) for seq in (1, 2, 3)]
-    metadata = WireMetadata(last_seq=3, claimed_after_seq=3, writer_protocol_version=1, wire_root_id='0' * 32)
+    metadata = WireMetadata.private_root('0' * 32, last_seq=3, claimed_after_seq=3)
     path = tmp_path / 'rows.jsonl'
     path.write_bytes(b''.join(rows))
     path.chmod(0o600)
