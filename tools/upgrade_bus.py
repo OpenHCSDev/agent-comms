@@ -270,8 +270,8 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied.root):
             before = bus_files(copied.root)
-        pending = CarryChain.at(revisions.repo, git(stack.checkout, "rev-parse", "HEAD")).pending(
-            copied.root)
+        target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
+        pending = CarryChain.at(revisions.repo, target).pending(copied.root)
         stopping = before_stop(copied.root, pending, stack, revisions)
         report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
         return {**report, "copy": asdict(measurement)}
