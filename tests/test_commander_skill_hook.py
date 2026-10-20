@@ -4,7 +4,6 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -27,7 +26,6 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
             config = CommanderConfig(
                 commander="fresh-commander",
                 root=bus,
-                cli=Path(sys.executable),
                 state=tmp_path / "state",
                 board=tmp_path / "board.md",
                 narrative=tmp_path / "narrative.md",

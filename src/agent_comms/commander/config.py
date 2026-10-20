@@ -35,7 +35,6 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     commander: str
     root: Path
-    cli: Path
     state: Path
     board: Path
     narrative: Path
