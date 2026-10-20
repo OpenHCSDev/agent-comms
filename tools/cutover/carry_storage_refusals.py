@@ -1,13 +1,12 @@
-"""Storage refusals keep their historical strike receipt, but never a live strike."""
+"""Keep old storage strikes on the board, but void every one still counting."""
+
 from __future__ import annotations
 
-import json
+import sqlite3
 from pathlib import Path
+from typing import cast
 
-from pydantic import JsonValue
-
-from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import StrikeTodo, Todo, VoidStrikeTodo
+from agent_comms.todos import StrikeTodo, Todo, TodoStore, VoidStrikeTodo
 
 from .carry import Carried, TodoRows
 
@@ -18,38 +17,51 @@ class StorageRefusals(TodoRows):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
+        if not cls.store.path_in(root).exists():
+            return Carried(0)
         changed = voids = 0
-        with cls.todo_rows(root, apply=apply) as db:
-            if db is None:
-                return Carried(0)
-            for identity, encoded, receipts in db.execute(
-                f'SELECT id,strikes,voided FROM "{Todo.declared_name}"'
-            ).fetchall():
-                strikes = FieldCodec.decode(list[dict[str, JsonValue]], FieldCodec.parse(encoded))
-                recorded = FieldCodec.decode(list[dict[str, JsonValue]], FieldCodec.parse(receipts))
-                storage = [strike for strike in strikes if strike.get("kind") == cls.old_kind]
-                nested = [FieldCodec.decode(dict[str, JsonValue], receipt["strike"])
-                          for receipt in recorded]
-                historical = [strike for strike in nested if strike.get("kind") == cls.old_kind]
-                if not storage and not historical:
-                    continue
-                for strike in (*storage, *historical):
-                    strike["kind"] = StrikeTodo.declared_name
-                for receipt, strike in zip(recorded, nested):
-                    receipt["strike"] = strike
-                db.execute(f'UPDATE "{Todo.declared_name}" SET strikes=?,voided=? WHERE id=?',
-                           (json.dumps(strikes), json.dumps(recorded), identity))
-                current = Todo.one(db, id=identity)
-                if current is None:
-                    raise ValueError(f"Todo disappeared during storage-strike carry: {identity}")
-                for original in storage:
-                    strike = FieldCodec.decode(StrikeTodo, original)
+        with cls.todo_rows(root, apply=apply) as connection:
+            db = cast(sqlite3.Connection, connection)
+            table = Todo.declared_name
+            names = db.execute(
+                f'SELECT id FROM "{table}" WHERE '
+                "EXISTS(SELECT 1 FROM json_tree(strikes) WHERE key='kind' AND value=?) OR "
+                "EXISTS(SELECT 1 FROM json_tree(voided) WHERE key='kind' AND value=?)",
+                (cls.old_kind, cls.old_kind),
+            ).fetchall()
+            for (identity,) in names:
+                indices = db.execute(
+                    f'SELECT j.key FROM "{table}" t,json_each(t.strikes) j '
+                    "WHERE t.id=? AND json_extract(j.value,'$.kind')=?",
+                    (identity, cls.old_kind),
+                ).fetchall()
+                db.execute(
+                    f'UPDATE "{table}" SET strikes=(SELECT json_group_array(json(part)) FROM '
+                    "(SELECT CASE WHEN json_extract(value,'$.kind')=? "
+                    "THEN json_set(value,'$.kind',?) ELSE value END AS part "
+                    "FROM json_each(strikes) ORDER BY key)),"
+                    "voided=(SELECT json_group_array(json(part)) FROM "
+                    "(SELECT CASE WHEN json_extract(value,'$.strike.kind')=? "
+                    "THEN json_set(value,'$.strike.kind',?) ELSE value END AS part "
+                    "FROM json_each(voided) ORDER BY key)) WHERE id=?",
+                    (
+                        cls.old_kind,
+                        StrikeTodo.declared_name,
+                        cls.old_kind,
+                        StrikeTodo.declared_name,
+                        identity,
+                    ),
+                )
+                current = TodoStore._current(db, identity)
+                for (index,) in indices:
+                    strike = current.strikes[index]
                     if strike in current.live_strikes():
-                        current = VoidStrikeTodo(current.revision, current.creator_identity,
-                                                 strike, cls.reason).apply(current)
+                        current = VoidStrikeTodo(
+                            current.revision, current.creator_identity, strike, cls.reason
+                        ).apply(current)
                         voids += 1
                 current.upsert(db)
-                changed += len(storage)
+                changed += len(indices)
         return cls.carried(root, changed, {"strikes": changed, "voids": voids}, apply=apply)
 
 
