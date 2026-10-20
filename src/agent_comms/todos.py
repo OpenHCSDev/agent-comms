@@ -395,7 +395,7 @@ class PullRequests:
         problems[todo.id] = todo
         references = ((candidate, reference) for candidate in problems.values()
                       for reference in (candidate.id, *(order.pull_request_reference
-                                                        for order in candidate.order.history)))
+                                                        for order in candidate.order_history)))
         aliases = {f"o{index}": pair for index, pair in enumerate(references)}
         selections = []
         for alias, (_, reference) in aliases.items():
@@ -1362,11 +1362,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
                                    metadata={"wire_omit_default": True})
 
     @property
-    def history(self) -> tuple[CheckedProblemOrder, ...]:
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
-
-    def replaced_by(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        return order
 
     @classmethod
     def pull_request_problems(cls, body: str) -> tuple[str, ...]:
@@ -1444,7 +1441,7 @@ class UnorderedProblemOrder(ProblemOrder):
                           *self.finding.instructions(), "No order"))
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        return self.replaced_by(replace(order, finding=self.finding))
+        return replace(order, finding=self.finding)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1459,8 +1456,8 @@ class FoldedProblemOrder(ProblemOrder):
         return self.original.phase
 
     @property
-    def history(self) -> tuple[CheckedProblemOrder, ...]:
-        return self.original.history
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
+        return self.original.declarations
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return (f"{todo.id} folded into {self.into}: {self.why}",)
@@ -1473,15 +1470,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def checked(self) -> CheckedProblemOrder:
         return self
 
-    preceding: ProblemOrder = field(default_factory=UnorderedProblemOrder,
-                                     metadata={"wire_omit_default": True})
-
     @property
-    def history(self) -> tuple[CheckedProblemOrder, ...]:
-        return (*self.preceding.history, self)
-
-    def replaced_by(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        return replace(order, preceding=self.preceding if order.id == self.id else self)
+    def declarations(self) -> tuple[CheckedProblemOrder, ...]:
+        return (self,)
 
     id: str
     owner: FileLine
@@ -1647,7 +1638,7 @@ class PendingProblemOrder(CheckedProblemOrder):
                   - self.at.recorded_at("An order"))
         return replace(self, id=uuid4().hex[:12], at=RecordedEventTime(at),
                        first_call_deadline=RecordedEventTime(at + window),
-                       first_call=AwaitingFirstCall(), preceding=self)
+                       first_call=AwaitingFirstCall())
 
     pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
@@ -2028,7 +2019,8 @@ class AssignTodo(TodoOperation):
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
         assigned = replace(assigned, deadline=self.deadline,
-                           order=current.order.replaced_by(self.order), goal=self.goal,
+                           order=self.order, prior_orders=current.orders_before(self.order),
+                           goal=self.goal,
                            revision=current.revision + 1)
         return self.actor.assigned(current, assigned)
 
@@ -2436,10 +2428,21 @@ class Todo(TypedTable):
     verdicts: tuple[OrderVerdict, ...] = ()
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
+    prior_orders: tuple[CheckedProblemOrder, ...] = ()
+
+    @property
+    def order_history(self) -> tuple[CheckedProblemOrder, ...]:
+        return (*self.prior_orders, *self.order.declarations)
+
+    def orders_before(self, following: ProblemOrder,
+                      additional: tuple[CheckedProblemOrder, ...] = ()) -> tuple[CheckedProblemOrder, ...]:
+        current = {order.id for order in following.declarations}
+        return tuple({order.id: order for order in (*self.order_history, *additional)
+                      if order.id not in current}.values())
 
     @property
     def held_order_ids(self) -> tuple[str, ...]:
-        return tuple(order.id for order in self.order.history)
+        return tuple(order.id for order in self.order_history)
 
     @property
     def reference_pattern(self) -> str:
@@ -2693,9 +2696,11 @@ class TodoStore(TypedStore):
             target.state.require_open(target)
             if target.holder not in (None, unit):
                 raise ValueError(f'{problem} is already held by {target.holder}')
-            replace(target, order=target.order.linked(source.order), assignment=source.held(),
-                    goal=source.goal, deadline=source.deadline, messages=source.messages,
-                    revision=target.revision + 1).upsert(db)
+            linked = target.order.linked(source.order)
+            replace(target, order=linked,
+                    prior_orders=target.orders_before(linked, source.prior_orders),
+                    assignment=source.held(), goal=source.goal, deadline=source.deadline,
+                    messages=source.messages, revision=target.revision + 1).upsert(db)
 
     def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         """Rows in creation order; an absent store has none, and a read never creates one."""

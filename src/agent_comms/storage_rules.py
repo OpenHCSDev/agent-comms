@@ -90,7 +90,7 @@ class StorageRule(RoomAllocation):
         return StorageRoots(self.scratch_base / name)
 
     def order_checkout(self, name: str, problem: str) -> Path:
-        """The checkout thread ``name`` holds for one ordered problem."""
+        """Allocation path for a new problem checkout; an existing source may be reused."""
         return self.checkout_base.resolve() / f'{name}--{problem}'
 
     def owns_checkout(self, name: str, path: Path) -> bool:

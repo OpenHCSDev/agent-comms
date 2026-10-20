@@ -965,16 +965,21 @@ class DoneVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "open the problem's PR with its required immutable order identity"
+    help = "open the problem's PR from this owned source checkout with its immutable order identity"
     pid: str = option("pid")
     title: str = option("--title")
     body_file: str = option("--body-file")
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
-        checkout = ctx.comms.registry.storage_rule.order_checkout(todo.holder, todo.id)
-        print(todo.order.open_pull_request(
-            todo, checkout, self.title, Path(self.body_file).read_text()))
+        source = Repo.of(Path.cwd())
+        holder = todo.held().owner
+        if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
+            raise ValueError(f"Run order pr from a source checkout owned by {holder}.")
+        if source.github != todo.repo:
+            raise ValueError(f"This source checkout is not the problem repository {todo.repo}.")
+        print(todo.order.checked().open_pull_request(
+            todo, source.checkout, self.title, Path(self.body_file).read_text()))
 
 
 @dataclass(frozen=True, kw_only=True)
