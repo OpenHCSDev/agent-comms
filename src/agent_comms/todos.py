@@ -328,7 +328,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
         return (todo.id in self.problems
                 or any(identity in self.orders for identity in todo.held_order_ids))
 
-    def merged_commits(self) -> Iterator[str]:
+    def merged_commits(self, since: float) -> Iterator[str]:
         return iter(())
 
     async def delivery_merges(self, delivery: CommitDelivery,
@@ -345,8 +345,9 @@ class MergedPullRequest(PullRequest):
     merge: str
     merged_at: float
 
-    def merged_commits(self) -> Iterator[str]:
-        yield self.merge
+    def merged_commits(self, since: float) -> Iterator[str]:
+        if self.merged_at >= since:
+            yield self.merge
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -930,7 +931,7 @@ class MergedProgress(FoundProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         return (cls(sha) for pr in source.requests("merged")
-                for sha in pr.merged_commits())
+                for sha in pr.merged_commits(source.since))
 
     @property
     def state(self) -> str:

@@ -119,6 +119,30 @@ def test_unfinished_check_keeps_other_overdue_orders_visible(
         todo.order.check.result.require(run)
 
 
+@pytest.mark.parametrize('merged_at', (200.0, 201.0))
+def test_reissued_order_rejects_earlier_merge_and_accepts_its_own(
+        checkout, commander, merged_at):
+    first, unit = checkout
+    sha = commit(unit)
+    earlier = MergedPullRequest(7, 'fix/p1', sha, merge=sha, merged_at=150.0,
+                               updated_at=150.0, orders=(first.order.id,))
+    comms, caller = commander
+    following = replace(first.order, id='resent-P1', at=RecordedEventTime(200.0))
+    CommsOrderTool(owner='worker', order=OrderGoalAction(
+        problem='P1', order=following, request='request', deadline=RecordedEventTime(3000),
+        commander='lead', expected_revision=first.revision,
+        assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
+    current = comms.goals.todos.get('P1')
+    assert current.prior_orders == (first.order,)
+    assert not isinstance(read((current, unit), Listed(merged=(earlier,))), MergedProgress)
+    assert comms.goals.todos.get('P1') == current and current.state.open
+    assert tuple(earlier.merged_commits(200.0)) == ()
+    later = replace(earlier, number=8, merged_at=merged_at, updated_at=merged_at,
+                    orders=(following.id,))
+    assert tuple(later.merged_commits(200.0)) == (sha,)
+    assert read((current, unit), Listed(merged=(earlier, later))) == MergedProgress(sha)
+
+
 def test_no_commit_since_the_order_is_explicit(checkout):
     progress = read(checkout)
     assert progress == NoCommitProgress()
