@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 from abc import abstractmethod
+from collections.abc import Sequence
 from contextlib import (
     AbstractContextManager,
     ExitStack,
@@ -43,7 +44,12 @@ from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.owner_cutover import MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection, OwnerStartResult
+from agent_comms.owner_lifecycle import (
+    OwnerLifecycle,
+    OwnerRestartResult,
+    OwnerRestartSelection,
+    OwnerStartResult,
+)
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _atomic_write_text, _store_lock
@@ -69,7 +75,8 @@ class PublicationIntent(SubclassUnion, affix=''):
                path: Path) -> SavedPublicationIntent: ...
 
     @staticmethod
-    def capture(snapshot, selected, runtime: Path, previous: Path, path: Path,
+    def capture(snapshot: RegistrySnapshot, selected: Sequence[Thread],
+                runtime: Path, previous: Path, path: Path,
                 owners: tuple[OwnerRestartSelection, ...] = ()) -> SavedPublicationIntent:
         names = {owner.name for owner in owners}
         intent = SavedPublicationIntent(str(runtime), str(previous), owners + tuple(
@@ -244,7 +251,8 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
     route_ownership: ExitStack = field(default_factory=ExitStack, compare=False)
     route_descriptor: int = field(init=False)
 
-    def restart(self, lifecycle, request) -> tuple[OwnerRestartResult, ...]:
+    def restart(self, lifecycle: OwnerLifecycle,
+                request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
         snapshot = lifecycle.registry.snapshot()
         for original in self.selection:
             if snapshot.require(original.name).incarnation != original.identity.incarnation:
