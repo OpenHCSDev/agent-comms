@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import re
 import subprocess
 import sys
@@ -613,7 +612,7 @@ class Commander(CommanderContext):
 
     @boundary_decoder
     def unstrike(self, task: str, why: str, at: str | None = None) -> None:
-        """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
+        """A strike recorded in error is voided in Core, then announced to #comms."""
         todo = self.comms.goals.todos.get(task)
         live = [s for s in todo.live_strikes() if at in (None, s.at.clock())]
         if not live:
