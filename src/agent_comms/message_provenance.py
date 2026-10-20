@@ -1,4 +1,5 @@
 """The public historical-message decoration, not a source or delivery authority."""
+
 from dataclasses import dataclass
 
 from .recorded_bus import RecordedBusIdentity

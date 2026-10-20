@@ -191,24 +191,31 @@ class FieldPlan:
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
-    def view_fields(self, view: str):
+    def view_fields(self, view: str) -> Iterator[tuple[str, object, Field[object]]]:
         if not self.setting(f"{view}_exclude", False):
             yield from self.projected_fields(view)
 
-    def projected_fields(self, view: str):
+    def projected_fields(self, view: str) -> Iterable[tuple[str, object, Field[object]]]:
         annotation = FieldCodec.view_annotation(self.annotation, view)
-        metadata = dict(self.declared.metadata)
-        for flag in ("wire_inline", "wire_exclude", "wire_bind"):
-            metadata.pop(flag, None)
-        metadata["wire_name"] = self.setting(f"{view}_name", self.key)
-        default = self.view_default(view, annotation)
-        yield self.name, annotation, field(default_factory=default, metadata=metadata)
+        yield self.name, annotation, self.view_field(view, annotation, self.view_metadata(view))
 
-    def view_default(self, view: str, annotation: object):
+    def view_metadata(self, view: str) -> dict[str, object]:
+        metadata = dict(self.declared.metadata)
+        metadata.pop("wire_exclude", None)
+        metadata["wire_name"] = self.setting(f"{view}_name", self.key)
+        return metadata
+
+    def view_field(
+        self, view: str, annotation: object, metadata: dict[str, object],
+    ) -> Field[object]:
         if not self.setting("wire_omit_default", False):
-            return MISSING
-        return lambda: FieldCodec.decode(annotation, FieldCodec.project(
-            self.default(), view, self.annotation))
+            return cast(Field[object], field(metadata=metadata))
+        declaration = field(
+            metadata=metadata,
+            default_factory=lambda: compile_decoder(annotation).decode(
+                FieldCodec.project(self.default(), view, self.annotation)),
+        )
+        return cast(Field[object], declaration)
 
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
@@ -300,8 +307,10 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
 
     metadata_flag = "wire_absent_none"
 
-    def view_default(self, view: str, annotation: object):
-        return lambda: None
+    def view_field(
+        self, view: str, annotation: object, metadata: dict[str, object],
+    ) -> Field[object]:
+        return field(default=None, metadata=metadata)
 
     def omitted(self, value: object) -> bool:
         return value is None or super().omitted(value)
@@ -313,7 +322,7 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
 class ContextFieldPlan(DeclaredFieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
 
-    def projected_fields(self, view: str):
+    def projected_fields(self, view: str) -> Iterable[tuple[str, object, Field[object]]]:
         return ()
 
     metadata_flag = "wire_context"
@@ -344,6 +353,11 @@ class BoundFieldPlan(DeclaredFieldPlan):
 
     metadata_flag = "wire_bind"
 
+    def view_metadata(self, view: str) -> dict[str, object]:
+        metadata = super().view_metadata(view)
+        metadata.pop(self.metadata_flag)
+        return metadata
+
     def decoded_bound(
         self, data: dict[str, object], context: Mapping[str, object]
     ) -> dict[str, object]:
@@ -356,7 +370,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     metadata_flag = "wire_inline"
 
-    def projected_fields(self, view: str):
+    def projected_fields(self, view: str) -> Iterable[tuple[str, object, Field[object]]]:
         _, representation = FieldCodec._representation(self.annotation)
         return FieldCodec.view_fields(self.inlined, "wire" if representation is not None else view)
 
@@ -443,7 +457,7 @@ class FieldRepresentation(ABC):
         return cls
 
     @classmethod
-    def schema_as(cls, target: object) -> dict[str, Any]:
+    def schema_as(cls, target: object) -> dict[str, object]:
         return cls.schema()
 
     @classmethod
@@ -453,6 +467,10 @@ class FieldRepresentation(ABC):
 
 class WiredValue(Protocol):
     def to_wire(self) -> object: ...
+
+
+class ViewedValue(WiredValue, Protocol):
+    wire_view: ClassVar[str]
 
 
 class _WireEncoding(FieldRepresentation):
@@ -468,7 +486,7 @@ class WireForm(_WireEncoding):
 
     @classmethod
     def schema_declaration(cls, target: object) -> type:
-        record = cast(type, target)
+        record = cast(type[ViewedValue], target)
         return FieldCodec.view_type(record, record.wire_view)
 
     @classmethod
@@ -480,7 +498,7 @@ class WireForm(_WireEncoding):
         return FieldCodec.decode(cls.schema_declaration(target), value)
 
     @classmethod
-    def schema_as(cls, target: object) -> dict[str, Any]:
+    def schema_as(cls, target: object) -> dict[str, object]:
         return FieldCodec.record_schema(cls.schema_declaration(target))
 
     @classmethod
@@ -591,7 +609,7 @@ class InlineRecord(WireValue):
     external_json_shape = True
 
     @classmethod
-    def wire_record(cls):
+    def wire_record(cls) -> type:
         return cls
 
     @classmethod
@@ -1115,11 +1133,11 @@ class FieldCodec(Sealed):
 
         current: ClassVar[ContextVar[FieldCodec._SchemaDefinitions]] = ContextVar(
             "field_codec_schema_definitions")
-        definitions: dict[type, tuple[str, dict[str, Any]]] = field(default_factory=dict)
+        definitions: dict[type, tuple[str, dict[str, object]]] = field(default_factory=dict)
         referenced: set[type] = field(default_factory=set)
 
         @classmethod
-        def document(cls, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        def document(cls, build: Callable[[], dict[str, object]]) -> dict[str, object]:
             try:
                 cls.current.get()
             except LookupError:
@@ -1136,7 +1154,7 @@ class FieldCodec(Sealed):
                            if target in owner.referenced}
             return {**schema, "$defs": definitions} if definitions else schema
 
-        def declared(self, target: type, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        def declared(self, target: type, build: Callable[[], dict[str, object]]) -> dict[str, object]:
             if target in self.definitions:
                 self.referenced.add(target)
                 name, _ = self.definitions[target]
@@ -1145,7 +1163,7 @@ class FieldCodec(Sealed):
             name = f"{target.__module__}.{target.__qualname__}"
             while any(name == previous for previous, _ in self.definitions.values()):
                 name += "_"
-            definition: dict[str, Any] = {}
+            definition: dict[str, object] = {}
             self.definitions[target] = (name, definition)
             schema = build()
             definition.update(schema)
@@ -1228,20 +1246,20 @@ class FieldCodec(Sealed):
             return annotation
         origin, args = get_origin(target), get_args(target)
         if origin in (Union, types.UnionType):
-            return Union[tuple(cls.view_annotation(item, view) for item in args)]
+            return reduce(or_, (cls.view_annotation(item, view) for item in args))
         if origin in (list, tuple):
             projected = tuple(item if item is Ellipsis else cls.view_annotation(item, view)
                               for item in args)
             return origin[projected]
         if isinstance(target, type) and issubclass(target, DeclaredFamily):
             members = tuple(cls.view_type(member, view) for member in target.members_with(target))
-            return Union[members] if members else target
+            return reduce(or_, members) if members else target
         if isinstance(target, type) and is_dataclass(target):
             return cls.view_type(target, view)
         return annotation
 
     @classmethod
-    def view_fields(cls, record: type, view: str):
+    def view_fields(cls, record: type, view: str) -> Iterator[tuple[str, object, Field[object]]]:
         if issubclass(record, DeclaredFamily) and record.decodes_tagged_records():
             yield record.family_discriminator, Literal[record.declared_name], field()
         for entry in cls._record_plan(record).bindings:

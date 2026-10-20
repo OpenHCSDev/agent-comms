@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, ClassVar, Type, cast
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
-from .message_provenance import HistoryMessageProvenance
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
@@ -27,6 +26,7 @@ from .field_codec import (
     projected,
 )
 from .mentions import ThreadMention
+from .message_provenance import HistoryMessageProvenance
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
 from .response_policy import InformationalPolicy, ResponseEligibility

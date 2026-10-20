@@ -12,9 +12,9 @@ from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
-    from .history_result import HistoryPageResult
     from .channels import Channel
     from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .history_result import HistoryPageResult
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DMConversation
     from .registry_provenance import RegistryProvenance
