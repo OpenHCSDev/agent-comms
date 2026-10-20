@@ -11,6 +11,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -1039,10 +1040,53 @@ class FieldCodec(Sealed):
             ))
         return cls.alternatives_schema("oneOf", alternatives)
 
+    @dataclass
+    class _SchemaDefinitions:
+        """One schema document owns declaration identities and their references."""
+
+        current: ClassVar[ContextVar[FieldCodec._SchemaDefinitions]] = ContextVar(
+            "field_codec_schema_definitions")
+        definitions: dict[type, dict[str, Any]] = field(default_factory=dict)
+        names: dict[type, str] = field(default_factory=dict)
+        referenced: set[type] = field(default_factory=set)
+
+        @classmethod
+        def document(cls, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+            try:
+                cls.current.get()
+            except LookupError:
+                owner = cls()
+            else:
+                return build()
+            token = cls.current.set(owner)
+            try:
+                schema = build()
+            finally:
+                cls.current.reset(token)
+            definitions = {owner.names[target]: definition
+                           for target, definition in owner.definitions.items()
+                           if target in owner.referenced}
+            return {**schema, "$defs": definitions} if definitions else schema
+
+        def declared(self, target: type, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+            if target in self.definitions:
+                self.referenced.add(target)
+                name = self.names[target].replace("~", "~0").replace("/", "~1")
+                return {"$ref": f"#/$defs/{name}"}
+            name = f"{target.__module__}.{target.__qualname__}"
+            while name in self.names.values():
+                name += "_"
+            self.names[target] = name
+            definition: dict[str, Any] = {}
+            self.definitions[target] = definition
+            schema = build()
+            definition.update(schema)
+            return schema
+
     @classmethod
     def record_schema(cls, target: type) -> dict[str, Any]:
         """Named request fields; external tool/CLI selection remains separate."""
-        return cls._record_schema(target, {}, [])
+        return cls._SchemaDefinitions.document(lambda: cls._record_schema(target, {}, []))
 
     @classmethod
     def _record_schema(
@@ -1059,10 +1103,15 @@ class FieldCodec(Sealed):
 
     @classmethod
     def value_schema(cls, annotation: object) -> dict[str, Any]:
-        """Derive external scalar/array choices from the same decode declarations."""
+        """Derive one complete schema document from the decode declarations."""
+        return cls._SchemaDefinitions.document(lambda: cls._value_schema(annotation))
+
+    @classmethod
+    def _value_schema(cls, annotation: object) -> dict[str, Any]:
         annotation, representation = cls._representation(annotation)
+        definitions = cls._SchemaDefinitions.current.get()
         if representation is not None:
-            schema = representation.schema()
+            schema = definitions.declared(representation, representation.schema)
             if type(None) in get_args(annotation):
                 return cls.alternatives_schema("anyOf", [schema, {"type": "null"}])
             return schema
@@ -1095,9 +1144,9 @@ class FieldCodec(Sealed):
         if annotation in primitive:
             return {"type": primitive[annotation]}
         if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-            return cls._family_schema(annotation)
+            return definitions.declared(annotation, lambda: cls._family_schema(annotation))
         if isinstance(annotation, type) and is_dataclass(annotation):
-            return cls.record_schema(annotation)
+            return definitions.declared(annotation, lambda: cls.record_schema(annotation))
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
