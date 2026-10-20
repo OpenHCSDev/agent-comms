@@ -32,6 +32,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
@@ -279,14 +280,13 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
         env["PYTHONPATH"] = f"{source_root / 'src'}:{source_root / 'tests'}"
         env.update(
             AC_TEST_NATIVE_MANIFEST=str(native_runtime_package.path.parents[3] / "pi-native.sha256"),
-            AGENT_COMMS_ROOT=str(root),
             AGENT_COMMS_THREAD="beta",
             PYTHONDONTWRITEBYTECODE="1",
         )
         env.pop("PI_PROMPT", None)
         child = Path(__file__).with_name("selected_write_owner_child.py")
         process = subprocess.Popen(
-            [sys.executable, "-u", str(child), str(base)],
+            [sys.executable, "-u", str(child), str(base), *LaunchRoot.from_path(root).arguments()],
             env=env,
             cwd=work,
             text=True,
