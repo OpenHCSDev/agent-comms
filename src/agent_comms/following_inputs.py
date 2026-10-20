@@ -30,9 +30,7 @@ class FollowingInputs:
     async def ready(inputs: InputDrain, session_id: str, after_seq: int = 0) -> None:
         """Take accepted work when a running turn opens or frees following capacity."""
         async with inputs.state(session_id).lock:
-            from .input_drain import NoPrivateObservation
-
-            inputs.state(session_id).idle_revision = NoPrivateObservation()
+            inputs.state(session_id).forget_observation()
             owner = await Coordination.run_worker(partial(
                 inputs.comms.registry.require, inputs.sessions.require(session_id),
             ))

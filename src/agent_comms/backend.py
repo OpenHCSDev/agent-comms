@@ -192,13 +192,13 @@ class InputStartListener(ABC):
     started_events: tuple[events.AgentEvent, ...]
 
     @abstractmethod
-    def __call__(self, public_id, native_id, text) -> bool: ...
+    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool: ...
 
 
 class NoInputStartListener(InputStartListener):
     started_events = ()
 
-    def __call__(self, public_id, native_id, text) -> bool:
+    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool:
         return True
 
 
@@ -207,7 +207,7 @@ class ReportInputStart(InputStartListener):
     report: Callable[[str | None, str, str], bool]
     started_events = (events.OriginalInputStarted(),)
 
-    def __call__(self, public_id, native_id, text) -> bool:
+    def __call__(self, public_id: str | None, native_id: str, text: str) -> bool:
         return self.report(public_id, native_id, text)
 
 
@@ -257,7 +257,9 @@ class NativeSession(MroDispatch, ABC):
     ):
         self.launch = launch
         self.tool_socket: ToolTransport
-        self.finish_signal = NoFinishSignal() if finish_event is None else EventFinishSignal(finish_event)
+        self.finish_signal = (
+            NoFinishSignal() if finish_event is None else EventFinishSignal(finish_event)
+        )
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
             model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
@@ -266,7 +268,9 @@ class NativeSession(MroDispatch, ABC):
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
         self.interrupt_boundary = interrupt_boundary
-        self.input_start = NoInputStartListener() if native_start is None else ReportInputStart(native_start)
+        self.input_start = (
+            NoInputStartListener() if native_start is None else ReportInputStart(native_start)
+        )
         self.native_session = native_session
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup

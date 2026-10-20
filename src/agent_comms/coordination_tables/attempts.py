@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import IntFlag
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
@@ -17,7 +17,12 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked, StaleFence
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    RecoveryBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
@@ -27,6 +32,9 @@ from agent_comms.typed_table import (
     ForeignKey,
     TypedTable,
 )
+
+if TYPE_CHECKING:
+    from agent_comms.coordination_snapshot import RecoverySnapshot
 
 
 class ReplayFact(IntFlag):
@@ -53,17 +61,17 @@ class PreviousAttempt(ABC):
     def require(self) -> AttemptRecord: ...
 
     @abstractmethod
-    def require_retry(self, snapshot) -> None: ...
+    def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
 
     def require_newer_owner(self, generation: int) -> None:
-        pass
+        return None
 
 
 class NoPreviousAttempt(PreviousAttempt):
     def require(self) -> AttemptRecord:
         raise StaleFence("execution has no authorized attempt")
 
-    def require_retry(self, snapshot) -> None:
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
         raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")
 
 
@@ -72,7 +80,7 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
     def require(self) -> AttemptRecord:
         return self
 
-    def require_retry(self, snapshot) -> None:
+    def require_retry(self, snapshot: RecoverySnapshot) -> None:
         if not snapshot.can_retry:
             raise RecoveryBlocked("retry requires final death, replay proof, and budget")
 

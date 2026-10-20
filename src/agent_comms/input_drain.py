@@ -8,7 +8,7 @@ from dataclasses import field, dataclass, replace
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from acp.schema import PromptResponse
 
@@ -36,7 +36,7 @@ from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress, MaintenanceStatus
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .private_bus_checkpoint import Addressed
@@ -56,6 +56,9 @@ from .wire_watch import WatchSource, WireWatch
 from .goal_waits import GoalWaits
 from .errors import RelationViolationError, UnregisteredThreadError
 from .turn_context import TurnContext, UserFollowupSegment
+
+if TYPE_CHECKING:
+    from .turn_phase import TurnPhase
 
 AGENT_PREFIX = "!agent "
 
@@ -149,11 +152,15 @@ class PrivateObservationState(ABC):
     settled = False
 
     @abstractmethod
-    async def coordination_unchanged(self, inputs: InputDrain, session_id: str, entry: RegistryEntry) -> bool: ...
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool: ...
 
 
 class NoPrivateObservation(PrivateObservationState):
-    async def coordination_unchanged(self, inputs: InputDrain, session_id: str, entry: RegistryEntry) -> bool:
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool:
         return False
 
 
@@ -166,7 +173,9 @@ class PrivateObservation(PrivateObservationState):
     work: tuple
     settled = True
 
-    async def coordination_unchanged(self, inputs: InputDrain, session_id: str, entry: RegistryEntry) -> bool:
+    async def coordination_unchanged(
+        self, inputs: InputDrain, session_id: str, entry: RegistryEntry,
+    ) -> bool:
         observed = await inputs._observe_coordination(
             session_id, inputs.effects.configured_root_id, self.wire, entry,
         )
@@ -310,12 +319,18 @@ class SettledTick(TickState):
         return self
 
 
-class InputObservation:
+class InputObservation(ABC):
     """File-driven observation and process-local wake behavior."""
 
     comms: Comms
     sessions: SessionLifecycle
+    effects: InputEffects
+    runtime: RuntimeServer
+    auto_wake: bool
     closing: bool
+
+    @abstractmethod
+    def state(self, session_id: str) -> DrainedSession: ...
 
     def turn_live(self, session_id: str) -> bool:
         return self.state(session_id).turn_open() or session_id in self.effects.turns.turn_tasks
@@ -565,7 +580,12 @@ class DrainTurn(ABC):
 
     is_open = False
     has_source = False
-    keys: tuple[str, ...] = ()
+    @property
+    def keys(self) -> tuple[str, ...]:
+        return ()
+
+    def for_phase(self, phase: TurnPhase) -> DrainTurn:
+        return self if phase.accepts_followup else NoDrainTurn()
 
     @abstractmethod
     def opened(self) -> DrainTurn: ...
@@ -583,13 +603,13 @@ class DrainTurn(ABC):
         raise KeyError("Session has no started first input")
 
     def send(self, item: TurnInboxItem) -> None:
-        pass
+        return None
 
-    async def resume(self, maintenance) -> None:
-        pass
+    async def resume(self, maintenance: MaintenanceIngress) -> None:
+        return None
 
     async def finish_original(self, inputs: InputDrain) -> None:
-        pass
+        return None
 
 
 class NoDrainTurn(DrainTurn):
@@ -617,7 +637,7 @@ class AwaitingDrainTurn(DrainTurn):
     def send(self, item: TurnInboxItem) -> None:
         self.inbox.put_nowait(item)
 
-    async def resume(self, maintenance) -> None:
+    async def resume(self, maintenance: MaintenanceIngress) -> None:
         async with maintenance.ingress_async() as status:
             with status.phase.send_running(None) as outcome:
                 outcome.resume(self.inbox)
@@ -665,7 +685,7 @@ class DrainedSession:
 
     def retire_producers(self) -> None:
         self.drain_task = self.wake_task = self.observation_watcher = None
-        self.idle_revision = NoPrivateObservation()
+        self.forget_observation()
         self.repeat_observation = False
 
     def turn_open(self) -> bool:
@@ -679,6 +699,9 @@ class DrainedSession:
 
     def wake_pending(self) -> bool:
         return self.wake_task is not None and not self.wake_task.done()
+
+    def forget_observation(self) -> None:
+        self.idle_revision = NoPrivateObservation()
 
     def settled(self) -> bool:
         return self.idle_revision.settled
@@ -865,7 +888,7 @@ class InputDrain(InputObservation):
             state.repeat_observation = False
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
-        state.idle_revision = NoPrivateObservation()
+        state.forget_observation()
         result = await before.drain(self, session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.

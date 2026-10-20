@@ -15,7 +15,12 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, NoPreviousAttempt, PreviousAttempt, ReplayAssessments
+from agent_comms.coordination_tables.attempts import (
+    AttemptRecord,
+    NoPreviousAttempt,
+    PreviousAttempt,
+    ReplayAssessments,
+)
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit

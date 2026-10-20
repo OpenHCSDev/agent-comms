@@ -381,8 +381,8 @@ class Commander(CommanderContext):
                 with MalformedRecord.refusing(pid):
                     if replacing:
                         listed[pid].require_replacement(replaces)
-                    if pid in listed and listed[pid].assignment:
-                        listed[pid].assignment.require_trace(unit, trace)
+                    if pid in listed:
+                        listed[pid].holder_state.require_trace(unit, trace)
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:
@@ -567,7 +567,7 @@ class Commander(CommanderContext):
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
-        unit = todo.assignment.owner
+        unit = todo.held().owner
         if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
             sys.exit('Refused: --repo must name the recorded order check directory.')
         repo = todo.order.check.directory
@@ -648,7 +648,7 @@ class Commander(CommanderContext):
         refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
         moved = RecordedEventTime(time.time()).at_clock(at)
         self.call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
-            todo.revision, todo.assignment, moved, todo.order, todo.goal)))
+            todo.revision, todo.held(), moved, todo.order, todo.goal)))
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} '
                   f'deadline changed): {why}', 'Deadline',
                   VerdictAudience.of(todo.held().owner, todo.goal))

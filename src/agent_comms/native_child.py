@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class InputForwarder(ABC):
-    """The child's forwarding state owns task admission and retirement."""
+    """The child's forwarding state owns starting and retiring its task."""
 
     @property
     @abstractmethod
@@ -38,7 +38,7 @@ class InputForwarder(ABC):
     async def finish(self) -> None: ...
 
     def raise_failure(self) -> None:
-        pass
+        return None
 
 
 class NoInputForwarder(InputForwarder):

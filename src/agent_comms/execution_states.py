@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .assignment_states import (
     AssignmentState,
@@ -17,6 +17,10 @@ from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .coordination_errors import ResponseClaimBlocked
+
+
+if TYPE_CHECKING:
+    from .coordination_snapshot import RecoverySnapshot
 
 
 @dataclass(frozen=True)
@@ -41,8 +45,8 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     def require_attempt_start(self) -> None:
         raise IdentityConflict("execution cannot start an attempt")
 
-    def require_retry_start(self, snapshot) -> None:
-        pass
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
+        return None
 
     @classmethod
     @abstractmethod
@@ -202,7 +206,7 @@ class InterruptedExecution(AttemptReference, ExecutionState):
 class DeferredExecution(StartsAttempt, InterruptedExecution):
     retry = True
 
-    def require_retry_start(self, snapshot) -> None:
+    def require_retry_start(self, snapshot: RecoverySnapshot) -> None:
         snapshot.previous_attempt.require_retry(snapshot)
 
     @classmethod

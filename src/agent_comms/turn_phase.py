@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, Self, TYPE_CHECKING, TypeVar
+from typing import ClassVar, Self, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
@@ -30,13 +30,10 @@ class StallExempt:
         return self
 
 
-Wait = TypeVar("Wait")
-
-
 class NoModelWait:
     """Native-owned excursions have no Core model-progress deadline."""
 
-    def model_wait(self, backstop: Wait, unbounded: Wait) -> Wait:
+    def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
         return unbounded
 
 
@@ -100,7 +97,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         """Display this phase while preserving the acquired drain readiness."""
         return activity.with_status(self.activity_state, self.activity_detail)
 
-    def model_wait(self, backstop: Wait, unbounded: Wait) -> Wait:
+    def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
         """Select the actual wait capability rather than flatten it to a nullable timeout."""
         return backstop
 
