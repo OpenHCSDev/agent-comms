@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from collections.abc import Iterable
 from contextlib import closing
 from pathlib import Path
@@ -98,6 +99,13 @@ class NativeInputOffsets(Carry):
                     "WHERE session_entry_id IS NOT NULL",
                 )
             )
+            # A located row exists only to find its input in that session. When
+            # the session file was deleted, no reader can use the row, so it is
+            # dropped and named, never given a guessed position.
+            deleted = tuple(row for row in locations if not Path(row[1]).exists())
+            for input_id, file, _entry in deleted:
+                print(f"dropped {input_id}: session deleted ({file})", file=sys.stderr)
+            locations = tuple(row for row in locations if row not in deleted)
             positions = {
                 Path(file): input_offsets(Path(file))
                 for file in {file for _id, file, _entry in locations}
