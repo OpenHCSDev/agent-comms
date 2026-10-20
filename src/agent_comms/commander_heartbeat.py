@@ -116,9 +116,11 @@ class CommanderHeartbeat:
                     # Initial observation, including connector startup, only establishes a baseline.
                     self.reviews[thread.incarnation] = HeartbeatReview(
                         thread.process_identity,
-                        frozenset(StandingRule.broken(comms, thread.name))
-                        if thread.incarnation in commanding
-                        else frozenset(),
+                        (
+                            frozenset(StandingRule.broken(comms, thread.name))
+                            if thread.incarnation in commanding
+                            else frozenset()
+                        ),
                     )
                 elif thread.process_alive:
                     review = self.reviews[thread.incarnation]
