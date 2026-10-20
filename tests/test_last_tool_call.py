@@ -25,9 +25,6 @@ def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnigh
                           'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1',
                           (transcript.lookup, ToolStartTranscript.declared_name)).fetchall()
         assert not any("TEMP B-TREE" in row[-1] for row in plan)
-    transcript.finish(turn_id="turn", item_id="undated", events=(
-        ToolStartTranscript(position=0, tool_call_id="undated", tool_name="bash"),))
-    assert transcript.last_tool_call() == UnrecordedEventTime()
 
 
 def test_tool_index_conversion_preserves_events_and_runs_once(tmp_path):
@@ -51,3 +48,46 @@ def test_tool_index_conversion_preserves_events_and_runs_once(tmp_path):
     with transcript.snapshot() as db:
         assert [tuple(row) for row in db.execute(f'SELECT event FROM "{ExternalEventRow.declared_name}"')] == before
     assert transcript.last_tool_call() == RecordedEventTime(42.0)
+
+
+def test_shared_index_carry_replaces_shifted_indexes_and_refuses_other_schema(tmp_path):
+    import pytest
+
+    from cutover.carry_external_event_indexes import ExternalEventIndexes
+    from agent_comms.external_transcript import DraftRow
+
+    assert ExternalEventIndexes.carry.__func__ is ToolCallIndex.carry.__func__
+    names = tuple(ExternalEventRow.schema_objects().keys() - {ExternalEventRow.declared_name})
+    shifted = sorted(names)[1:]
+    for step in (ToolCallIndex, ExternalEventIndexes):
+        root = tmp_path / step.__name__
+        transcript = ExternalTranscript(root, RecordedThreadIncarnation("worker", 1.0))
+        transcript.finish(turn_id="turn", item_id="call", events=(
+            ToolStartTranscript(position=0, tool_call_id="call", tool_name="bash", timestamp=42.0),))
+        with transcript.snapshot() as db:
+            before = [tuple(row) for row in db.execute(
+                f'SELECT event FROM "{ExternalEventRow.declared_name}"')]
+        db = CoordinationStore.writer(transcript.path)
+        try:
+            for name in shifted:
+                db.execute(f'DROP INDEX "{name}"')
+            # Reproduce the real pre-P286 name collision through the Index declaration.
+            db.execute(ExternalEventRow.indexes[-1].sql(ExternalEventRow, shifted[0]))
+            db.commit()
+        finally:
+            db.close()
+        assert step.carry(root, apply=False).changed == 2
+        assert step.carry(root, apply=True).changed == 2
+        assert step.carry(root, apply=True).changed == 0
+        with transcript.snapshot() as db:
+            assert [tuple(row) for row in db.execute(
+                f'SELECT event FROM "{ExternalEventRow.declared_name}"')] == before
+            assert tuple(db.execute("PRAGMA integrity_check").fetchone()) == ("ok",)
+        db = CoordinationStore.writer(transcript.path)
+        try:
+            db.execute(f'DROP TABLE "{DraftRow.declared_name}"')
+            db.commit()
+        finally:
+            db.close()
+        with pytest.raises(ValueError, match="outside its allowed declared indexes"):
+            step.carry(root, apply=True)

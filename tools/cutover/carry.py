@@ -181,16 +181,10 @@ class StoreCarry(Carry):
         return (cls.store.path_in(root),)
 
 
-class TodoRows(StoreCarry):
-    """A carry over the saved todo rows: one write transaction on the todo store that
-    re-reads every row as declared, then commits on apply and rolls back otherwise."""
-
-    store = TodoStore
-
     @classmethod
     @contextmanager
-    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
-        """None when this bus has no todo store."""
+    def store_transaction(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        """None when this bus has no store; dry runs and errors always roll back."""
         if not cls.store.path_in(root).exists():
             yield None
             return
@@ -198,8 +192,6 @@ class TodoRows(StoreCarry):
             db.execute("BEGIN IMMEDIATE")
             try:
                 yield db
-                for _row in Todo.stream(db):
-                    pass
                 if apply:
                     db.commit()
                 else:
@@ -214,6 +206,21 @@ class TodoRows(StoreCarry):
     ) -> Carried:
         rewritten = tuple(path.name for path in root.glob(f"{cls.store.path_in(root).name}*"))
         return Carried(changed, dict(detail), rewritten if changed and apply else ())
+
+
+class TodoRows(StoreCarry):
+    """Re-read the declared todo rows before the shared store transaction commits."""
+
+    store = TodoStore
+
+    @classmethod
+    @contextmanager
+    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        with cls.store_transaction(root, apply=apply) as db:
+            yield db
+            if db is not None:
+                for _row in Todo.stream(db):
+                    pass
 
 
 @dataclass(frozen=True)
@@ -359,11 +366,22 @@ class CarryChain:
         known = {}
         parents = carry_parents(git(repo, "show", f"{revision}:{STEPS}/carry.py"))
         tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
-        for path in tree:
-            if path.startswith("carry_") and path.endswith(".py"):
-                name = path.removesuffix(".py")
-                known[name] = Step.declared(
-                    name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision, parents)
+        pending = {
+            path.removesuffix(".py"): git(repo, "show", f"{revision}:{STEPS}/{path}")
+            for path in tree if path.startswith("carry_") and path.endswith(".py")
+        }
+        while pending:
+            declared = {
+                name: Step.declared(name, source, revision, parents)
+                for name, source in pending.items() if Step.holds_carry(source, parents)
+            }
+            if not declared:
+                raise ValueError(
+                    f"{sorted(pending)} holds no Carry step; "
+                    "every carry_* module is a step of the chain")
+            known.update(declared)
+            parents.update({step.declaration: step.family for step in declared.values()})
+            pending = {name: source for name, source in pending.items() if name not in declared}
         retired = cls.retired_at(repo, revision, known)
         retired_columns = frozenset(
             column for name in retired
