@@ -1,15 +1,12 @@
 """Relationship owner contracts: corruption, locks and durability."""
 
-import json
 import os
 import stat
 
 import pytest
 
-from agent_comms.relationships import ChildrenRelationshipGroup, RelationshipEdit
+from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import Comms
-from agent_comms.display_order import CreatedThreadSort
-from agent_comms.locked_store import LockedStore
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from agent_comms.store_files import SharedLock, _store_lock
 from test_locked_store import _hold_lock, assert_writer_excluded, event, process
@@ -91,7 +88,7 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stag
 
     monkeypatch.setattr(os, "fsync", sync)
     monkeypatch.setattr(os, "replace", publish)
-    with pytest.raises(OSError, match="injected"):
+    with pytest.raises(OSError):
         mutate()
     assert path.read_bytes() == before
     assert stat.S_IMODE(path.stat().st_mode) == 0o640

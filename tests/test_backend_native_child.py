@@ -1,13 +1,10 @@
 """Saved-session launch fences exercised with the actual pinned Pi child."""
 
 import asyncio
-import os
-from uuid import uuid4
 
 import pytest
 
-from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError, ChildRetirementFailed
-from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError
 
 
 async def test_resource_release_failure_retains_exact_native_child(tmp_path, native_runtime_package):

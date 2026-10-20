@@ -1,18 +1,14 @@
 """Canonical saved clocks survive projection, ACP transport and page rebuild."""
 
-import asyncio
-import json
 from dataclasses import replace
 from datetime import datetime
 
 import pytest
 
-from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.native_entries import NativeEntry, TranscriptProjection
 from agent_comms.routing import TurnRouting
-from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript
 
 

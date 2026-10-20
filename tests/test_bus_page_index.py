@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 from contextlib import closing
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -15,14 +14,11 @@ from agent_comms.comms import Comms
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import AllChannelDisplayScope
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
-from agent_comms.wire_log import (CurrentSnapshotOpening, OpenedWireSnapshot, SavedPrefixOpening,
-                                  WireSnapshot)
+from agent_comms.wire_log import (CurrentSnapshotOpening)
 
 
 def retained_source(root, count, *, access=ArchivedAccess()):

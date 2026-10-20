@@ -1,11 +1,8 @@
 """An idle owner wakes for durable wire changes without a 20 Hz scan."""
 
-from unittest.mock import AsyncMock
 
 import asyncio
 import os
-import sqlite3
-from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +10,6 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
-from agent_comms.threads import Thread
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
 
 

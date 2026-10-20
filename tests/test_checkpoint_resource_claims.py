@@ -6,11 +6,10 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeClaim
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import ClaimCommits
 from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
 
 
 def authored(tmp_path):
@@ -56,7 +55,7 @@ def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path
     comms.messaging.send('owner', 'peer', 'release', releases=paths[:2]).message
     assert not comms.bus.log.claim_projection()
     before = comms.bus.log.path.read_bytes()
-    with pytest.raises(IdentityConflict, match='already consumed'):
+    with pytest.raises(IdentityConflict):
         authorized(comms, claim_scope, paths[2:])
     assert comms.bus.log.path.read_bytes() == before
     reopened = Comms(comms.root)

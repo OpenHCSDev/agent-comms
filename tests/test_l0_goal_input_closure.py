@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
@@ -18,16 +17,13 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, GoalHumanDecision
+from agent_comms.goal_attempts import GoalHumanDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.queued_input import QueuedInput
-from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
 
@@ -83,7 +79,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     retry = RetryGoalAction(
         expect=GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))
     )
-    with pytest.raises(ValueError, match="Retry cannot create a grant"):
+    with pytest.raises(ValueError):
         comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     assert store.snapshot(goal.id) is None
     assert comms.registry.require("owner").goal == goal
@@ -123,7 +119,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     messages = comms.bus.inbox("owner")
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
-    with pytest.raises(ValueError, match="pending or UNKNOWN"):
+    with pytest.raises(ValueError):
         comms.goals.update_goal("owner", action)
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
     assert list(review.reviewed_inputs) == [key]

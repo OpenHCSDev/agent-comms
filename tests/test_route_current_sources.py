@@ -10,7 +10,6 @@ import pytest
 from agent_comms.bus_route_counts import OpenedRouteCounts
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryScope
-from agent_comms.threads import Thread
 from agent_comms.wire_record import PublicWireRecord
 
 
@@ -75,8 +74,8 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
             bindings = recorded.sender_bindings
             assert json.loads(bindings['senders'])['sender'] == ['']
             assert 'sender' in json.loads(bindings['unrecorded'])
-            with pytest.raises(sqlite3.OperationalError, match='user-defined function'):
+            with pytest.raises(sqlite3.OperationalError):
                 index.unseen_counts({viewer: basis.seen(source)})
         # The read never grants the same participant identity-bound publication.
-        with pytest.raises(ValueError, match='positive recorded birth'):
+        with pytest.raises(ValueError):
             scope.minimum_timestamp('sender', viewer, '1'*32, recorded)

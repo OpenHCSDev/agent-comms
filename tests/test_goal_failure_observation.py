@@ -14,7 +14,6 @@ from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
     StaleAttemptError,
-    StorageUncertainError,
     UnresolvedAttemptError,
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
@@ -29,7 +28,6 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import StoredTurnRecord, TurnLeaseFence
 
 

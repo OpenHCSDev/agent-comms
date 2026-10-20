@@ -1,23 +1,12 @@
 """Socket and delivery owners exercised by the real Claude probe."""
 import asyncio
 from contextlib import asynccontextmanager
-import json
-import os
-import signal
-import sys
-from datetime import datetime, timezone
-from html import escape
-from pathlib import Path
+from datetime import datetime
 
 import pytest
-import pytest_asyncio
 
-from agent_comms.child_process import ParentedProcess, ProcessIdentity
-from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
-from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorService, NoReader, REPLIES, VerifySession
-from agent_comms.cli_bridges.shared import Binding, BridgeLog, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
-from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
+from agent_comms.cli_bridges.monitor import AttachMonitor, NoReader, REPLIES
+from agent_comms.cli_bridges.shared import BridgeLog, MONITOR_FRAME
 from agent_comms.messages import InfoKind, Message
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 

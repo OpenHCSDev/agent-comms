@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.rule_file import HardRuleFile, RuleFile
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 
 

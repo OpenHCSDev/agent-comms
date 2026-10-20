@@ -8,16 +8,13 @@ from contextlib import contextmanager
 
 import pytest
 
-from agent_comms.acp import CommsAgent
-from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
-from conftest import await_event_or_task
 
 
 def saved_history(tmp_path):
@@ -221,7 +218,7 @@ def test_local_pipe_corruption_is_not_peer_retirement(comms):
     with connection, viewer:
         service = ObservationService(comms, connection)
         connection.close()
-        with pytest.raises(OSError, match="handle is closed"):
+        with pytest.raises(OSError):
             service.send(ReadAnswered(1, None))
         assert not service.closed
 

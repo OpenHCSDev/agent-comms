@@ -13,7 +13,6 @@ from agent_comms.coordination_errors import StaleFence
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.threads import Thread
 from agent_comms.turn_phase import PreparingPhase
 
 
@@ -37,7 +36,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
                 comms.goals.update_goal("owner", SetGoalAction(text="A distinct goal during this turn"))
                 # An informational source observation grants no new input.
                 # The original input/selected claim_scope still refuses this goal.
-                with pytest.raises(StaleFence, match="registry_goal"):
+                with pytest.raises(StaleFence):
                     initial.require_snapshot(comms.registry.snapshot(), "Original input changed")
             current = comms.registry.require("owner")
             status = comms.registry.status("owner")

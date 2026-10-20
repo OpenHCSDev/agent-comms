@@ -3,8 +3,6 @@
 import json
 import os
 
-import pytest
-from agent_comms.acp_failure import NativeTurnError
 from agent_comms.diagnostics import record_terminal_failure
 
 

@@ -2,9 +2,7 @@
 
 from bus_history import read_history
 import asyncio
-import json
 import os
-from types import SimpleNamespace
 
 import pytest
 
@@ -14,11 +12,9 @@ from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
-from agent_comms.cursor_publication import CursorPublication
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):

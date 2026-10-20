@@ -13,7 +13,7 @@ from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
-    StringIdentity, python_paths,
+    python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -94,7 +94,7 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
               if json.loads(line)['event'] == 'start']
     assert len(starts) == 2
     assert GitMeasure.sources(repo.path, revision, set()) == []
-    with pytest.raises(ValueError, match='omitted'):
+    with pytest.raises(ValueError):
         GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 

@@ -1,14 +1,11 @@
 """Saved files, adapter JSON and predicates share declared field ownership."""
 
-from dataclasses import dataclass
 
 import pytest
 
 from agent_comms.channels import (
     AllOfMatch,
     AnyOfMatch,
-    SavedView,
-    ViewKind,
     ViewMatch,
     ViewPredicate,
 )

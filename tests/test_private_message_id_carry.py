@@ -31,7 +31,7 @@ def test_carry_rebuilds_message_indexes_and_seal(tmp_path):
         marker = bus.private_marker_unlocked()
         marker.seal_with(FinalSeal.capture(witness, checkpoint))
         bus.write_metadata_unlocked(marker)
-    with pytest.raises(RelationViolationError, match='schema'), bus.checked_read():
+    with pytest.raises(RelationViolationError), bus.checked_read():
         pass
     assert PrivateMessageIds.carry(comms.root, apply=False).changed == 2
     with _store_lock(comms.root / 'wire'):

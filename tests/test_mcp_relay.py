@@ -4,24 +4,16 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from contextlib import AsyncExitStack
-from types import SimpleNamespace
 
 import pytest
-from acp.schema import PromptResponse
 
 import agent_comms.agent_events as ae
 import agent_comms.pi_events as pi
-from agent_comms.acp_extension import (
-    McpClientAcknowledgementUpdate,
-    decode_updates,
-)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
-from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
-from delivery_owner_fixture import canonical_agent
+from agent_comms.runtime import SocketClient
 from pi_session_turn import one_turn_events
 
 pytestmark = [

@@ -18,8 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.selected_triage import IgnoreSelectedTriage
+from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -30,7 +29,6 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.

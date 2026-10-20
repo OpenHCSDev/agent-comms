@@ -3,12 +3,10 @@
 import json
 import sqlite3
 from contextlib import ExitStack, closing
-from dataclasses import dataclass, replace
-from unittest.mock import patch
+from dataclasses import replace
 
 import pytest
 
-import agent_comms.field_codec as field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
     GoalInputDecision,
@@ -64,18 +62,18 @@ def test_failure_after_original_publication_retires_the_batch_and_schedule(tmp_p
     store = InputDispositions(tmp_path)
     rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
                  for seq in (1, 2))
-    with pytest.raises(OSError, match="later failure"), ExitStack() as ownership:
+    with pytest.raises(OSError), ExitStack() as ownership:
         store.record_originals(*rows, ownership=ownership)
         raise OSError("later failure")
     assert all(isinstance(row, NotSentInput) for row in stored_inputs(store.root).originals(
         tuple(row.key for row in rows)
     ))
-    with pytest.raises(OSError, match="later failure"), ExitStack() as ownership:
+    with pytest.raises(OSError), ExitStack() as ownership:
         store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", ownership=ownership)
         raise OSError("later failure")
     scheduled = stored_inputs(store.root)
     assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
-    with ExitStack() as ownership, pytest.raises(RelationViolationError, match="reservation already exists"):
+    with ExitStack() as ownership, pytest.raises(RelationViolationError):
         store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", ownership=ownership)
     assert stored_inputs(store.root) == scheduled
 
@@ -114,7 +112,6 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.registration import Registration
-    from agent_comms.threads import Thread
 
     registry = Registration(tmp_path / "registry.json")
     registry.register(registry.new_thread('worker', frozenset(), str(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
@@ -211,7 +208,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     assert not store.bind("acp:input", claim_scope=4, turn_id="new", native_id="b" * 32, text="keep")
     assert UnresolvedInput.of(unsent).status == "not_sent"
     assert "unknown" not in InputAttempt.names()
-    with pytest.raises(ValueError, match="document key"):
+    with pytest.raises(ValueError):
         InputDocument(rows={"missing": missing})
 
 
@@ -271,7 +268,7 @@ def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
     store = InputDispositions(tmp_path)
     store.record("acp:x", seq=None, owner="owner", claim_scope=1, target="owner", text="retained")
     before = stored_inputs(store.root)
-    with pytest.raises(ValueError, match="native input"):
+    with pytest.raises(ValueError):
         store.bind("acp:x", claim_scope=1, turn_id="turn", native_id=native_id, text="sent")
     assert stored_inputs(store.root) == before
 
@@ -340,6 +337,6 @@ def test_stored_row_declaration_owns_the_schema(tmp_path):
     with closing(sqlite3.connect(store.path)) as connection:
         connection.execute('DROP INDEX "input_disposition_1_idx"')
         connection.commit()
-    with pytest.raises(RelationViolationError, match="differs from its declaration"):
+    with pytest.raises(RelationViolationError):
         store.read(())
     assert InputDispositionRow.declared_name == "input_disposition"

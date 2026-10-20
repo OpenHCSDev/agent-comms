@@ -1,15 +1,13 @@
 """Registry reads reuse unchanged declarations but follow external wire writes."""
 
 import json
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.registration import Registration
 from agent_comms.store_files import _atomic_write_text
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
+from agent_comms.thread_status import StoppedThreadStatus
 
 
 def test_malformed_replacement_never_serves_stale_success(tmp_path):

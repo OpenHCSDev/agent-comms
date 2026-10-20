@@ -5,7 +5,6 @@ import pytest
 
 from agent_comms.tools import invoke_tool
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller
 
 

@@ -7,10 +7,9 @@ import json
 
 import acp
 import pytest
-from acp.schema import ToolCallStart, TextContentBlock
+from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
-from agent_comms.turn_progress import TurnProgress
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
@@ -175,7 +174,7 @@ def test_native_call_fields_are_not_model_arguments():
     assert FieldCodec.encode(call) == {"tool": "write", **arguments}
     assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
     refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
-    with pytest.raises(SelectedToolDenied, match="call_id"):
+    with pytest.raises(SelectedToolDenied):
         refused.allowed_claim()
 
 

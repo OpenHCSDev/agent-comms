@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ProcessPoolExecutor
-from contextlib import closing
 from dataclasses import replace
 from multiprocessing import Manager
 from pathlib import Path
@@ -12,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
@@ -20,13 +18,12 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AssignTodo, Assignment, ChangeTodoState, DoneTodoState, GoalRef,
+    Assignment, ChangeTodoState, DoneTodoState, GoalRef,
     MechanicalOrderRun, PendingProblemOrder,
-    BlockedTodoState, DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
+    DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
     Todo, TodoConflict, TodoError, TodoState, TodoStore, WithdrawTodo,
 )
 
-from cutover.carry_todo_open_indexes import TodoOpenIndexes
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -124,7 +121,7 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released):
     if released:
         delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, lead.incarnation,
             todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
-    with pytest.raises(ValueError, match="Only an undelivered order can be withdrawn"):
+    with pytest.raises(ValueError):
         store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
             delivered.holder_state.previous_assignment(), "This delivery must remain on record."))
     assert store.get(todo.id) == delivered

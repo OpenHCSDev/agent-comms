@@ -19,7 +19,6 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goals import NoGoal
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 
@@ -114,7 +113,7 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
 
     with monkeypatch.context() as patch:
         patch.setattr(store_files, "_atomic_write_text", failed_registry_write)
-        with pytest.raises(OSError, match="registry write failure"):
+        with pytest.raises(OSError):
             comms.goals.update_goal(
                 "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
             )

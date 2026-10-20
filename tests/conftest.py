@@ -1,8 +1,6 @@
 """Shared fixtures: an isolated Comms wire per test."""
 from agent_comms.native_package import pinned_location, pinned_native_package
 
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.selected_session import SelectedSession
 import asyncio
 import os
 import subprocess
@@ -23,8 +21,6 @@ from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
-from native_backend_fixture import native_backend_fixture
 
 
 class TranscriptRecords:

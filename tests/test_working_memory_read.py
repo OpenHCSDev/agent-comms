@@ -5,22 +5,13 @@ import sqlite3
 
 import pytest
 
-from agent_comms.coordinator import Coordination
-from agent_comms.coordination_tables.annotations import SpanAnnotationsRow
-from agent_comms.field_codec import FieldCodec
-from agent_comms.registration import Registration
-from agent_comms.thread_identity import UserThreadRole
-from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextSpan, ContributionCoordinates, FileProvenance, SystemLayerSegment,
     UnattributedProvenance,
 )
 from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.working_memory_labels import (
-    AnswerProbability, HumanLabel, JevClassifier, ModelLabel, QuestionVersion,
-)
-from agent_comms.working_memory_questions import (
-    CommitmentSpan, KindQuestion, OtherSpan, RuleSpan,
+    JevClassifier,
 )
 
 

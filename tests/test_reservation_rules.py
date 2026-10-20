@@ -1,14 +1,12 @@
 """Named refusal behavior through the rule family and the real input ledger."""
 
 
-from dataclasses import dataclass
 
 import pytest
 
 from stored_inputs import stored_inputs
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
 from agent_comms.session_revision import SessionRevision
 
 

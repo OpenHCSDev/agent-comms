@@ -2,8 +2,6 @@
 import asyncio
 import os
 import shutil
-import sys
-from dataclasses import replace
 
 import pytest
 
@@ -11,12 +9,11 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.storage_room import (
-    BuildRoomWork, RoomClaim, RoomNeed, TestGateRoomWork, UnitStartRoomWork,
-    WaitingRoomPhase, WorkMeasurement, WorkPeak,
+    BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
+    WaitingRoomPhase,
 )
 from agent_comms.storage_rules import StorageRule, shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.wire_watch import ModifiedWatchSource, open_wire_watcher
 
 
 def copied_root(tmp_path):

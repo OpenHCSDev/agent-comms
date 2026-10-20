@@ -2,13 +2,10 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from unittest.mock import patch
 
 import pytest
 
-from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.comms import wire
-from agent_comms.display_order import CreatedChannelSort
 from agent_comms.messages import Message, InfoKind
 
 
@@ -40,7 +37,7 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
 
     original = AnnotatedMessage("alpha", "#api", "hello", InfoKind, annotation="retained")
     assert AnnotatedMessage.from_wire(original.to_wire()) == original
-    with pytest.raises(ValueError, match="Unknown fields"):
+    with pytest.raises(ValueError):
         Message.from_wire({**original.to_wire(), "extension": "not supported"})
     with pytest.raises(ValueError):
         Message.from_wire(

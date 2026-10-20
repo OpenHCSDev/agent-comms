@@ -4,15 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoTurn
 
-import agent_comms.agent_events as ae
 import agent_comms.ordinary_turn_rules as rules
 from agent_comms.reservation_rules import ReservationViolationError
-from agent_comms.send_outcome import GrantedSend
-from agent_comms.store_files import _store_lock
-from agent_comms.thread_status import StoppedThreadStatus
-from test_acp_goal_input_authority import owner
 from agent_comms.goal_waits import NoGoalWait, RecordedGoalWait
 
 
@@ -20,7 +14,6 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from agent_comms.channel_input_batch import SingleInputBatch
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goals import Goal
-    from agent_comms.threads import Thread
     from agent_comms.turn_goal_permission import ContinuationGoalPermission, TurnGoalPermission
     from agent_comms.turn_input_source import (
         CapturedInputDependency,

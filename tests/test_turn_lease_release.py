@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity

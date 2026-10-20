@@ -20,10 +20,9 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goals import (
-    AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NoGoal, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
+    AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
 )
 from agent_comms.thread_identity import UserThreadRole
-from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 

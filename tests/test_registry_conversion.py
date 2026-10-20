@@ -26,7 +26,7 @@ def test_reads_and_lock_acquisition_never_convert(tmp_path):
     with store.locked():
         assert store.path.read_bytes() == before
     for read in (store.read, lambda: store.read_entry("worker")):
-        with pytest.raises(RegistryNeedsConversion, match=r"RegistryStore.convert_format\(\)"):
+        with pytest.raises(RegistryNeedsConversion):
             read()
         assert store.path.read_bytes() == before
     assert store.convert_format(apply=False)

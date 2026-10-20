@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from conftest import publish_initial
-import asyncio
-import threading
 from functools import partial
 
 import pytest

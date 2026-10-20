@@ -1,16 +1,13 @@
 """Append-aware activity snapshots preserve the existing JSONL recovery contract."""
 
 import json
-import threading
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.activity import Activity, ActivityLog, ActivityState
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import _atomic_write_text
-from agent_comms.threads import Thread
 
 
 def encoded(name="a", detail="before"):

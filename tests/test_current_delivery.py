@@ -5,10 +5,8 @@ from agent_comms.wire_log import WireLog
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
-import os
 import sqlite3
 from collections import Counter
-from unittest.mock import patch
 
 import pytest
 
@@ -18,7 +16,6 @@ from agent_comms.bus_route_counts import (
 )
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
 from agent_comms.routing import DeliveryScope
 from agent_comms.read_basis import ReadCursor, ConversationCursor
 from agent_comms.read_ledger import ReadLedger

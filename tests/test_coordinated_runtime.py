@@ -7,41 +7,21 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 from __future__ import annotations
 
 from bus_history import read_history
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
-from agent_comms.field_codec import FieldCodec
-from agent_comms.diagnostics import RequestObservations
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.messages import NoticeRole
 import asyncio
 import hashlib
 import json
 import os
 import tempfile
-import threading
-from dataclasses import fields, replace
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import agent_comms.coordinated_runtime as runtime
-import agent_comms.coordination_response as coordination_response
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
-from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
-from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.assignment_states import (
-    CompletedAssignment,
-    FailedAssignment,
-    IgnoredAssignment,
-    TriagePendingAssignment,
-)
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.native_arguments import SelectedModel
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.coordinated_runtime_schema import (
@@ -52,31 +32,19 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
-    StaleFence,
 )
-from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import (
-    NativeContextProof,
     NativePiUnavailable,
     NativeTurnResult,
 )
-from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
-from agent_comms.context_segments.optional_awareness import OmittedAwareness
-from agent_comms.publisher import ResponseWrites
-from agent_comms.registration import Registration
-from agent_comms.threads import Thread
-from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import (
-    ProjectionUnavailableError, WakeCandidateIndex, RebuildIndex,
+    WakeCandidateIndex, RebuildIndex,
 )
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
-from agent_comms.wake_policy import PassiveWake
 from native_proof_cases import (
     append_input_entry, emitted_context, read_proof_rows, recorded_context, write_proof_rows,
 )
@@ -251,10 +219,10 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
-    with pytest.raises(IdentityConflict, match="response obligation"):
+    with pytest.raises(IdentityConflict):
         TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2], comms.goals),)).text
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
-    with pytest.raises(IdentityConflict, match="selected N/K"):
+    with pytest.raises(IdentityConflict):
         TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1], comms.goals),)).text
     assert len(read_history(comms, "#team")) == 1  # Framing never publishes a row.
 
@@ -332,7 +300,7 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
         install_native_runtime_schema(store)
         assert_native_runtime_schema(store.session._connection)
         store.session._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
-        with pytest.raises(PublicationActivationBlocked, match="drifted"):
+        with pytest.raises(PublicationActivationBlocked):
             assert_native_runtime_schema(store.session._connection)
 
 

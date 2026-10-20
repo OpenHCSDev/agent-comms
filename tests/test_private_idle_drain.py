@@ -1,31 +1,21 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
 from bus_history import read_history
-from agent_comms.native_package import VerifiedNativePackage
 from conftest import await_event_or_task, publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import os
 import threading
 from contextlib import AsyncExitStack
-from dataclasses import replace
 
 import pytest
 
-import agent_comms.acp as acp
-import agent_comms.cohort_foreground as cohort_foreground
-import agent_comms.coordinated_runtime as coordinated_runtime
-import agent_comms.native_pi as native_pi
-import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 import agent_comms.agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
-from agent_comms.coordination_cohort import next_sealed_assignment
-from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.messages import AlertKind, InfoKind, Message
-from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
 from agent_comms.store_files import StoreLockContention, _store_lock
 from test_acp_private_nk_delivery import _session

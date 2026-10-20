@@ -1,5 +1,4 @@
 """Original sealed messaging survives silent context rows through every projection."""
-from bus_history import read_history
 from conftest import publish_initial
 import hashlib
 import json
@@ -7,7 +6,6 @@ import json
 import pytest
 
 from agent_comms.context_store import AbsentContext
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
@@ -15,9 +13,7 @@ from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord
 from agent_comms.field_codec import FieldCodec
-from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
-from agent_comms.comms import Comms
-from test_private_bus_checkpoint import _root, _page
+from test_private_bus_checkpoint import _root
 
 
 def manifest(owner, generation=1):

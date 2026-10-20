@@ -1,13 +1,10 @@
 """Bus snapshots share read ownership while publication remains exclusive."""
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageSource
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
-from agent_comms.wire_record import WireRecord
 from agent_comms.wire_log import CurrentSnapshotOpening
 
 

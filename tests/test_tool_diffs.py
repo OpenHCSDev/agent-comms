@@ -3,21 +3,14 @@
 from bus_history import read_history
 import json
 from agent_comms.tool_caller import NoThreadCaller
-import sys
 
 import pytest
 
-import agent_comms.agent_events as ae
-from agent_comms.acp import CommsAgent
-from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
-from agent_comms.transcript_events import ToolEndTranscript, TranscriptEvent
-from pi_session_turn import one_turn_events
+from agent_comms.transcript_events import ToolEndTranscript
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 

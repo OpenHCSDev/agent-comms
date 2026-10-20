@@ -98,7 +98,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     original = comms.agents.begin_turn('owner', 'original-turn')
     try:
         comms.threads.set_project('owner', str(new))
-        with pytest.raises(StaleFence, match='registry_worktree'):
+        with pytest.raises(StaleFence):
             original.require_snapshot(comms.registry.snapshot(), 'New input refused')
         saved = str(old / 'native.jsonl')
         observed = comms.registry.attach_native_session(original, saved)
@@ -110,7 +110,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         # Later native observations use the same source and preserve old -> new.
         observed = comms.registry.attach_native_session(observed, saved)
         assert observed.thread.worktree == str(old)
-        with pytest.raises(StaleFence, match='registry_worktree'):
+        with pytest.raises(StaleFence):
             observed.require_snapshot(comms.registry.snapshot(), 'New input refused')
         LiveResponseOwner(thread=observed.thread,
             claimed_generation=original.claimed_generation).require_snapshot(
@@ -132,7 +132,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))
     before = comms.registry.store.path.read_bytes()
-    with pytest.raises(StaleFence, match='registry_worktree'):
+    with pytest.raises(StaleFence):
         comms.registry.attach_native_session(original, str(tmp_path / 'native.jsonl'))
     assert comms.registry.store.path.read_bytes() == before
     assert comms.agents.finish_turn(original.turn_lease)

@@ -1,13 +1,6 @@
 """A stored revision owns one immutable registry snapshot, including empty files."""
-import json
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
 
-from agent_comms.comms import Comms
-from agent_comms.historical_views import ChannelDisplayHistory, ConversationObservation, DMDisplayHistory
 from agent_comms.registration import Registration
-from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.store_files import _atomic_write_text
 
 
 def test_absence_and_recreation_have_distinct_snapshots(tmp_path):

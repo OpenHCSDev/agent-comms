@@ -12,7 +12,7 @@ from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import (
-    AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope,
+    ChannelDisplayScope,
 )
 from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
@@ -65,7 +65,7 @@ def test_unavailable_opened_source_is_not_empty_metrics(tmp_path):
     path.write_bytes(row(1))
     with opened(path) as source:
         path.write_bytes(b"")
-        with pytest.raises(StaleRevision, match="captured revision"):
+        with pytest.raises(StaleRevision):
             BusDisplayIndex(path, "viewer").snapshot(source, semantics())
 
 

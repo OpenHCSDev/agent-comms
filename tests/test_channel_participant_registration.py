@@ -2,8 +2,6 @@
 
 import pytest
 
-from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.registration import Registration
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
@@ -11,7 +9,6 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio

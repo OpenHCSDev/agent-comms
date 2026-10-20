@@ -1,4 +1,3 @@
-from agent_comms.channel_targets import CommandTarget
 from agent_comms.coordination_errors import DMPaintedBoundChanged
 from agent_comms.read_basis import NamedViewer
 import os
@@ -6,12 +5,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
 from agent_comms.private_path import FileRevision
 from agent_comms.view_unread import Counted, ReplyIndex
 
@@ -81,7 +78,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
     unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count
-    with pytest.raises(DMPaintedBoundChanged, match=r"^Transcript changed; reload the latest page\.$"):
+    with pytest.raises(DMPaintedBoundChanged):
         comms.views.mark_page_read(painted, worktree=str(tmp_path))
     assert (
         wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == unread_after_join

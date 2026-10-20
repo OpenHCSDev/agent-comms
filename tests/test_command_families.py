@@ -1,19 +1,13 @@
-from agent_comms.field_codec import FieldCodec, option
+from agent_comms.field_codec import FieldCodec
 
 """External contracts and adding commands without editing any consumer catalog."""
 
-import asyncio
 import json
-import os
-from dataclasses import dataclass
-from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -21,15 +15,10 @@ from agent_comms.history_result import (
     EverythingHistoryPageResult,
 )
 from agent_comms.messages import InfoKind
-from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.runtime import RuntimeProxy, RuntimeServer
-from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime_requests import (
-    ResultRuntimeRequest,
     RuntimeRequest,
 )
-from agent_comms.threads import Thread
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):

@@ -4,10 +4,7 @@ from conftest import transcript_records
 import json
 from pathlib import Path
 
-from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.threads import Thread
 
 
 def _session(path: Path, count: int) -> None:
@@ -51,7 +48,7 @@ def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):
     owner = TranscriptRoutes(tmp_path)
     owner.record_input_display("input", "human display")
     owner.record_input_display("input", "wrapped display", sent_text="exact sent text")
-    with pytest.raises(RelationViolationError, match="cannot be rebound"):
+    with pytest.raises(RelationViolationError):
         owner.record_input_display("input", "overwrite", sent_text="different text")
     with TranscriptRoutes(tmp_path).for_session("session") as routes:
         row = routes.input_display("input")

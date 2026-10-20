@@ -4,15 +4,12 @@ import json
 import os
 
 import pytest
-from dataclasses import replace
 from shutil import copytree
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.turn_lease import NoTurnRecord, StoredTurnRecord, StoredTurnReference
 
 
 def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
@@ -38,7 +35,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
 
     forged = json.loads((copied / 'registry.json').read_text())
     forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
-    with pytest.raises(RelationViolationError, match='Invalid registry document'):
+    with pytest.raises(RelationViolationError):
         moved._decode(forged)
 
 

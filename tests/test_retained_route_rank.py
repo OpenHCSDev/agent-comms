@@ -1,16 +1,10 @@
 """A retained original cut is independent of later routes and timestamp history."""
 
-from agent_comms.wire_log import WireLog
 
-from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
-from unittest.mock import patch
 
-from agent_comms.bus_route_counts import BusRouteCounts, OpenedRouteCounts, RouteSourceRow
+from agent_comms.bus_route_counts import BusRouteCounts, RouteSourceRow
 from agent_comms.comms import wire
-from agent_comms.messages import InfoKind, Message
-from agent_comms.routing import DeliveryScope
-from agent_comms.threads import Thread
 
 
 def measure(index, actor, seen):

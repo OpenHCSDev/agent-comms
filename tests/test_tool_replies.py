@@ -1,36 +1,11 @@
 """Every declared tool's reply is the encoding of its declared result record."""
-from agent_comms.repository_name import RepositoryName
-import os
-from dataclasses import replace
 from typing import get_type_hints
 
-from agent_comms.change_report import FileLine
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, PausedGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.plan_phases import RecordPlanePhase
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
-    StrikeTodo)
-from agent_comms.rule_reviews import DrawnRuleReviewEntry
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
-    CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
-    CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
-    CommsEditGoalTool, CommsFleetStoryTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsOrderStoryTool,
-    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
-    CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
-    CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
-    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
-    CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
-    CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsTurnsTool, CommsVerdictTool,
-    CommsUnjudgedTool, CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
+    ToolRequest,
 )
-from agent_comms.work_branches import WorkBranches
 
 
 def result_type(tool: type[ToolRequest]) -> type:

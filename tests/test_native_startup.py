@@ -1,17 +1,9 @@
 """Native startup readiness is size-aware, and cancellation reaps a starting child."""
 
-import asyncio
-import json
-import os
-import sys
-from contextlib import aclosing
 
 import pytest
 
 from agent_comms.native_startup import MeasuredSessionLoad, NativeStartupPolicy, UnmeasuredSessionLoad
-from pi_session_turn import one_turn_events
-from agent_comms.wire_watch import WatchSource, WireWatch
-from conftest import await_event_or_task
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 

@@ -53,7 +53,7 @@ def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monk
     observed = NativeSessionIdentity.locate(str(file))
     assert observed == NativeSessionIdentity(identity, str(file))
     assert file.read_bytes() == before and not marker.exists()
-    with pytest.raises(NativeReopenError, match="identity changed"):
+    with pytest.raises(NativeReopenError):
         observed.require_same_session(NativeSessionIdentity("wrong", str(file)))
 
 

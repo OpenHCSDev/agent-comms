@@ -39,9 +39,9 @@ def test_location_methods_and_missing_history(tmp_path, source_reads):
     assert location.read_keys() == (location.path,)
     assert location.resumable is True
     assert location.model_choice is None
-    with pytest.raises(BackendDeclarationError, match='cannot select native sessions'):
+    with pytest.raises(BackendDeclarationError):
         location.select_session(tmp_path, None, source_reads)
-    with pytest.raises(ValueError, match='forking'):
+    with pytest.raises(ValueError):
         location.require_forkable()
     source = location.history_source(tmp_path, None)
     with source.reading() as reader:

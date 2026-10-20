@@ -8,7 +8,6 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
-from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])

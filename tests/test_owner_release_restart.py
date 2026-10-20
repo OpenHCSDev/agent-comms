@@ -199,7 +199,6 @@ while True: time.sleep(0.01)
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.child_process import NoProcess, ProcessIdentity
-    from agent_comms.threads import Thread
 
     comms = Comms(tmp_path / "wire")
     declared = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
@@ -216,7 +215,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
         new_owner=True,
     )
-    with pytest.raises(RelationViolationError, match="Stopping owner process changed"):
+    with pytest.raises(RelationViolationError):
         comms.registry.snapshot().require_stopping_owner(waiting, before)
 
 

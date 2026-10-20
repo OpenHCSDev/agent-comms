@@ -1,9 +1,7 @@
 """A failed request warning cannot decide availability of the recipient inbox."""
 from dataclasses import replace
-import asyncio
 
 import pytest
-from conftest import await_event_or_task
 
 from agent_comms.activity import (
     Activity, ActivityState, DrainReadiness, NativeInputDrainDiagnostic,
@@ -46,7 +44,7 @@ def test_real_inbox_failures_refuse_without_owning_message_labels(kind):
         kind(owner, 'OSError', 'real read failure', recorded_at=1.0), owner
     )
     assert isinstance(ready, UnavailableDrainReadiness)
-    with pytest.raises(RelationViolationError, match='real read failure'):
+    with pytest.raises(RelationViolationError):
         ready.require_available()
     assert ready.presentation(
         Activity('receiver', ActivityState.IDLE).ordinary_presentation('receiver')

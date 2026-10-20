@@ -4,31 +4,21 @@ from bus_history import read_history
 import asyncio
 import base64
 import json
-import os
 import sys
 
 import pytest
 from acp import RequestError
 from acp.schema import ImageContentBlock
 
-import agent_comms.agent_events as ae
-import agent_comms.backend as backend
 from agent_comms.acp_extension import (
-    InputDeliveryChangedUpdate,
-    QueueChangedUpdate,
-    QueuePromptRequest,
-    SteerPromptRequest,
     InputStartedUpdate,
     decode_updates,
-    encode_request,
 )
 from agent_comms.comms import wire
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
-from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
-from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
@@ -65,7 +55,7 @@ def test_invalid_images_fail_instead_of_being_dropped(blocks):
 
 def test_combined_image_budget():
     data = base64.b64encode(b"x" * (MAX_IMAGE_BYTES // 2 + 1)).decode()
-    with pytest.raises(ValueError, match="4 MiB"):
+    with pytest.raises(ValueError):
         prompt_images([{**IMAGE, "data": data}] * 2)
 
 

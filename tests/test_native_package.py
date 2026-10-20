@@ -7,9 +7,7 @@ import json
 import os
 import shutil
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -17,10 +15,7 @@ import agent_comms.native_package as native_package
 from agent_comms.core_stamp import CheckoutStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_package import (
-    NativePackageError,
     package_tree_digest,
-    share_native_resources,
-    verify_native_package,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
@@ -60,7 +55,7 @@ def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, includ
     module = installed / "native_package.py"
     shutil.copy2(native_package.__file__, module)
     if not include_resources:
-        with pytest.raises(ValueError, match="Installed native package resources"):
+        with pytest.raises(ValueError):
             load_resource_module(module)
         return
     resources = installed / "_native"

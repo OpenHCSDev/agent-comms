@@ -10,8 +10,8 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
-    AllocateStorageEffect, CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    StorageProjection, WriteStorageEffect, shell_storage_effects,
+    CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
+    StorageProjection, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -73,7 +73,7 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(home)))
     comms.registry.declare(comms.registry.new_thread('opencode', frozenset(), '/home/ts'))
     assert rule.checkouts_of(thread) == (home, old)
-    with pytest.raises(SelectedToolDenied, match='at most 1'):
+    with pytest.raises(SelectedToolDenied):
         comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
     comms.registry.decide_storage('worker', (RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)

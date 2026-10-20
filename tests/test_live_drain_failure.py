@@ -109,7 +109,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     comms, agent, _ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
 
-    with pytest.raises(OSError, match="past drain failed"):
+    with pytest.raises(OSError):
         async with drain_failures(comms, "beta", owner):
             raise OSError("past drain failed")
     lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease

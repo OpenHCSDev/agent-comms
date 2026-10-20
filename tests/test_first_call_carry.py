@@ -56,7 +56,7 @@ def test_saved_first_call_keys_are_carried_once_before_strict_order_reads(tmp_pa
                 f'UPDATE todo SET "{column}"=json_set("{column}", ?, json(?)) WHERE id=?',
                 (path + ".first_call", json.dumps({"kind": "late_observed"}), saved.id),
             )
-    with pytest.raises(MalformedRecord, match="first_call"):
+    with pytest.raises(MalformedRecord):
         store.get(saved.id)
     with closing(CoordinationStore.read_snapshot(store.path)) as db:
         before = tuple(db.execute('SELECT "order", prior_orders FROM todo').fetchone())

@@ -1,31 +1,16 @@
 """An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
-import shutil
 import subprocess
-import shlex
 import time
 
-from dataclasses import replace
 
 import pytest
 
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import OrderGoalAction
-from agent_comms.commander import order as commander_order
-from agent_comms.child_process import CountPrinted
-from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.tools import CommsOrderDoneTool, CommsOrderTool
 from agent_comms.native_tools import NativeRequestTools
-from cutover.carry_todo_order_history import TodoOrderHistory
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
-    InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    MeasuredProgressSource, MergedPullRequest, ProgressPoint, ProgressSource, PullRequest, PullRequests,
-    PushedProgress, Todo, UnmergedListedPullRequest, UnmergedPullRequest, UnreadProgress)
+    OpenPrProgress, OrderProgress, MergedPullRequest, ProgressPoint, PullRequest, PullRequests,
+    PushedProgress, UnmergedPullRequest, UnreadProgress)
 
-from agent_comms.standing_rules import OrderOverdue
 from agent_comms.storage_rules import StorageRule
-from agent_comms.work_branches import WorkBranchError
-from test_commander_problem_orders import create, order, working
 
 
 class Listed(PullRequests):
@@ -135,9 +120,5 @@ def test_unfound_progress_says_from_its_class_whether_it_stalls(progress, line, 
 ])
 def test_work_that_stops_moving_stalls(progress, now, stalled):
     assert progress.stalled(100.0, now) is stalled
-
-
-def order_alarms(script):
-    return [rule.line() for rule in OrderOverdue.violations(script.comms, script.commander)]
 
 

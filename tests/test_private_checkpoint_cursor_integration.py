@@ -5,7 +5,6 @@ Provider-free native fake only: a source prefix record is not an ACK or input pe
 
 from __future__ import annotations
 
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import os
 import tempfile
@@ -13,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -27,9 +25,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import NativeSourceCursor
-from agent_comms.threads import Thread
-from agent_comms.tracked_turn import TrackedTurnSession
-from test_native_prompt_binding import _fake_model
 
 
 @pytest.fixture

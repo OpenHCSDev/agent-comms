@@ -1,27 +1,16 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
 
-import asyncio
-from threading import Event
 
 import pytest
 
-import agent_comms.agent_events as events
-from agent_comms.acp import CommsAgent
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goal_attempts import GoalAttemptError, GoalAttemptStore
+from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import (
-    BlockedGeneration, CancelledGeneration, CompletedGeneration, ReadyGeneration,
+    CompletedGeneration, ReadyGeneration,
 )
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal, ReportedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from agent_comms.owned_turn import OwnedTurn
-from agent_comms.input_attempt import NotSentInput
-from agent_comms.turn_goal_account import TurnGoalAccount
-from agent_comms.turn_input_source import OriginalTurnInput
-from test_s1_event_behavior import owner_turn as owner_turn
-from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 

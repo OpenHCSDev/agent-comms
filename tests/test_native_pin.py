@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 
 from agent_comms.native_build_inputs import NativeBuildInputs
 

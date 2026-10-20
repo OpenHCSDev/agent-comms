@@ -7,12 +7,10 @@ import os
 import pytest
 
 from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
-from agent_comms.comms import Comms
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.pi_payloads import ToolCallContent
-from delivery_owner_fixture import canonical_agent, reply_turn_finished
 
 
 @pytest.mark.parametrize("name, arguments, encoded", [

@@ -1,16 +1,9 @@
 """A command owns its selected bus; importing its declarations opens nothing."""
 import os
-import shutil
 import subprocess
 import sys
 
-import pytest
 
-from agent_comms.commander.order import Commander
-from agent_comms.commander.request import RequestVerb
-from agent_comms.comms import Comms
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import RequestGoalOrder
 
 
 def test_importing_order_with_empty_home_reads_no_config_and_opens_no_store(tmp_path):

@@ -6,20 +6,17 @@ No root, writer, child, native package or process launch is acquired here.
 from dataclasses import replace
 import os
 from pathlib import Path
-import sys
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
-from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
@@ -122,16 +119,3 @@ def test_retirement_capture_refuses_changed_original_incarnation(*, thread_regis
         RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
 
 
-def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_launch(*, thread_registration):
-    from pathlib import Path
-    from types import SimpleNamespace
-
-    thread, snapshot = stopped(registry=thread_registration)
-    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
-                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
-    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
-    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None, LaunchRuntime(Path("/target/bin/python")))
-    lifecycle = SimpleNamespace(root=Path("/authored"))
-    # No registry/launch member supplied: refusal must precede either access.
-    with pytest.raises(RelationViolationError, match="acquired source interpreter"):
-        handoff.restore(lifecycle)

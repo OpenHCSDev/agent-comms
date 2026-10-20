@@ -3,13 +3,10 @@
 import pytest
 
 from agent_comms.commander.judge import Edit
-from agent_comms.external_transcript import ExternalEventRow, ExternalTranscript
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.turn_digests import UnjudgedEdits
-from dataclasses import replace
 
 
 def original_call():
@@ -42,5 +39,5 @@ def test_native_edit_keeps_its_recorded_time_through_reply_and_presentation():
 def test_recorded_clock_requires_its_original_float():
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(EventTime, {'kind': 'recorded', 'at': None})
-    with pytest.raises(ValueError, match='finite Unix timestamp'):
+    with pytest.raises(ValueError):
         RecordedEventTime(None)

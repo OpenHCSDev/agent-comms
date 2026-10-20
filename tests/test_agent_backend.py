@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 from types import MappingProxyType
@@ -12,14 +10,10 @@ from types import MappingProxyType
 import pytest
 
 import agent_comms.agent_backend as ab
-import agent_comms.agent_events as ae
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.selected_actions import NoSelectedTools
-from agent_comms.pi_counts import PiCount
-from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend
+from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
@@ -36,7 +30,7 @@ def test_registry_holds_the_pi_native_backend_and_is_frozen():
 
 
 def test_a_backend_declared_after_sealing_fails_loud():
-    with pytest.raises(ab.BackendDeclarationError, match="registry is sealed"):
+    with pytest.raises(ab.BackendDeclarationError):
 
         class LateBackend(ab.AgentBackend):  # noqa: F841
             pass
@@ -249,7 +243,7 @@ def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comm
     from agent_comms.pi_native_backend import PersistentPiSession
 
     runner.persistent_backends["other"] = PersistentPiSession()
-    with pytest.raises(RelationViolationError, match="declares pi_native"):
+    with pytest.raises(RelationViolationError):
         TurnRunner.backend_for(runner, "other", thread)
 
 

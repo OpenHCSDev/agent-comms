@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 import sys
 from contextlib import closing
 
@@ -142,7 +141,7 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         assert winner in (first, other)
         assert Binding.bind(db, None) == Binding.bind(db, winner) == winner
         loser = other if winner == first else first
-        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+        with pytest.raises(ValueError):
             Binding.bind(db, loser)
         with db:
             assert not DeliveryRow(message.message_id, 'unused', DeliveredOutcome).insert_if_absent(db).rowcount

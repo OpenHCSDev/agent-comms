@@ -1,21 +1,11 @@
 """Merge observation closes the real stored order, without a completion request."""
 from agent_comms.repository_name import RepositoryName
-from dataclasses import fields, replace
-import json
 import subprocess
 
 import pytest
 
 from agent_comms.repo import Repo
-from agent_comms.field_codec import FieldCodec
-from agent_comms.plan_phases import RecordPlanePhase
-from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
-                               MergedPullRequest, PullRequests, UnorderedProblemOrder)
-from agent_comms.tools import CommsOrderDoneTool, CommsOrderServeTool
-from agent_comms.recorded_time import RecordedEventTime
-from cutover.carry_merged_orders import MergedOrders
-from test_commander_problem_orders import working
-from test_order_progress import checkout, commit, order_alarms, git
+from test_order_progress import git
 
 
 def test_failed_git_is_not_a_negative_ancestry_result(tmp_path):

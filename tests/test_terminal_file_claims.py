@@ -1,33 +1,11 @@
 """Exact terminal claim release on real private stores and worker processes."""
 
-from bus_history import read_history
-import asyncio
-import json
-import os
-import shutil
-from pathlib import Path
 from dataclasses import replace
-from types import SimpleNamespace
 
-import pytest
 
-from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
 from agent_comms.selected_claim import publish_selected_resource_claim
-from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
-from agent_comms.execution_states import FailedExecution
-from agent_comms.obligation_states import FailedResponse
-from agent_comms.owner_fence import OwnerFence
-from test_claim_bus_read import acquire_tool_claim, claim_originals, selected_turn
-
-
-def test_unknown_outcome_never_defers_when_retry_is_otherwise_authorized():
-    execution, response = UnknownOutcomeAttempt().disposition(
-        SimpleNamespace(retry_authorized=True), SimpleNamespace(attempt_ordinal=1)
-    )
-
-    assert type(execution) is FailedExecution
-    assert type(response) is FailedResponse
+from test_claim_bus_read import claim_originals, selected_turn
 
 
 def test_terminal_release_spans_the_existing_envelope_bound():

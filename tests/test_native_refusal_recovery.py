@@ -1,21 +1,14 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
 from agent_comms.native_arguments import SelectedModel
 
-import asyncio
 import json
-from pathlib import Path
 
 import pytest
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
 import agent_comms.native_pi as native_pi
 import agent_comms.pi_events as pi_events
-from agent_comms.acp_extension import RequestFailedUpdate
-from agent_comms.goal_actions import SetGoalAction
-from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
-from test_acp import facts
 from test_backend import _NATIVE_PROMPT_START, _replay_stub
 
 OVERLOADED = "Our servers are currently overloaded. Please try again later."

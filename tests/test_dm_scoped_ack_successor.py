@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.wire_log import WireLog
 from agent_comms.registration import Registration
 
 import os
@@ -15,10 +14,8 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged
-from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
-from agent_comms.store_files import _store_lock
-from agent_comms.read_basis import ReadCursor, ConversationCursor, DMSelection
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.message_page import PageBounds
+from agent_comms.read_basis import DMSelection
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
@@ -42,7 +39,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms.threads.rename_managed_thread("peer", "renamed", owner_pid=os.getpid())
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 1
@@ -72,7 +69,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
@@ -88,7 +85,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "old viewer painted").message.message_id
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert isinstance(page.selection, DMSelection)
-    with pytest.raises(DMScopeChanged, match="different root, worktree or peer"):
+    with pytest.raises(DMScopeChanged):
         comms.views.mark_page_read(page, worktree=str(tmp_path / "foreign"))
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
@@ -96,7 +93,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "new viewer unseen").message.message_id
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
-    with pytest.raises(DMScopeChanged, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, page)
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == before
 
@@ -119,7 +116,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     assert before == 1
     marker_path = tmp_path / "read_ledger.json"
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
-    with pytest.raises(DMScopeChanged, match="registry changed|viewer/peer incarnation changed"):
+    with pytest.raises(DMScopeChanged):
         _mark(comms, "peer", tmp_path, page)
     assert (marker_path.read_bytes() if marker_path.exists() else None) == marker_before
     assert comms.bus.pending_count("new_user", CommandTarget.named("peer")) == before

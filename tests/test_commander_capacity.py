@@ -2,11 +2,8 @@
 
 import pytest
 
-from agent_comms.commander import capacity
 from agent_comms.commander.capacity import Load
 from agent_comms.field_codec import FieldCodec
-from agent_comms.tools import CommsCommanderLoadTool
-from test_commander_problem_orders import create
 
 
 @pytest.mark.parametrize("unjudged", [0, 1, 395, 1_000_000])

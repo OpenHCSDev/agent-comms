@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
-from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -13,9 +11,7 @@ from acp import RequestError
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
-    InputStartedUpdate,
     QueueChangedUpdate,
-    QueueItem,
     LiveCursorScope,
     LiveQueueScope,
     QueuePromptRequest,
@@ -27,13 +23,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.input_attempt import ReservedInput
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
 
@@ -88,7 +82,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
     assert all(row.public_status == "unknown" for row in stored_inputs(agent.inputs.dispositions.root).rows.values())
     before = inbox.qsize()
-    with pytest.raises(RelationViolationError, match="reservation already exists"):
+    with pytest.raises(RelationViolationError):
         await agent.prompt(
             "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
         )

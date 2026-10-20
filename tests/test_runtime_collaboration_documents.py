@@ -1,16 +1,12 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
 
 import json
-import time
 from unittest.mock import patch
 
 import pytest
 
-from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import RuntimeInfoStore
-from agent_comms.shared_ledger import SharedLedger, LedgerDocument
-from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
+from agent_comms.shared_ledger import SharedLedger
 from test_locked_store import assert_writer_excluded
 
 

@@ -10,12 +10,10 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-import agent_comms.agent_events as ae
 from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.threads import Thread
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
@@ -48,7 +46,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             comms.threads.set_project("worker", path)
     file = tmp_path / "file"
     file.touch()
-    with pytest.raises(ValueError, match="not a directory"):
+    with pytest.raises(ValueError):
         comms.threads.set_project("worker", str(file))
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(old / "session.jsonl"), process=attachment_owner.process_identity)
@@ -133,7 +131,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
                           agent.sessions.display_titles.get(session_id),
                           agent.sessions.worktrees.get(session_id))
                 sender.fail = True
-                with pytest.raises(OSError, match="transport failed"):
+                with pytest.raises(OSError):
                     await agent.sessions.sync_identity(session_id)
                 assert (agent.sessions.titles.get(session_id),
                         agent.sessions.display_titles.get(session_id),

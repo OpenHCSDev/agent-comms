@@ -9,8 +9,6 @@ from agent_comms.historical_views import (
     DMDisplayHistory,
     DMDisplayIdentity,
 )
-from agent_comms.registry_store import RegistryStore
-from conftest import publish_initial
 
 
 def declared_wire(root):

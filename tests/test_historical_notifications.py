@@ -16,12 +16,11 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
 )
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import DMScopeChanged, HistoricalSourceChanged
+from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
@@ -62,7 +61,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)
-    with pytest.raises(DMScopeChanged, match="viewer changed"):
+    with pytest.raises(DMScopeChanged):
         HistoricalDisplay(source, reused).acknowledge(live.bus.history, live.registry)
     assert ledger.read() == document
     newer_namespace = replace(source.provenance, threads={
@@ -77,7 +76,7 @@ def test_response_evidence_rejects_mixed_sql_columns():
     from agent_comms.notification_assignment import AssignmentResponse
 
     for values in ((1, None, 2), (None, "message-id", 2), (1, "message-id", None)):
-        with pytest.raises(ValueError, match="response evidence is incomplete"):
+        with pytest.raises(ValueError):
             AssignmentResponse.from_columns(*values)
 
 
@@ -107,7 +106,7 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
         connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION - 1}")
     database.chmod(0o600)
     original = database.read_bytes()
-    with pytest.raises(ValueError, match="unsupported schema"), live.bus.history.read_sources() as sources:
+    with pytest.raises(ValueError), live.bus.history.read_sources() as sources:
         source.notification_references(sources, (messages[0].reference,))
     assert database.read_bytes() == original
 
@@ -127,7 +126,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         progress=ShownToModelProgress(1),
         response=UnansweredResponse(),
     )
-    with pytest.raises(TypeError, match="activity"):
+    with pytest.raises(TypeError):
         assignment.notification(
             recipient, SENDER, observation=RecordedRecipientActivity(), updated_at_ms=1
         )

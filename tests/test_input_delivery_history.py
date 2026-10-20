@@ -1,21 +1,14 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
-import os
 from dataclasses import replace
 
-import pytest
 
 from agent_comms.comms import wire
-from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
-from delivery_owner_fixture import canonical_agent
 
 
 def seed(comms, name):

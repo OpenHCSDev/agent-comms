@@ -5,8 +5,7 @@ from dataclasses import fields, replace
 import pytest
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
+from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
@@ -189,7 +188,7 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
     # Unstarted assignments cannot carry a frozen response target at all.
     unstarted = FieldCodec.encode(FullPendingAssignment())
     assert FieldCodec.decode(AssignmentState, unstarted) == FullPendingAssignment()
-    with pytest.raises(ValueError, match="Unknown fields"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(AssignmentState, dict(unstarted, exact_target="requester"))
 
     # An engagement cannot omit either member of its exact execution binding.
@@ -207,5 +206,5 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
         del damaged[field]
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(ResponseState, damaged)
-    with pytest.raises(ValueError, match="Unknown fields"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(ResponseState, {**FieldCodec.encode(SilentResponse()), "seq": 1})

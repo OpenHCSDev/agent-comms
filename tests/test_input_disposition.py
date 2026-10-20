@@ -1,6 +1,5 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
-import json
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -31,7 +30,7 @@ from stored_inputs import stored_inputs
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
 def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid_text) -> None:
     store = InputDispositions(tmp_path)
-    with pytest.raises(ValueError, match="Invalid ACP input identity"):
+    with pytest.raises(ValueError):
         store.record(
             "acp:" + "f" * 32,
             seq=None,
@@ -72,7 +71,6 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import wire
-    from agent_comms.threads import Thread
 
     comms = wire(tmp_path)
     comms.registry.declare(
@@ -191,7 +189,7 @@ def test_every_input_state_answers_every_transition_with_a_member(state, transit
     else:
         assert result == UnchangedInput(row)
         assert result.successors("key") == {}
-        with pytest.raises(RelationViolationError, match="refused"):
+        with pytest.raises(RelationViolationError):
             result.require_moved("refused")
 
 

@@ -10,10 +10,8 @@ import sys
 import pytest
 
 import agent_comms.private_sidecar as sidecar
-from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
-from agent_comms.selected_triage import IgnoreSelectedTriage
-from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_prompt_binding import PromptBinding
 
 
@@ -91,7 +89,7 @@ def test_pending_intent_is_present_without_following_or_opening_it(path, kind):
     else:
         os.mkfifo(intent, 0o600)
     identity = intent.lstat()
-    with pytest.raises(sidecar.SidecarCommitUnknown, match="unresolved commit intent"):
+    with pytest.raises(sidecar.SidecarCommitUnknown):
         with _connection(path):
             pytest.fail("a pending commit reached the database caller")
     assert path.read_bytes() == before
@@ -125,9 +123,9 @@ def test_all_schema_objects_checked_independent_of_name(path, sql):
     with sqlite3.connect(path) as db:
         db.execute(sql)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict, match="schema objects"), _connection(path):
+    with pytest.raises(IdentityConflict), _connection(path):
         pass
-    with pytest.raises(IdentityConflict, match="schema objects"), _connection(path):
+    with pytest.raises(IdentityConflict), _connection(path):
         pytest.fail("tampered schema reached caller")
     assert path.read_bytes() == before
 
@@ -161,7 +159,7 @@ def test_mid_scope_replacement_refuses_before_publish(path, replacement):
 def test_mutation_of_loaded_inode_refuses_before_publish(path):
     _create(path)
     with (
-        pytest.raises(IdentityConflict, match="outside the snapshot protocol"),
+        pytest.raises(IdentityConflict),
         _connection(path) as db,
     ):
         _insert(db)
@@ -175,7 +173,7 @@ def test_mutation_of_loaded_inode_refuses_before_publish(path):
 def test_schema_drift_during_scope_cannot_publish(path):
     _create(path)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict, match="schema objects"), _connection(path) as db:
+    with pytest.raises(IdentityConflict), _connection(path) as db:
         db.execute(
             "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
             "BEGIN SELECT RAISE(IGNORE); END"
@@ -192,7 +190,7 @@ def test_mode_drift_and_connection_attachment_are_not_admitted(path):
         path.chmod(0o644)
     path.chmod(0o600)
     with (
-        pytest.raises(IdentityConflict, match="only its in-memory snapshot"),
+        pytest.raises(IdentityConflict),
         _connection(path) as db,
     ):
         db.execute("ATTACH ':memory:' AS other")

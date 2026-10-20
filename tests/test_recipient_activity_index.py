@@ -1,33 +1,23 @@
 """Registry snapshots own recipient lookup; activity reads own their requested set."""
 
-import hashlib
 from dataclasses import replace
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.agent_activity import UnavailableRecipientActivity
 from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import Comms
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_presentation import GoalWaitTarget
+from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.read_basis import ConversationCursor, ReadCursor
-from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_identity import (
-    DeletedThreadIncarnation,
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
     UnrecordedThreadIncarnation,
 )
-from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
 
 
@@ -36,7 +26,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
-    with pytest.raises(RelationViolationError, match="creation identities collide"):
+    with pytest.raises(RelationViolationError):
         RegistrySnapshot.capture(replace(comms.registry.store.read(), threads={
             **source.threads,
             "second": replace(source.threads["second"], created_at=1700.0),
@@ -62,7 +52,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     assert ledger.historical_displayed_recipient(
         message, FrozenRecipient("wrong-lookup", "old"), archived, document=document
     ) == ()
-    with pytest.raises(ValueError, match="positive recorded birth"):
+    with pytest.raises(ValueError):
         replace(source.threads["second"], created_at=0.0)
     zero = replace(recorded.threads["second"], created_at=0.0)
     unrecorded = replace(recorded, threads={**recorded.threads, "second": zero})

@@ -1,16 +1,11 @@
 """Recurring problems must replace their duplicated fact with a declaration."""
-import json
-from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.commander.order import OrderVerb
 from agent_comms.todos import (
-    DeclarationDerivation, Derivation, LocatedProblemFinding, Slop, TodoError,
+    DeclarationDerivation, Derivation,
 )
-from test_commander_problem_orders import create, order_body
 
 
 @pytest.mark.parametrize('mechanism', [

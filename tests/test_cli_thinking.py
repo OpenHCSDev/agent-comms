@@ -1,14 +1,8 @@
 """Stopped-thread configuration uses the session's model-specific catalog."""
 
-import pytest
 
-from agent_comms.cli_commands import ConfigureCliCommand
-from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLevels
-from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
-from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier
-from agent_comms.threads import Thread
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 
 def test_native_arguments_configured_has_one_default(monkeypatch):

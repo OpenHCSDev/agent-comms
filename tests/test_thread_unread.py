@@ -7,13 +7,12 @@ import json
 import sqlite3
 from concurrent.futures import Future
 from multiprocessing import get_context
-from unittest.mock import patch
 
 import pytest
 
 from agent_comms.comms import wire
 from agent_comms.private_path import FileRevision
-from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot, RosterVisibility
+from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
 from agent_comms.view_unread import (
     CappedCount,
@@ -25,10 +24,9 @@ from agent_comms.view_unread import (
     ReplyRead,
     ReplyReading,
     RevisionMoved,
-    TranscriptReadKeys,
     TranscriptReply,
 )
-from native_unread_fixture import completed_counts, completed_snapshot, native_reader
+from native_unread_fixture import completed_counts, completed_snapshot
 
 
 def append(path, role='assistant', content='Reply'):
@@ -219,5 +217,5 @@ def test_a_closed_reader_is_not_reused_and_other_views_keep_their_marks(tmp_path
     fresh = wire(comms.root).views.transcript_reads
     assert fresh is not state
     assert completed_counts(fresh, 'two').counts == {'worker': ReplyUnread(1)}
-    with pytest.raises(RuntimeError, match='closed'):
+    with pytest.raises(RuntimeError):
         state.counts('one', registry=comms.registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER)

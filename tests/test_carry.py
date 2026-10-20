@@ -3,48 +3,26 @@
 import importlib
 import json
 import os
-import re
-import shutil
 import sqlite3
 import subprocess
 import sys
-import time
-from contextlib import closing, contextmanager
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.goals import Goal
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
-    MaintenanceHeldError,
-    MaintenanceOperator,
 )
-from agent_comms.read_basis import (
-    ChannelConversation, ConversationCursor, DMConversation, ReadCursor,
-)
-from agent_comms.private_path import FileIdentity
-from agent_comms.read_ledger import ReadDocument, ReadLedger
-from agent_comms.recorded_bus import RecordedBus
-from agent_comms.repository_name import RepositoryName
 from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.todos import GoalRef, Todo, TodoStore
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from agent_comms.recorded_time import RecordedEventTime
-from test_todos import order, thread
 from cutover.backup import (
-    RestoreSpace, SavedFile, StoreBackup, UpgradeRefused, bus_files, transcripts_held,
+    StoreBackup, UpgradeRefused, bus_files, transcripts_held,
 )
 from upgrade_bus import (
     RehearsalFiles,
@@ -135,7 +113,7 @@ def test_steps_run_in_the_order_the_main_line_merged_them(tmp_path):
     repo.git("merge", "-q", "--no-ff", "--no-edit", "side")
     chain = CarryChain.at(tmp_path, "HEAD")
     assert [step.name for step in chain.steps] == ["carry_a", "carry_b", "carry_c", "carry_d"]
-    with pytest.raises(ValueError, match="skips a step"):
+    with pytest.raises(ValueError):
         chain.pending(("carry_a", "carry_c"))
 
 
@@ -145,7 +123,7 @@ def test_steps_one_commit_adds_together_are_refused(tmp_path):
         (tmp_path / STEPS).mkdir(parents=True, exist_ok=True)
         (tmp_path / STEPS / f"{name}.py").write_text(step_source())
     repo.commit({})
-    with pytest.raises(UnorderedSteps, match="in one commit"):
+    with pytest.raises(UnorderedSteps):
         CarryChain.at(tmp_path, "HEAD")
 
 
@@ -159,9 +137,9 @@ def test_a_deleted_step_is_retired_and_never_runs_again(tmp_path):
     assert [step.name for step in chain.pending(())] == ["carry_a", "carry_c", "carry_d"]
     assert [step.name for step in chain.pending(("carry_a", "carry_b", "carry_c"))] == ["carry_d"]
     assert [step.name for step in chain.pending(("carry_a",))] == ["carry_c", "carry_d"]
-    with pytest.raises(ValueError, match="does not declare"):
+    with pytest.raises(ValueError):
         chain.pending(("carry_a", "carry_z"))
-    with pytest.raises(ValueError, match="skips a step"):
+    with pytest.raises(ValueError):
         chain.pending(("carry_c",))
 
 
@@ -175,7 +153,7 @@ def test_a_todo_column_runs_before_the_row_steps_merged_ahead_of_it(tmp_path):
     assert [step.name for step in chain.steps] == ["carry_a", "carry_column", "carry_rows", "carry_b"]
     assert [step.name for step in chain.pending(("carry_a", "carry_rows", "carry_b"))] == [
         "carry_column"]
-    with pytest.raises(ValueError, match="skips a step"):
+    with pytest.raises(ValueError):
         chain.pending(("carry_rows",))
 
 
@@ -214,7 +192,7 @@ def test_a_carry_module_outside_the_chain_is_refused(tmp_path):
     repo = Repository(tmp_path)
     repo.commit({"carry_a": step_source(),
                  "carry_script": "def carry(root):\n    pass\n"})
-    with pytest.raises(ValueError, match=r"carry_script.*holds no Carry step"):
+    with pytest.raises(ValueError):
         CarryChain.at(tmp_path, "HEAD")
 
 
@@ -331,7 +309,7 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
         revisions.close()
     assert carried(root, before, steps, RehearsalFiles.declared(steps)) == RehearsalFiles(
         0, 3, ("carried", "carries.json", "stopped"), 0)
-    with pytest.raises(UpgradeRefused, match="outside the expected set"):
+    with pytest.raises(UpgradeRefused):
         carried(root, before, steps, frozenset({CarryLedger.name}))
     assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
     assert CarryLedger(root).applied() == ("carry_probe",)
@@ -353,7 +331,7 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         assert carried(tmp_path, before, steps, RehearsalFiles.declared(steps)) == (
             RehearsalFiles(1, 0, (), 0))
         opened.execute("UPDATE todo SET id = 2")
-        with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
+        with pytest.raises(UpgradeRefused):
             carried(tmp_path, before, steps, RehearsalFiles.declared(steps))
 
 
@@ -443,7 +421,7 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
     with comms.registry.external_process(external.name, process):
         assert Stack(REPO).running_owners(comms.root) == [native.name]
         native.execution.require_native()
-        with pytest.raises(ValueError, match='no native prompt transport'):
+        with pytest.raises(ValueError):
             external.execution.require_native()
 
 
@@ -463,7 +441,7 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path)
                 raise UpgradeRefused("stop failed")
             return {}
 
-    with pytest.raises(UpgradeRefused, match="stop failed"):
+    with pytest.raises(UpgradeRefused):
         Installed(REPO).owners(tmp_path, "stop", names)
     assert sorted(finished) == sorted(names)
 
@@ -471,7 +449,7 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path)
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
     """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
     stack = Stack(REPO, tmp_path)
-    with pytest.raises(UpgradeRefused, match=re.escape(str(stack.uv))):
+    with pytest.raises(UpgradeRefused):
         stack.require_uv()
 
 

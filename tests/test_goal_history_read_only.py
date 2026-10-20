@@ -1,6 +1,5 @@
 """Authored journal acquisition; no original retained root or runtime operation."""
 from dataclasses import replace
-from pathlib import Path
 import sqlite3
 
 import pytest
@@ -8,7 +7,6 @@ import pytest
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
-from agent_comms.threads import Thread
 
 
 def authored_history(root):

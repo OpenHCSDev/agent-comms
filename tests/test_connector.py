@@ -28,13 +28,12 @@ from agent_comms.connector import (
     RevokeVerb,
 )
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import MalformedRecord
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
-from agent_comms.tools import CommsTurnsTool, ReadTool, ToolRequest, invoke_tool
+from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 

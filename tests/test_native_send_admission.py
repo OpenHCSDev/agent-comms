@@ -3,7 +3,6 @@
 from __future__ import annotations
 from contextlib import closing
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.native_entries import NativeEvidenceScope
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
@@ -23,16 +22,14 @@ from agent_comms.turn_watchdog import ModelWait
 
 import agent_comms.native_pi as native_pi
 import agent_comms.native_prompt_send as native_prompt_send
-from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_database import StoreBusy
-from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
-from test_coordinated_runtime import _fake_model, _root
+from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
@@ -97,7 +94,6 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         import threading
         import time
 
-        import agent_comms.coordinated_runtime as runtime
 
         with pytest.MonkeyPatch.context() as patch:
             root, root_id, comms, _, people = _root(directory, direct=True)
@@ -256,7 +252,6 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
 
 def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
     """A transaction which admits the pipe write owns its complete commit lifetime."""
-    import threading
 
     path = tmp_path / "coordinator.sqlite3"
     with Coordination(path, contention=StoreBusy()) as store:

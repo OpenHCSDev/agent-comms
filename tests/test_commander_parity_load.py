@@ -1,5 +1,3 @@
-import shutil
-import sys
 from dataclasses import replace
 
 import pytest
@@ -7,7 +5,7 @@ import pytest
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_parity.load import CommandComparison, LoadComparison, state_files
-from agent_comms.commander_parity.observations import CapacityObservation, MeasuredOutput
+from agent_comms.commander_parity.observations import MeasuredOutput
 
 
 def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_path):

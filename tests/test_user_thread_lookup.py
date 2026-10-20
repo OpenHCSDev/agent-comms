@@ -4,8 +4,8 @@ from dataclasses import replace
 
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.registry_document import FoundUserThread, NoUserThread, RegistryDocument
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
+from agent_comms.registry_document import NoUserThread, RegistryDocument
+from agent_comms.thread_identity import UserThreadRole
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):

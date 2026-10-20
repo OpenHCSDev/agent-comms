@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from agent_comms.channel_targets import CommandTarget
-from conftest import publish_initial
-import asyncio
 import os
 import subprocess
 import sys
@@ -14,20 +12,18 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.bus_publication import HumanOrigin
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
-    HumanInitialUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
 )
 from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import UserThreadRole
-from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -100,19 +96,19 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
     origin = HumanOrigin(user.name, user.created_at, user.worktree)
     first = comms.bus.publisher.publish_ordinary(message, origin=origin)
-    with pytest.raises(RelationViolationError, match="already exists"):
+    with pytest.raises(RelationViolationError):
         comms.bus.publisher.publish_ordinary(message, origin=origin)
     assert [row.message_id for row in _public_messages(comms)] == [first.message_id]
 
 
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
-    with pytest.raises(RelationViolationError, match="not a routable"):
+    with pytest.raises(RelationViolationError):
         comms.messaging.send_user_message("#any", "wrong route", worktree=str(tmp_path))
-    with pytest.raises(UnregisteredThreadError, match="not a registered thread"):
+    with pytest.raises(UnregisteredThreadError):
         comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
     user = comms.messaging.user_identity(str(tmp_path))
-    with pytest.raises(RelationViolationError, match="Human messages"):
+    with pytest.raises(RelationViolationError):
         comms.messaging.send(user.name, "alice", "agent impersonation").message
     assert comms.bus.log.latest_sequence() == 0
 

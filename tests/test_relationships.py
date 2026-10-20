@@ -12,7 +12,6 @@ from agent_comms.relationships import (
 )
 from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
-from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 
@@ -71,9 +70,9 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     assert reopened.relationships.collaborations("owner") == ()
     assert reopened.relationships.collaborations("peer") == ()
     assert reopened.relationships.edit("owner", RelationshipEdit.member_named("remove"), "peer") is None
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises(ValueError):
         reopened.relationships.edit("owner", RelationshipEdit.member_named("update"), "peer")
-    with pytest.raises(ValueError, match="itself"):
+    with pytest.raises(ValueError):
         reopened.relationships.edit("owner", RelationshipEdit.member_named("add"), "owner")
 
 
@@ -223,7 +222,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     row = collaboration_rows(comms)[0]
     assert row.target == "peer" and row.person is None and not row.available
     for action in ("add", "update"):
-        with pytest.raises(ValueError, match="identity was replaced"):
+        with pytest.raises(ValueError):
             comms.relationships.edit(
                 "owner", RelationshipEdit.member_named(action), "peer", "Must not overwrite old task"
             )

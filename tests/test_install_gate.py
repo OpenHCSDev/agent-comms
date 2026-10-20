@@ -15,34 +15,20 @@ import unittest
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from install_gate import (
     DEFAULT_SCRATCH,
     REPO,
-    Desktop,
-    ExistingStatusChecks,
     FieldCodec,
-    GateArguments,
     GateError,
-    GateReport,
     InstallSurface,
-    Laptop,
     Machine,
     MalformedRecord,
     MissingProtection,
-    NoStatusChecks,
-    NumberedAppIdentity,
-    ParentBaseRevision,
-    ProtectionAnswer,
     PullRequestAnswer,
-    RequiredCheck,
-    RevisionGateCommand,
     RouteDocument,
     SnapshotCopy,
-    UncheckedSourceCoverage,
-    UnfinishedGateResult,
     affected,
     prepare_home,
     rehearse,

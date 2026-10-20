@@ -1,13 +1,9 @@
 """Repository identities cross the wire and SQL once, without case-sensitive aliases."""
-from dataclasses import replace
 
 import pytest
 
-from agent_comms.commander.config import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import PullRequests, UnorderedProblemOrder
-from test_commander_problem_orders import create
 
 
 def test_repository_identity_hash_and_existing_wire_form():

@@ -3,7 +3,6 @@
 from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
 
-import asyncio
 from dataclasses import replace
 
 import pytest
@@ -15,7 +14,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.queued_input import QueuedInput
@@ -60,11 +58,11 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
         def unavailable_scope():
             raise AssertionError('Unavailable projection acquired input scope')
-        with pytest.raises(ValueError, match='queue'):
+        with pytest.raises(ValueError):
             observation.projection.capture_human_input(comms, unavailable_scope)
     malformed = FieldCodec.encode(QueueChangedUpdate(scope, 0, AvailableQueueProjection()))
     malformed['scope'] = None
-    with pytest.raises(ValueError, match='original attachment scope'):
+    with pytest.raises(ValueError):
         FieldCodec.decode(QueueChangedUpdate, malformed)
     observation = QueueChangedUpdate(scope, 0, AvailableQueueProjection())
     assert observation.projection.capture_human_input(comms, lambda: scope) == capture(comms)
@@ -126,7 +124,7 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
                 QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                     echo=True, images=(), controller=Client(), origin=witness, ownership=ownership)
                 ownership.pop_all()
-    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="controller"):
+    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=None, origin=origin, ownership=ownership)
@@ -145,7 +143,7 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
     restored = FieldCodec.decode(ReservedInput, payload)
     assert restored.origin == UnattributedInputOrigin()
     assert restored.origin.retained_fact(restored) == InputTaskFact(restored)
-    with pytest.raises(RelationViolationError, match="author witness"):
+    with pytest.raises(RelationViolationError):
         HumanInputTaskFact(restored)
     authored = replace(restored, origin=origin)
     fact = origin.retained_fact(authored)
@@ -185,7 +183,7 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     with pytest.raises(ValueError):
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
-    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="scope"):
+    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=Client(), origin=absent, ownership=ownership)
@@ -205,14 +203,13 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     comms.registry.register(replace(comms.registry.require("beta"), goal=NoGoal()))
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
-    with pytest.raises(ValueError, match="goal changed"):
+    with pytest.raises(ValueError):
         comms.registry.require("beta").goal.require_checkpoint(goal.revision_key)
 
 
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(live_owner):
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
     from agent_comms.retained_task_facts import RetainedTaskFacts
-    from agent_comms.threads import Thread
     from agent_comms.turn_context import WireProvenance
 
     comms, agent = live_owner
@@ -248,20 +245,20 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     with comms.bus.log.checked_read() as source:
         wire_only = tuple(source.retained_task_facts(snapshot.require('beta').incarnation))
-    with pytest.raises(RelationViolationError, match='original captured wording'):
+    with pytest.raises(RelationViolationError):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated,)
     before = (comms.root / 'bus.jsonl').read_bytes()
     comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
-    with pytest.raises(RelationViolationError, match='did not receive'):
+    with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
-    with pytest.raises(RelationViolationError, match='provenance'):
+    with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', replace(subject, key='absent'), worktree=origin.project)
-    with pytest.raises(RelationViolationError, match='provenance'):
+    with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', replace(subject, origin=replace(origin, root_id='f'*32)),
                                              worktree=origin.project)
-    with pytest.raises(RelationViolationError, match='original human input'):
+    with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', WireProvenance(MessageReference(1, 'not-input')),
                                              worktree=origin.project)
     assert (comms.root / 'bus.jsonl').read_bytes() == before

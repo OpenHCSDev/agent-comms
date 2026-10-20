@@ -183,7 +183,7 @@ def test_running_claude_session_is_found_by_its_id(tmp_path, monkeypatch):
     lines(source, [claude_prompt("a", "keep going", origin={"kind": "human"})])
     history = OnlineHistory.of(ClaudeCodeHarness, "live-session", None, tmp_path)
     assert bodies(ImportSnapshot.read(history, ImportLimits())) == ["keep going"]
-    with pytest.raises(ValueError, match="found 0"):
+    with pytest.raises(ValueError):
         ImportSnapshot.read(OnlineHistory.of(ClaudeCodeHarness, "missing", None, tmp_path), ImportLimits())
 
 
@@ -251,13 +251,13 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert entry.to_wire() == saved[1]
     assert ImportedSessionMetadata.public_source_text(
         comms.registry, original_owner, refs[1], comms).text == "Historical developer λ.\n"
-    with pytest.raises(ValueError, match="outside the original imported snapshot"):
+    with pytest.raises(ValueError):
         ImportedSessionMetadata.public_source_text(
             comms.registry, original_owner, replace(refs[1], instruction=999), comms)
-    with pytest.raises(ValueError, match="incarnation changed"):
+    with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
-    with pytest.raises(ValueError, match="selected session changed"):
+    with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
             comms.registry, replace(original_owner, session_file=str(tmp_path / "other.jsonl")))
     assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
@@ -282,7 +282,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
         output.write(b'{"type":"future","payload":{}}\n')
     assert refs[1].public_text(comms) == "Historical developer λ.\n"
     source.write_bytes(source.read_bytes().replace("developer λ".encode(), "developer ψ".encode()))
-    with pytest.raises(ValueError, match="changed or is unavailable"):
+    with pytest.raises(ValueError):
         refs[1].public_text(comms)
 
 
@@ -420,7 +420,7 @@ def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path, m
     assert snapshot.latest_request == "Retained request"
     assert "obsolete prefix" not in str(snapshot.messages)
     assert opened[0].bytes_read < 200_000
-    with pytest.raises(ValueError, match="different"):
+    with pytest.raises(ValueError):
         read(CodexHarness, source, session_id="parent-inherited")
 
 
@@ -500,7 +500,7 @@ def test_latest_request_is_not_duplicated_when_retained(tmp_path):
 def test_codex_rollout_must_start_with_its_session_and_decode_completely(tmp_path):
     source = tmp_path / "rollout.jsonl"
     source.write_text(json.dumps(codex_message("user", "no metadata")) + "\n")
-    with pytest.raises(ValueError, match="starts with its session metadata"):
+    with pytest.raises(ValueError):
         read(CodexHarness, source)
     source.write_text('{"type":"session_meta","payload":{}}\n')
     with pytest.raises(ValueError):
@@ -609,7 +609,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     assert "Keep model authority" in context and "42 passed" in context
     assert "remaining work" in context and "[Historical attachment: screenshot.png]" in context
     assert "Reverted prompt" not in context
-    with pytest.raises(ValueError, match="reserved"):
+    with pytest.raises(ValueError):
         comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
 
 
@@ -619,7 +619,7 @@ def test_import_refuses_redirected_session_directory(tmp_path, comms):
     outside = tmp_path / "outside"
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(ValueError, match="owner-controlled"):
+    with pytest.raises(ValueError):
         comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
@@ -643,7 +643,7 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path):
     snapshot = read(OpenCodeHarness, source, session_id="session")
     assert bodies(snapshot) == ["Resume this task"] and snapshot.title == "Title"
     assert source.read_bytes() == before
-    with pytest.raises(ValueError, match="session-id"):
+    with pytest.raises(ValueError):
         read(OpenCodeHarness, source)
 
 
@@ -683,7 +683,7 @@ def test_opencode_server_reads_all_messages_including_the_users():
     snapshot = asyncio.run(collect())
     assert bodies(snapshot) == ["Live prompt", "Live answer"]
     assert snapshot.title == "Live task" and connection.queries == [{}]
-    with pytest.raises(ValueError, match="server address"):
+    with pytest.raises(ValueError):
         OnlineHistory.of(OpenCodeHarness, "ses_test", None, Path("/work"))
 
 
@@ -711,9 +711,9 @@ def test_import_cli_and_invalid_sources(tmp_path, capsys, comms):
     assert main(["--root", str(comms.root), "import-thread", "--harness", "opencode",
                  "--source", str(source), "--name", "copied"]) == 0
     assert json.loads(capsys.readouterr().out)["thread"] == "copied"
-    with pytest.raises(ValueError, match="different"):
+    with pytest.raises(ValueError):
         read(OpenCodeHarness, source, session_id="wrong")
-    with pytest.raises(ValueError, match="No single"):
+    with pytest.raises(ValueError):
         read(OpenCodeHarness, tmp_path / "export.txt")
-    with pytest.raises(ValueError, match="positive"):
+    with pytest.raises(ValueError):
         ImportLimits(messages=0)

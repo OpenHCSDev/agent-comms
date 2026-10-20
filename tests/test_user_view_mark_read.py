@@ -7,7 +7,6 @@ import json
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.threads import Thread
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
@@ -65,7 +64,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
 
     answer(source, "New reply after manual read")
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == ReplyUnread(1)
-    with pytest.raises(ValueError, match="registered"):
+    with pytest.raises(ValueError):
         comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
 
 

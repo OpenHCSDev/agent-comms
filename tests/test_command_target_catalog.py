@@ -2,9 +2,7 @@
 
 import pytest
 
-from agent_comms.channel_targets import ChannelTarget, ProjectTarget, ThreadTarget
-from agent_comms.cli_commands import CliCommand, OneTarget, ReadTargetCliCommand, TargetBatch
-from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.cli_commands import OneTarget, TargetBatch
 
 
 @pytest.mark.parametrize("selection,target,resolvable", [

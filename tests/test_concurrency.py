@@ -9,17 +9,14 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 from typing import Any
 
-import pytest
 
 import agent_comms.store_files as store_files
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
 from bus_history import read_history
 
 

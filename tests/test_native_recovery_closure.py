@@ -6,14 +6,6 @@ import json
 
 import pytest
 
-import agent_comms.backend as backend
-import agent_comms.native_pi as native_pi
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import NativeMessageFailureSource, NativeTurnError
-from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_payloads import ProviderTransportFailureDiagnostic
-from delivery_owner_fixture import canonical_agent
-from test_native_refusal_recovery import _settled_records, _stub_with
 
 FINAL = "Opaque provider transport failure"
 DIAGNOSTIC = {
