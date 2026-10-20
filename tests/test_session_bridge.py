@@ -111,7 +111,9 @@ async def test_bridge_survives_its_watch_child_being_signalled(tmp_path, monkeyp
                 assert bridge.alive() and watch_process() != child
                 await no_line(stream)
             with Binding.open(state) as db:
-                assert len(DeliveryRow.select(db)) == 2
+                deliveries = DeliveryRow.select(db)
+                assert len(deliveries) == 2
+                assert all(row.outcome is DeliveredOutcome for row in deliveries)
         finally:
             await asyncio.to_thread(bridge.close)
     lines = log_path.read_text().splitlines()
