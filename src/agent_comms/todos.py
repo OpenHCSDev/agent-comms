@@ -1021,54 +1021,6 @@ class InstallDue(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class FirstCall(DeclaredFamily, affix="FirstCall"):
-    def observe(self):
-        return self
-
-    def notify(self):
-        return self
-
-
-class AwaitingFirstCall(FirstCall):
-    def observe(self):
-        return ObservedFirstCall()
-
-    def notify(self):
-        return NotifiedFirstCall()
-
-
-class ObservedFirstCall(FirstCall):
-    pass
-
-
-class NotifiedFirstCall(FirstCall):
-    def observe(self):
-        return LateObservedFirstCall()
-
-
-class LateObservedFirstCall(ObservedFirstCall, NotifiedFirstCall):
-    pass
-
-
-class FirstCallEvent(DeclaredFamily, affix="FirstCallEvent"):
-    @classmethod
-    @abstractmethod
-    def apply(cls, current): ...
-
-
-class ObservedFirstCallEvent(FirstCallEvent):
-    @classmethod
-    def apply(cls, current):
-        return current.observe()
-
-
-class NotifiedFirstCallEvent(FirstCallEvent):
-    @classmethod
-    def apply(cls, current):
-        return current.notify()
-
-
-@dataclass(frozen=True)
 class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
@@ -1569,7 +1521,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     report: str
     at: EventTime
     first_call_deadline: EventTime
-    first_call: FirstCall = field(default_factory=AwaitingFirstCall)
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
@@ -1734,8 +1685,7 @@ class PendingProblemOrder(CheckedProblemOrder):
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
         return replace(self, id=uuid4().hex[:12], at=RecordedEventTime(at),
-                       first_call_deadline=RecordedEventTime(at + window),
-                       first_call=AwaitingFirstCall())
+                       first_call_deadline=RecordedEventTime(at + window))
 
     pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
@@ -2557,18 +2507,6 @@ class ServeTodo(TodoOperation):
         current.require_commander(self.actor)
         return replace(current, order=current.order.for_phase(self.serves),
                        revision=current.revision + 1)
-
-
-@dataclass(frozen=True)
-class RecordFirstCallTodo(TodoOperation):
-    actor: ThreadIncarnation
-    event: type[FirstCallEvent]
-
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        order = replace(current.order, first_call=self.event.apply(current.order.first_call))
-        return current if order == current.order else replace(current, order=order, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)

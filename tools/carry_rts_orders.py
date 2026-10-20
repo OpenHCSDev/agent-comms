@@ -149,7 +149,6 @@ class RtsOrder:
             report=report[1],
             at=RecordedEventTime(self.at),
             first_call_deadline=RecordedEventTime(self.at + 120),
-            first_call=todos.ObservedFirstCall() if self.started else todos.AwaitingFirstCall(),
             run=self.works,
         )
 

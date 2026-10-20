@@ -35,7 +35,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
@@ -187,10 +187,14 @@ class StoreCarry(Carry):
 
 
     @classmethod
+    def has_store(cls, root: Path) -> bool:
+        return cls.store.path_in(root).exists()
+
+    @classmethod
     @contextmanager
     def store_transaction(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
         """None when this bus has no store; dry runs and errors always roll back."""
-        if not cls.store.path_in(root).exists():
+        if not cls.has_store(root):
             yield None
             return
         with closing(CoordinationStore.writer(cls.store.path_in(root))) as db:
@@ -223,6 +227,18 @@ class TodoRows(StoreCarry):
         """Every column step runs before a row reader, so rows decode only as the chain's
         own Todo; an older tree's Todo lacks the columns added since it was written."""
         return step.revision
+
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        if not cls.has_store(root):
+            return cls.carried(root, 0, {}, apply=apply)
+        with cls.todo_rows(root, apply=apply) as db:
+            return cls.carry_rows(root, cast(sqlite3.Connection, db), apply=apply)
+
+    @classmethod
+    @abstractmethod
+    def carry_rows(cls, root: Path, db: sqlite3.Connection, *, apply: bool) -> Carried:
+        """Convert an existing store; the step owns its changed count and detail."""
 
     @classmethod
     @contextmanager

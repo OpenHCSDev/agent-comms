@@ -26,10 +26,7 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, SharedLock, _async_store_lock, _store_lock
-from agent_comms.todos import GoalRef, ObservedFirstCallEvent, RecordFirstCallTodo, TodoStore
-from agent_comms.recorded_time import RecordedEventTime
 from cutover.carry_maintenance_identity import MaintenanceIdentity
-from test_todos import order, thread
 
 
 def _hold(root: Path, phase: type[MaintenancePhase], ready) -> None:
@@ -118,31 +115,6 @@ async def test_async_recovery_borrows_registry_without_blocking_event_loop(tmp_p
             await asyncio.wait_for(attempt, 5)
         async with barrier.ingress_async() as status:
             status.require_open()
-
-
-def test_commander_first_call_write_is_admitted_before_sqlite_mutation(tmp_path: Path):
-    store = TodoStore(tmp_path)
-    lead = thread("lead", tmp_path, 1.0)
-    original = store.create(
-        "P1",
-        "org/repo",
-        "Fix maintenance",
-        creator=lead,
-        owner=lead,
-        generation="one",
-        goal=GoalRef("lead", 1.0, "request"),
-        deadline=RecordedEventTime(1000),
-        order=order(tmp_path),
-    )
-    barrier = MaintenanceBarrier(tmp_path / "registry.json")
-    held = barrier.begin(MaintenanceOperator.current())
-    before = store.path.read_bytes()
-    notification = RecordFirstCallTodo(original.revision, lead.incarnation, ObservedFirstCallEvent)
-    with pytest.raises(MaintenanceHeldError):
-        store.apply("P1", notification)
-    assert store.path.read_bytes() == before and store.get("P1") == original
-    barrier.clear(held)
-    assert store.apply("P1", notification).revision == original.revision + 1
 
 
 def test_legacy_ready_has_one_registered_conversion(tmp_path: Path):
