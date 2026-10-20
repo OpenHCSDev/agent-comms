@@ -11,8 +11,17 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .lifecycle import (
+    AssignOrderCase,
+    BuildBoundProofCase,
+    CreateProblemCase,
+    InstalledEvidenceCase,
+    StrikeLimitCase,
+    verify_order_progress,
+)
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .story import StoryCase
 
 
 class CreateProblemParityRow(ParityRow):
@@ -22,6 +31,8 @@ class CreateProblemParityRow(ParityRow):
     native = "`CommsTodoCreateTool`"
     phases = (OneOrderOwnerPhase,)
 
+    comparison = CreateProblemCase.read
+
 
 class AssignOrderParityRow(ParityRow):
     number = 2
@@ -29,6 +40,8 @@ class AssignOrderParityRow(ParityRow):
     current = "`order.py send`, `--reassign`, `drop`; `deadlines.json`"
     native = "`CommsOrderTool`, `CommsTodoTool` assignment and release"
     phases = (OneOrderOwnerPhase,)
+
+    comparison = AssignOrderCase.read
 
 
 class DeliveredCommitParityRow(ParityRow):
@@ -45,6 +58,8 @@ class InstalledEvidenceParityRow(ParityRow):
     current = "`order.py close`; `closed.jsonl`"
     native = "`CommsProblemCloseTool`"
     phases = (OneOrderOwnerPhase,)
+
+    comparison = InstalledEvidenceCase.read
 
 
 class BoardParityRow(ParityRow):
@@ -69,6 +84,8 @@ class StrikeLimitParityRow(ParityRow):
     current = "`order.py strike`; `strikes.jsonl`"
     native = "`Strike` rows, author-declared `StrikeLimit`, one `comms_fire`"
     phases = (RecordPlanePhase,)
+
+    comparison = StrikeLimitCase.read
 
 
 class VerdictParityRow(ParityRow):
@@ -117,6 +134,7 @@ class PublicStoryParityRow(ParityRow):
     current = "`fleet-narrative.md`; `judge.py roast`"
     native = "`comms_order_story`, `comms_fleet_story`; send-back reason posted once"
     phases = (StoryPhase,)
+    comparison = StoryCase.read
 
 
 class ScheduledWakeParityRow(ParityRow):
@@ -278,6 +296,8 @@ class BuildBoundProofParityRow(ParityRow):
     native = "Build run records runtime and Core/Toad revisions; close requires delivered commit"
     phases = (RecordPlanePhase,)
 
+    comparison = BuildBoundProofCase.read
+
 
 class DeletionTargetParityRow(ParityRow):
     number = 31
@@ -311,6 +331,8 @@ class OrderProgressParityRow(ParityRow):
         "later progress 15 min STALL; units see no due time"
     )
     phases = (OneOrderOwnerPhase, ControlPlanePhase)
+
+    comparison = staticmethod(verify_order_progress)
 
 
 class MultipleCommandersParityRow(ParityRow):
