@@ -27,7 +27,10 @@ class ProgressClaim(DeclaredFamily, affix="Claim"):
 
     @classmethod
     def require_all(
-        cls, claims: tuple[ProgressClaim, ...], comms: Comms, worktree: Path,
+        cls,
+        claims: tuple[ProgressClaim, ...],
+        comms: Comms,
+        worktree: Path,
     ) -> dict[ProgressClaim, tuple[str, ...]]:
         return {claim: claim.verify(comms, worktree) for claim in dict.fromkeys(claims)}
 

@@ -196,7 +196,9 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         try:
             branches = verified_claims[MergedClaim(self.delivered)]
         except KeyError as error:
-            raise ValueError("Commit delivery requires the order-done claim verification.") from error
+            raise ValueError(
+                "Commit delivery requires the order-done claim verification."
+            ) from error
         verified = await super().verified(todo, registry, verified_claims)
         merge = await self.merge_state(todo, registry, branches)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,

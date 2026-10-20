@@ -56,4 +56,4 @@ def test_real_delivery_tool_decodes_once_and_queries_origin_once(commander, monk
     assert len(commands) == 1 and 'for-each-ref' in commands[0]
     assert not comms.goals.todos.get('P1').pending
     assert 'claims' in CommsOrderDoneTool.schema()['parameters']['properties']
-    assert 'verified_claims' not in FieldCodec.schema(DeliverTodo)['properties']
+    assert 'verified_claims' not in FieldCodec.record_schema(DeliverTodo)['properties']
