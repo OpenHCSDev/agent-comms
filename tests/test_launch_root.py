@@ -124,6 +124,13 @@ def test_cli_root_wins_without_published_route(tmp_path, monkeypatch, joined):
     assert not (tmp_path / '.local/state/agent-comms/active-route.json').exists()
 
 
+def test_later_root_spelling_does_not_cancel_the_published_launch(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    root = publish_route(tmp_path)
+    assert main(['threads', '--root']) == 1  # malformed CLI option, not a launch override
+    assert LaunchRoot.current().path == root
+
+
 def test_rootless_real_cli_child_fails_without_published_route(tmp_path):
     environment = {**os.environ, 'HOME': str(tmp_path), 'AGENT_COMMS_ROOT': '/live'}
     environment = LaunchRuntime(Path(sys.executable)).environment(environment)

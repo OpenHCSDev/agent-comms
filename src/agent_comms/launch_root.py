@@ -66,9 +66,12 @@ class LaunchRoot:
             record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
             cls.from_path(record.path).install()
             del arguments[index : index + 2]
-        elif not any(arg == cls.root_argument or arg.startswith(f"{cls.root_argument}=")
-                     for arg in arguments):
-            # Only the CLI parses --root; it selects that explicit path after parsing.
+        elif arguments and (
+            arguments[0] == cls.root_argument or arguments[0].startswith(f"{cls.root_argument}=")
+        ):
+            # Only the CLI parses its leading --root; it selects that path afterward.
+            return
+        else:
             published().install()
 
     @classmethod
