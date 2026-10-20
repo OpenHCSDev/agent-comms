@@ -48,6 +48,13 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
+class Side(enum.Enum):
+    """The two revisions a comparison measures; the value names a checker's cache."""
+
+    BASE = "base"
+    HEAD = "head"
+
+
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
     def blocks(cls, delta: dict[str, int]) -> bool:
@@ -98,7 +105,8 @@ class ChangeMeasure(Measure):
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
                 root: str) -> tuple[dict[str, int], dict[str, int]]:
-        return results[0]
+        before, after = results[0]
+        return before, after
 
 
 class RevisionMeasure(Measure):
@@ -121,7 +129,7 @@ class RevisionMeasure(Measure):
         return cls.align(*results)
 
 
-class InventoryMeasure(Measure):
+class InventoryMeasure[Reading](Measure):
     """A measure of every file a revision holds, not only the changed ones. A file the change
     did not touch reads the same at both revisions, so it is read once; the reading is split
     across processes."""
@@ -133,17 +141,17 @@ class InventoryMeasure(Measure):
 
     @classmethod
     @abstractmethod
-    def reading(cls, path: str, source: bytes) -> object:
+    def reading(cls, path: str, source: bytes) -> Reading:
         """What the measure needs from one file, independent of the revision holding it."""
 
     @classmethod
     @abstractmethod
-    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, object],
+    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, Reading],
                  root: str) -> dict[str, int]:
         """This revision's measurements from its files' readings, in path order."""
 
     @classmethod
-    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, object]:
+    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
         return {path: cls.reading(path, source)
                 for path, source in GitMeasure.sources(repo, ref, set(paths))}
 
@@ -272,8 +280,8 @@ class CheckedRevision(Measure):
 
     @staticmethod
     @abstractmethod
-    def command(root: str, selected: list[str], side: str) -> list[str]:
-        """The checker's arguments after `python -m`; side names the revision as base or head."""
+    def command(root: str, selected: list[str], side: Side) -> list[str]:
+        """The checker's arguments after `python -m`."""
 
     @staticmethod
     def batches(selected: list[str]) -> list[list[str]]:
@@ -288,7 +296,7 @@ class CheckedRevision(Measure):
 
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
-                 side: str) -> tuple[str, Counter[str]]:
+                 side: Side) -> tuple[Side, Counter[str]]:
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
             cls.extract(repo, ref, Path(scratch), selected)
             configuration = Path(scratch) / "pyproject.toml"
@@ -307,18 +315,19 @@ class CheckedRevision(Measure):
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
         return tuple(partial(cls.findings, repo, ref, head, root, batch, side)
-                     for side, ref in (("base", base), ("head", head))
+                     for side, ref in zip(Side, (base, head), strict=True)
                      for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
                      if batch)
 
     @classmethod
     def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
                 root: str) -> tuple[dict[str, int], dict[str, int]]:
-        found = {"base": Counter(), "head": Counter()}
+        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
         for side, counted in results:
             found[side] += counted
-        return tuple({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
-                     for side in ("base", "head"))
+        before, after = ({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
+                         for side in Side)
+        return before, after
 
 
 class Unformatted(CheckedRevision):
@@ -339,7 +348,7 @@ class Unformatted(CheckedRevision):
             (scratch / path).write_bytes(source)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: str) -> list[str]:
+    def command(root: str, selected: list[str], side: Side) -> list[str]:
         return ["black", "--check", *selected]
 
 
@@ -349,7 +358,7 @@ class LintFindings(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: str) -> list[str]:
+    def command(root: str, selected: list[str], side: Side) -> list[str]:
         return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
 
 
@@ -360,11 +369,11 @@ class TypeErrors(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str], side: str) -> list[str]:
+    def command(root: str, selected: list[str], side: Side) -> list[str]:
         # Mypy validates each cached module against its file, so the analysis carries from one run
         # to the next while the checked tree is read fresh. Each side keeps its own cache: the two
         # revisions run at once, and a base usually matches the previous run's base.
-        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side
+        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side.value
         return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
                 *selected]
 
@@ -815,7 +824,7 @@ def production_paths(repo: Path, ref: str) -> frozenset[str]:
                      if not any(Path(path).is_relative_to(tree) for tree in tests))
 
 
-class StringIdentity(InventoryMeasure):
+class StringIdentity(InventoryMeasure[ModuleDeclarations]):
     """Literal strings standing for something the code declares, per production file.
 
     A class, module or function named by its spelling, a kind decided by comparing spellings,
@@ -832,10 +841,10 @@ class StringIdentity(InventoryMeasure):
     reading = DeclaredSpellings.declarations
 
     @classmethod
-    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, object],
-                 root: str) -> dict[str, int]:
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
         spellings = DeclaredSpellings.read(readings)
-        selected = touched_paths(repo, base, head) & readings.keys()
+        selected = readings.keys() & touched_paths(repo, base, head)
         return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
                 for path, source in GitMeasure.sources(repo, ref, selected)}
 
@@ -1120,7 +1129,7 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
         return cls.count_module(ast.parse(source, filename))
 
 
-class GodClassExcess(InventoryMeasure):
+class GodClassExcess(InventoryMeasure[dict[str, int]]):
     """Independent class lines beyond 500, including newly introduced classes."""
 
     threshold = 500
@@ -1132,8 +1141,8 @@ class GodClassExcess(InventoryMeasure):
         return python_paths(repo, ref, root)
 
     @classmethod
-    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, object],
-                 root: str) -> dict[str, int]:
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
         return {identity: value
                 for values in readings.values() for identity, value in values.items()}
 
@@ -1701,8 +1710,10 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
     base, head = revision(repo, base), revision(repo, head)
     touched = touched_paths(repo, base, head)
     paths = set(touched & (python_paths(repo, base, root) | python_paths(repo, head, root)))
-    before, after = {}, {}
-    introduced, introduced_lines = {}, {}
+    before: dict[str, int] = {}
+    after: dict[str, int] = {}
+    introduced: dict[str, int] = {}
+    introduced_lines: dict[str, list[int]] = {}
     # Every measure reads production Python paths only, so with none touched each would
     # report no change.
     if not touched & (production_paths(repo, base) | production_paths(repo, head)):
@@ -1731,8 +1742,8 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
             measured_base, measured_head = measured[measure]
             before.update(measured_base)
             after.update(measured_head)
-        for future in sites:
-            for identity, found in future.result().items():
+        for path_sites in sites:
+            for identity, found in path_sites.result().items():
                 introduced[identity] = len(found)
                 if found:
                     introduced_lines[identity] = sorted(found)
