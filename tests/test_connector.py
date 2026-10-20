@@ -257,9 +257,9 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(clien
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
     headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
     reviews = RuleReviews(comms.root)
-    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
-    reviews.write("claude-ai", AnsweredRuleReviewEntry(
-        1, "This tick moves rules.py:47 into one typed Core record that Core owns."))
+    rule = "Declare each fact once and derive all consumers from its owner."
+    reviews.write("claude-ai", DrawnRuleReviewEntry((rule,)))
+    reviews.write("claude-ai", AnsweredRuleReviewEntry(1, rule + " rules.py:47"))
     calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
              {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
     for call in calls:

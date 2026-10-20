@@ -7,12 +7,12 @@ review and answer (CommsRuleReviewTool); its RulesDue member refuses every comma
 RULES DUE in rotate until the last review is answered and fresh.
 
   agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
-  agent-comms-commander rules answer N "<10+ words>" [--fork FORK]  answer drawn rule N with what this tick does about it
+  agent-comms-commander rules answer N "<8+ quoted rule words and file:line or P-number>" [--fork FORK]
 
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
-import glob, os, random, re, sys
+import os, random, re, sys
 from dataclasses import dataclass
 
 
@@ -37,9 +37,10 @@ def principles() -> list[str]:
 
 
 def rules() -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(CommanderConfig.packaged_skill()).read(), re.M)]
-    for path in sorted(glob.glob(f'{CommanderConfig.packaged_rules()}/*.md')):
-        text = open(path).read()
+    found = [(m.group(1) + m.group(2)).strip() for m in re.finditer(
+        r'^\s*- \*\*(.+?)\*\*(.*)$', CommanderConfig.packaged_skill().read_text(), re.M)]
+    for path in CommanderConfig.packaged_rules_files():
+        text = path.read_text()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)
             found.append(f'{os.path.basename(path)[:-3]}: {desc.group(1) if desc else ""}')
@@ -64,7 +65,7 @@ def review(ctx: Commander, who: str) -> None:
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    record(ctx, who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ctx.commander else 2))
+    record(ctx, who, DrawnRuleReviewEntry(tuple(drawn)))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')

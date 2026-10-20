@@ -50,6 +50,8 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
     from .todos import Todo
+    from .messages import Message
+    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -267,6 +269,13 @@ class OrderCheck:
         if not self.directory.strip() or not self.command.strip():
             raise ValueError("An order check requires a directory and command.")
 
+    def require_writable(self) -> None:
+        """New checks cannot select revisions; saved checks remain readable for correction."""
+        if any(self.git_command(words) in self.REVISION_COMMANDS
+               for words in self.simple_commands(self.command)):
+            raise ValueError("A check never checks out a revision: Core runs it at the "
+                             "delivered commit and at each branch commit. Drop the checkout.")
+
     def require_directory(self):
         if not Path(self.directory).is_dir():
             raise ValueError("The order check directory does not exist.")
@@ -283,11 +292,9 @@ class OrderCheck:
         found = cls.LINE.fullmatch(line.strip())
         if not found:
             return None
-        if any(cls.git_command(words) in cls.REVISION_COMMANDS
-               for words in cls.simple_commands(found[2])):
-            raise ValueError("A check line never checks out a revision: Core runs it at the "
-                             "delivered commit and at each branch commit. Drop the checkout.")
-        return cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check = cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check.require_writable()
+        return check
 
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
@@ -436,6 +443,9 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         """Only a thread holding owner requests records a claude-ai directive."""
         return goal
 
+    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
+        return ()
+
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[RequestDirective, ...]:
         return ()
@@ -458,17 +468,25 @@ class UnorderedGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class RequestDirective:
-    """One claude-ai message to the commander that the request answers. It is acted on once an
-    order sent after it serves the request, or the request closes; until then it is due by its
-    deadline."""
+    """One original directive; only a reply linked to that message answers it."""
 
     window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
     seq: int
     deadline: float
-    served: int  # orders serving the request when the directive arrived
 
-    def overdue(self, served: int, now: float) -> bool:
-        return served == self.served and self.deadline < now
+    def original(self, goals: Goals) -> Message:
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            return source.delivery(self.seq).message
+
+    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
+        if self.deadline >= now:
+            return False
+        original = self.original(goals).reference
+        with goals.bus.log.checked_read() as source:
+            replies = source.replies((original,))
+        return not any(reply.message.sender == owner.name and original in reply.message.answers
+                       for reply in replies)
 
 
 @dataclass(frozen=True)
@@ -500,14 +518,16 @@ class RequestGoalOrder(GoalOrder):
         """A closed request is replaced by one the directive opens; an open one records it."""
         if goal.state.terminal:
             return directive.request(goal, ctx)
-        served = len(ctx.goals.todos.for_request(ctx.thread.incarnation, goal.id))
         return replace(goal, revision=goal.revision + 1, order=replace(
-            self, directives=(*self.directives, directive.directive(served))))
+            self, directives=(*self.directives, directive.directive())))
+
+    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
+        return tuple(directive.original(goals) for directive in self.directives)
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[RequestDirective, ...]:
-        served = len(goals.todos.for_request(owner, goal.id))
-        return tuple(directive for directive in self.directives if directive.overdue(served, now))
+        return tuple(directive for directive in self.directives
+                     if directive.overdue(goals, owner, now))
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

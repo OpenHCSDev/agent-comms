@@ -24,7 +24,7 @@ from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, Hun
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
+from agent_comms.todos import (CleanHunt, DirectiveText, MergedProgress,
     MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
     Todo, UnmergedPullRequest, UnreadProgress)
 from agent_comms.connector import CALLER
@@ -254,11 +254,15 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
     assert lines(comms, RulesDue) == [
         "RULES DUE (no rule review recorded for lead) -> agent-comms-commander rules review"
         " and answer the drawn rules before any order"]
-    review(DrawnRuleReviewEntry(("Declare each fact once", "Kinds are class families"), 1))
+    drawn = ("Declare each fact once and derive all consumers from its owner.",
+             "Kinds are class families whose declarations own their behavior and membership.")
+    review(DrawnRuleReviewEntry(drawn))
     with pytest.raises(ValueError, match="file:line or P-number"):
         review(AnsweredRuleReviewEntry(1, "This tick reads every open order before it sends any new one."))
-    review(AnsweredRuleReviewEntry(1, "This tick moves rules.py:47 into one typed Core record that Core owns."))
-    assert review(AnsweredRuleReviewEntry(2, "This tick sends no order until the review family answers it.")) == ()
+    review(AnsweredRuleReviewEntry(1, drawn[0] + " rules.py:47"))
+    with pytest.raises(ValueError, match="file:line or P-number"):
+        review(AnsweredRuleReviewEntry(2, drawn[1]))
+    assert review(AnsweredRuleReviewEntry(2, drawn[1] + " P275")) == ()
     assert lines(comms, RulesDue) == []
     later = time.time() + RulesDue.max_age + 60
     monkeypatch.setattr(time, "time", lambda: later)
@@ -268,13 +272,8 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 
 
 
-def test_defect_text_without_slop_line_needs_no_label():
-    """Only a text that names a defect in a Slop: line needs its label outside that line."""
-    assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
-    slop = "Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
-    assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
-    assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
-    assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
+def test_plain_messages_need_no_order_labels():
+    assert DirectiveText.refused("Yes, go ahead.") == ()
 
 
 def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_review(commander, tmp_path):
@@ -286,14 +285,8 @@ def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_revie
     def send(body):
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, CALLER)
 
-    for body, refusal in (
-        ("Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
-         "Read the count from its owner.", "Not blunt"),
-        ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
-        ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),
-    ):
-        with pytest.raises(ValueError, match=refusal):
-            send(body)
+    with pytest.raises(ValueError, match='Soft wording'):
+        send('Thanks for moving the count at tools.py:829 into its owner, that is correct.')
     clean = "The count copy at tools.py:829 is wrong: delete it and read the count from its owner."
     send(clean)
     assert [(m.sender, m.body) for m in comms.bus.inbox("worker")] == [("claude-ai", clean)]

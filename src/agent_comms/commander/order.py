@@ -1,13 +1,8 @@
 """The only way the commander sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
 
-`order send` bodies declare, on their own lines:
-  Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
-  Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
-  Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
-  Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
-  Deletes: <decision family> at PATH:LINE :: <repo> :: <family-wide count>
-    (optional; done refuses unless the count is 0)
-  1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
+`order send` and `order problem` take one JSON file. Its `order` is decoded by
+FieldCodec into the PendingProblemOrder used by native tools; its other fields
+name the problems and explain the defect. No rendered instructions are parsed.
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
 Incompetence is not tolerated: a unit is fired from a task, not berated about it.
@@ -19,42 +14,85 @@ and refuses to let a deadline lapse silently.
 """
 from __future__ import annotations
 
-import argparse, asyncio, os, re, subprocess, sys, time
+import argparse
+import asyncio
+import os
+import re
+import subprocess
+import sys
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from uuid import uuid4
+
+from pydantic import PrivateAttr
+
+from agent_comms_hooks import ClaudeHook
+from agent_comms_hooks.watch import PeerSync
 
 from ..change_report import FileLine
-from ..comms import Comms
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
+from ..comms import Comms
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
-from ..field_codec import boundary_decoder
+from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
+from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..launch_runtime import LaunchRuntime
-from ..thread_identity import ThreadIncarnation
-from ..plan_phases import OrderPhase, UnplannedPhase
+from ..plan_phases import OrderPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
+from ..repo import Repo
 from ..standing_rules import HuntDue, RulesDue
 from ..storage_rules import UnitStorage
+from ..thread_identity import ThreadIncarnation
+from ..todos import (
+    AssignTodo,
+    BluntText,
+    CleanHunt,
+    CommitDelivery,
+    DirectiveText,
+    FileDeliveryEvidence,
+    InstallDeadline,
+    LocatedProblemFinding,
+    NoDeliveryEvidence,
+    NotifiedFirstCallEvent,
+    ObservedFirstCallEvent,
+    OperationDelivery,
+    OrderedHunt,
+    OrderMessage,
+    OrderProgress,
+    PendingProblemOrder,
+    PlannedInstallDeadline,
+    RecordFirstCallTodo,
+    Slop,
+    StrikeReason,
+    StrikeTodo,
+    Todo,
+    UnlocatedProblemFinding,
+    VerdictAudience,
+    VoidStrikeTodo,
+    WithdrawTodo,
+)
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
-                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
-                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, TodoList)
-from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
+from ..tools import (
+    CommsChangeProblemTool,
+    CommsFireTool,
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderServeTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+    CommsTodoListTool,
+    TodoList,
+)
 from . import capacity
-from ..repo import Repo
 from .config import CommanderConfig, CommanderRole
-from pydantic import PrivateAttr
+from .send_guard import CommanderSession
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -136,6 +174,45 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
+@dataclass(frozen=True)
+class OrderFile:
+    """CLI context and prose around the same order the native tools accept."""
+
+    order: PendingProblemOrder
+    defect: str
+    why_stupid: str
+    problems: tuple[str, ...] = ()
+    slop: tuple[Slop, ...] = ()
+
+    @classmethod
+    def read(cls, text: str):
+        try:
+            return FieldCodec.decode(cls, FieldCodec.parse(text))
+        except MalformedRecord as error:
+            sys.exit(f'Refused order, nothing recorded:\n{error}')
+
+    @property
+    def prose(self) -> str:
+        return f'{self.defect}\n{self.why_stupid}'
+
+    def problems_found(self, clean: bool) -> list[str]:
+        problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
+                    for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
+                    for error in DirectiveText.refused(text)]
+        if len(self.defect.split()) < 8:
+            problems.append('defect: fix: describe what fails in at least eight words')
+        if not self.why_stupid.strip():
+            problems.append('why_stupid: fix: explain why this design is wrong')
+        if not clean and (timid := BluntText.refused(self.prose)):
+            problems.append(timid + '; fix: name the defect in why_stupid, or use --clean')
+        if re.search(r'\bslop\b', self.prose, re.I) and not self.slop:
+            problems.append('slop: fix: supply pattern, fact, at, derive and by citation fields')
+        return problems
+
+
+
+
+
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
@@ -161,10 +238,13 @@ class CommanderContext(CommanderConfig):
     def incarnation(self) -> ThreadIncarnation:
         return self.comms.registry.require(self.commander).incarnation
 
-    def post(self, audience: VerdictAudience, body: str) -> str:
+    def post(self, audience: VerdictAudience, body: str,
+             answers: tuple[MessageReference, ...] = ()) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        return self.call(CommsSendTool(sender=self.commander, target=target, body=body,
-                                  audience=audience.threads)).id
+        published = self.comms.messaging.send(self.commander, target,
+            audience.addressed(target, body), answers=answers)
+        PeerSync.sent(self, target)
+        return published.message.message_id
 
     def call(self, tool):
         return ThreadCaller(self.commander).invoke(tool, self.comms)
@@ -226,64 +306,56 @@ class CommanderContext(CommanderConfig):
 
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
-             traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
-        """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
-
-        Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
-        problems = []
+    def send(self, unit, due, document: OrderFile, clean=False, reassign=None, new=None,
+             traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
+             answers: tuple[MessageReference, ...] = ()):
+        """Record the decoded order, or report every failed prerequisite before any write."""
+        problems = document.problems_found(clean)
+        order = replace(document.order, finding=finding)
+        check = replace(order.check, directory=str(self.repo_directory(order.check.directory)))
+        order = replace(order, check=check)
+        edits = order.edits
+        body = '\n'.join((document.prose, *edits, order.report))
         # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
         try:
             self.comms.registry.storage_rule.require_quota(self.comms.registry.require(unit))
         except SelectedToolDenied as quota:
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-        Todo.require_order_body(body)
-        if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
-            problems.append(timid)
-        works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
-        run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
-        serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
-        phase = OrderPhase.member_named(serves[1] if serves else UnplannedPhase.declared_name)
-        edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
-        if not edits:
-            problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
-        report = re.search(r'(?m)^Report:\s*(\S.*?)\s*$', body)
-        if not report:
-            problems.append('no Report: line: say exactly what the unit sends back (sha, counts before -> after)')
-        banned = tuple(item.strip() for line in re.findall(r'(?m)^Banned:(.*)$',
-            body) for item in line.split(';') if item.strip())
-        if not banned:
-            problems.append('no Banned: line: name the slop shapes this task invites, separated by ";"')
-        if not re.fullmatch(r'\d{1,2}:\d{2}', due):
-            problems.append('due must be HH:MM local time')
-        fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
-        group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
-        owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
-        line = re.search(r'(?m)^Check:(.*)$', body)
-        check = self.read_check(line[1] if line else '')
+        if not re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d', due):
+            problems.append('due: fix: supply HH:MM local time (00:00 through 23:59)')
+        group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
-        if not group:
-            problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
-        elif not new and (missing := [pid for pid in group if pid not in listed]):
-            problems.append(f'{missing} not open problems')
-        if not owner:
-            problems.append('no Owner: path:line of the existing owner the fix belongs on')
-        elif not os.path.exists(owner[1]) or int(owner[2]) > sum(1 for _ in open(owner[1])):
-            problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
+        if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
+            problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
+        if new and document.problems:
+            problems.append('problems: fix: omit IDs when creating a new problem')
+        if not new and (missing := [pid for pid in group if pid not in listed]):
+            problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
+        for label, validate in (('order.owner', order.owner.require_exists),
+                               ('order.check.directory', check.require_directory)):
+            try:
+                with MalformedRecord.refusing(label):
+                    validate()
+            except MalformedRecord as error:
+                problems.append(f'{label}: {error}; fix: name an existing source location or directory')
         # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
         # An order's check must fail now (or it proves nothing), and every absolute
         # path:line it cites must exist.
-        if check and os.path.isdir(check.directory) and not problems:
+        try:
+            with MalformedRecord.refusing('order.check'):
+                order.require_writable()
+                if Path(check.directory).is_dir():
+                    ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
+                                                    cwd=check.directory, timeout=90))
+                    problems += check.result.distance(ran).unproven(check.command, 0)
+        except MalformedRecord as error:
+            problems.append(f'order.check: {error}; fix: supply a focused measurable command')
+        for reference in FileLine.scan('\n'.join((document.prose, *edits))):
             try:
-                ran = subprocess.run(['bash', '-c', check.command],
-                    cwd=check.directory, capture_output=True, timeout=90)
-                printed = CheckPrinted.decoded(ran.stdout)
-                problems += printed.unproven(check.command, check.result.expected)
-            except subprocess.TimeoutExpired:
-                problems.append('Check took over 90 s; done runs it too, so make it a focused count')
-        for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
-            if not os.path.exists(path) or int(line) > sum(1 for _ in open(path, errors='replace')):
-                problems.append(f'cited {path}:{line} does not exist; read the code before citing it')
+                with MalformedRecord.refusing(reference.to_wire()):
+                    reference.require_exists()
+            except MalformedRecord as error:
+                problems.append(f'{error}; fix: cite an existing source line')
         # A module deleted here can still be imported by another repo:
         # P12 deleted acp_ingress.py, which Toad imports.
         deleted = {stem for edit in edits
@@ -298,41 +370,42 @@ class Commander(CommanderContext):
         # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
         holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
         replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
+        trace = None
+        if traced is not None:
+            try:
+                with MalformedRecord.refusing('--traced'):
+                    trace = FileLine.from_wire(traced)
+            except MalformedRecord as error:
+                problems.append(f'--traced: {error}; fix: supply PATH:LINE')
         for pid in group:
-            if replacing:
-                listed[pid].require_replacement(replaces)
+            try:
+                with MalformedRecord.refusing(pid):
+                    if replacing:
+                        listed[pid].require_replacement(replaces)
+                    if pid in listed and listed[pid].assignment:
+                        listed[pid].assignment.require_trace(unit, trace)
+            except MalformedRecord as error:
+                problems.append(str(error))
         if replaces and not replacing:
-            raise ValueError('--replaces must name the current order on these problems to the same unit.')
-        trace = FileLine.from_wire(traced) if traced is not None else None
-        for pid in group:
-            if pid in listed and listed[pid].assignment:
-                listed[pid].assignment.require_trace(unit, trace)
+            problems.append('--replaces: fix: name the current order on these problems to the same unit')
         if holders and not reassign:
             problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
         if reassign is not None and len(reassign.split()) < 8:
             problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-        message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+        instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
+            f'Problems: {", ".join(group)}', *order.work_instructions()))
+        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')  # a unit shown a due time takes until then
         taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
-        refuse('\n'.join((message, *taken.values())),
-            *OUTGOING)  # before Core: refused records nothing
         fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
-        if not mechanical and fired:
+        if not order.run.mechanical and fired:
             sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
-                     f'Reassign them; only --mechanical orders on them reach {unit}.')
+                     f'Reassign them; only a mechanical run reaches {unit}.')
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
-        at = time.time()
-        order = PendingProblemOrder(finding=finding,
-            id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
-            check=check, edits=edits, banned=banned,
-            report=report[1], run=run, serves=phase,
-            deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
-                rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
-            at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
         common = dict(order=order, request=order.request(self.comms.registry.require(self.commander), tuple(group)), deadline=deadline(due), commander=self.commander)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
@@ -342,7 +415,7 @@ class Commander(CommanderContext):
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
                 assigner=self.incarnation, traced=trace, **common)))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
-        sent = self.post(VerdictAudience((unit,)), message)
+        sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
@@ -356,7 +429,7 @@ class Commander(CommanderContext):
         elif replacing and not clean and not reassign:
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
-            verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
+            verdict = document.prose.strip()
             self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
@@ -382,29 +455,24 @@ class Commander(CommanderContext):
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
-    def say(self, units, body_file):
+    def say(self, units: str, body_file: str,
+            answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
-        # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
-        if len(re.findall(r'(?m)^\s*\d+[.)] ',
-            body)) >= 2 or re.search(r'(?mi)^\s*(report|due)\b.*:', body):
-            sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order send` so it gets a tracked deadline.')
+        if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2:
+            sys.exit('Refused: an edit list needs a tracked deadline; use order send with a JSON file.')
         refuse(body, *OUTGOING)
-        Slop.from_order(body)
-        print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip()))
+        print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
-    def problem(self, text, unit, due, order_file, where, disk=False):
+    def problem(self, order_file, unit, due, where, disk=False,
+                answers: tuple[MessageReference, ...] = ()):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         location = FileLine.from_wire(where)
         location.require_exists()
-        body = open(order_file).read()
-        if 'Problem: NEW' not in body:
-            sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
-        if len(text.split()) < 8:
-            sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
+        document = OrderFile.read(Path(order_file).read_text())
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
-        self.send(unit, due, body.replace('Problem: NEW', f'Problem: {pid}'), new=(pid, text),
-             disk=disk, finding=LocatedProblemFinding(location))
+        self.send(unit, due, document, new=(pid, document.defect),
+             disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         self.write_board()
         print(pid)
 
@@ -419,7 +487,7 @@ class Commander(CommanderContext):
     def write_board(self):
         lines = ['# Fleet board', '',
                  "GENERATED by agent-comms-commander order from Core's Todo store. Do not edit by hand:",
-                 '`order problem` adds a row, `order send ... Problem: P<n>` orders it, `order close` or `order withdraw` removes it.', '',
+                 '`order problem FILE.json` adds a row, `order send` orders it, `order close` or `order withdraw` removes it.', '',
                  '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
                  '| Strikes | Owner last acted |',
                  '|---|---|---|---|---|---|---|---|---|']
@@ -437,7 +505,8 @@ class Commander(CommanderContext):
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
         open(self.board, 'w').write('\n'.join(lines) + '\n')
 
-    def on_record(self, line: str, recorded: str, audience: VerdictAudience) -> None:
+    def on_record(self, line: str, recorded: str, audience: VerdictAudience,
+                  answers: tuple[MessageReference, ...] = ()) -> None:
         """Put one line on the public record: the narrative file, then its audience.
 
         Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
@@ -449,14 +518,15 @@ class Commander(CommanderContext):
                         'Written by agent-comms-commander order; never edited.\n\n')
             f.write(f'- {line}\n')
         try:
-            self.post(audience, f'On the record: {line}')
+            self.post(audience, f'On the record: {line}', answers)
         except (SystemExit, ValueError) as failed:
             print(f'{recorded} recorded, but the post failed ({failed}). '
                   'Repost with order.post; do not record it again.', file=sys.stderr)
             raise
 
     def strike(self, unit: str, task: str, why: str, caught: str = 'review', *,
-               kind: type[StrikeTodo] = StrikeTodo) -> None:
+               kind: type[StrikeTodo] = StrikeTodo,
+               answers: tuple[MessageReference, ...] = ()) -> None:
         """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
         failure stays private and none is described in words that hide what happened."""
         caught = f'{self.commander} at {caught}' if caught in STAGES else caught
@@ -468,9 +538,10 @@ class Commander(CommanderContext):
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
         self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
-                                      f'{why} (caught by {caught})'))
+                                      f'{why} (caught by {caught})'), answers)
 
-    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
+                 answers: tuple[MessageReference, ...] = ()) -> None:
         """Core records the strike on the task's Todo; it is written to the narrative file and posted
         to #comms in the same step."""
         refuse(strike.reason,
@@ -478,14 +549,15 @@ class Commander(CommanderContext):
         if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
                 .todo.revision == todo.revision):
             return
-        self.posted(unit, self.comms.goals.todos.get(todo.id), strike)
+        self.posted(unit, self.comms.goals.todos.get(todo.id), strike, answers)
 
-    def posted(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+    def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
+               answers: tuple[MessageReference, ...] = ()) -> None:
         """A strike Core recorded on the task's Todo goes to the narrative file and #comms."""
         n = struck(todo, unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
-        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
+        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
     def done(self, pid, sha, screenshot='', seen='', repo=''):
@@ -740,10 +812,47 @@ class RuledVerb(CommanderVerb):
 
     def gate(self, ctx: Commander) -> None:
         super().gate(ctx)
+        self.require_review(ctx)
+
+    def require_review(self, ctx: Commander) -> None:
         for due in RulesDue.violations(ctx.comms, self.who(ctx)):
             flag = '' if self.who(ctx) == ctx.commander else f' --fork {self.who(ctx)}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
+
+
+@dataclass(frozen=True, kw_only=True)
+class DirectiveVerb(RuledVerb):
+    """An action may answer named directives; unrelated work cannot clear them."""
+
+    answers: tuple[str, ...] = option("--answers", nargs="+", default=(),
+                                      help="original directive message IDs this action answers")
+
+    def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
+        thread = ctx.comms.registry.require(self.who(ctx))
+        originals = tuple(message for goal in thread.goal.active()
+                          for message in goal.order.directive_messages(ctx.comms.goals)
+                          if message.message_id in self.answers)
+        if set(self.answers) != {message.message_id for message in originals}:
+            sys.exit('REFUSED: --answers must name original directives on this request.')
+        return tuple(message.reference for message in originals)
+
+    def require_review(self, ctx: Commander) -> None:
+        if not self.answer_references(ctx):
+            super().require_review(ctx)
+
+    def gate(self, ctx: Commander) -> None:
+        answers = self.answer_references(ctx)
+        thread = ctx.comms.registry.require(self.who(ctx))
+        overdue = tuple(directive.original(ctx.comms.goals)
+                        for goal in thread.goal.active()
+                        for directive in goal.order.overdue_directives(
+                            goal, ctx.comms.goals, thread.incarnation, time.time()))
+        if overdue and not answers:
+            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
+            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        super().gate(ctx)
 
 
 class OrderVerb(CommanderVerb):
@@ -751,13 +860,12 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, RuledVerb):
+class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
-    body_file: str = option("body_file", metavar="BODYFILE")
+    body_file: str = option("body_file", metavar="ORDER.json")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
-    mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
     replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
     disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
@@ -765,13 +873,13 @@ class SendVerb(OrderVerb, RuledVerb):
                                 help="the first failing source line, required after two owners")
 
     def run(self, ctx: Commander) -> None:
-        ctx.send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
-             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
-             replaces=self.replaces, disk=self.disk)
+        ctx.send(self.unit, self.due, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
+             reassign=self.reassign, traced=self.traced,
+             replaces=self.replaces, disk=self.disk, answers=self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, RuledVerb):
+class StrikeVerb(OrderVerb, DirectiveVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
@@ -781,7 +889,8 @@ class StrikeVerb(OrderVerb, RuledVerb):
         references = set(re.findall(r'\bP\d+\b', self.why))
         if len(references) != 1:
             sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
-        ctx.strike(self.unit, references.pop(), self.why, self.caught)
+        ctx.strike(self.unit, references.pop(), self.why, self.caught,
+                   answers=self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -894,27 +1003,27 @@ class ServeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, RuledVerb):
+class SayVerb(OrderVerb, DirectiveVerb):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
 
     def run(self, ctx: Commander) -> None:
-        ctx.say(self.units, self.body_file)
+        ctx.say(self.units, self.body_file, self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, RuledVerb):
+class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
-    text: str = option("text")
+    order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
     due: str = option("--due", help="HH:MM local time")
-    order: str = option("--order", help="the order body file")
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
 
     def run(self, ctx: Commander) -> None:
-        ctx.problem(self.text, self.to, self.due, self.order, self.where, self.disk)
+        ctx.problem(self.order, self.to, self.due, self.where, self.disk,
+                    self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -986,6 +1095,17 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         print(ctx.next_hunt())
+
+
+class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
+    """Run the hook against the selected commander's existing context and session owner."""
+
+    help = "inject or block when the selected commander owes its peer a relay"
+
+    def run(self, ctx: Commander) -> None:
+        hook = ClaudeHook.read()
+        if CommanderSession(hook.session_id, ctx).is_commander():
+            PeerSync.report(hook, ctx)
 
 
 class BoardVerb(OrderVerb):

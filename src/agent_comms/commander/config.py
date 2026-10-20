@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,6 +45,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     disk: Path
     parked: frozenset[str] = frozenset()
 
+    @property
+    def peer_sync_log(self) -> Path:
+        return self.scratch / "peer-sync.log"
+
     @staticmethod
     def path(home: Path | None = None) -> Path:
         return (home or Path.home()) / '.config/agent-comms/commander.json'
@@ -57,7 +62,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
     @classmethod
-    def read(cls, path: Path | str) -> CommanderConfig:
+    def read(cls, path: Path | str) -> Self:
         return cls.model_validate_json(Path(path).read_text())
 
     @staticmethod
@@ -65,9 +70,17 @@ class CommanderConfig(CommanderRole, BaseModel):
         return root / 'commander.json'
 
     @classmethod
-    def read_root(cls, root: Path | str) -> CommanderConfig:
+    def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
         return cls.read(cls.root_path(root)).model_copy(update={'root': root})
+
+    @classmethod
+    def packaged_rules_files(cls) -> tuple[Path, ...]:
+        """All packaged rule files, shared by review and session context."""
+        rules = tuple(sorted(path for path in cls.packaged_rules().iterdir() if path.is_file()))
+        if not rules:
+            raise ValueError('The packaged commander rules directory is empty.')
+        return rules
 
     def repo_directory(self, name: str) -> Path:
         """A configured repository name takes precedence over a directory spelling."""
