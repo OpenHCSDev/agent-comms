@@ -32,7 +32,7 @@ from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, View
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, MalformedRecord, option
+from .field_codec import FieldCodec, MalformedRecord, option, projected
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
@@ -74,7 +74,8 @@ from .native_tools import ArgumentTool, NativeToolDeclaration, NativeRequestTool
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
 from .cli_result import ToolCatalogResult
-from .tool_result import OwnGoalPublication, ToolResult
+from .tool_result import ToolResult
+from .pi_payloads import PublishedGoalToolDetails
 from .send_result import CorrectionResult, SendResult
 from .coordination_tables.refusals import SendRefusal
 from .task_sources import (
@@ -138,6 +139,16 @@ class ProjectSet(ToolResult):
     current: str
     changed: bool
     instruction: str
+
+
+class OwnGoalPublication(ToolResult):
+    """A self-relative goal writer returns the exact declaration it published."""
+
+    __slots__ = ()
+
+    @projected(view="wire", name="agentCommsKind")
+    def publication_kind(self) -> object:
+        return FieldCodec.encode(PublishedGoalToolDetails)
 
 
 @dataclass(frozen=True)

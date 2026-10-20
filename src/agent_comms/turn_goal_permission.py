@@ -6,8 +6,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .native_tool_call import SelectedToolDenied
+from .ordinary_turn_rules import OrdinaryGoalRule
+from .reservation_rules import ReservationViolationError
+
 if TYPE_CHECKING:
+    from .goal_waits import GoalWait
     from .goals import Goal, GoalDeclaration
+    from .turn_input_source import InputDependency
 
 
 class GoalPermission(ABC):
@@ -17,7 +23,7 @@ class GoalPermission(ABC):
     def allows_routed(self, current: GoalDeclaration) -> bool:
         return not current.accepts_following_handoff()
 
-    def dependency_current(self, dependency, wait) -> bool:
+    def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return dependency.current(wait)
 
 
@@ -35,7 +41,7 @@ class PublishedGoalPermission(OwnerGoalPermission):
     def allows_routed(self, current: GoalDeclaration) -> bool:
         return self.allows(current)
 
-    def dependency_current(self, dependency, wait) -> bool:
+    def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return dependency.current(wait) or wait.allows_routed_input()
 
 
@@ -63,10 +69,10 @@ class AcceptedGoalPermission(GoalPermission):
 
 @dataclass
 class TurnGoalPermission(GoalPermission):
-    """One live input's grant, advanced only by its authenticated tool publication.
+    """One running input's permission, changed only by its own tool publication.
 
-    The returned declaration is the writer's receipt, not a reread of whatever
-    another owner may have published. A later external change still fails equality.
+    The writer returns its exact declaration, not a reread of whatever another
+    owner may have published. A later external change still fails equality.
     """
 
     captured: GoalPermission
@@ -77,14 +83,10 @@ class TurnGoalPermission(GoalPermission):
     def allows_routed(self, current: GoalDeclaration) -> bool:
         return self.captured.allows_routed(current)
 
-    def dependency_current(self, dependency, wait) -> bool:
+    def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return self.captured.dependency_current(dependency, wait)
 
     def require_current(self, current: GoalDeclaration) -> None:
-        from .ordinary_turn_rules import OrdinaryGoalRule
-        from .reservation_rules import ReservationViolationError
-        from .native_tool_call import SelectedToolDenied
-
         if not self.allows(current):
             raise SelectedToolDenied(str(ReservationViolationError(OrdinaryGoalRule())))
 

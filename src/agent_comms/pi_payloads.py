@@ -35,9 +35,9 @@ from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
+    from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
-    from .turn_goal_permission import TurnGoalPermission
 
 
 def wire_field(name: str, default=None):

@@ -56,7 +56,7 @@ class SelectedParticipant(MroDispatch):
     goal_permission: TurnGoalPermission = field(init=False, repr=False)
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal))
 
     @handles(CompactionEvent)

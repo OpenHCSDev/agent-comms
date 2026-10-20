@@ -1,6 +1,6 @@
 """Declared CLI and tool replies share their JSON behavior."""
 
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec
 
 
 class DeclaredReply:
@@ -17,15 +17,3 @@ class ToolResult(DeclaredReply):
     """A tool's declared result record; invoke alone encodes it for every adapter."""
 
     __slots__ = ()
-
-
-class OwnGoalPublication(ToolResult):
-    """A self-relative goal writer returns the exact declaration it published."""
-
-    __slots__ = ()
-
-    @projected(view="wire", name="agentCommsKind")
-    def publication_kind(self) -> str:
-        from .pi_payloads import PublishedGoalToolDetails
-
-        return PublishedGoalToolDetails.declared_name

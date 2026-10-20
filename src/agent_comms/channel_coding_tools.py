@@ -38,6 +38,9 @@ from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
 from .turn_goal_permission import TurnGoalPermission
 
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
+
 
 @dataclass(frozen=True, kw_only=True)
 class CodingToolOwner(ABC):
@@ -46,8 +49,9 @@ class CodingToolOwner(ABC):
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
-    if TYPE_CHECKING:
-        goal_permission: TurnGoalPermission
+    @property
+    @abstractmethod
+    def goal_permission(self) -> TurnGoalPermission: ...
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
@@ -77,7 +81,7 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
         return reservation
 
-    def tool_completed(self, call, result) -> None:
+    def tool_completed(self, call: CodingCall, result: PiToolResult) -> None:
         """The checked terminal shares its actual publication with this turn's grant."""
         call.published_goal(result, self.goal_permission)
 
@@ -91,13 +95,13 @@ class CodingToolOwner(ABC):
         raise SelectedToolDenied("An ordinary input has no selected original")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
     claim_scope: WakeClaim
     session_dir: Path
     input_id: str
-    goal_permission: TurnGoalPermission
+    goal_permission: TurnGoalPermission = field()
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""

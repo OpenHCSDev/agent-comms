@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CursorOwner(RegistryOwner):
-    """Settle recorded input, without re-admitting its goal or any new input."""
+    """Record this started input; deciding whether tools may run belongs to its turn."""
 
     check_type = RunningTurnRegistryCheck
     wire_root_id: str
