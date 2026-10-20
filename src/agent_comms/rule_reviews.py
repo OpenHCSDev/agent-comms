@@ -28,7 +28,6 @@ class DrawnRule(TypedTable):
     reviewer: str = field(metadata={"sql": Column(primary_key=True)})
     n: int = field(metadata={"sql": Column(primary_key=True, check="n>0")})
     rule: str
-    cited: bool
     drawn_at: float
 
 
@@ -50,47 +49,46 @@ class RuleReviewEntry(DeclaredFamily, affix="RuleReviewEntry"):
 
 @dataclass(frozen=True)
 class DrawnRuleReviewEntry(RuleReviewEntry):
-    """A new review replaces the reviewer's last; the first ``cited`` rules need a cited answer."""
+    """A new review replaces the reviewer's last; every drawn rule requires a quoted answer."""
 
     drawn: tuple[str, ...]
-    cited: int
 
     def __post_init__(self) -> None:
-        if not self.drawn or not 0 <= self.cited <= len(self.drawn):
-            raise ToolRefusedError(
-                "A review draws at least one rule and cites at most every drawn rule."
-            )
+        if not self.drawn:
+            raise ToolRefusedError("A review draws at least one rule.")
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         DrawnRule.delete(db, reviewer=reviewer)
         RuleAnswer.delete(db, reviewer=reviewer)
         at = time.time()
         for n, rule in enumerate(self.drawn, 1):
-            DrawnRule(reviewer, n, rule, n <= self.cited, at).insert(db)
+            DrawnRule(reviewer, n, rule, at).insert(db)
 
 
 @dataclass(frozen=True)
 class AnsweredRuleReviewEntry(RuleReviewEntry):
     """What this tick does about drawn rule ``n``."""
 
-    least_words: ClassVar[int] = 10
+    quoted_words: ClassVar[int] = 8
     n: int
     text: str
-
-    def __post_init__(self) -> None:
-        if len(self.text.split()) < self.least_words:
-            raise ToolRefusedError(
-                f"Say in {self.least_words}+ words what this tick does about the rule,"
-                " naming a unit, problem or file."
-            )
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         drawn = DrawnRule.select(db, reviewer=reviewer, n=self.n)
         if not drawn:
             raise ToolRefusedError(f"{reviewer} has no review that drew rule {self.n}.")
-        if drawn[0].cited and not re.search(r"\S+\.py:\d+|P\d+", self.text):
+        quotes = str.maketrans("", "", "\"'`“”‘’")
+        words = tuple(drawn[0].rule.translate(quotes).casefold().split())
+        answer = tuple(self.text.translate(quotes).casefold().split())
+        width = self.quoted_words
+        runs = {answer[i : i + width] for i in range(len(answer) - width + 1)}
+        if not any(
+            words[i : i + width] in runs for i in range(len(words) - width + 1)
+        ) or not re.search(r"\S+\.py:\d+|P\d+", self.text):
             raise ToolRefusedError(
-                "A correct-maintenance answer names the file:line or P-number it was applied to."
+                f"Quote the drawn rule's own words ({self.quoted_words}+ in a row) "
+                "and the file:line or P-number "
+                "this tick applied it to."
             )
         RuleAnswer(reviewer, self.n, self.text).upsert(db)
 

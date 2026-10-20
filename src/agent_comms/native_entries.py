@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, TextIO
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
-from .importing import ImportBuffer, ImportedSessionMetadata, ImportLimits
+from .importing import ImportedSessionMetadata
 from .pi_payloads import PiMessage, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
+from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
@@ -176,13 +176,11 @@ class ImportedSessionWriter:
         self.stream.write(json.dumps(encoded, ensure_ascii=False) + "\n")
         self.parent = NativeEntry.from_wire(encoded)
 
-    def import_record(
-        self, entry: RecordedEntry, events: Iterable[TranscriptEvent], limits: ImportLimits
-    ) -> None:
-        buffer = ImportBuffer(limits)
-        buffer.add(events)
-        for message in buffer.messages:
-            self.append(message, entry.timestamp.at)
+    def append_recorded(self, event: TranscriptEvent) -> None:
+        def append(message: ImportedMessage) -> None:
+            at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
+            self.append(message, datetime.fromtimestamp(at, UTC))
+        event.import_to(append)
 
 
 class NativeHeaderState(ABC):

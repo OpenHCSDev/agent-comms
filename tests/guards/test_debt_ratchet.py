@@ -11,11 +11,19 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
-    ComparedKind, DeclaredSpellings, NamedAccess, NamedDeclaration, StringIdentity, python_paths,
+    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
+    ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
+    StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
+
+
+def test_measure_owner_rejects_a_new_absence() -> None:
+    name = f"{NoneAbsence.__name__}:tools/example.py"
+    result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
+    assert result.delta[name] == 1
+    assert result.failed
 
 
 class Repository:
@@ -113,6 +121,35 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
     assert os.environ["PYTHONPATH"] == inherited
+
+
+def test_unrelated_change_does_not_require_a_core_carry_module(repo: Repository) -> None:
+    base = repo.commit({"plain.py": "value = 1\n"})
+    head = repo.commit({"plain.py": "value = 2\n"})
+    assert EditedCarry.compare(
+        repo.path, base, head, {f"{repo.root}/plain.py"}, repo.root,
+    ) == ({"EditedCarry": 0}, {"EditedCarry": 0})
+
+
+def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository) -> None:
+    base = repo.commit({"new.py": "value = 1\n"})
+    source = "value = 1\nother = 2\n"
+    grown = repo.commit({"new.py": source})
+    assert repo.compare(base, grown)[0] == 0
+    filtered = repo.commit({"new.py": source + "filtered = type(value) is int\n"})
+    status, report = repo.compare(grown, filtered)
+    assert status == 1
+    assert report["delta"]["TypeIdentity"] == 1
+    dispatch = repo.commit({"new.py": source + (
+        "\n\ndef select(value):\n"
+        '    if value == "one":\n        return 1\n'
+        '    if value == "two":\n        return 2\n'
+        '    if value == "three":\n        return 3\n'
+        "    return 0\n"
+    )})
+    status, report = repo.compare(grown, dispatch)
+    assert status == 1
+    assert report["delta"][f"StringDispatch:{repo.root}/new.py"] == 1
 
 
 def test_added_type_check_fails(repo: Repository) -> None:
@@ -283,8 +320,7 @@ def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
     head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
+    assert status == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::Small"] == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
 
@@ -312,8 +348,7 @@ def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: R
     base = repo.commit({"old.py": owner("Existing", 501)})
     moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
     status, report = repo.compare(base, moved)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
+    assert status == 0
     assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
@@ -471,7 +506,6 @@ class Reader:
 """})
     status, report = repo.compare(base, boolean)
     assert status == 1
-    assert report["delta"]["SourceLines"] > 0
     assert report["head"][f"ForeignAbsenceProbe:{repo.root}/connection.py"] == 0
 
     missing = repo.commit({"missing.py": """
@@ -509,7 +543,6 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
     declarations = repo.commit({"boundary.py": source})
     status, report = repo.compare(base, declarations)
     assert status == 1
-    assert report["delta"]["SourceLines"] > 0
     assert report["head"]["StringSubscript"] == 0
     # Annotation spelling cannot conceal actual initializer/default/decorator/body reads.
     runtime = source + '\n'.join([
