@@ -83,10 +83,10 @@ class GitSource(BaseModel):
 
 
 class EditableSource(BaseModel):
-    editable: str
+    editable: Path
 
     def pin(self, version: str, core: str) -> PackagePin:
-        if self.editable != "..":
+        if self.editable != Path(".."):
             raise ValueError(f"Unrecorded editable source: {self.editable}")
         return GitPin(version, core)
 
@@ -160,7 +160,8 @@ class RuntimeResolution(InstalledBuildManifest):
                     "-c",
                     "import importlib.metadata as m,json; "
                     "from packaging.utils import canonicalize_name as n; "
-                    'print(json.dumps({n(d.metadata["Name"]):d.version for d in m.distributions()}))',
+                    'print(json.dumps({n(d.metadata["Name"]):d.version '
+                    "for d in m.distributions()}))",
                 ]
             )
         )
