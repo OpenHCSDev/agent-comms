@@ -102,8 +102,8 @@ class PiChild:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
             response = await self.reader.request(command, self.proc.stdin)
-        if response.success is not True:
-            raise RuntimeError(response.error)
+        if not response.succeeded:
+            raise RuntimeError(response.error.value_or("Pi gave no error text"))
         return response.data.require_payload()
 
     @property

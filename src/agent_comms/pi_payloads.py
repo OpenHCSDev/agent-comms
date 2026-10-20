@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from decimal import Decimal
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+from uuid import uuid4
 
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -50,6 +51,7 @@ from .turn_failure import ProviderTransportFailed
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
     from .backend import TurnSession
+    from .pending_requests import PendingRequests
     from .pi_events import AutoRetryEnd
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
@@ -61,18 +63,96 @@ PiValue = typing.TypeVar("PiValue")
 PiField = Annotated[PiValue, WireOmitDefault()]
 
 
+class PiReported[T](SingleFieldValue):
+    """A value Pi sent in one of its optional fields; PiOmitted answers the same questions."""
+
+    __slots__ = ()
+    reported: ClassVar[bool] = True
+    value: T
+
+    def value_or[D](self, default: D) -> T | D:
+        return self.value
+
+    def present(self) -> tuple[T]:
+        return (self.value,)
+
+    def require(self) -> T:
+        return self.value
+
+
 @dataclass(frozen=True, slots=True)
 class PiOmitted(NullMember):
     """Pi left an optional field out or sent null; it goes back out the same way."""
 
-    def __bool__(self) -> Literal[False]:
-        return False
+    reported: ClassVar[bool] = False
+
+    def value_or[D](self, default: D) -> D:
+        return default
+
+    def present(self) -> tuple[()]:
+        return ()
+
+    def text_or[D](self, default: D) -> D:
+        return default
+
+    def require(self) -> Any:
+        raise MalformedRecord("Pi left out a field this record requires")
 
     @classmethod
     @boundary_decoder
     def from_input[T](cls, value: T | None) -> T | PiOmitted:
         """Our own unset value reaches Pi's wire as Pi's omission."""
         return cls() if value is None else value
+
+
+@dataclass(frozen=True)
+class ReportedText(PiReported[str]):
+    value: str
+
+    def text_or[D](self, default: D) -> str | D:
+        """Pi's empty text falls back exactly as its omitted text does."""
+        return self.value or default
+
+
+@dataclass(frozen=True)
+class ReportedFlag(PiReported[bool]):
+    value: bool
+
+
+@dataclass(frozen=True)
+class RequestId(PiReported[str]):
+    """The id a command carries and Pi echoes on the response that answers it."""
+
+    value: str
+
+    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+        return pending.add(owner, self.value, request=command)
+
+    def release_from(self, pending: PendingRequests, owner: type) -> None:
+        pending.discard(owner, self.value)
+
+    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+        return pending.take(owner, self.value, response)
+
+
+@dataclass(frozen=True, slots=True)
+class AnonymousRequest(PiOmitted):
+    """The record carried no id; its response is matched by command family alone."""
+
+    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+        return pending.add(owner, uuid4().hex, request=command)
+
+    def release_from(self, pending: PendingRequests, owner: type) -> None:
+        """The anonymous entry is keyed by a private token nobody else holds."""
+
+    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+        return pending.take_anonymous(owner, response)
+
+    def require(self) -> str:
+        raise ValueError("A correlated native input requires its command ID")
+
+
+PiRequestId = RequestId | AnonymousRequest
 
 
 def wire_options(target):
@@ -679,13 +759,15 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: PiField[PiUsage] = UnreportedUsage()
-    input_id: Annotated[PiField[str | PiOmitted], WireName("inputId")] = PiOmitted()
-    input_digest: Annotated[PiField[str | PiOmitted], WireName("inputDigest")] = PiOmitted()
+    input_id: Annotated[PiField[ReportedText | PiOmitted], WireName("inputId")] = PiOmitted()
+    input_digest: Annotated[
+        PiField[ReportedText | PiOmitted], WireName("inputDigest")
+    ] = PiOmitted()
     stop_reason: Annotated[
         PiField[type[PiStopReason]], WireName("stopReason")
     ] = UnreportedStopReason
     error_message: Annotated[
-        PiField[str | PiOmitted], WireName("errorMessage")
+        PiField[ReportedText | PiOmitted], WireName("errorMessage")
     ] = PiOmitted()
     diagnostics: tuple[PiDiagnostic, ...] = ()
 
@@ -837,7 +919,8 @@ class UserMessage(PiMessage):
     user = True
 
     def matches_input(self, text, native_id):
-        return self.text == text and self.input_id == native_id
+        # An omitted input id matches an omitted prompt id, as it always has.
+        return self.text == text and self.input_id.value_or(PiOmitted()) == native_id
 
     async def apply_start(self, session, event):
         return await session.accept_user_message(self, event)
@@ -870,7 +953,9 @@ class UserMessage(PiMessage):
         for part in parts:
             events.extend(part.user_transcript(context.position, timestamp))
         events = [replace(event, routing=routing) for event in events]
-        return [event.with_native_input(self.input_id) for event in events] if self.input_id else events
+        for input_id in self.input_id.present():
+            events = [event.with_native_input(input_id) for event in events]
+        return events
 
 
 class ToolDetailsPayload(PiPayload):
@@ -941,6 +1026,11 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
 
     async def emit(self, session):
         return self.events()
+
+
+@dataclass(frozen=True)
+class NoDelta(PiOmitted, PiDelta, declared_name=None):
+    """The update carried no assistant event: no events and no progress, as PiDelta answers."""
 
 
 @dataclass(frozen=True)
@@ -1131,14 +1221,16 @@ class SessionSwitchData(PiResponseData):
 class NativeSessionSnapshot(PiPayload):
     """External snapshots may report only part of a saved session's identity."""
 
-    session_id: Annotated[PiField[str | PiOmitted], WireName("sessionId")] = PiOmitted()
-    session_file: Annotated[PiField[str | PiOmitted], WireName("sessionFile")] = PiOmitted()
+    session_id: Annotated[PiField[ReportedText | PiOmitted], WireName("sessionId")] = PiOmitted()
+    session_file: Annotated[
+        PiField[ReportedText | PiOmitted], WireName("sessionFile")
+    ] = PiOmitted()
 
     def _known_identity(self) -> dict[str, str]:
         return {
             component.name: value
             for component in fields(NativeSessionIdentity)
-            if (value := getattr(self, component.name))
+            if (value := getattr(self, component.name).text_or(""))
         }
 
     @property
@@ -1175,9 +1267,11 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     pending_message_count: Annotated[
         PiField[NonnegativePiCount], WireName("pendingMessageCount")
     ] = UnreportedCount()
-    is_streaming: Annotated[PiField[bool | PiOmitted], WireName("isStreaming")] = PiOmitted()
+    is_streaming: Annotated[
+        PiField[ReportedFlag | PiOmitted], WireName("isStreaming")
+    ] = PiOmitted()
     is_compacting: Annotated[
-        PiField[bool | PiOmitted], WireName("isCompacting")
+        PiField[ReportedFlag | PiOmitted], WireName("isCompacting")
     ] = PiOmitted()
 
     @classmethod
@@ -1202,14 +1296,19 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 
     @property
     def session_busy(self) -> bool:
-        return self.is_streaming is True or self.is_compacting is True
+        return self.is_streaming.value_or(False) or self.is_compacting.value_or(False)
 
 
 @dataclass(frozen=True)
 class SessionStatsData(NativeSessionSnapshot, PiResponseData):
     context_usage: Annotated[
-        PiField[PiContextUsage | PiOmitted], WireName("contextUsage")
+        PiField[ReportedContextUsage | PiOmitted], WireName("contextUsage")
     ] = PiOmitted()
+
+
+@dataclass(frozen=True)
+class ReportedContextUsage(PiReported[PiContextUsage]):
+    value: PiContextUsage
 
 
 @dataclass(frozen=True)
@@ -1227,7 +1326,7 @@ class CompactionData(PiResponseData):
     summary: str | None = None
     usage: PiField[PiUsage] = UnreportedUsage()
     first_kept_entry_id: Annotated[
-        PiField[str | PiOmitted], WireName("firstKeptEntryId")
+        PiField[ReportedText | PiOmitted], WireName("firstKeptEntryId")
     ] = PiOmitted()
     tokens_before: Annotated[
         PiField[PiCount], WireName("tokensBefore")
@@ -1244,6 +1343,11 @@ class CompactionData(PiResponseData):
 
     def charge(self, session):
         yield from self.usage.charges(session.usage)
+
+
+@dataclass(frozen=True)
+class ReportedCompaction(PiReported[CompactionData]):
+    value: CompactionData
 
 
 @dataclass(frozen=True)
@@ -1313,8 +1417,8 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 class NativeEditDetails(PiPayload):
     """Native edit metadata, decoded only when projecting actual edit evidence."""
 
-    patch: PiField[str | PiOmitted] = PiOmitted()
-    diff: PiField[str | PiOmitted] = PiOmitted()
+    patch: PiField[ReportedText | PiOmitted] = PiOmitted()
+    diff: PiField[ReportedText | PiOmitted] = PiOmitted()
     first_changed_line: Annotated[
         PiField[int | PiOmitted], WireName("firstChangedLine")
     ] = PiOmitted()
@@ -1332,11 +1436,11 @@ class NativeEditDetails(PiPayload):
     def reported_diff(self):
         from .tool_results import ToolDiff
 
-        if self.patch and self.patch.strip():
-            return ToolDiff(self.patch)
-        if self.diff and self.diff.strip():
+        if (patch := self.patch.value_or("")).strip():
+            return ToolDiff(patch)
+        if (diff := self.diff.value_or("")).strip():
             # This is the external numbered edit format in retained Pi journals.
-            return ToolDiff(self.diff, "numbered")
+            return ToolDiff(diff, "numbered")
         return None
 
 

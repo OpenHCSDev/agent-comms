@@ -41,8 +41,8 @@ class PreparedSession(UnwrittenPrompt):
             raise NativePiUnavailable("Native preparation did not attest the saved session")
         session.launch.session.attest(identity)
         if (
-            state.is_streaming is not False
-            or state.is_compacting is not False
+            state.is_streaming.value_or(True)
+            or state.is_compacting.value_or(True)
             or not state.pending_message_count.matches(0)
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")

@@ -134,7 +134,7 @@ class HumanInputOrigin(InputOrigin):
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
-            root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
+            root_id = comms.bus.log.read_metadata_unlocked().root_id
             root_id = Id128Text.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
@@ -149,7 +149,7 @@ class HumanInputOrigin(InputOrigin):
 
         if controller is None or controller is UNBOUND_CONTROLLER:
             raise RelationViolationError("User input origin requires its attached ACP controller")
-        if self.root_id != comms.bus.log.read_metadata_unlocked().wire_root_id:
+        if self.root_id != comms.bus.log.read_metadata_unlocked().root_id:
             raise RelationViolationError("User input origin belongs to another wire root")
         if self.claim_scope != claim_scope:
             raise RelationViolationError("User input origin attachment changed")

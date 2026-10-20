@@ -581,7 +581,7 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
                 # introduce header failures where no SQL source was selected.
                 session_id = (reader.session_id
                               if db is not None and any(
-                                  user and user.input_id
+                                  user and user.message.input_id.reported
                                   for _, user in selected) else None)
                 capture = partial(
                     NativeRuntimeInput.transcript_projection,

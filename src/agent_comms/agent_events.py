@@ -26,7 +26,7 @@ from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
+from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
     CompactionReason,
     NoThinkingOverride,
@@ -165,7 +165,7 @@ class NativePhaseChanged(AgentEvent):
 
 @dataclass(frozen=True)
 class SettingChangeResult(AgentEvent):
-    id: str | None
+    id: PiRequestId
     ok: bool
     error: str | None = None
 

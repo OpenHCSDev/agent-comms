@@ -307,7 +307,7 @@ class PiNativeBackend(
             return NothingToCompaction()
         return PlacedCompaction(
             summary=data.summary,
-            first_kept=data.first_kept_entry_id,
+            first_kept=data.first_kept_entry_id.value_or(None),
             tokens_before=data.tokens_before,
         )
 

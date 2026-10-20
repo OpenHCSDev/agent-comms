@@ -553,20 +553,21 @@ class MessageEntry(NativeEntry):
         return self.message.assistant
 
     @property
-    def input_id(self) -> str | PiOmitted:
-        return self.message.input_id
+    def input_id(self) -> str:
+        """A tracked user entry's input id; untracked entries ask message.input_id."""
+        return self.message.input_id.require()
 
     @property
     def tracked_user(self) -> MessageEntry | None:
         from .field_codec import Id128Text, Sha256Text
 
-        if not self.message.input_id:
-            return None
-        Id128Text.decode(self.message.input_id)
-        if not self.message.user or not self.message.input_digest or not self.id:
-            raise MalformedRecord("Native Pi session has ambiguous tracked user input")
-        Sha256Text.from_text(self.message.input_digest)
-        return self
+        for input_id in self.message.input_id.present():
+            Id128Text.decode(input_id)
+            if not self.message.user or not self.message.input_digest.reported or not self.id:
+                raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+            Sha256Text.from_text(self.message.input_digest.require())
+            return self
+        return None
 
     def require_failed_terminal(self, parent_id: str) -> None:
         if self.parent_id != parent_id:

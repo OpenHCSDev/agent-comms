@@ -35,32 +35,32 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from agent_comms.pi_payloads import PiOmitted
+from agent_comms.pi_payloads import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
-from .acp_failure import UnrecordedFailureSource
 from .agent_backend import TurnInbox
+from .acp_failure import UnrecordedFailureSource
 from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_inputs import ImageInput
-from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
-from .native_tool_call import NativeToolMode
-from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .native_tool_call import NativeToolMode
+from .native_tool_transport import ToolTransport, UnboundToolTransport
+from .mro_dispatch import MroDispatch, handles
 from .selected_tool_broker import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
@@ -165,9 +165,8 @@ async def stream_agent_events(
                     TurnSession(
                         launch,
                         partial(commands.Prompt,
-                            id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-                            input_id=Id128Text.mint(), message=task,
-                            images=tuple(images) or PiOmitted(),
+                            id=RequestId(f"agent-comms-prompt-{secrets.token_hex(16)}"),
+                            input_id=Id128Text.mint(), message=task, images=tuple(images),
                             context_contributions=context_contributions,
                         ),
                         tool_mode=tool_mode,
@@ -418,7 +417,7 @@ class NativeSession(MroDispatch, ABC):
             abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
                 self.native.proc.stdin.write(
-                    self.native.reader.encode(commands.Abort(id="agent-comms-watchdog"))
+                    self.native.reader.encode(commands.Abort(id=RequestId("agent-comms-watchdog")))
                 )
                 remaining = max(0.0, abort_deadline - self.loop.time())
                 await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=remaining)
@@ -678,7 +677,7 @@ class TurnSession(NativeSession):
         self.tool_socket.tool_finished(event, self.command.input_id)
 
     def reject_prompt(self, response):
-        error = self.output.error(str(response.error or "Prompt was rejected"),
+        error = self.output.error(response.error.text_or("Prompt was rejected"),
                                   source=UnrecordedFailureSource())
         yield self.watchdog.state(
             "failed", "prompt_rejected", 0, phase=ShutdownPhase()
