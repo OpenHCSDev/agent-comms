@@ -247,14 +247,14 @@ class ClaimWrites(PrivateWrites):
             release_records.sort(key=lambda release: release.resource)
             held = tuple(current for resource in requested
                          if (current := source.claim(resource)) is not None)
-            for current in held:
-                current.require_holder(stored.sender, owner_incarnation, snapshot)
+            superseded = tuple(previous for current in held
+                               for previous in current.require_holder(
+                                   stored.sender, owner_incarnation, snapshot))
             transition = ClaimTransition(
                 stored.sender, owner_incarnation, stored.seq, stored.message_id,
                 requested, tuple(release_records),
                 Id128Text.mint() if requested else None, claim,
-                superseded=tuple(current for current in held
-                                 if current.incarnation != owner_incarnation),
+                superseded=superseded,
             )
             source.prepare_claim(transition)  # pre-append conflict is synchronous
         stored = replace(stored, claim_transition=transition)

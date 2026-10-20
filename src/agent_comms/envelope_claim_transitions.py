@@ -290,11 +290,15 @@ class ClaimOwner:
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
 
-    def require_holder(self, owner: str, incarnation: str, registry: RegistryProvenance) -> None:
-        """A retired claim passes only to the same name's registry-declared live incarnation."""
+    def require_holder(
+        self, owner: str, incarnation: str, registry: RegistryProvenance,
+    ) -> tuple[ClaimOwner, ...]:
+        """Admit the registry's current holder; return a retired claim's exact preimage."""
         current = registry.threads.get(owner)
-        permitted = (self,) if current is not None and str(current.created_at) == incarnation else ()
-        self.require_recorded_holder(owner, incarnation, permitted)
+        if current is None or str(current.created_at) != incarnation:
+            raise ClaimConflict(self)
+        self.require_recorded_holder(owner, incarnation, (self,))
+        return (self,) if self.incarnation != incarnation else ()
 
     def require_recorded_holder(
         self, owner: str, incarnation: str, superseded: tuple[ClaimOwner, ...],

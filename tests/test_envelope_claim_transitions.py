@@ -26,15 +26,18 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     registry = comms.registry.snapshot()
     held = transition(1, incarnation="1.0", claims=(resource,), generation=G1).apply(ClaimProjection())
     original = held[resource]
-    original.require_holder("owner", "2.0", registry)
-    for owner, incarnation in (("foreign", "3.0"), ("owner", "4.0")):
+    superseded = original.require_holder("owner", "2.0", registry)
+    assert superseded == (original,)
+    for owner, incarnation in (("foreign", "3.0"), ("owner", "4.0"), ("owner", "1.0")):
         with pytest.raises(ClaimConflict):
             original.require_holder(owner, incarnation, registry)
     successor = replace(transition(2, incarnation="2.0", claims=(resource,), generation=G2),
-                        superseded=(original,))
+                        superseded=superseded)
     saved = FieldCodec.decode(ClaimTransition, FieldCodec.encode(successor))
     moved = saved.apply(held)
     assert moved[resource].incarnation == "2.0" and moved[resource].generation == G2
+    assert moved[resource].require_holder("owner", "2.0", registry) == ()
+    comms.registry.declare(thread("owner", comms.root, 4.0))
     assert saved.apply(held) == moved  # replay takes recorded evidence, not today's registry
     with pytest.raises(ClaimConflict):
         replace(saved, superseded=()).apply(held)
