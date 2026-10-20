@@ -101,7 +101,7 @@ class LifecycleRun:
 
     @classmethod
     @contextlib.contextmanager
-    def open(cls) -> Iterator[LifecycleRun]:
+    def open(cls, *, extra_threads: tuple[str, ...] = ()) -> Iterator[LifecycleRun]:
         config = CommanderConfig.read(CommanderConfig.path())
         source = Comms(config.root)
         actor = ToolCaller.from_actor(os.environ.get("AGENT_COMMS_THREAD")).acting_name(
@@ -117,7 +117,8 @@ class LifecycleRun:
         else:
             worker = caller
         directory = caller.storage_roots.scratch / "commander-parity" / uuid4().hex
-        with CheckRoot(source, (config.commander, worker.name), directory).open() as copied:
+        threads = tuple(dict.fromkeys((config.commander, worker.name, *extra_threads)))
+        with CheckRoot(source, threads, directory).open() as copied:
             root = copied.root
             commander = MeasuredCommander(
                 commander=config.commander,
