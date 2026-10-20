@@ -166,10 +166,7 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         self, todo: Todo, order_id: str, actor: ThreadIncarnation
     ) -> tuple[StrikeTodo, ...]:
         """A commit delivered after the order's deadline strikes its holder once."""
-        lateness = self.at.lateness(todo.deadline)
-        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
-                  f"(caught by {actor.name} at review)")
-        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
+        return MissedDeadlineStrike.late(todo, self.at, f"as delivered commit {self.delivered}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1938,8 +1935,13 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
         return self
 
     def record(self, goals: Goals, problem: str) -> Todo:
-        """Write this operation; one that also revises the holder's Goal routes through it."""
-        return goals.apply_problem(problem, self)
+        """Write this operation; publish its effects only after the canonical row was written."""
+        changed = goals.apply_problem(problem, self)
+        self.after_record(goals, changed)
+        return changed
+
+    def after_record(self, goals: Goals, changed: Todo) -> None:
+        """Most operations have no automatic public effect."""
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
@@ -2048,29 +2050,34 @@ class ObjectiveStrike(StrikeTodo, declared_name=None):
                                StrikeReason(self.reason), self.at).apply(struck)
         return struck
 
-    def record(self, goals: Goals, problem: str) -> Todo:
-        changed = goals.apply_problem(problem, self)
+    def after_record(self, goals: Goals, changed: Todo) -> None:
         if changed.revision == self.expected_revision:
-            return changed
+            return
         count = len(changed.live_strikes(self.previous.owner))
-        line = (f"Core strike {count} on {problem} order {self.order_id}: "
+        line = (f"Core strike {count} on {changed.id} order {self.order_id}: "
                 f"{self.previous.owner} {self.reason}"
-                + (f"; {problem} taken away" if not changed.holder else ""))
+                + (f"; {changed.id} taken away" if not changed.holder else ""))
         goals.bus.publisher.publish_ordinary(
             Message(sender=changed.creator, target="#comms", body=line, type=InfoKind),
             origin=AgentOrigin())
-        return changed
 
 
 @dataclass(frozen=True, kw_only=True)
 class MissedDeadlineStrike(ObjectiveStrike):
     @classmethod
-    def observe(cls, goals: Goals, todo: Todo, now: float) -> tuple[Self, ...]:
-        if not todo.overdue(now):
+    def late(cls, todo: Todo, at: EventTime, detail: str) -> tuple[Self, ...]:
+        lateness = at.lateness(todo.deadline)
+        if not lateness.late():
             return ()
-        due = todo.deadline.recorded_at("An order deadline")
-        return (cls.make(todo, now,
-            f"missed its order deadline without a delivered commit; cost {(now - due) / 60:.1f} minutes late"),)
+        strike = cls.make(todo, at.recorded_at("A deadline failure"),
+            f"{todo.id} order {todo.order.checked().id} {lateness} {detail}; "
+            f"missed its order deadline; cost {lateness.seconds / 60:.1f} minutes late")
+        return () if any(strike.repeats(prior) for prior in todo.strikes) else (strike,)
+
+    @classmethod
+    def observe(cls, goals: Goals, todo: Todo, now: float) -> tuple[Self, ...]:
+        return (cls.late(todo, RecordedEventTime(now), "without a delivered commit")
+                if todo.pending else ())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2374,20 +2381,26 @@ class DeliverTodo(TodoOperation):
         current.order.require_delivery(self.order_id)
         verified = self.delivery.verified(current, goals.registry)
         try:
-            return replace(self, delivery=asyncio.run(verified))
+            delivered = asyncio.run(verified)
         except OrderCheckFailed as error:
             self.delivery.check_failed(goals, current, error)
             raise
+        return replace(self, delivery=delivered)
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
+        for strike in self.delivery.strikes(current, self.order_id, self.actor):
+            current = strike.apply(current)
         return replace(current, order=current.order.delivered(self.delivery),
-                       strikes=(*current.strikes,
-                                *self.delivery.strikes(current, self.order_id, self.actor)),
                        revision=current.revision + 1)
+
+    def after_record(self, goals: Goals, changed: Todo) -> None:
+        for strike in changed.strikes:
+            if strike.expected_revision >= self.expected_revision:
+                strike.after_record(goals, changed)
 
 
 @dataclass(frozen=True)

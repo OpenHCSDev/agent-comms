@@ -60,7 +60,7 @@ def test_objective_family_records_once_posts_minutes_and_uses_existing_takeaway(
                  ('push', '-q', 'origin', 'main')):
         subprocess.run(['git', '-C', str(repo), *args], check=True)
     sha = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
-    todo = create(commander, 'P2', deadline=now + 3600)
+    todo = create(commander, 'P2', deadline=now - 60)
     with store.writing() as db:
         replace(todo, order=replace(todo.order, at=RecordedEventTime(now - 120),
             first_call_deadline=RecordedEventTime(now + 60),
@@ -76,3 +76,24 @@ def test_objective_family_records_once_posts_minutes_and_uses_existing_takeaway(
     found = {type(strike) for pid in ('P1', 'P2') for strike in store.get(pid).strikes}
     assert found == set(ObjectiveStrike.members_with(ObjectiveStrike))
     assert store.get('P2').pending  # A failed check never becomes delivered work.
+    failed = store.get('P2')
+    with store.writing() as db:
+        replace(failed, order=replace(failed.order,
+            check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(0)))).upsert(db)
+    done.apply(comms, caller)
+    delivered = store.get('P2')
+    assert not delivered.pending and delivered.holder is None
+    assert len(delivered.strikes) == 2 and len(delivered.released) == 1 and len(lines()) == 4
+
+    # A subsequent late done must not create a second copy of the watcher's deadline failure.
+    third = create(commander, 'P3', deadline=now - 60)
+    with store.writing() as db:
+        replace(third, order=replace(third.order, at=RecordedEventTime(now - 180),
+            first_call_deadline=RecordedEventTime(now + 60),
+            check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(0)))).upsert(db)
+    store.advance_objective_failures(comms.goals)
+    assert len(store.get('P3').strikes) == 1
+    CommsOrderDoneTool(problem='P3', order_id=third.order.id,
+        delivery=CommitDelivery(commit=sha, delivered_commit=sha), claims=working(comms)).apply(comms, caller)
+    assert not store.get('P3').pending and len(store.get('P3').strikes) == 1
+    assert len(lines()) == 5

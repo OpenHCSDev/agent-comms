@@ -351,7 +351,9 @@ def test_each_delivery_declares_the_strikes_it_carries(commander):
 
     commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
     (late,) = strikes(commit, 2035)
-    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
+    from agent_comms.thread_identity import StallWatcherIncarnation
+    assert (late.previous, late.actor, late.expected_revision) == (
+        todo.held(), StallWatcherIncarnation.watcher(), todo.revision)
     assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
     assert strikes(commit, 2000) == ()
     assert strikes(OperationDelivery(), 9000) == ()
