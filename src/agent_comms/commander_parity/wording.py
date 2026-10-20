@@ -6,6 +6,7 @@ import io
 from collections.abc import Callable, Iterable
 from contextlib import redirect_stderr
 from dataclasses import dataclass, replace
+from functools import partial
 from itertools import islice
 from pathlib import Path
 from typing import ClassVar
@@ -15,6 +16,7 @@ from ..commander.order import CommanderContext, OrderFile, refuse
 from ..comms import Comms
 from ..errors import RelationViolationError, ToolRefusedError
 from ..goal_actions import GoalActionContext, OrderGoalAction
+from ..message_reference import MessageReference
 from ..messages import AlertKind, Message
 from ..task_sources import Decision
 from ..todos import (
@@ -71,6 +73,7 @@ def decisions(source: Iterable[Message]) -> Iterable[tuple[Message, Decision]]:
 class WordingComparison(ParityComparison):
     observations: tuple[tuple[WordingOutcome, WordingOutcome], ...]
     owner: str
+    references: tuple[MessageReference, ...] = ()
     native_owner: ClassVar[type[OrderWords]]
     current_owner: ClassVar[Callable[..., object]] = refuse
 
@@ -83,15 +86,16 @@ class WordingComparison(ParityComparison):
         return (
             f"{len(self.observations)} retained texts; mismatches={different}; "
             f"current={self.current_owner.__module__}.{self.current_owner.__qualname__}; "
-            f"native={self.owner}; compared refusal and warnings; no publication"
+            f"native={self.owner}; sources={self.references}; "
+            "compared refusal and warnings; no publication"
         )
 
     @classmethod
     def compare_texts(cls, texts: Iterable[str]) -> ParityComparison:
         observed = tuple(
             (
-                WordingOutcome.read(lambda: refuse(text, cls.native_owner)),
-                WordingOutcome.read(lambda: cls.native_owner(text)),
+                WordingOutcome.read(partial(refuse, text, cls.native_owner)),
+                WordingOutcome.read(partial(cls.native_owner, text)),
             )
             for text in texts
         )
@@ -127,7 +131,9 @@ class OrderWordingComparison(WordingComparison):
             assigner=context.incarnation,
         )
         return action.request_ref(
-            GoalActionContext(context.comms.goals, context.comms.registry.require(todo.holder))
+            GoalActionContext(
+                context.comms.goals, context.comms.registry.require(todo.held().owner)
+            )
         )
 
     @classmethod
@@ -137,29 +143,29 @@ class OrderWordingComparison(WordingComparison):
         if not held:
             return UnverifiedParity("No held order exists for the native pre-reservation check.")
         todo = max(held, key=lambda item: item.order.checked().at.recorded_at("A live order"))
-        texts = tuple(
-            message.body
-            for message in messages(context.comms)
-            if cls.native_owner.refused(message.body)
+        cases = tuple(
+            message for message in messages(context.comms) if cls.native_owner.refused(message.body)
         )
-        if not texts:
+        if not cases:
             return UnverifiedParity(
                 "No actual soft-worded message exists for a refusal comparison."
             )
         observed = []
-        for text in texts:
+        for message in cases:
+            text = message.body
             notes = io.StringIO()
             with redirect_stderr(notes):
                 refused = OrderFile(
                     todo.order.checked().copy_as(PendingProblemOrder), text, todo.text
                 ).problems_found(clean=True)
             current = WordingOutcome(not refused, notes.getvalue())
-            native = WordingOutcome.read(lambda: cls.native_request(context, todo, text))
+            native = WordingOutcome.read(partial(cls.native_request, context, todo, text))
             observed.append((current, native))
         return cls(
             tuple(observed),
             "native ProblemOrderGoalAction.request_ref (no reservation/write); "
             "current OrderFile.problems_found; OrderText selects actual refusal cases",
+            tuple(message.reference for message in cases),
         )
 
 
@@ -175,7 +181,7 @@ class ApplicationRunComparison:
             if order.run.mechanical:
                 continue
             text = "\n".join(order.run.instructions())
-            observed.append(WordingOutcome.read(lambda: OrderText(text)))
+            observed.append(WordingOutcome.read(partial(OrderText, text)))
             # This is the real native request owner, not a substituted store or caller.
             # Construct its operation only: no artifact or successful run is invented.
             CommsProblemCloseTool(problem=todo.id, works=text, artifact="").operation_for(
@@ -223,7 +229,7 @@ class DecisionAlertsComparison:
         for message in alerts:
             sender = context.comms.registry.require(message.sender)
             outcome = WordingOutcome.read(
-                lambda: AlertKind.require_publishable(message, Path(sender.worktree))
+                partial(AlertKind.require_publishable, message, Path(sender.worktree))
             )
             allowed += outcome.accepted
         rendered = matched = 0
@@ -235,7 +241,7 @@ class DecisionAlertsComparison:
             matched += tool.original_body(decision) == message.body
         return UnverifiedParity(
             "Missing native decision-only alert policy: "
-            f"{AlertKind.require_publishable.__func__.__qualname__} allowed "
+            f"{AlertKind.require_publishable.__qualname__} allowed "
             f"{allowed}/{len(alerts)} actual alerts. CommsDecisionTool rendered "
             f"{rendered} actual authored decisions, {matched} matching original bodies; "
             "that separate tool does not restrict AlertKind publication. "
