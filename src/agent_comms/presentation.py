@@ -16,10 +16,12 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
+from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .coordination_database import CoordinationStore
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
@@ -39,7 +41,7 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .ui_model.unread import UnreadPresentation, UnobservedUnread
+from .ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation, UnobservedUnread
 from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
                          NamedViewer)
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
@@ -441,7 +443,8 @@ class BusPresentation:
             )
         return replace(
             snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads),
-            unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
+            unread={name: IndexingUnread() for name in snapshot.threads},
+            channel_unread={name: IndexingUnread() for name in snapshot.channels},
         )
 
     def channel_page(
@@ -687,13 +690,12 @@ class ThreadView(ThreadRecord):
 class CoordinationSnapshot:
     threads: Mapping[str, ThreadView]
     channels: Mapping[str, ChannelView]
-    unread: Mapping[str, int]
+    unread: Mapping[str, UnreadPresentation]
+    channel_unread: Mapping[str, UnreadPresentation]
     last_sent: Mapping[str, float]
     references: DisplayReferences
-    channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
-    unread_pending: frozenset[str] = frozenset()
     read_marker_notice: ReadNotice = field(default_factory=NoReadNotice)
 
     @classmethod
@@ -715,10 +717,22 @@ class CoordinationSnapshot:
                 activities, sent, messages, visibility,
             )),
             threads=threads,
-            unread=unread, last_sent=sent, channel_unread=channel_unread,
+            unread={name: ExactUnread(count) for name, count in unread.items()},
+            channel_unread={name: ExactUnread(count) for name, count in channel_unread.items()},
+            last_sent=sent,
             thread_unread={name: UnobservedUnread() for name in threads},
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
+        )
+
+    def has_indexing_unread(self) -> bool:
+        """Whether this snapshot still waits for any unread source to finish indexing."""
+        return any(
+            value.waiting
+            for values in (
+                self.unread.values(), self.channel_unread.values(), self.thread_unread.values()
+            )
+            for value in values
         )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
@@ -776,6 +790,9 @@ class WireRevision(ReadState):
         *STATUS_SOURCE, RegistrationsView)
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
         *STATUS_SOURCE, BusSourceView)
+    bus_routes: tuple[FileRevision, ...] = revision_source(
+        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),  # type: ignore[has-type]
+        StoresView, SidebarView)
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
         *STATUS_SOURCE)
     activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,),

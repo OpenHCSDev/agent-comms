@@ -633,8 +633,8 @@ class SidebarReadStage:
     ) -> SidebarResult:
         return request._answer(revision, comms.views.viewer_snapshot, request.worktree)
 
-    def next(self) -> SidebarReadStage:
-        return self
+    def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
+        """A full read waits for a changed source or its native-index watcher."""
 
 
 class RosterSidebarRead(SidebarReadStage):
@@ -644,8 +644,10 @@ class RosterSidebarRead(SidebarReadStage):
         viewer = comms.messaging.user_identity(request.worktree).name
         return request._answer(revision, comms.views.presentation.roster, viewer)
 
-    def next(self) -> SidebarReadStage:
-        return SidebarReadStage()
+    def advance(self, reading: SidebarReading, snapshot: CoordinationSnapshot) -> None:
+        reading.stage = SidebarReadStage()
+        if snapshot.has_indexing_unread():
+            reading.sent = NoSidebarSent()
 
 
 class SidebarReading(Observation[ObserveSidebar]):
@@ -954,9 +956,7 @@ class SidebarObserved(SidebarResult):
     derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
 
     def advance(self, reading: SidebarReading) -> None:
-        reading.stage = reading.stage.next()
-        if self.snapshot.unread_pending:
-            reading.sent = NoSidebarSent()
+        reading.stage.advance(reading, self.snapshot)
 
 
 @dataclass(frozen=True)
