@@ -23,7 +23,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
     }) + "\n")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
     comms.transcripts.routes.record_input_display("b" * 32, None)
-    with closing(sqlite3.connect(comms.transcripts.routes.database_path)) as connection:
+    with closing(sqlite3.connect(comms.transcripts.routes.path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
         captured = comms.transcripts.capture_page_read("worker")
         assert captured.read().events[0].declared_name == "user"

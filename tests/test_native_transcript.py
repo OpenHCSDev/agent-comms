@@ -1,5 +1,6 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
+from conftest import transcript_records
 import json
 from dataclasses import fields
 from unittest.mock import Mock
@@ -75,8 +76,8 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     assert "type" not in normalized and "role" not in normalized["message"]
     # The entry was read from its own bytes, so its record starts at offset 0.
     assert entry.events(TranscriptProjection(position=0)) == [
-        UserTranscript("look", timestamp=STAMPED, position=0),
-        UserTranscript("[Image attachment: image/png]", timestamp=STAMPED, position=0),
+        transcript_records.event(UserTranscript, "look", position=0),
+        transcript_records.event(UserTranscript, "[Image attachment: image/png]", position=0),
     ]
     assert entry.message.parts[1].data == "aGVsbG8="
 
@@ -135,14 +136,14 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].events == []
-    assert forward[1].events == [AssistantTranscript("valid", timestamp=STAMPED, position=forward[1].start)]
+    assert forward[1].events == [transcript_records.event(AssistantTranscript, "valid", position=forward[1].start)]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
 
 
 @pytest.mark.parametrize("raw, error, match", [
     (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
-     ValueError, r"^Expected a JSON array\.$"),
+     ValueError, r"^message\.content: Expected a JSON array\.; fix: supply tuple\[agent_comms\.pi_payloads\.PiContent, \.\.\.\]$"),
     (b'{"type":"message"\n', json.JSONDecodeError,
      r"^Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
 ])
@@ -162,11 +163,11 @@ def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, e
     "event",
     [
         # Codec data: a byte offset and a provider item ID are both recorded positions.
-        AssistantTranscript("answer", position=0),
-        ThinkingTranscript("reason", position=512),
-        NoticeTranscript("compacted", position="item-1"),
-        ToolStartTranscript(position=1024, tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
-        ToolEndTranscript(position=1024, tool_call_id="a", tool_name="read", text="contents", ok=False),
+        transcript_records.event(AssistantTranscript, "answer", position=0),
+        transcript_records.event(ThinkingTranscript, "reason", position=512),
+        transcript_records.event(NoticeTranscript, "compacted", position="item-1"),
+        transcript_records.event(ToolStartTranscript, position=1024, tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
+        transcript_records.event(ToolEndTranscript, position=1024, tool_call_id="a", tool_name="read", text="contents", ok=False),
     ],
 )
 def test_snapshot_family_roundtrip_has_only_owned_fields(event):
@@ -263,6 +264,6 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     assert walks == [tuple(record.entry.id for record in records)] and headers == [path]
     assert not active
     assert tuple(event for _, events in projected for event in events) == (
-        UserTranscript("request", timestamp=STAMPED, position=records[1].start, native_id="a" * 32),
-        AssistantTranscript("answer", timestamp=STAMPED, position=records[2].start),
+        transcript_records.event(UserTranscript, "request", position=records[1].start, native_id="a" * 32),
+        transcript_records.event(AssistantTranscript, "answer", position=records[2].start),
     )
