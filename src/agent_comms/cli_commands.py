@@ -1293,15 +1293,14 @@ class InstallCliCommand(CliCommand):
         from .commander.config import CommanderConfig
 
         home = Path.home()
-        project = self.project.resolve()
         config = CommanderConfig(
             commander=self.commander, root=ctx.root,
             state=home / ".local/state/agent-comms/commander",
-            repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
+            repos=tuple(Repo.of(repo) for repo in self.repos or (self.project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.register(ctx, self.commander, project)
+            type(harness).declared_name: harness.register(ctx, self.commander, self.project)
             for harness in Harness.present(home)})
 
 
