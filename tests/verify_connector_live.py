@@ -1,12 +1,10 @@
 """Real scratch-bus connector/curl and maintenance proof; no test doubles.
 
 PYTHONPATH=src python -X faulthandler tests/verify_connector_live.py
-Use --baseline with PYTHONPATH pointing at main to record its failures.
 All scratch is owned by pi-connector and removed after the subprocess exits.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import select
@@ -22,7 +20,7 @@ from pathlib import Path
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.wake_candidate_index import WakeCandidateIndex, ProjectionRebuildRequiredError
+from agent_comms.wake_candidate_index import WakeCandidateIndex, OutdatedCheckpoint
 
 
 def wait_started(service, log):
@@ -51,14 +49,11 @@ def curl_call(port, token, body, *, arguments=None):
     ], capture_output=True, text=True, check=True).stdout
 
 
-def maintenance_proof(comms, baseline):
+def maintenance_proof(comms):
     log = comms.bus.log
     # A real committed original is indexed by the normal background worker.
     message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    for worker in threading.enumerate():
-        if worker.name == "agent-comms-candidate-maintenance":
-            worker.join(timeout=15)
-            assert not worker.is_alive()
+    maintenance.drain_candidate_catchup(comms.root)
     index = WakeCandidateIndex(log)
     root_id = log.private_marker_unlocked().root_id
     before = index._verified_checkpoint(root_id)
@@ -70,12 +65,8 @@ def maintenance_proof(comms, baseline):
     # at its replacement inode, exactly as the source barrier requires.
     with log.checked_read() as checked:
         checked.require_current()
-    try:
-        index._verified_checkpoint(root_id)
-    except ProjectionRebuildRequiredError as error:
-        print(f"source replacement: old inode={before.inode}, new inode={log.path.stat().st_ino}; {error}")
-    else:
-        raise AssertionError("scratch source did not invalidate the projection")
+    assert isinstance(index._captured_checkpoint(root_id), OutdatedCheckpoint)
+    print(f"source replacement: old inode={before.inode}, new inode={log.path.stat().st_ino}; outdated checkpoint")
     failures = []
     observed = []
     entered = threading.Event()
@@ -85,7 +76,7 @@ def maintenance_proof(comms, baseline):
         failures.append(f"{args.exc_type.__name__}: {args.exc_value}")
 
     def profile(frame, event, arg):
-        if frame.f_code is maintenance._drain_candidate.__code__ and event == "call":
+        if frame.f_code is maintenance.CandidateMaintenance.run.__code__ and event == "call":
             observed.append(threading.current_thread())
             entered.set()
 
@@ -101,9 +92,6 @@ def maintenance_proof(comms, baseline):
         threading.setprofile(None)
         threading.excepthook = old_hook
     print(f"maintenance threads started={len(observed)}, failures={failures}")
-    if baseline:
-        assert failures and "candidate bus source changed" in failures[0]
-        return
     assert not failures
     after = index._verified_checkpoint(root_id)
     assert after.inode == log.path.stat().st_ino and after.last_seq == message.seq
@@ -113,9 +101,6 @@ def maintenance_proof(comms, baseline):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", action="store_true")
-    args = parser.parse_args()
     scratch = Path.home() / ".cache/agent-scratch/pi-connector"
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="live-", dir=scratch) as directory:
@@ -150,39 +135,59 @@ def main():
             with store.granted("scratch curl proof") as token:
                 before = comms.bus.log.latest_sequence()
                 output = curl_call(port, token, "Fix the candidate now")
-                print("refused wording:\n" + output.strip())
+                print("published owner wording:\n" + output.strip())
                 response, status = output.strip().rsplit("\n", 1)
-                assert status.split()[0] == ("500" if args.baseline else "200")
-                if not args.baseline:
-                    result = json.loads(response)["result"]
-                    assert result["isError"] is True
-                    assert "Jargon" in response and "candidate" in response
-                    readback = subprocess.run([
-                        shutil.which("agent-comms"), "--root", str(root), "tool",
-                        "--tool", "comms_send_refusals", "--arguments",
-                        json.dumps({"sender": "claude-ai", "target": "worker"}),
-                    ], env=environment, capture_output=True, text=True)
-                    assert readback.returncode == 0, readback.stdout + readback.stderr
-                    rows = json.loads(readback.stdout)["refusals"]
-                    assert len(rows) == 1, "each refused send must record exactly once"
-                    assert rows[0]["sender"] == "claude-ai" and rows[0]["target"] == "worker"
-                    assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
-                    assert rows[0]["refused_at_ms"] > 0
-                    print("agent-comms readback: " + json.dumps(rows[0], sort_keys=True))
+                assert status.split()[0] == "200"
+                assert json.loads(response)["result"]["isError"] is False
+                messages = comms.bus.inbox("worker")
+                assert len(messages) == 1
+                assert messages[0].sender == "claude-ai"
+                assert messages[0].body == "Fix the candidate now"
+                assert messages[0].seq > before
+                read_command = [
+                    shutil.which("agent-comms"), "--root", str(root), "tool",
+                    "--tool", "comms_send_refusals", "--arguments",
+                    json.dumps({"sender": "claude-ai"}),
+                ]
+                readback = subprocess.run(
+                    read_command, env=environment, capture_output=True, text=True)
+                assert readback.returncode == 0, readback.stdout + readback.stderr
+                assert json.loads(readback.stdout)["refusals"] == []
+                print("published owner wording: refusal rows=0")
+
+                # Unknown destinations are still genuine refused sends. Exercise
+                # the real connector path, not a fabricated refusal-table entry.
+                before = comms.bus.log.latest_sequence()
+                output = curl_call(port, token, "", arguments={
+                    "from": "claude-ai", "to": "#missing-channel", "body": "Fix this now",
+                })
+                response, status = output.strip().rsplit("\n", 1)
+                result = json.loads(response)["result"]
+                assert status.split()[0] == "200" and result["isError"] is True
+                assert "Unknown channel" in response
                 assert comms.bus.log.latest_sequence() == before, "a refused send committed bytes"
-                if not args.baseline:
-                    output = curl_call(port, token, "", arguments={"unexpected": True})
-                    response, status = output.strip().rsplit("\n", 1)
-                    assert status.split()[0] == "200" and json.loads(response)["result"]["isError"]
-                    assert "Invalid comms_send arguments" in response
-                    print("invalid tool arguments: " + status)
+                readback = subprocess.run(
+                    read_command, env=environment, capture_output=True, text=True)
+                assert readback.returncode == 0, readback.stdout + readback.stderr
+                rows = json.loads(readback.stdout)["refusals"]
+                assert len(rows) == 1, "each refused send must record exactly once"
+                assert rows[0]["sender"] == "claude-ai"
+                assert rows[0]["target"] == "#missing-channel"
+                assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
+                assert rows[0]["refused_at_ms"] > 0
+                print("unknown-target refusal readback: " + json.dumps(rows[0], sort_keys=True))
+                output = curl_call(port, token, "", arguments={"unexpected": True})
+                response, status = output.strip().rsplit("\n", 1)
+                assert status.split()[0] == "200" and json.loads(response)["result"]["isError"]
+                assert "Invalid comms_send arguments" in response
+                print("invalid tool arguments: " + status)
         finally:
             service.terminate()
             tail, _ = service.communicate(timeout=15)
             server_log.append(tail)
             errors.close()
             print("connector stopped; HTTP handler tracebacks=" + str(error_path.read_text().count("Error handling request")))
-        maintenance_proof(comms, args.baseline)
+        maintenance_proof(comms)
 
 
 if __name__ == "__main__":
