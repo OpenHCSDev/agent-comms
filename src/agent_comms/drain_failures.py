@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from acp import RequestError
 
 from .activity import (
+    DrainDiagnostic,
     NativeInputDrainDiagnostic,
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
@@ -28,6 +29,17 @@ if TYPE_CHECKING:
     from .thread_identity import OwnerIdentity
 
 
+async def record_drain_failure(
+    comms: Comms, thread: str, owner: OwnerIdentity,
+    kind: type[DrainDiagnostic], error: Exception,
+) -> None:
+    diagnostic = kind.from_error(owner, error)
+    await Coordination.run_worker(partial(
+        comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
+        source_error=error,
+    ))
+
+
 @asynccontextmanager
 async def drain_failures(
     comms: Comms,
@@ -41,13 +53,6 @@ async def drain_failures(
         comms.agents.activity_of, thread, snapshot=snapshot,
     ))
 
-    async def record(kind, error) -> None:
-        diagnostic = kind.from_error(owner, error)
-        await Coordination.run_worker(partial(
-            comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
-            source_error=error,
-        ))
-
     try:
         yield
     except asyncio.CancelledError:
@@ -56,13 +61,13 @@ async def drain_failures(
         # This describes a native request failure, not an inbox read failure.
         # Settlement belongs to the request or selected participant that raised
         # it; recording a diagnostic neither settles an input nor permits replay.
-        await record(NativeInputDrainDiagnostic, error)
+        await record_drain_failure(comms, thread, owner, NativeInputDrainDiagnostic, error)
         raise
     except UNAVAILABLE_DRAIN_ERRORS as error:
-        await record(unavailable, error)
+        await record_drain_failure(comms, thread, owner, unavailable, error)
         raise
     except ValueError as error:
-        await record(StoppedDrainDiagnostic, error)
+        await record_drain_failure(comms, thread, owner, StoppedDrainDiagnostic, error)
         raise
     else:
         await comms.agents.recover_drain(thread, owner, observed)

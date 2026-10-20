@@ -25,7 +25,9 @@ from .acp_extension import (
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import IdentityConflict
-from .drain_failures import DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures
+from .drain_failures import (
+    DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures, record_drain_failure,
+)
 from .activity import FailedWakeDiagnostic
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
@@ -185,8 +187,13 @@ class UnsettledTick(TickState):
 
 
 @dataclass(frozen=True, slots=True)
-class FailedTick(UnsettledTick):
+class FailedTick(TickState):
     error: Exception
+
+    async def _next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> FullTick:
+        return await UnsettledTick()._next(observation, session_id, revision)
 
     async def apply(
         self, observation: InputObservation, session_id: str, watcher: WireWatch,
@@ -194,11 +201,9 @@ class FailedTick(UnsettledTick):
         thread = observation.sessions.require(session_id)
         snapshot = await Coordination.run_worker(observation.comms.registry.snapshot)
         owner = snapshot.owner_identity(thread)
-        diagnostic = FailedWakeDiagnostic.from_error(owner, self.error)
-        await Coordination.run_worker(partial(
-            observation.comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
-            source_error=self.error,
-        ))
+        await record_drain_failure(
+            observation.comms, thread, owner, FailedWakeDiagnostic, self.error,
+        )
         return self
 
 
@@ -315,8 +320,8 @@ class InputObservation:
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
         state = self.state(session_id)
-        if state.drain_task is task and not self.closing:
-            raise SystemExit(1)
+        if state.drain_task is task:
+            state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
         state = self.state(session_id)
