@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from ..change_report import FileLine
@@ -51,19 +53,9 @@ class TraceOutcome:
     reason: str
 
     @classmethod
-    def current(
-        cls, assignment: Assignment, proposed: Assignment, trace: FileLine | None
-    ) -> TraceOutcome:
+    def read(cls, action: Callable[[], object]) -> TraceOutcome:
         try:
-            assignment.require_trace(proposed.owner, trace)
-        except ValueError as error:
-            return cls(True, str(error))
-        return cls(False, "")
-
-    @classmethod
-    def native(cls, todo: Todo, proposed: Assignment, trace: FileLine | None) -> TraceOutcome:
-        try:
-            todo.assigned(proposed, trace)
+            action()
         except ValueError as error:
             return cls(True, str(error))
         return cls(False, "")
@@ -89,7 +81,7 @@ class TransferComparison(ParityComparison):
         )
 
     def describe(self) -> str:
-        return repr(self)
+        return f"current=Assignment.require_trace; native=Todo.assigned; {self!r}"
 
     @classmethod
     def read(cls) -> ParityComparison:
@@ -101,20 +93,22 @@ class TransferComparison(ParityComparison):
             assignment = todo.assignment
             if not todo.pending or assignment is None:
                 continue
-            owners = {assignment.owner, *(owner.name for owner in assignment.previous_owners)}
-            if len(owners) < 2:
-                continue
             proposed = next(
                 (
                     other.assignment
                     for other in history
                     if other.assignment is not None
-                    and other.assignment.owner not in owners
+                    and other.assignment.owner != assignment.owner
                     and other.assignment.generation != assignment.generation
                 ),
                 None,
             )
             if proposed is None:
+                continue
+            current_without = TraceOutcome.read(
+                partial(assignment.require_trace, proposed.owner, None)
+            )
+            if not current_without.refused:
                 continue
             source = inspect.getsourcefile(Assignment.require_trace)
             if source is None:
@@ -126,22 +120,24 @@ class TransferComparison(ParityComparison):
             )
             return cls(
                 todo.id,
-                TraceOutcome.current(assignment, proposed, None),
-                TraceOutcome.native(todo, proposed, None),
-                TraceOutcome.current(assignment, proposed, trace),
-                TraceOutcome.native(todo, proposed, trace),
+                current_without,
+                TraceOutcome.read(partial(todo.assigned, proposed, None)),
+                TraceOutcome.read(partial(assignment.require_trace, proposed.owner, trace)),
+                TraceOutcome.read(partial(todo.assigned, proposed, trace)),
                 store.get(todo.id) == todo,
             )
         return UnverifiedParity(
             "Assignment.require_trace and Todo.assigned exist, but no live pending order "
-            "has two retained owners and a distinct registered assignment to compare; no fixture substituted."
+            "has two retained owners and a distinct registered assignment to compare; "
+            "no fixture substituted."
         )
 
 
 def scheduled_wake() -> ParityComparison:
     return UnverifiedParity(
         "CommanderHeartbeat exists, but current rotate.py was deleted. No live comparison "
-        "entrypoint exposes the running heartbeat; starting another scheduler would duplicate wakes."
+        "entrypoint exposes the running heartbeat; starting another scheduler "
+        "would duplicate wakes."
     )
 
 
