@@ -102,7 +102,8 @@ class WireRecord(ABC):
     def require_claim(self, metadata: WireMetadata) -> None: ...
 
     @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
+                        claimed_after_seq: int): ...
 
 
 class MessageWireRecord(WireRecord):
@@ -116,8 +117,13 @@ class MessageWireRecord(WireRecord):
             raise MalformedRecord("Bus sequence is not increasing.")
         return self.message.seq
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        return self.message.checkpoint_rows(previous_sequence)
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
+                        claimed_after_seq: int):
+        # Retained messages precede this root's own allocations. Their source
+        # positions stay intact; only this root's suffix can contain an UNKNOWN gap.
+        predecessor = (self.message.seq - 1 if self.message.seq <= claimed_after_seq
+                       else previous_sequence)
+        return self.message.checkpoint_rows(predecessor)
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
@@ -221,9 +227,10 @@ class AuthoredObservationWireRecord(ObservationWireRecord):
     def read(self) -> WireObservation:
         return self.observation
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int) -> tuple:
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
+                        claimed_after_seq: int) -> tuple:
         return DeferredObservationWireRecord.decode(self.to_wire()).checkpoint_rows(
-            offset, length, previous_sequence
+            offset, length, previous_sequence, claimed_after_seq
         )
 
     def to_wire(self) -> dict:
@@ -257,7 +264,8 @@ class DeferredObservationWireRecord(ObservationWireRecord, WireValue):
         except MalformedRecord as error:
             raise StoredHistoryUnreadable(f"Unreadable {owner.row_label(data)}: {error}") from error
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int) -> tuple:
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
+                        claimed_after_seq: int) -> tuple:
         owner, data = self.member
         return owner.checkpoint_from_wire(data, offset, length, previous_sequence)
 
