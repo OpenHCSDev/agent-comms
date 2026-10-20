@@ -11,7 +11,7 @@ from pydantic import JsonValue
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_history import GoalHistoryEntry
+from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goals import GoalOrder, RequestGoalOrder
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
@@ -30,7 +30,7 @@ class DirectiveAnswers(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
         store = RegistryStore.at(root)
-        return store.path, store.guard_path, root / "goal_history.sqlite3"
+        return store.path, store.guard_path, GoalHistoryStore.path_for(store.path)
 
     @classmethod
     def convert(cls, value: JsonValue) -> int:
@@ -55,7 +55,7 @@ class DirectiveAnswers(Carry):
         store = RegistryStore.at(root)
         changed = 0
         rewritten: list[str] = []
-        history = root / "goal_history.sqlite3"
+        history = GoalHistoryStore.path_for(store.path)
         if history.exists():
             connection = (
                 CoordinationStore.writer(history)

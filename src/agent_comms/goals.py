@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .todos import Todo
     from .messages import Message
+    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -467,6 +468,7 @@ class RequestDirective:
     deadline: float
 
     def original(self, goals: Goals) -> Message:
+        source: CheckedRead
         with goals.bus.log.checked_read() as source:
             return source.delivery(self.seq).message
 

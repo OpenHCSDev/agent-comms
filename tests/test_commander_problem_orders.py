@@ -657,7 +657,7 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
@@ -675,7 +675,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
         commander, commander_script, monkeypatch):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
@@ -694,7 +694,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
@@ -711,7 +711,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
 def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     edit = 'Count the measure in tools/debt_ratchet.py.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
@@ -837,7 +837,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     script, repo = commander_script
     create(commander, 'P1')
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: posted.append((recipients, body)))
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
     script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit')
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
@@ -854,7 +854,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     script, _ = commander_script
     create(commander, 'P1', deadline=1)
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: posted.append((recipients, body)))
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
     script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
     withdrawn = comms.goals.todos.get('P1')
     assert script.held_orders() == () and not withdrawn.pending and commander_order.struck(withdrawn, 'worker') == 0
@@ -1392,7 +1392,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, to, body: posted.append((to, body)) or 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, to, body, answers=(): posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
     judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
