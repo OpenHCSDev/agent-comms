@@ -116,6 +116,11 @@ def test_pr_uses_actual_owned_checkout_instead_of_an_invented_problem_directory(
     monkeypatch.chdir(repo)
     OrderVerb.parse(['pr', 'P287', '--title', 'P287', '--body-file', str(body)], '').apply(context)
     assert seen == [('P287', repo, todo.order.pull_request_body(body.read_text()))]
+    subprocess.run(['git', '-C', str(repo), 'remote', 'set-url', 'origin',
+                    'https://github.com/another/project.git'], check=True)
+    with pytest.raises(SystemExit, match='not OpenHCSDev/agent-comms'):
+        OrderVerb.parse(['pr', 'P287', '--title', 'P287', '--body-file', str(body)], '').apply(context)
+    assert len(seen) == 1  # A different repository must never reach publication.
 
 
 @pytest.mark.parametrize('commit_delivery', (True, False))

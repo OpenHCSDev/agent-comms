@@ -34,8 +34,11 @@ class UnplannedPhase(OrderPhase):
         rows = tuple(todos)
         ready = tuple(phase for phase in PlanPhase.members_with(PlanPhase) if phase.ready(rows))
         if ready and len(reason.split()) < 8:
-            return ('Plan phases are ready: ' + ', '.join(phase.declared_name for phase in ready)
-                    + '. Name a phase, or declare Serves: unplanned with a reason of 8+ words.',)
+            return (
+                "Plan phases are ready: "
+                + ", ".join(phase.declared_name for phase in ready)
+                + ". Name a phase, or provide an explicit unplanned_reason of 8+ words.",
+            )
         return ()
 
 

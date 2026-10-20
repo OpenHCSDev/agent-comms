@@ -336,7 +336,8 @@ class Commander(CommanderContext):
             idle = sorted(thread.name for thread in snapshot.threads.values()
                           if thread.name not in occupied and thread.role.executor(thread)
                           and snapshot.statuses[thread.name].active)
-            problems.append(f'{unit} already holds plan orders {", ".join(todo.id for todo in busy)}; '
+            problems.append(f'{unit} already holds plan orders '
+                            f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
