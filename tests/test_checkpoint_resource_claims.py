@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeClaim
+from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, SelectedAttemptClaim
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import ClaimCommits
 from agent_comms.store_files import _store_lock
@@ -22,9 +22,9 @@ def authored(tmp_path):
     for path in paths:
         path.write_text('owned\n')
     original = comms.messaging.send('peer', 'owner', 'original source').message
-    claim_scope = WakeClaim(root_id, original.seq, original.message_id,
-        'cohort-v1:' + 'd' * 64, 1, 'e' * 32, 'execution-one', 'f' * 32,
-        1, 'turn-one', 1, 1)
+    claim_scope = SelectedAttemptClaim(root_id, original.seq, original.message_id,
+        'cohort-v1:' + 'd' * 64, 1, 'e' * 32, 'execution-one',
+        1, 'turn-one', 1, 1, operation_id='f' * 32)
     return comms, paths, claim_scope
 
 

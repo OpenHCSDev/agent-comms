@@ -21,7 +21,7 @@ from agent_comms.storage_room import NoRoomNeeded, RoomReservation
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import WakeClaim
+from agent_comms.envelope_claim_transitions import SelectedAttemptClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.selected_session import SelectedSession
@@ -203,7 +203,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
     session_dir = tmp_path / "session"
     session_dir.mkdir(mode=0o700)
     comms = Comms(root)
-    claim_scope = WakeClaim(
+    claim_scope = SelectedAttemptClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",
@@ -257,7 +257,7 @@ def test_writer_order_and_unknown_after_writer(
     monkeypatch.setattr(broker, "record_selected_terminal", lambda *a: trace.append("terminal"))
     # These dummy owner fields are not production authority; only order is
     # tested here. The typed claim_scope is checked at runtime in this function.
-    claim_scope = WakeClaim(
+    claim_scope = SelectedAttemptClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",
@@ -288,7 +288,7 @@ def test_post_reservation_effect_unknown_is_never_retried(
     request = broker.SelectedToolRequest(
         "call_1", broker.SelectedWriteArguments("notes.txt", "replacement")
     )
-    claim_scope = WakeClaim(
+    claim_scope = SelectedAttemptClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",

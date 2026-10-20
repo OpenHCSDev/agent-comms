@@ -17,7 +17,6 @@ from agent_comms.coordinator import Coordination
 from .comms import Comms
 from .envelope_claim_transitions import (
     ClaimOwner,
-    FileClaimPath,
     SelectedAttemptClaim,
 )
 from .field_codec import FieldCodec
@@ -114,7 +113,7 @@ class SelectedCodingToolOwner(CodingToolOwner):
         verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
     def claim_resource(self, store, turn, resource, slot, prior):
-        scope = replace(self.claim_scope, operation_id=slot)
+        scope = self.claim_scope.for_operation(slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 
 

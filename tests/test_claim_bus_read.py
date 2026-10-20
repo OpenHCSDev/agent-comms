@@ -32,7 +32,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, SelectedAttemptClaim
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import ClaimNoticeKind
@@ -117,7 +117,7 @@ def selected_turn():
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))
-            claim_scope = WakeClaim(
+            claim_scope = SelectedAttemptClaim(
                 wire_root_id=root_id,
                 source_seq=message.seq,
                 source_message_id=message.message_id,

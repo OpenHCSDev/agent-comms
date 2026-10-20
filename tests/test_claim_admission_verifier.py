@@ -28,7 +28,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, SelectedAttemptClaim
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.message_page import MessagePageRequest
@@ -105,7 +105,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 expected_pointer_revision=snapshot.pointer_revision,
             ))
             engaged = store.assignments.get(assignment.assignment_id)
-            claim_scope = WakeClaim(
+            claim_scope = SelectedAttemptClaim(
                 wire_root_id=root_id,
                 source_seq=message.seq,
                 source_message_id=message.message_id,

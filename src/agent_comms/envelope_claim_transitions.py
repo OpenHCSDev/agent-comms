@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import AttemptRecord
@@ -149,7 +149,7 @@ class WakeClaim(SubclassUnion, ABC, affix=""):
     @abstractmethod
     def finished_turn(self, turn_id: str, claimed_generation: int) -> bool: ...
 
-    def for_operation(self, operation_id: str) -> WakeClaim:
+    def for_operation(self, operation_id: str) -> Self:
         return self
 
     def same_attempt(self, other: WakeClaim) -> bool:
@@ -187,7 +187,7 @@ NO_LIVE_ATTEMPT = NoLiveAttempt()
 class LiveAttemptClaim(RecordMember, WakeClaim):
     operation_id: Annotated[str, Id128Text]
 
-    def for_operation(self, operation_id: str) -> WakeClaim:
+    def for_operation(self, operation_id: str) -> Self:
         return replace(self, operation_id=operation_id)
 
     def same_attempt(self, other: WakeClaim) -> bool:
