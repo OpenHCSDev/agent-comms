@@ -81,7 +81,7 @@ class LoadComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> ParityComparison:
-        config = CommanderConfig.installed()
+        config = CommanderConfig.read(CommanderConfig.path())
         before = state_files(config.state)
         # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
         # HOME and the environment stay unchanged; the actual CLI main runs.
