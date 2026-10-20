@@ -13,6 +13,7 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .fleet import UnjudgedComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -109,6 +110,10 @@ class UnjudgedParityRow(ParityRow):
     current = "`judge.py unjudged`; `vibe_watch.py`"
     native = "`comms_unjudged`: calls and unit messages after the last verdict"
     phases = (ReviewQueuePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnjudgedComparison.read()
 
 
 class PublicStoryParityRow(ParityRow):
