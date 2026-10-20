@@ -4,8 +4,8 @@
 // resulting file must stay valid JSONL with no torn or interleaved lines.
 // Provider-free and runtime-dormant; requires the disposable prototype package.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,6 +28,33 @@ try {
     timestamp: Date.now(),
   });
   const sessionFile = manager.getSessionFile();
+
+  const selfStat = readFileSync('/proc/self/stat', 'utf8');
+  const startTime = selfStat.slice(selfStat.lastIndexOf(')') + 2).trim().split(/\s+/)[19];
+  for (const [name, holder, commits] of [
+    ['dead', '2147483647 1', true],
+    ['reused', `${process.pid} 0`, true],
+    ['live', `${process.pid} ${startTime}`, false],
+  ]) {
+    const copy = join(root, `${name}.jsonl`);
+    copyFileSync(sessionFile, copy);
+    writeFileSync(`${copy}.pr48-writer.lock`, `${holder}\n`, { mode: 0o600 });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import { SessionManager } from ${JSON.stringify(pathToFileURL(join(packageDir, 'dist/index.js')).href)};
+      const manager = SessionManager.open(${JSON.stringify(copy)});
+      const inputId = '73573573573573573573573573573573';
+      try {
+        manager.appendMessage({ role: 'user', content: [{type:'text',text:'P735 copied input'}],
+          timestamp: Date.now(), inputId, inputDigest: 'a'.repeat(64) });
+        console.log(JSON.stringify({ entry: manager.flushInputDurably(inputId) }));
+      } catch (error) { console.log(JSON.stringify({ error: error.message })); }
+    `], { encoding: 'utf8', env: process.env });
+    assert.equal(child.status, 0, child.stderr);
+    const result = JSON.parse(child.stdout);
+    if (commits) assert.ok(result.entry, `${name}: ${child.stdout}`);
+    else assert.match(result.error, /Native session writer lock unavailable; no replay/);
+    console.log(`P735 ${name} holder: ${child.stdout.trim()}`);
+  }
 
   const gate = join(root, 'burst-gate');
   const children = Array.from({ length: 4 }, (_, index) => new Promise((resolve, reject) => {
@@ -69,7 +96,7 @@ try {
       outcome.refusals.some(text =>
         text.includes('Native session writer changed') ||
         text.includes('Native session writer lock unavailable'))),
-    'loser refusals must be typed fail-closed denials',
+    `loser refusals must be typed fail-closed denials: ${JSON.stringify(outcomes)}`,
   );
 
   console.log('outcomes', JSON.stringify(outcomes));

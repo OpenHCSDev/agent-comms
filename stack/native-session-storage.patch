@@ -5,7 +5,7 @@
  import { uuidv7 } from "@earendil-works/pi-ai";
  import { randomUUID } from "crypto";
  import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
-+import { fstatSync, realpathSync, unlinkSync } from "fs";
++import { fstatSync, linkSync, readFileSync, realpathSync, unlinkSync } from "fs";
 +import { createHash } from "crypto";
 +import { basename } from "path";
  import { readdir, stat } from "fs/promises";
@@ -260,7 +260,7 @@
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -580,22 +372,71 @@
+@@ -580,22 +372,107 @@
   * Branching moves the leaf to an earlier entry, allowing new branches without
   * modifying history.
   *
@@ -268,7 +268,6 @@
 + * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
   * handles compaction summaries and follows the path from root to current leaf.
   */
-+// PR48 local-only prototype: no automatic stale-lock stealing after a crash.
 +function pr48DiskRevision(file) {
 +    if (!file || !existsSync(file)) return null;
 +    const s = lstatSync(file, { bigint: true });
@@ -276,21 +275,58 @@
 +        throw new Error("Native session file is not a regular file");
 +    return [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].map(String).join(":");
 +}
++function pr48WriterStart(pid) {
++    try {
++        process.kill(pid, 0);
++        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
++        return stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19];
++    } catch (error) {
++        if (error.code === "ESRCH" || error.code === "ENOENT") return null;
++        throw error;
++    }
++}
 +function pr48WriterLock(file, write) {
 +    if (!file) return write();
 +    const canonical = existsSync(file) ? realpathSync(file) :
 +        join(realpathSync(dirname(file)), basename(file));
 +    const lock = `${canonical}.pr48-writer.lock`;
-+    let fd;
-+    try { fd = openSync(lock, "wx", 0o600); }
-+    catch { throw new Error("Native session writer lock unavailable; no replay"); }
-+    try {
-+        writeFileSync(fd, `${process.pid}\n`);
-+        fsyncSync(fd);
-+        return write();
-+    } finally {
-+        try { closeSync(fd); } finally { unlinkSync(lock); }
++    const refusal = new Error("Native session writer lock unavailable; no replay");
++    const temp = join(dirname(canonical), `.pr48-writer-${randomUUID()}`);
++    const fd = openSync(temp, "wx", 0o600);
++    function claimDead(path) {
++        const holderText = readFileSync(path, "utf8");
++        const holder = /^([1-9][0-9]*) ([0-9]+)\n?$/.exec(holderText);
++        if (!holder || pr48WriterStart(Number(holder[1])) === holder[2]) throw refusal;
++        const digest = createHash("sha256").update(`${path}\0${holderText}`).digest("hex");
++        const claim = join(dirname(canonical), `.pr48-dead-${digest}`);
++        try { linkSync(temp, claim); }
++        catch (error) {
++            if (error.code !== "EEXIST") throw error;
++            claimDead(claim);
++        }
++        return holderText;
 +    }
++    try {
++        try {
++            writeFileSync(fd, `${process.pid} ${pr48WriterStart(process.pid)}\n`);
++            fsyncSync(fd);
++        } finally { closeSync(fd); }
++        try { linkSync(temp, lock); }
++        catch (error) {
++            if (error.code !== "EEXIST") throw error;
++            try {
++                const holderText = claimDead(lock);
++                if (readFileSync(lock, "utf8") !== holderText) throw refusal;
++                unlinkSync(lock);
++                linkSync(temp, lock);
++            } catch (error) {
++                if (error.code === "EEXIST" || error.code === "ENOENT") throw refusal;
++                throw error;
++            }
++        }
++        try { return write(); }
++        finally { unlinkSync(lock); }
++    } finally { unlinkSync(temp); }
 +}
 +
 +
@@ -338,7 +374,7 @@
          this.cwd = resolvePath(cwd);
          this.sessionDir = normalizePath(sessionDir);
          this.persist = persist;
-@@ -603,46 +444,48 @@
+@@ -603,46 +464,48 @@
              mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
          }
          if (sessionFile) {
@@ -412,7 +448,7 @@
          if (options?.id !== undefined) {
              assertValidSessionId(options.id);
          }
-@@ -656,68 +499,20 @@
+@@ -656,68 +519,20 @@
              cwd: this.cwd,
              parentSession: options?.parentSession,
          };
@@ -487,7 +523,7 @@
      isPersisted() {
          return this.persist;
      }
-@@ -737,43 +532,40 @@
+@@ -737,43 +552,40 @@
          return this.sessionFile;
      }
      _persist(entry) {
@@ -556,7 +592,7 @@
          if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
              throw new Error("Native input proof requires a persisted owner-controlled session");
          }
-@@ -812,22 +604,21 @@
+@@ -812,22 +624,21 @@
      }
      /** Find exactly one durable or pending native tracked input, including old branches. */
      getTrackedInput(inputId) {
@@ -586,7 +622,7 @@
              if (tracked.length !== 1) throw new Error("Explicit native input ID required");
              inputId = tracked[0].message.inputId;
          }
-@@ -841,7 +632,7 @@
+@@ -841,7 +652,7 @@
          if (!this.flushed) {
              const fd = openSync(this.sessionFile, "wx", 0o600);
              try {
@@ -595,7 +631,7 @@
                      writeFileSync(fd, `${JSON.stringify(item)}\n`);
                  }
                  fsyncSync(fd);
-@@ -867,7 +658,11 @@
+@@ -867,7 +678,11 @@
                  closeSync(fd);
              }
          }
@@ -607,7 +643,7 @@
      }
      /** Append a message as child of current leaf, then advance leaf. Returns entry id.
       * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
-@@ -876,36 +671,38 @@
+@@ -876,36 +691,38 @@
       * These need to be appended via appendCompaction() and appendBranchSummary() methods.
       */
      appendMessage(message) {
@@ -652,7 +688,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
-@@ -913,12 +713,14 @@
+@@ -913,12 +733,14 @@
          };
          this._appendEntry(entry);
          return entry.id;
@@ -668,7 +704,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
-@@ -930,45 +732,44 @@
+@@ -930,45 +752,44 @@
          };
          this._appendEntry(entry);
          return entry.id;
@@ -725,7 +761,7 @@
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
-@@ -979,18 +780,20 @@
+@@ -979,18 +800,20 @@
       * @returns Entry id
       */
      appendCustomMessageEntry(customType, content, display, details) {
@@ -747,7 +783,7 @@
      }
      // =========================================================================
      // Tree Traversal
-@@ -999,28 +802,26 @@
+@@ -999,28 +822,26 @@
          return this.leafId;
      }
      getLeafEntry() {
@@ -784,7 +820,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1028,91 +829,71 @@
+@@ -1028,91 +849,71 @@
       * Pass undefined or empty string to clear the label.
       */
      appendLabelChange(targetId, label) {
@@ -896,7 +932,7 @@
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
              }
-@@ -1147,10 +926,12 @@
+@@ -1147,10 +946,12 @@
       * are not modified or deleted.
       */
      branch(branchFromId) {
@@ -910,7 +946,7 @@
      }
      /**
       * Reset the leaf pointer to null (before any entries).
-@@ -1158,7 +939,9 @@
+@@ -1158,7 +959,9 @@
       * Use this when navigating to re-edit the first user message.
       */
      resetLeaf() {
@@ -920,7 +956,7 @@
      }
      /**
       * Start a new branch with a summary of the abandoned path.
-@@ -1166,14 +949,15 @@
+@@ -1166,14 +969,15 @@
       * context from the abandoned conversation path.
       */
      branchWithSummary(branchFromId, summary, details, fromHook, usage) {
@@ -938,7 +974,7 @@
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
-@@ -1184,6 +968,7 @@
+@@ -1184,6 +988,7 @@
          };
          this._appendEntry(entry);
          return entry.id;
@@ -946,7 +982,7 @@
      }
      /**
       * Create a new session file containing only the path from root to the specified leaf.
-@@ -1191,112 +976,47 @@
+@@ -1191,112 +996,47 @@
       * Returns the new session file path, or undefined if not persisting.
       */
      createBranchedSession(leafId) {
@@ -1099,7 +1135,7 @@
      }
      /**
       * Create a new session.
-@@ -1315,26 +1031,10 @@
+@@ -1315,26 +1051,10 @@
       */
      static open(path, sessionDir, cwdOverride) {
          const resolvedPath = resolvePath(path);
@@ -1130,7 +1166,7 @@
      }
      /**
       * Continue the most recent session, or create new if none.
-@@ -1351,8 +1051,8 @@
+@@ -1351,8 +1071,8 @@
          return new SessionManager(cwd, dir, undefined, true);
      }
      /** Create an in-memory session (no file persistence), optionally from entries held outside the filesystem. */
@@ -1141,7 +1177,7 @@
      }
      /**
       * Fork a session from another project directory into the current project.
-@@ -1362,45 +1062,47 @@
+@@ -1362,45 +1082,47 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
