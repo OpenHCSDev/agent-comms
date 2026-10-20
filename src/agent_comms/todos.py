@@ -1458,6 +1458,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def checked(self) -> CheckedProblemOrder:
         return self
 
+    def require_wording(self) -> None:
+        """Check fresh order prose, never reinterpret stored history or shell commands."""
+        for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
+            DirectiveText.require(text)
+
     def story(self) -> tuple[StoryLine, ...]:
         return (StoryLine(self.at, f"Ordered {self.id}: {'; '.join(self.edits)}"),)
 
@@ -2023,6 +2028,7 @@ class AssignTodo(TodoOperation):
         current.require_revision(self.expected_revision)
         self.actor.require_may_change(current)
         if self.order != current.order:
+            self.order.require_wording()
             self.order.require_writable()
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
@@ -2996,6 +3002,8 @@ class TodoStore(TypedStore):
         goal: GoalRef,
     ) -> Todo:
         identity, assignee = _participant(creator), _thread(owner)
+        DirectiveText.require(text)
+        order.require_wording()
         order.require_writable()
         proposed = Todo.ordered(
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
