@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence,
+)
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING

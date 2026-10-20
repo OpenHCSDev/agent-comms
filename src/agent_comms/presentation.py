@@ -727,7 +727,9 @@ class CoordinationSnapshot:
         """Whether this snapshot still waits for any unread source to finish indexing."""
         return any(
             isinstance(value, IndexingUnread)
-            for values in (self.unread.values(), self.channel_unread.values(), self.thread_unread.values())
+            for values in (
+                self.unread.values(), self.channel_unread.values(), self.thread_unread.values()
+            )
             for value in values
         )
 
