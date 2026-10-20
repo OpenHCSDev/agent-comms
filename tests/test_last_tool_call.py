@@ -38,7 +38,8 @@ def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnigh
 def test_execution_activity_drives_first_call_alarm_and_core_strike(
         commander, commander_script, execution_name, monkeypatch):
     from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
-    from agent_comms.todos import MissedFirstCallStrike, ObservedFirstCall
+    from agent_comms.todos import MissedFirstCallStrike
+    from agent_comms.standing_rules import FirstCallMissing
     from test_commander_problem_orders import create
 
     comms, _ = commander
@@ -104,11 +105,10 @@ def test_execution_activity_drives_first_call_alarm_and_core_strike(
         # User 400, text 300, tool 250, text 199; stop even on an older non-tool row.
         assert len(decoded) == 4
     assert not MissedFirstCallStrike.observe(comms.goals, todo, 301, None)
-    assert context.first_calls((todo,), {'worker': context.last_activity('worker')}) == []
     comms.goals.todos.advance_objective_failures(comms.goals)
     retained = comms.goals.todos.get('P1')
     assert retained.holder == 'worker' and not retained.strikes and not retained.released
-    assert isinstance(retained.order.first_call, ObservedFirstCall)
+    assert FirstCallMissing.violations(comms, context.commander) == ()
 
 
 def test_tool_index_conversion_preserves_events_and_runs_once(tmp_path):
