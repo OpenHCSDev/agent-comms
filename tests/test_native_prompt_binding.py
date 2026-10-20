@@ -16,7 +16,7 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-from native_proof_cases import read_proof_rows, write_proof_rows
+from native_proof_cases import emitted_context, read_proof_rows, write_proof_rows
 
 import pytest
 
@@ -235,12 +235,10 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
 
         observer = _.get("observe_event")
         if observer is not None:
-            from agent_comms.pi_events import PiEvent
-
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
             NativeContextProof(

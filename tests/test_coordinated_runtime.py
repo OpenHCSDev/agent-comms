@@ -77,7 +77,7 @@ from agent_comms.wake_candidate_index import (
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
-from native_proof_cases import read_proof_rows, write_proof_rows
+from native_proof_cases import emitted_context, read_proof_rows, write_proof_rows
 
 
 @pytest.fixture
@@ -231,12 +231,10 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             reply = "42"
         observer = _kwargs.get("observe_event")
         if observer is not None:
-            from agent_comms.pi_events import PiEvent
-
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
             NativeContextProof(
