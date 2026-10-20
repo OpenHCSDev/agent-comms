@@ -156,6 +156,24 @@ class Stack:
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
             list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
 
+    def require_alive(self, root: Path, names: list[str], *, seconds: float) -> None:
+        """Each replacement must stay alive for the whole interval, not just its launch."""
+        from agent_comms.child_process import ProcessIdentity
+
+        selected = {row["name"]: FieldCodec.decode(ProcessIdentity, row["process_identity"])
+                    for row in self.cli(root, "threads")["threads"] if row["name"] in names}
+        if set(selected) != set(names):
+            raise UpgradeRefused("Restart did not return every captured agent")
+        deadline = time.monotonic() + seconds
+        while True:
+            dead = [name for name, process in selected.items() if not process.alive()]
+            if dead:
+                raise UpgradeRefused(f"Restarted agents exited: {', '.join(dead)}")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.25, remaining))
+
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
@@ -271,10 +289,19 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
             MaintenanceOperator.current()).nonce
         with transcripts_held(copy):
             before = bus_files(copy)
-        stopping = before_stop(copy, pending, stack, revisions)
-        # Optional connector qualification belongs to its own round_trip command;
-        # a native-only bus must not acquire a fabricated director to update.
-        return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
+        steps, failures = [], []
+        # A private copy can keep checking independent steps after a failure.
+        # Never stop live agents just to discover the next incompatible store.
+        for step in pending:
+            try:
+                result = carry(step, copy, stack, revisions, "--apply")
+                steps.append(result.report(step.name, True))
+                CarryLedger(copy).record(step.name)
+            except UpgradeRefused as error:
+                failures.append({"step": step.name, "error": str(error)})
+        if failures:
+            raise UpgradeRefused(json.dumps({"rehearsal_failures": failures, "steps": steps}))
+        return {"steps": steps, "files": carried(copy, before, steps), "read": stack.verify(copy)}
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
@@ -314,6 +341,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
                       "rehearsal": install.rehearsal()}
             if rehearse_only:
                 return report
+            # This is deliberately after the complete fresh-copy rehearsal.
+            # No process is stopped while target steps are still unproved.
             report["live"] = install.live()
             return report
         finally:
@@ -337,7 +366,8 @@ class Install(ABC):
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
            installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> Install:
-        unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
+        unchanged = (not pending and current == target
+                     and staged.lock.read_bytes() == installed.lock.read_bytes())
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, pending, installed, staged, revisions, installer)
 
@@ -386,33 +416,27 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
                 root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
-    except BaseException as error:
-        maintenance.clear(held)
-        installed.owners(root, "start", running)
-        print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
-              f"maintenance cleared and {running} restarted", file=sys.stderr)
-        raise
-    shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
-    try:
+        if lock.exists():
+            shutil.copy2(lock, backup.path / "uv.lock")
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
         installed.relock()
         installed.prepare_native()
         passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
         installed.publish()
-        maintenance.clear(held)
         services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
-    except BaseException as error:
-        state = maintenance.read()
-        state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
-        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
-              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
-              file=sys.stderr)
-        raise
-    installed.owners(root, "start", running)
-    return {"stopped_and_started": running, **passed, "services": services,
-            "backup": str(backup.path)}
+        return {"stopped_and_started": running, **passed, "services": services,
+                "backup": str(backup.path)}
+    finally:
+        # Stop and restart are one lifetime, including a failed stop or install.
+        # Never recompute the set from the now-stopped registry.
+        try:
+            maintenance.clear(held)
+        finally:
+            installed.owners(root, "start", running)
+            installed.require_alive(root, running, seconds=20)
+
 
 
 def detached_live(command: tuple[str, ...], root: Path) -> int:
