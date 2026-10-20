@@ -1,6 +1,4 @@
-import sys
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -46,7 +44,6 @@ def test_failed_real_children_remain_named_unverified(tmp_path, program, expecte
     config = CommanderConfig(
         commander="reader",
         root=tmp_path / "bus",
-        cli=Path(sys.executable),
         state=tmp_path / "state",
         board=tmp_path / "board.md",
         narrative=tmp_path / "narrative.md",
