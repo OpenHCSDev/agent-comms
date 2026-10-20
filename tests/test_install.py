@@ -98,3 +98,18 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
 
     report = InstallResult("/config.json", {"claude-code": ("skill", "tools")})
     assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
+
+
+def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):
+    # The laptop's install refused this read: rebuilding the copy's empty index sealed it
+    # inside an open transaction, so the commit moved the file past its own seal.
+    from agent_comms.cli import main
+
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    Comms(root).messaging.initialize_private_initial_protocol()
+    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
+    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+        for _ in range(2):
+            assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+            assert '"failed"' not in capsys.readouterr().out
