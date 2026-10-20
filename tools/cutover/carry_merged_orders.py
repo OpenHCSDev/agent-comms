@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import CheckedProblemOrder, Todo
+from agent_comms.todos import CheckedProblemOrder, MergedProblemOrder, Todo
 from agent_comms.typed_table import TypedRow
 
 from .carry import Carried, TodoOrderShape
@@ -31,6 +31,7 @@ class MergedOrders(TodoOrderShape):
         path = cls.store.path_in(root)
         if not path.exists():
             return Carried(0)
+        parameters = (MergedProblemOrder.declared_name,)
         with closing(CoordinationStore.writer(path)) as db:
             db.execute("BEGIN IMMEDIATE")
             # Folded provenance can contain a merged order too. The transition
@@ -41,11 +42,10 @@ class MergedOrders(TodoOrderShape):
                     f" json_extract(t.\"order\", n.path || '.original') AS checked,"
                     f" json_extract(t.\"order\", n.path || '.sha') AS sha"
                     f' FROM "{Todo.declared_name}" t, json_tree(t."order") n'
-                    " WHERE n.key='kind' AND n.value='merged'"
+                    " WHERE n.key='kind' AND n.value=?"
                     " AND json_type(t.\"order\", n.path || '.original')='object'"
-                    " ORDER BY length(n.path) DESC"
-                    # 'merged' is the retired input tag; the checked order's
-                    # transition and codec own the current output declaration.
+                    " ORDER BY length(n.path) DESC",
+                    parameters,
                 )
             )
             for row in saved:
