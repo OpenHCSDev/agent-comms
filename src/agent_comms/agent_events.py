@@ -39,7 +39,6 @@ from .tool_results import ToolDiff
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
-    from .turn_effects import TurnEffects
     from .input_disposition import InputDocument
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
@@ -48,6 +47,7 @@ if TYPE_CHECKING:
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
+    from .turn_effects import TurnEffects
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
 
