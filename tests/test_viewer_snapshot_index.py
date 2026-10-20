@@ -285,6 +285,21 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         comms.views.transcript_reads.close()
 
 
+def test_route_index_write_is_a_sidebar_revision(tmp_path):
+    from agent_comms.presentation import WireRevision
+    from agent_comms.revision_views import SidebarView
+
+    comms = wire(tmp_path)
+    index = BusRouteCounts(comms.bus.log.path)
+    index.prepare()
+    before = WireRevision.capture(comms.views, expiry_tick=0)
+    with closing(CoordinationStore.writer(index.path)) as writer, writer:
+        writer.execute('CREATE TABLE p730_revision_probe (id INTEGER)')
+    after = WireRevision.capture(comms.views, expiry_tick=0)
+    assert before.bus_log == after.bus_log
+    assert after.changed_since(SidebarView(), before)
+
+
 def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))

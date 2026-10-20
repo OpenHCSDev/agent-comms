@@ -16,10 +16,12 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
+from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .coordination_database import CoordinationStore
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
@@ -788,6 +790,9 @@ class WireRevision(ReadState):
         *STATUS_SOURCE, RegistrationsView)
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
         *STATUS_SOURCE, BusSourceView)
+    bus_routes: tuple[FileRevision, ...] = revision_source(
+        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),
+        StoresView, SidebarView)
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
         *STATUS_SOURCE)
     activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,),
