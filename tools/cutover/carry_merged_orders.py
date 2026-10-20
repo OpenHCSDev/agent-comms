@@ -9,10 +9,10 @@ from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import CheckedProblemOrder, MergedProblemOrder, Todo
+from agent_comms.todos import CheckedProblemOrder, MergedProblemOrder, Todo, TodoStore
 from agent_comms.typed_table import TypedRow
 
-from .carry import Carried, TodoOrderShape
+from .carry import Carried, StoreCarry
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,9 @@ class SavedMergedOrder(TypedRow):
     sha: str
 
 
-class MergedOrders(TodoOrderShape):
+class MergedOrders(StoreCarry):
+    store = TodoStore
+
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         path = cls.store.path_in(root)
