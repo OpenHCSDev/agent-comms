@@ -23,7 +23,6 @@ from ..check_root import CheckRoot
 from ..commander.config import CommanderConfig
 from ..commander.order import Commander, OrderFile, hhmm
 from ..commander.request import RequestAddVerb
-from ..comms import Comms
 from ..field_codec import FieldCodec
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..todos import (
@@ -102,15 +101,14 @@ class LifecycleRun:
     @classmethod
     @contextlib.contextmanager
     def open(cls, *, extra_threads: tuple[str, ...] = ()) -> Iterator[LifecycleRun]:
-        config = CommanderConfig.read(CommanderConfig.path())
-        source = Comms(config.root)
+        config = MeasuredCommander.read(CommanderConfig.path())
+        source = config.comms
         actor = ToolCaller.from_actor(os.environ.get("AGENT_COMMS_THREAD")).acting_name(
             config.commander
         )
         caller = source.registry.require(actor)
         if actor == config.commander:
-            authority = MeasuredCommander(config=config)
-            held = source.goals.todos.held_for_commander(authority.incarnation)
+            held = source.goals.todos.held_for_commander(config.incarnation)
             if not held:
                 raise ValueError("Lifecycle comparison requires an existing native order holder")
             worker = source.registry.require(held[-1].held().owner)
