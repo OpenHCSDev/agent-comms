@@ -5,12 +5,13 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
+from ..recorded_time import RecordedEventTime
 from ..repo import Repo
 from ..standing_rules import (
     DatedStandingRule,
@@ -20,9 +21,12 @@ from ..standing_rules import (
 )
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
+from ..todos import (
+    FlatTrend, OrderProgress, PullRequests, StrikeReason, Todo, VerdictAudience,
+)
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from .config import CommanderConfig
+from .order import CommanderContext
 
 
 @dataclass(frozen=True)
@@ -122,8 +126,20 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " to an idle unit")
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        for unit in self.idle(comms, commander)[:1]:
-            self.assign(comms, commander, unit, StallWatcherIncarnation.watcher())
+        todo = comms.goals.todos.get(self.todo.id)
+        todo.require_revision(self.todo.revision)
+        actor = StallWatcherIncarnation.watcher()
+        reason = StrikeReason(f"{todo.holder} kept working on {todo.id} while its distance "
+                              "did not fall across two readings.")
+        for strike in todo.stall_strikes(actor, reason, RecordedEventTime(time.time())):
+            todo = comms.goals.change_problem(todo.id, strike, commander)
+        current = replace(self, todo=todo)
+        if idle := self.idle(comms, commander):
+            current.assign(comms, commander, idle[0], actor)
+        else:
+            CommanderContext.read_root(comms.root).post(VerdictAudience(()),
+                f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling "
+                f"since {RecordedEventTime(self.since).clock()}; struck, still held")
 
 
 @dataclass(frozen=True)

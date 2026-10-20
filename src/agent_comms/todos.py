@@ -2421,12 +2421,21 @@ class Todo(TypedTable):
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
+    def stall_strikes(self, actor: ThreadIncarnation, reason: StrikeReason,
+                      at: EventTime) -> tuple[StrikeTodo, ...]:
+        owner = self.held()
+        if self.struck_on_order(owner.owner):
+            return ()
+        return (StrikeTodo(self.revision, actor, owner, reason.text, at),)
+
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
         """After assignment validation, fold its strike and release into the same row write."""
         owner, at = self.held(), RecordedEventTime(time.time())
         reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
                               f"Core reassigned the order to {assigned.held().owner}.")
-        struck = StrikeTodo(self.revision, actor, owner, reason.text, at).apply(self)
+        struck = self
+        for strike in self.stall_strikes(actor, reason, at):
+            struck = strike.apply(struck)
         released = ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
         return replace(assigned, strikes=struck.strikes, released=released.released,
                        revision=released.revision + 1)
