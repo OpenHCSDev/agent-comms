@@ -12,7 +12,28 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.turn_lease import StoredTurnRecord
+from agent_comms.turn_lease import NoTurnRecord, StoredTurnRecord, StoredTurnReference
+
+
+def test_executing_comes_from_the_record_declaration_without_reading(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(
+        'worker', frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    owner = comms.agents.begin_turn('worker', 'running')
+
+    def forbidden_read(record):
+        raise AssertionError('execution status must not read a turn file')
+
+    monkeypatch.setattr(StoredTurnRecord, 'read', forbidden_read)
+    monkeypatch.setattr(NoTurnRecord, 'read', forbidden_read)
+    monkeypatch.setattr(StoredTurnReference, 'read', forbidden_read)
+    assert owner.turn_record.executing is True
+    assert owner.executing is True
+    assert NoTurnRecord().executing is False
+    with pytest.raises(RelationViolationError, match='must be bound by its registry'):
+        StoredTurnReference().executing
 
 
 def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monkeypatch):
