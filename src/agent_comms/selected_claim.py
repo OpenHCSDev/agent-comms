@@ -184,7 +184,7 @@ def publish_selected_resource_claim(
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
             if existing is not None:
-                existing.require_holder(owner.name, str(owner.created_at))
+                existing.require_holder(owner.name, str(owner.created_at), registry)
                 # Same-operation lookup; holder identity was already checked above.
                 if claim_scope == existing.claim_scope:
                     return existing

@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
@@ -23,6 +23,9 @@ from .message_reference import MessageReference
 from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
                           ResourcePathText, Sha256Text)
 from .thread_identity import GenerationCounter, TurnId
+
+if TYPE_CHECKING:
+    from .registry_provenance import RegistryProvenance
 
 
 class ClaimTransitionError(ValueError):
@@ -208,8 +211,14 @@ class ClaimTransition:
         default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
     )
 
+    superseded: tuple[ClaimOwner, ...] = field(default=(), metadata={"wire_omit_default": True})
+
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
+        if any(owner.resource not in self.claims for owner in self.superseded):
+            raise ClaimTransitionError("A claim transfer must acquire its original resource.")
+        if len({owner.resource for owner in self.superseded}) != len(self.superseded):
+            raise ClaimTransitionError("A claim transfer cannot repeat a resource.")
         if not self.claims and not self.releases:
             raise ClaimTransitionError("Empty claim transitions are not meaningful.")
         if len(set(self.resources)) != len(self.resources):
@@ -247,6 +256,9 @@ class ClaimTransition:
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")
         next_state = dict(previous)
+        for owner in self.superseded:
+            if previous.get(owner.resource) != owner:
+                raise ClaimTransitionError("Claim transfer differs from its recorded holder.")
         for release in self.releases:
             current = next_state.get(release.resource)
             if current is None:
@@ -257,7 +269,7 @@ class ClaimTransition:
                 raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
         for resource in self.claims:
             if existing := next_state.get(resource):
-                existing.require_holder(self.owner, self.incarnation)
+                existing.require_recorded_holder(self.owner, self.incarnation, self.superseded)
         for release in self.releases:
             del next_state[release.resource]
         for resource in self.claims:
@@ -278,8 +290,18 @@ class ClaimOwner:
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
 
-    def require_holder(self, owner: str, incarnation: str) -> None:
-        if (self.owner, self.incarnation) != (owner, incarnation):
+    def require_holder(self, owner: str, incarnation: str, registry: RegistryProvenance) -> None:
+        """A retired claim passes only to the same name's registry-declared live incarnation."""
+        current = registry.threads.get(owner)
+        permitted = (self,) if current is not None and str(current.created_at) == incarnation else ()
+        self.require_recorded_holder(owner, incarnation, permitted)
+
+    def require_recorded_holder(
+        self, owner: str, incarnation: str, superseded: tuple[ClaimOwner, ...],
+    ) -> None:
+        if self.owner != owner:
+            raise ClaimConflict(self)
+        if self.incarnation != incarnation and self not in superseded:
             raise ClaimConflict(self)
 
 
