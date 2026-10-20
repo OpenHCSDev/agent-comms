@@ -50,11 +50,9 @@ class TranscriptReplay:
     @cached_property
     def reads(self):
         # Replay and subscription share this process and its request/wait lifetime.
-        return self.runtime._resources.enter_context(
-            ObservationProcess.awaited(self.comms.route)
-        )
+        return self.runtime._resources.enter_context(ObservationProcess.awaited(self.comms.route))
 
-    async def replay(self, session_id: str, client: SocketClient | None = None) -> None:
+    async def replay(self, session_id: str, client: RuntimeServer | SocketClient) -> None:
         snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), session_id))
         await self._publish(session_id, snapshot, client)
 
@@ -63,10 +61,11 @@ class TranscriptReplay:
         await self._publish(session_id, snapshot, client)
 
     async def _publish(
-        self, session_id: str, snapshot: TranscriptSnapshotUpdate,
-        client: SocketClient | None,
+        self,
+        session_id: str,
+        snapshot: TranscriptSnapshotUpdate,
+        destination: RuntimeServer | SocketClient,
     ) -> None:
-        destination = client or self.runtime
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
         await destination.session_update(
             session_id=session_id,
