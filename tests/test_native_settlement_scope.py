@@ -3,10 +3,13 @@
 from bus_history import read_history
 from agent_comms.messages import NoticeRole
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.attempt_states import SucceededAttempt
+from agent_comms.child_process import NoProcess
+from agent_comms.thread_status import StoppedThreadStatus
 
 from agent_comms.coordination_session import (
     CoordinationSession,
@@ -28,6 +31,21 @@ def strand_terminal(monkeypatch, store):
     terminal = store.snapshots.get("execution")
     assert terminal.attempt.lifecycle.terminal and not terminal.is_current
     return terminal
+
+
+def test_recovery_does_not_release_a_claim_from_a_dead_owner():
+    with selected_turn() as (comms, store, selected, resource):
+        claim = publish_selected_resource_claim(
+            comms, store, selected, "Alice", ExistingFileClaim(resource)
+        )
+        owner = comms.registry.require("Alice")
+        comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
+        before = (comms.root / "bus.jsonl").read_bytes()
+        settle_failed(store)
+        assert (comms.root / "bus.jsonl").read_bytes() == before
+        assert comms.bus.log.claim_projection()[str(resource)] == claim
+        assert not comms.bus.log.claim_projection().live_in(comms.registry.snapshot())
+        assert store.snapshots.get("execution").attempt.lifecycle.terminal
 
 
 def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeypatch, *, thread_registration):

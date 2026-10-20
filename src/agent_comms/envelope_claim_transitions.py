@@ -306,9 +306,7 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
         raise ClaimTransitionError("Release originals do not acquire resources.")
 
     def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
-        live = ClaimProjection(previous.last_seq, {
-            resource: owner for resource, owner in previous.items() if owner.live(registry)
-        })
+        live = previous.live_in(registry)
         self.require_holders(live)
         # Only registry evidence expires original claims; never accept caller-authored expiry.
         return replace(self, expired=()).project(live)
@@ -474,6 +472,12 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
         ):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
+
+    def live_in(self, registry: RegistrySnapshot) -> ClaimProjection:
+        """Keep only claims whose recorded owner still holds its registry generation."""
+        return ClaimProjection(self.last_seq, {
+            resource: owner for resource, owner in self.items() if owner.live(registry)
+        })
 
     def __getitem__(self, key: str) -> ClaimOwner:
         return self._claims[key]
