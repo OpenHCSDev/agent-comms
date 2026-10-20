@@ -197,7 +197,7 @@ class ClaimWrites(PrivateWrites):
             )
             transition = make_transition(owner=stored.sender, seq=stored.seq,
                                          message_id=stored.message_id)
-            source.prepare_claim(transition, snapshot)
+            transition = source.prepare_claim(transition, snapshot)
         stored = ClaimMessage.of(stored, transition)
         try:
             self.log.append_private_unlocked(metadata, stored.to_wire())
