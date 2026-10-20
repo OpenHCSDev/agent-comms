@@ -75,6 +75,9 @@ def test_repo_edit_is_refused_by_real_hook_entry(guard_entry):
         decision = response["hookSpecificOutput"]
         assert decision["permissionDecision"] == "deny"
         assert decision["permissionDecisionReason"] == SourceChangeCommand.reason
+    assert invoke({"file_path": "src/agent_comms/todos.py"}, edit=True)["hookSpecificOutput"][
+        "permissionDecision"
+    ] == "deny"
     assert (
         invoke({"file_path": str(repo / "src/x.py")}, edit=True, session="a-different-real-session")
         is None
@@ -103,6 +106,10 @@ def test_git_commit_and_push_use_the_shared_directory_decoder(guard_entry, tmp_p
         )
     assert invoke({"command": "git commit -am scratch"}, cwd=context.scratch) is None
     assert invoke({"command": 'printf "%s" "git commit -am quoted"'}, cwd=repo) is None
+    assert invoke({"command": "git --exec-path"}, cwd=repo) is None
+    assert invoke({"command": "git -C"}, cwd=repo)["hookSpecificOutput"][
+        "permissionDecision"
+    ] == "deny"
 
 
 def test_declared_batch_landing_path_remains_allowed(guard_entry):

@@ -485,7 +485,8 @@ class RemovesCheckout(ShellProgram):
 
 
 class WritesWorkingTree(ShellProgram):
-    verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,), ('merge',), ('reset',), ('stash',))
+    verbs = (('switch',), ('checkout',), (GitWriteOperation.COMMIT,),
+             ('merge',), ('reset',), ('stash',))
 
     def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
@@ -499,7 +500,8 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
     chdir_option = '-C'
     directory_options = frozenset({chdir_option, '--git-dir', '--work-tree'})
     value_options = (*sorted(directory_options), '-c', '--config-env', '--namespace',
-                     '--exec-path', '--list-cmds', '--attr-source', '--super-prefix')
+                     '--list-cmds', '--attr-source', '--super-prefix')
+    optional_options = ('--exec-path',)
     switch_options = ('-v', '-h', '-p', '-P', '--version', '--help', '--no-pager', '--paginate',
                       '--html-path', '--man-path', '--info-path', '--no-replace-objects', '--bare',
                       '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs',
@@ -511,10 +513,12 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
         short += ''.join(name[1:] for name in cls.switch_options if len(name) == 2)
         long = [name[2:] + '=' for name in cls.value_options if name.startswith('--')]
         long.extend(name[2:] for name in cls.switch_options if name.startswith('--'))
+        long.extend(name[2:] + '=?' for name in cls.optional_options)
         try:
             options, remaining = getopt.getopt(args, short, long)
         except getopt.GetoptError as error:
-            raise SelectedToolDenied(f'StorageRule: incomplete or unknown git option: {error}') from error
+            raise SelectedToolDenied(
+                f'StorageRule: incomplete or unknown git option: {error}') from error
         directories = [cwd]
         for option, value in options:
             if option in cls.directory_options:
