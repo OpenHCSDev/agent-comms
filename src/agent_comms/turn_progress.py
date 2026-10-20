@@ -19,7 +19,7 @@ from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_request_progress
+from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
@@ -307,13 +307,21 @@ class TurnProgress(events.AgentEventConsumer):
                     )
                 )
             )
+            diagnostic = record_terminal_failure(
+                self.comms.root,
+                turn_id=self.turn_lease.turn_id,
+                thread=self.thread_name,
+                event={"reason_code": terminal.reason_code, "diagnostic": terminal.diagnostic},
+                sequences=(),
+            )
             results = []
             for target in notice_targets:
                 prefix = "Request failed" if target in self.reply_targets else "Delivery failed"
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: {terminal.text}",
+                    f"{prefix}: backend turn did not complete. "
+                    f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
                     AlertKind,
                     role=NoticeRole(),
                 ))

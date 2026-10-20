@@ -5,6 +5,7 @@ import json
 import pytest
 
 import agent_comms.agent_events as ae
+from agent_comms.acp_failure import NativeTurnError
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -78,15 +79,16 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
-        await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+        with pytest.raises(NativeTurnError):
+            await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
         assert paused is not None
         assert wired.registry.require("project").goal == paused
         assert wired.registry.require("project").goal.state.pause_source.instruction() is not None
-        assert stored_inputs(agent.inputs.dispositions.root) == ledger_before
-        assert (
-            stored_inputs(agent.inputs.dispositions.root).rows["acp:earlier-uncertain"].declared_name
-            == "unknown"
-        )
+        after = stored_inputs(agent.inputs.dispositions.root)
+        assert after.rows["acp:earlier-uncertain"] == ledger_before.rows["acp:earlier-uncertain"]
+        distinct = set(after.rows) - set(ledger_before.rows)
+        assert len(distinct) == 1
+        assert after.rows[distinct.pop()].declared_name == "not_sent"
         generation = wired.goals.open_goal_store().snapshot(goal.id)
         assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttemptError):

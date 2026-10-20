@@ -8,7 +8,7 @@ from agent_comms.queued_input import InitialInput
 import json
 
 import pytest
-from acp import RequestError
+from agent_comms.acp_failure import NativeTurnError
 
 import agent_comms.agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
@@ -153,7 +153,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        with pytest.raises(RequestError, match="Internal error"):
+        with pytest.raises(NativeTurnError, match="Owner stopped before send"):
             await InitialInput.run(agent.inputs, "project", "project", "do not send after stop")
         assert boundaries == [AuthorityChangedSend]
         rows = disposition_rows(agent)
