@@ -1,7 +1,7 @@
 """At session start, resume and compaction, write the commander's sources and order them read.
 
-The sources are the indictment, the recorded failures, the commander skill, the
-packaged rules and the pinned refactor-audit pattern catalog. Claude Code caps
+The sources are the indictment, the packaged spine, the recorded failures, the
+commander skill, the packaged rules and the pinned refactor-audit pattern catalog. Claude Code caps
 injected hook text at 10,000 characters and the sources are far longer, so they
 go into parts beside the transcript and the hook injects the order to read
 each part. The reread hook repeats that order as context grows.
@@ -53,6 +53,7 @@ class CommanderStart(CommanderReread):
             (
                 cls.notice(),
                 CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
+                CommanderConfig.packaged_spine().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
                 RuleFile.document(CommanderConfig.packaged_skill())[1],
                 *(rule.render() for rule in RuleFile.packaged()),
