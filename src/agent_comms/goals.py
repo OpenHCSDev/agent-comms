@@ -264,6 +264,9 @@ class OrderCheck:
     def __post_init__(self):
         if not self.directory.strip() or not self.command.strip():
             raise ValueError("An order check requires a directory and command.")
+
+    def require_writable(self) -> None:
+        """New checks cannot select revisions; saved checks remain readable for correction."""
         if any(self.git_command(words) in self.REVISION_COMMANDS
                for words in self.simple_commands(self.command)):
             raise ValueError("A check never checks out a revision: Core runs it at the "
@@ -285,7 +288,9 @@ class OrderCheck:
         found = cls.LINE.fullmatch(line.strip())
         if not found:
             return None
-        return cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check = cls(found[1], found[2], CountCheckResult(int(found[3])))
+        check.require_writable()
+        return check
 
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
