@@ -7,7 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessIdentity
@@ -89,8 +89,9 @@ class RegistryOwner:
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
-        thread = snapshot.threads.get(name)
-        claim_scope = snapshot.claimed_generations.get(name)
+        canonical = snapshot.canonical_name(name)
+        thread = snapshot.threads.get(canonical)
+        claim_scope = snapshot.claimed_generations.get(canonical)
         if thread is None or claim_scope is None:
             raise StaleFence(reason)
         owner = cls(thread=thread, claimed_generation=claim_scope)
@@ -123,7 +124,7 @@ class RegistryOwner:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.claimed_generations.get(self.thread.name), reason, check)
+        self._require_current(actual, snapshot.claimed_generations.get(actual.name), reason, check)
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
@@ -170,10 +171,8 @@ class GoalLaunchOwner(RegistryOwner):
     check_type = RegistryIdentityCheck
 
     def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
-        name = snapshot.canonical_name(self.thread.name)
-        canonical = replace(self, thread=replace(self.thread, name=name))
-        canonical.require_snapshot(snapshot, "Goal launch owner changed")
-        current = snapshot.require_active(name)
+        self.require_snapshot(snapshot, "Goal launch owner changed")
+        current = snapshot.require_active(self.thread.name)
         snapshot.status(current.name).require_running()
         return current.goal.require().require_id(goal_id).require_active()
 
