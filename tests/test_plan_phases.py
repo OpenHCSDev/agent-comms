@@ -124,7 +124,32 @@ def test_merged_phase_is_inherited_and_round_trips_without_a_wrapper(commander):
     assert original.phase is RecordPlanePhase
     assert not order.accepted
     folded = FoldedProblemOrder(original=original, into="P2", why="Keep one owner")
-    assert folded.phase is UnplannedPhase
+    assert folded.phase is RecordPlanePhase
+    assert not folded.accepted
+
+
+@pytest.mark.parametrize("phase", (CutoverPhase, CommanderPagePhase))
+@pytest.mark.parametrize("installed", (False, True))
+def test_folded_provenance_retains_phase_without_acceptance(
+        commander, monkeypatch, phase, installed):
+    todo = create(commander, "P1")
+    declared = replace(todo, order=todo.order.for_phase(phase))
+    monkeypatch.setattr(phase, "task", task(declared))
+    original = accepted(declared).order if installed else declared.order.merged("a" * 40)
+    folded = original.folded("P2", "Keep one owner")
+    nested = folded.folded("P3", "Keep the retained provenance")
+    for order in (folded, nested):
+        restored = FieldCodec.decode(ProblemOrder, FieldCodec.encode(order))
+        assert restored == order
+        assert restored.phase is phase
+        assert not restored.accepted
+        saved = replace(todo, order=restored, state=DoneTodoState, assignment=None)
+        assert phase.serving((saved,)) == (saved,)
+        assert not phase.done((saved,))
+        with pytest.raises(ValueError, match="Only a checked order"):
+            restored.for_phase(UnplannedPhase)
+    assert original.phase is phase
+    assert original.accepted is installed
 
 
 def test_closed_related_subtask_does_not_accept_a_whole_phase(commander, monkeypatch):
