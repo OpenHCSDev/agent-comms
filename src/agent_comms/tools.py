@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from . import cli as comms_cli
 from .commander.capacity import Load
 from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
@@ -1396,10 +1397,8 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
 
     def argv(self, root: Path) -> tuple[str, ...]:
         """The CLI boundary owns its module, grammar and argument serialization."""
-        from . import cli
-
         caller = ToolCaller.from_actor(self.caller)
-        return (sys.executable, '-m', cli.__name__, '--root', str(root),
+        return (sys.executable, '-m', comms_cli.__name__, '--root', str(root),
                 self.declared_name, '--from', caller.acting_name(''), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
