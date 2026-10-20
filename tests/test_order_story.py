@@ -50,6 +50,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = Comms(copied_root)
     saved = copied.goals.todos.get("P1")
+    stored_at = copied.goals.todos.path.stat().st_mtime_ns
     result = CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=NoThreadCaller())
     story = FieldCodec.decode(OrderStory, result)
     assert story.line.count(reason) == story.line.count(standalone) == 1
@@ -62,5 +63,6 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         copied, {"thread": "lead"}, caller=NoThreadCaller()))
     assert fleet.lines == (story.line,)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
+    assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with pytest.raises(TodoError, match="Expected one saved order"):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

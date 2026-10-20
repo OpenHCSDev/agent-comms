@@ -19,12 +19,10 @@ class StoryCase(LifecycleCase):
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
         created = run.create()
-        run.commander.strike(run.worker, created.id, cls.strike_reason)
-        struck = run.commander.comms.goals.todos.get(created.id)
         verdict = SendBackVerdict(
-            struck.revision,
+            created.revision,
             run.commander.incarnation,
-            struck.held(),
+            created.held(),
             "story-review",
             StrikeReason(cls.back_reason),
         )
@@ -38,6 +36,7 @@ class StoryCase(LifecycleCase):
             clean=True,
             replaces=sent_back.messages[-1].message_id,
         )
+        run.commander.strike(run.worker, created.id, cls.strike_reason)
         saved = run.commander.comms.goals.todos.get(created.id)
         for _ in range(2):
             story = run.commander.call(CommsOrderStoryTool(order_id=saved.order.checked().id))
