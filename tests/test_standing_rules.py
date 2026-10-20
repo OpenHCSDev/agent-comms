@@ -48,6 +48,19 @@ def lines(comms, member, commander="lead"):
     return [found.line() for found in member.violations(comms, commander)]
 
 
+def test_wheel_spin_reads_external_owner_and_requires_actual_recent_turns(standing, tmp_path):
+    from agent_comms.transcript_events import AssistantTranscript
+
+    comms, _, rules = standing
+    for name in ('recent-cli', 'old-cli', 'empty-cli'):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    for name, timestamp in (('recent-cli', time.time()), ('old-cli', 1.0)):
+        comms.transcripts.external(name).finish(turn_id='original-turn', item_id='reply', events=(
+            AssistantTranscript('retained answer', position=1, timestamp=timestamp),))
+    assert [thread.name for thread in rules.WheelSpin.idle(comms, 'lead')] == ['recent-cli']
+
+
 @pytest.mark.parametrize("reported,alarms", [
     (NoCommitProgress(), True),
     (MergedProgress("d" * 9), False),

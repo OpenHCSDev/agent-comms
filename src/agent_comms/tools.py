@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from .commander.capacity import Load
 from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
@@ -79,7 +80,7 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .order_work import OrderWork
-from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
+from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
@@ -763,25 +764,18 @@ class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
-    @classmethod
-    def readers(cls, comms: Comms, commander: str, read_type=OrderEditsRead):
-        actor = comms.registry.require(commander).incarnation
-        for todo in comms.goals.todos.held_for_commander(actor):
-            assignment = todo.held()
-            holder = comms.registry.require(assignment.owner)
-            if holder.incarnation != assignment.owner_identity:
-                raise ToolRefusedError(
-                    f"Order {todo.id} holder incarnation no longer exists"
-                )
-            yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
-
-    @classmethod
-    def count(cls, comms: Comms, commander: str) -> int:
-        return sum(read.read() for read in cls.readers(comms, commander, OrderEditCountRead))
-
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(tuple(edit for read in self.readers(comms, caller.subject(self.thread))
-                                  for edit in read.read()))
+        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
+            comms, caller.subject(self.thread)) for edit in read.read()))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCommanderLoadTool(ThreadReadTool):
+    label = "Measured commander load"
+    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> Load:
+        return Load.of(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)
