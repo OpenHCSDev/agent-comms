@@ -83,7 +83,8 @@ class NativeInputOffsets(Carry):
             rows = list(
                 NativeRuntimeInput.read(
                     db.execute(
-                        f"SELECT {columns} FROM native_runtime_input WHERE session_entry_id IS NULL",
+                        f"SELECT {columns} FROM native_runtime_input "
+                        "WHERE session_entry_id IS NULL",
                         (None,),
                     )
                 )

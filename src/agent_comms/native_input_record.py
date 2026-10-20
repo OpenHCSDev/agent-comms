@@ -40,20 +40,21 @@ class NativeInputCommit:
 class NativeInputLocation(NativeInputCommit):
     """Emitted byte placement; only the original runtime input row persists it."""
 
+    position_column: ClassVar[Column] = Column(check="session_entry_start>0")
     session_entry_start: int = field(kw_only=True, metadata={
-        "wire_name": "sessionEntryStart", "sql": Column(check="session_entry_start>0"),
+        "wire_name": "sessionEntryStart", "sql": position_column,
     })
 
-    @classmethod
-    def position_field(cls) -> Field[object]:
+    @staticmethod
+    def position_field() -> Field[object]:
         """The placement declaration supplies its name and storage constraints."""
-        position, = (item for item in fields(cls) if item.name in cls.__annotations__)
+        position, = (item for item in fields(NativeInputLocation)
+                     if item.name in NativeInputLocation.__annotations__)
         return position
 
     @classmethod
     def pending_column(cls) -> Column:
-        position = cls.position_field()
-        return replace(position.metadata["sql"], nullable=True, storage=IntegerStorage)
+        return replace(cls.position_column, nullable=True, storage=IntegerStorage)
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
