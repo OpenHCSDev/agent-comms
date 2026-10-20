@@ -51,8 +51,7 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
-from .commander.standing import UnownedWheelSpin
-from .todos import DirectiveText, ReviewedHeadVerdict
+from .todos import DirectiveText, ReviewedHeadVerdict, UnownedWheelSpin
 from .tool_caller import ThreadCaller
 from .tools import (
     CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,

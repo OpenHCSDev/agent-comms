@@ -97,6 +97,9 @@ class Thread(ThreadProvenance):
         default=False,
         metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
     )
+    parked: bool = field(default=False, kw_only=True,
+                         metadata={"registration_inheritance": InheritPrevious,
+                                   "wire_omit_default": True})
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: type[ThreadRole] = field(

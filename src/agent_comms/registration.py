@@ -82,6 +82,13 @@ class Registration:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
 
+    def set_parked(self, name: str, parked: bool) -> None:
+        """Change the thread's scheduling state without replacing its live declaration."""
+        with self.store.editing() as edit:
+            current = edit.document.require(name)
+            edit.document.threads[current.name] = replace(current, parked=parked)
+            edit.commit()
+
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):
         """The CLI bridge owns its registered endpoint until that same process leaves."""

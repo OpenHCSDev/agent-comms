@@ -43,7 +43,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     worktrees: Path
     scratch: Path
     disk: Path
-    parked: frozenset[str] = frozenset()
 
     @property
     def peer_sync_log(self) -> Path:
