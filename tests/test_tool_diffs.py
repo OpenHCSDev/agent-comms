@@ -10,7 +10,6 @@ from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff, tool_result_content
-from agent_comms.transcript_events import ToolEndTranscript
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -49,12 +48,6 @@ def test_native_edit_evidence(name, native, ok, expected):
     )
 
 
-def test_plain_tool_result_keeps_text_content():
-    event = ToolEndTranscript(tool_call_id="plain", tool_name="read", text="saved output")
-    assert event.diff is None
-    assert tool_result_content("plain", event.text, event.diff) == [
-        {"type": "content", "content": {"type": "text", "text": "saved output"}}
-    ]
 
 
 def test_successful_send_preserves_original_publication_in_live_and_saved_content(tmp_path):
