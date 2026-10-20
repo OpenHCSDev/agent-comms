@@ -26,7 +26,10 @@ class SessionHook(ClaudeHook):
     def owner(self) -> ProcessIdentity:
         if os.environ.get("CLAUDE_CODE_SESSION_ID") != self.session_id:
             raise ValueError("Claude hook session and CLAUDE_CODE_SESSION_ID disagree")
-        owner = ProcessIdentity.capture(int(os.environ["CLAUDE_PID"]))
+        pid = os.environ.get("CLAUDE_PID", "")
+        if not pid:
+            raise ValueError("Claude hook has no exported CLAUDE_PID")
+        owner = ProcessIdentity.capture(int(pid))
         owner.require_ancestor_of(os.getpid())
         return owner
 
@@ -35,7 +38,7 @@ class SessionHook(ClaudeHook):
         if not isinstance(claim.state(), RecordedWatch):
             return
         owner = self.owner()
-        request = VerifySession(owner=owner)
+        request = VerifySession.model_validate(dict(owner=owner))
         with claim.launching():
             state = claim.state()
             if not isinstance(state, RecordedWatch):
@@ -46,7 +49,8 @@ class SessionHook(ClaudeHook):
             except (FileNotFoundError, ConnectionRefusedError) as error:
                 if isinstance(state, LiveWatch):
                     raise RuntimeError(
-                        "An older watch still owns this session. Stop that Monitor once, then connect."
+                        "An older watch still owns this session. "
+                        "Stop that Monitor once, then connect."
                     ) from error
             command = (
                 state.record.command[0],
@@ -61,21 +65,22 @@ class SessionHook(ClaudeHook):
             with log.open("ab") as output:
                 child = ParentedProcess.launch(command, env=dict(os.environ), output=output)
             deadline = time.monotonic() + 30
-            while child.alive and time.monotonic() < deadline:
+            while child.alive() and time.monotonic() < deadline:
                 try:
                     request.exchange(claim)
                     return
                 except FileNotFoundError, ConnectionRefusedError:
                     time.sleep(0.05)
             raise RuntimeError(
-                f"Session bridge startup not observed (PID {child.pid}); inspect {log}. No launch retry."
+                f"Session bridge startup not observed (PID {child.pid}); inspect {log}. "
+                "No launch retry."
             )
 
     def end(self) -> None:
         claim = WatchClaim(self.session_id)
         if not isinstance(claim.state(), LiveWatch):
             return
-        EndSession(owner=self.owner()).exchange(claim)
+        EndSession.model_validate(dict(owner=self.owner())).exchange(claim)
 
 
 class SessionStarted(ClaudeHookProgram):

@@ -29,10 +29,12 @@ if TYPE_CHECKING:
 class WatchRecord:
     bus: str
     root: str
-    command: Sequence[str]
+    command: tuple[str, ...]
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, 'command', tuple(self.command))
+    @classmethod
+    def decode(cls, bus: str, root: str, command: Sequence[str]) -> WatchRecord:
+        """Normalize the saved JSON array before constructing the immutable record."""
+        return cls(bus, root, tuple(command))
 
 
 @dataclass(frozen=True)
@@ -47,22 +49,22 @@ class WatchClaim:
     @property
     def socket_path(self) -> Path:
         # sockaddr_un is short. Keep the locator derived from the session claim.
-        return self.path.with_name(self.path.stem[:32] + '.sock')
+        return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
     def reader_path(self) -> Path:
-        return self.path.with_suffix('.reader.lock')
+        return self.path.with_suffix(".reader.lock")
 
     @contextmanager
     def launching(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.with_suffix('.launch.lock').open('a') as lock:
+        with self.path.with_suffix(".launch.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
-        with self.reader_path.open('a') as lock:
+        with self.reader_path.open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             yield
 
@@ -81,7 +83,7 @@ class WatchClaim:
             current = self.state()
             if isinstance(current, LiveWatch):
                 if current.record != record:
-                    raise ValueError('This session is already bound to another bridge command')
+                    raise ValueError("This session is already bound to another bridge command")
                 return
             with self.held(record):
                 pass
@@ -104,11 +106,11 @@ class WatchClaim:
             try:
                 fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
             except BlockingIOError:
-                return LiveWatch(self, WatchRecord(**json.load(lock)))
+                return LiveWatch(self, WatchRecord.decode(**json.load(lock)))
             text = lock.read()
         if not text:
             return UnclaimedWatch()
-        return LapsedWatch(self, WatchRecord(**json.loads(text)))
+        return LapsedWatch(self, WatchRecord.decode(**json.loads(text)))
 
 
 class WatchState:
@@ -130,9 +132,10 @@ class LiveWatch(RecordedWatch):
     def report(self, hook: ClaudeHook) -> None:
         if not self.claim.has_reader():
             hook.warn(
-                f'agent-comms: the session bridge for {self.record.bus} is connected, but no '
-                f'Monitor reader is running. Delivery is paused. Attach Monitor now: '
-                f'{shlex.join(self.record.command)}')
+                f"agent-comms: the session bridge for {self.record.bus} is connected, but no "
+                f"Monitor reader is running. Delivery is paused. Attach Monitor now: "
+                f"{shlex.join(self.record.command)}"
+            )
 
 
 class LapsedWatch(RecordedWatch):
