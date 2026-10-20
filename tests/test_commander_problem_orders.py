@@ -606,8 +606,6 @@ def problem(script, body):
 def test_reassignment_validates_trace_at_commander_boundary(commander, commander_script):
     comms, caller = commander
     script, repo = commander_script
-    script = script.model_copy(update={'repos': (Repo(
-        checkout=repo, github=RepositoryName.from_wire('OpenHCSDev/agent-comms')), )})
     for name in ('second', 'third'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(repo)))
     first = create(commander, 'P1')

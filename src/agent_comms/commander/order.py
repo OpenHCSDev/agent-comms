@@ -367,8 +367,7 @@ class Commander(CommanderContext):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(self.source_repository(
-                        Path(check.directory) / reference.file).checkout)
+                    reference.require_exists(Path(check.directory))
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         if any((Path(check.directory) / reference.file).resolve().is_relative_to(
@@ -470,8 +469,7 @@ class Commander(CommanderContext):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
-        checkout = self.source_repository(
-            self.repo_directory(document.order.check.directory) / location.file).checkout
+        checkout = self.repo_directory(document.order.check.directory)
         location.require_exists(checkout)
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
