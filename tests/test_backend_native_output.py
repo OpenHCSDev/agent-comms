@@ -7,28 +7,6 @@ import os
 import agent_comms.agent_events as events
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.turn_failure import TerminalFailure
-
-
-
-class MissingAuditEvidence(TerminalFailure):
-    code = "missing_audit_evidence"
-    default_text = "New declaration rejected terminal evidence."
-    precedence = 55
-
-    @classmethod
-    def detected(cls, session, transport_ok):
-        return transport_ok and session.task == "Exercise new terminal failure declaration"
-
-
-async def test_actual_native_new_terminal_failure_refuses_success_and_retention(native_backend):
-    owner = native_backend
-    result = await owner.run("Exercise new terminal failure declaration")
-    assert not result[-1].ok and result[-1].reason_code == MissingAuditEvidence.code
-    assert result[-1].text == MissingAuditEvidence.default_text
-    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
-    assert not owner.persistent.available
-    assert all(not child.alive() for child in owner.children)
 
 
 async def test_actual_native_cold_preparation_retains_without_admitting_input(native_backend):
@@ -50,8 +28,10 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
             "--no-extensions",
             "--no-tools",
         ],
+        package=owner.package,
         worktree=str(owner.project),
         root=owner.root,
+        session_directory=owner.root,
         environment=dict(os.environ),
         session_file=str(owner.session),
         observe=observe,

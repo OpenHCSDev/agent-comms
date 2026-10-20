@@ -43,7 +43,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.notification_progress import HumanReadProgress
-from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
@@ -77,7 +77,9 @@ from agent_comms.wake_candidate_index import (
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
-from native_proof_cases import read_proof_rows, write_proof_rows
+from native_proof_cases import (
+    append_input_entry, emitted_context, read_proof_rows, recorded_context, write_proof_rows,
+)
 
 
 @pytest.fixture
@@ -147,6 +149,11 @@ def _root(
     return root, root_id, comms, initial, people
 
 
+def _fake_session_id(input_id: str) -> str:
+    """The saved session id the fake model writes for a fresh input."""
+    return f"isolated-session-{input_id}"
+
+
 def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
     calls = []
 
@@ -163,9 +170,9 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # The real Pi get_state returns a saved file BEFORE raw prompt send.
         fresh = session_file is None
         if fresh:
-            session_file = session_dir / "one.jsonl"
+            session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": "isolated-session", "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
+                json.dumps({"type": "session", "version": 3, "id": _fake_session_id(input_id), "timestamp": "2026-09-26T00:00:00.000Z"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -187,24 +194,16 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
-        entries.append(
-            {
-                "type": "message",
-                "id": entry_id,
-                "timestamp": "2026-09-26T00:00:00.000Z",
-                "message": {
-                    "role": "user",
-                    "inputId": input_id,
-                    "inputDigest": native_request_digest(prompt),
-                },
-            }
-        )
-        if fresh:
-            session_file.write_text("".join(json.dumps(row) + "\n" for row in entries))
-        else:
-            with session_file.open("a") as output:
-                output.write(json.dumps(entries[-1]) + "\n")
-        session_file.chmod(0o600)
+        session_entry_start = append_input_entry(session_file, {
+            "type": "message",
+            "id": entry_id,
+            "timestamp": "2026-09-26T00:00:00.000Z",
+            "message": {
+                "role": "user",
+                "inputId": input_id,
+                "inputDigest": native_request_digest(prompt),
+            },
+        })
         digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
@@ -218,7 +217,6 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
-        proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
         # The original selected stage owns this control's response grammar.
         # Relevance guidance can mention triage inside a FULL prompt too.
@@ -231,17 +229,14 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             reply = "42"
         observer = _kwargs.get("observe_event")
         if observer is not None:
-            from agent_comms.pi_events import PiEvent
-
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            await observer(emitted_context(proof_rows[-1]))
         return NativeTurnResult(
             reply,
-            NativeContextProof(
-                input_id, session_id, entry_id, generation, digest,
-                1_791_964_800_000 + generation, session_file,
+            recorded_context(
+                session_file, proof_rows[-1], session_entry_start=session_entry_start,
             ),
         )
 
@@ -765,7 +760,8 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1
         assert all(row.expected_prompt_equality_established for row in rows)
-        assert all(row.context.session_id == "isolated-session" for row in rows)
+        assert len({row.context.session_id for row in rows}) == 1
+        assert rows[0].context.session_id == NativeSessionIdentity.locate(str(rows[0].context.session_file)).session_id
         assert (
             read_historical_native_inputs(
                 store,
@@ -871,7 +867,8 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(t
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT count(*) FROM native_runtime_input WHERE session_id='isolated-session'"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id=?",
+                (_fake_session_id(calls[0][0]),),
             ).fetchone()[0]
             == 1
         )
@@ -924,7 +921,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(tmp_path: Pat
             "JOIN native_runtime_input i ON i.input_id=m.input_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
-        assert tuple(row) == ("deferred", "isolated-session")
+        assert tuple(row) == ("deferred", _fake_session_id(calls[0][0]))
 
 
 async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
@@ -935,7 +932,7 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(tmp_path:
             '{"decision":"IGNORE"}',
             NativeContextProof(
                 input_id, "fake", "fake", 1, "f" * 64, 1_791_964_800_001,
-                session.directory / "nonexistent.jsonl",
+                session.directory / "nonexistent.jsonl", session_entry_start=0,
             ),
         )
 
@@ -1164,7 +1161,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(tmp_path:
         ).run()
     assert not calls
     assert not comms.registry.status("beta").active
-    assert not comms.registry.require("beta").active_turn.executing
+    assert not comms.registry.require("beta").turn_record.executing
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -1219,7 +1216,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(tm
         assert result is not None and result.disposition is CompletedAssignment
         assert len(calls) == 1
         assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 2
-    assert not comms.registry.require("beta").active_turn.executing
+    assert not comms.registry.require("beta").turn_record.executing
     with Coordination(str(root / "coordination.sqlite3")) as store:
         inputs = store.session._connection.execute(
             "SELECT count(*) FROM native_runtime_input"
@@ -1277,7 +1274,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_p
                 opt_in=True,
                 cursor_delivery=cursor_delivery,
             ).run()
-        assert not comms.registry.require("delta").active_turn.executing
+        assert not comms.registry.require("delta").turn_record.executing
         assert len(list(comms.views.history_page(CommandTarget.named("gamma"), viewer="sender").messages)) == 1
     else:
         result = await SelectedExecution(
@@ -1289,7 +1286,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(tmp_p
             cursor_delivery=cursor_delivery,
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
-        assert not comms.registry.require("gamma").active_turn.executing
+        assert not comms.registry.require("gamma").turn_record.executing
         assert len(list(comms.views.history_page(CommandTarget.named("gamma"), viewer="sender").messages)) == 2
     assert len(calls) == 1
 
@@ -1340,7 +1337,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
-    def blocking_append(self, intent, *, conversation, registry_snapshot=None):
+    def blocking_append(self, intent, *, conversation, registry_snapshot=None, activity):
         def stop_owner():
             started.set()
             comms.registry.unregister("beta")
@@ -1351,11 +1348,11 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         worker.start()
         assert started.wait(2)
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
-        return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot)
+        return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot, activity=activity)
 
     monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
-        with pytest.raises(StaleFence, match="stopped or changed"):
+        with pytest.raises(StaleFence):
             await SelectedExecution(
                 root=root,
                 wire_root_id=root_id,
@@ -1389,9 +1386,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path,
 
     def revoke(*args, **kwargs):
         if mutation == "finish_turn":
-            active = comms.registry.require("beta").active_turn
-            assert active is not None
-            comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
+            thread = comms.registry.require("beta")
+            assert thread.turn_record.executing
+            comms.agents.finish_turn(thread.require_turn_lease())
         else:
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
@@ -1413,7 +1410,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(tmp_path: Path,
         ).run()
     assert len(calls) == 1
     assert comms.registry.status("beta").active
-    assert not comms.registry.require("beta").active_turn.executing
+    assert not comms.registry.require("beta").turn_record.executing
     assert len(list(comms.views.history_page(CommandTarget.named("beta"), viewer="sender").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
@@ -1443,13 +1440,12 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
 
     def revoke_and_restore() -> None:
         saved = comms.registry.require("beta")
-        assert saved.active_turn.executing
+        active = saved.turn_record.read().require_active()
         comms.registry.unregister("beta")
         comms.registry.register(saved)
         restored = comms.registry.require("beta")
-        assert restored == replace(
-            saved, active_turn=replace(saved.active_turn, claimed_generation=None)
-        )
+        assert restored == saved
+        assert restored.turn_record.read() == replace(active, claimed_generation=None)
         assert comms.registry.status("beta").active
 
     if boundary == "before_run":
@@ -1473,7 +1469,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
             return result
 
         monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
-        with pytest.raises(StaleFence, match="stopped or changed"):
+        with pytest.raises(StaleFence, match="registry owner turn witness is invalid"):
             await SelectedExecution(
                 root=root,
                 wire_root_id=root_id,
@@ -1541,7 +1537,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(tmp_path: Path, 
 async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch, *, native_runtime_package, cursor_delivery) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     comms.agents.begin_turn("beta", "existing-real-turn")
-    original = comms.registry.require("beta").active_turn
+    original = comms.registry.require("beta").turn_record.read()
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
@@ -1554,7 +1550,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
             cursor_delivery=cursor_delivery,
         ).run()
     assert calls == []
-    assert comms.registry.require("beta").active_turn == original
+    assert comms.registry.require("beta").turn_record.read() == original
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -1610,9 +1606,9 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(tmp_p
     assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_input"
+            "SELECT stage,session_id,session_file FROM native_runtime_input"
         ).fetchone()
-        assert tuple(row) == ("full", "isolated-session")
+        assert row[0] == "full" and row[1] == NativeSessionIdentity.locate(row[2]).session_id
         assert (
             store.session._connection.execute("SELECT state FROM obligations").fetchone()[0]
             == "failed"
@@ -1688,7 +1684,8 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
 async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path, *, native_runtime_package, cursor_delivery) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    with pytest.raises(NativePiUnavailable):
+    root.chmod(0o755)  # Refuse an unsafe private root before opening its registry.
+    with pytest.raises(SessionSetupFailed):
         await SelectedExecution(
             root=root,
             wire_root_id="0" * 32,
@@ -1717,30 +1714,35 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
         cursor_delivery=cursor_delivery,
     ).run()
     assert result.disposition is CompletedAssignment
-    assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), "high")] * 2
+    assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), HighThinkingLevel)] * 2
     assert len(calls) == 2
 
 
-async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
+async def test_owner_without_override_uses_native_default_model(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
+    from agent_comms.native_settings import NativeThreadDefaults
+
     root, root_id, comms, initial, people = _root(tmp_path)
-    comms = Comms(root)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
     fake, calls = _fake_model()
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    with pytest.raises(IdentityConflict, match="no configured provider/model"):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="beta",
-            native_package=native_runtime_package,
-            cursor_delivery=cursor_delivery,
-        ).run()
-    assert calls == []
-    assert not comms.registry.require("beta").active_turn.executing
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        pending = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", owner.created_at).lookup)
-        assert type(pending[0].lifecycle) is TriagePendingAssignment
+    models = []
+
+    async def capture(package, **kwargs):
+        models.append(kwargs["model"])
+        return await fake(package, **kwargs)
+
+    monkeypatch.setattr(TrackedTurnSession, "execute", capture)
+    result = await SelectedExecution(
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
+    assert models == [SelectedModel.decode(NativeThreadDefaults.model)] * len(calls)
+    assert len(calls) == 2
+    assert not comms.registry.require("beta").turn_record.executing
 
 
 @pytest.mark.parametrize("direct", [True, False])
@@ -1869,7 +1871,7 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(tm
         assignment = sealed_cohort_assignments(store, lookup)[0]
         assert assignment.source == initial.message.reference
         snapshot = store.snapshots.get(assignment.lifecycle.execution_id)
-        assert snapshot.execution.max_attempts == 3
+        assert snapshot.execution.max_attempts == SelectedExecution.max_attempts
         assert snapshot.attempt is not None and snapshot.attempt.attempt_ordinal == 3
         attempts = store.session._connection.execute(
             "SELECT attempt_ordinal FROM attempts WHERE execution_id=? ORDER BY attempt_ordinal",
@@ -1957,7 +1959,7 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
         assert len(calls) == 1
-        assert not comms.registry.require("beta").active_turn.executing
+        assert not comms.registry.require("beta").turn_record.executing
     finally:
         finish.set()
         if not task.done():

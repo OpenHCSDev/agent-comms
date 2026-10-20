@@ -32,9 +32,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.envelope_claim_transitions import UnclaimedResource
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.native_pi import NativePiUnavailable
@@ -235,7 +237,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
         with Comms(root).bus.log.checked_read() as source:
             assert source.claim_operation_used(acknowledgement.operation_id)
-            assert source.claim(str(resource)) is None
+            assert source.claim(str(resource)) == UnclaimedResource()
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
         assert await agent._drain_private_nk("beta", root_id) == 0
@@ -244,7 +246,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
 
 
 @pytest.mark.asyncio
-async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
+async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runtime_package):
     with TemporaryDirectory(prefix="ac-acp-public-selected-", dir="/var/tmp") as dirname:
         base = Path(dirname)
         base.chmod(0o700)
@@ -277,14 +279,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         source_root = Path(__file__).resolve().parents[1]
         env["PYTHONPATH"] = f"{source_root / 'src'}:{source_root / 'tests'}"
         env.update(
-            AGENT_COMMS_ROOT=str(root),
+            AC_TEST_NATIVE_MANIFEST=str(native_runtime_package.path.parents[3] / "pi-native.sha256"),
             AGENT_COMMS_THREAD="beta",
             PYTHONDONTWRITEBYTECODE="1",
         )
         env.pop("PI_PROMPT", None)
         child = Path(__file__).with_name("selected_write_owner_child.py")
         process = subprocess.Popen(
-            [sys.executable, "-u", str(child), str(base)],
+            [sys.executable, "-u", str(child), str(base), *LaunchRoot.from_path(root).arguments()],
             env=env,
             cwd=work,
             text=True,

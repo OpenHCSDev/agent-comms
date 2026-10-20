@@ -24,7 +24,7 @@ class TestToolCatalog:
             name="catalog-owner", tags=frozenset(), worktree="/wt", service_tier=ServiceTier.STANDARD,
         )
         comms.registry.declare(thread)
-        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package")
+        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package", comms.root)
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
         assert payload == ToolsCliCommand(name=thread.name).apply(comms).to_wire()

@@ -519,6 +519,7 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
     hold = gate.begin(MaintenanceOperator.current())
     for argv in (('send', '--from', 'a', '--to', 'b', '--body', 'hi'),
+                 ('user-send', '--to', 'b', '--body', 'hi', '--worktree', '/wt'),
                  ('activity', '--name', 'a', '--state', 'working')):
         code, out = cli(*argv)
         assert code != 0 and 'under maintenance' in out
@@ -529,15 +530,15 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
 
 async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
     from functools import partial
-    from agent_comms.activity import ActivityState
     from agent_comms.runtime_updates import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+    from agent_comms.turn_phase import ModelWaitPhase
     from agent_comms.recorded_time import RecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
-    updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
+    updates = [StartedItem('turn', 'item', ModelWaitPhase('Replying'),
                           TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
                AppendDraftItem('turn', 'item', ' once')]
     barrier = MaintenanceBarrier(comms.registry.store.path)
