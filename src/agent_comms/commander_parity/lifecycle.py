@@ -43,7 +43,6 @@ from ..tools import (
     CommsTodoCreateTool,
     CommsTodoListTool,
     ProblemOrdered,
-    ThreadToolRequest,
     TodoChanged,
     TodoList,
     ToolRequest,
@@ -200,8 +199,8 @@ class LifecycleRun:
 
 
 class LifecycleCase(ABC):
-    native_owner: ClassVar[type[ThreadToolRequest]]
-    additional_owners: ClassVar[tuple[type[ThreadToolRequest], ...]] = ()
+    native_owner: ClassVar[type[ToolRequest[ThreadCaller]]]
+    additional_owners: ClassVar[tuple[type[ToolRequest[ThreadCaller]], ...]] = ()
 
     @classmethod
     @abstractmethod
@@ -235,7 +234,7 @@ class LifecycleCase(ABC):
 
 
 class CreateProblemCase(LifecycleCase):
-    native_owner: ClassVar[type[ThreadToolRequest]] = CommsTodoCreateTool
+    native_owner: ClassVar[type[ToolRequest[ThreadCaller]]] = CommsTodoCreateTool
 
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
