@@ -22,6 +22,37 @@ from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
 
 
+class TranscriptRecords:
+    """Fixed test time, projected through each record's declared constructor."""
+
+    def __init__(self):
+        from datetime import UTC, datetime
+        from agent_comms.field_codec import RecordedTimestamp
+
+        self.timestamp = RecordedTimestamp(datetime(2026, 10, 1, tzinfo=UTC))
+
+    def event(self, declaration, *args, **facts):
+        return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
+
+    def entry(self, declaration, **facts):
+        return declaration(timestamp=self.timestamp, **facts)
+
+    def message(self, payload, **coordinates):
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.native_entries import MessageEntry
+        from agent_comms.pi_payloads import PiMessage
+
+        return self.entry(MessageEntry, message=FieldCodec.decode(PiMessage, payload), **coordinates)
+
+    def session(self, **coordinates):
+        from agent_comms.native_entries import SessionEntry
+
+        return self.entry(SessionEntry, **coordinates)
+
+
+transcript_records = TranscriptRecords()
+
+
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "AGENT_COMMS_MANAGED",
     "AGENT_COMMS_PROJECT_REQUEST",

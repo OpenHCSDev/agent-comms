@@ -1,3 +1,4 @@
+from conftest import transcript_records
 from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace
@@ -12,11 +13,11 @@ from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
 
 def transcript(path, count):
     path.write_text(
-        json.dumps({"type": "session", "id": "session"})
+        json.dumps(transcript_records.session(id="session").to_wire())
         + "\n"
         + "".join(
             json.dumps(
-                {"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": f"Record {i}"}]}}
+                transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": f"Record {i}"}]}).to_wire()
             )
             + "\n"
             for i in range(count)
@@ -43,7 +44,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     # New live output must not leak into the frozen replay window and duplicate ACP input.
     with path.open("a") as output:
         output.write(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "LIVE"}]}})
+            json.dumps(transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": "LIVE"}]}).to_wire())
             + "\n"
         )
     seen = [event.text for event in page.events]
@@ -59,7 +60,7 @@ def test_oversized_message_and_file_identity(tmp_path):
     path = tmp_path / "session.jsonl"
     text = "x" * 200000
     path.write_text(
-        json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
+        json.dumps(transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": text}]}).to_wire()) + "\n"
     )
     comms = wire(tmp_path / "wire")
     thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path))

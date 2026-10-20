@@ -72,7 +72,7 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.transcripts.routes.record_input_display("a" * 32, "first input")
-    path = comms.transcripts.routes.database_path
+    path = comms.transcripts.routes.path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()

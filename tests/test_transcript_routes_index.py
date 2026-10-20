@@ -1,5 +1,6 @@
 """Transcript routing lookups stay bounded as saved history grows."""
 
+from conftest import transcript_records
 import json
 from pathlib import Path
 
@@ -14,14 +15,10 @@ def _session(path: Path, count: int) -> None:
         for index in range(count):
             output.write(
                 json.dumps(
-                    {
-                        "type": "message",
-                        "id": f"entry-{index}",
-                        "message": {
+                    transcript_records.message({
                             "role": "assistant",
                             "content": [{"type": "text", "text": f"answer {index}"}],
-                        },
-                    }
+                        }, id=f"entry-{index}").to_wire()
                 )
                 + "\n"
             )

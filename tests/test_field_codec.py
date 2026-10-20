@@ -1,3 +1,4 @@
+from conftest import transcript_records
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -659,10 +660,7 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
     from agent_comms.transcript_events import ToolStartTranscript
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
-    event = ToolStartTranscript(
-        position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
-    )
+    event = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments, tool=ToolDeclaration.record("comms_send", arguments, call_id="case"))
     encoded = FieldCodec.encode(event)
     assert encoded["tool"]["tool"] == "comms_send"
     assert "kind" not in encoded["tool"]

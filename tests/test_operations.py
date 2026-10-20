@@ -1,4 +1,5 @@
 
+from conftest import transcript_records
 import json
 import os
 import subprocess
@@ -146,16 +147,11 @@ class TestThreadOps:
     def test_thread_transcript_normalizes_persisted_pi_events(self, wired, tmp_path):
         session_file = tmp_path / "session.jsonl"
         records = [
-            {
-                "type": "message",
-                "message": {
+            transcript_records.message({
                     "role": "user",
                     "content": [{"type": "text", "text": "demo request"}],
-                },
-            },
-            {
-                "type": "message",
-                "message": {
+                }).to_wire(),
+            transcript_records.message({
                     "role": "assistant",
                     "content": [
                         {"type": "thinking", "thinking": "considering"},
@@ -166,25 +162,18 @@ class TestThreadOps:
                             "arguments": {"to": "child"},
                         },
                     ],
-                },
-            },
-            {
-                "type": "message",
-                "message": {
+                }).to_wire(),
+            transcript_records.message({
                     "role": "toolResult",
                     "toolCallId": "call-1",
                     "toolName": "comms_send",
                     "content": [{"type": "text", "text": "sent"}],
                     "isError": False,
-                },
-            },
-            {
-                "type": "message",
-                "message": {
+                }).to_wire(),
+            transcript_records.message({
                     "role": "assistant",
                     "content": [{"type": "text", "text": "demo complete"}],
-                },
-            },
+                }).to_wire(),
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
@@ -530,26 +519,20 @@ class TestLedgerOps:
             # unbounded readline or hide the newest small records.
             stream.write(
                 json.dumps(
-                    {
-                        "type": "message",
-                        "message": {
+                    transcript_records.message({
                             "role": "assistant",
                             "content": [{"type": "text", "text": "x" * 2_000_000}],
-                        },
-                    }
+                        }).to_wire()
                 )
                 + "\n"
             )
             for index in range(100):
                 stream.write(
                     json.dumps(
-                        {
-                            "type": "message",
-                            "message": {
+                        transcript_records.message({
                                 "role": "assistant",
                                 "content": [{"type": "text", "text": str(index)}],
-                            },
-                        }
+                            }).to_wire()
                     )
                     + "\n"
                 )

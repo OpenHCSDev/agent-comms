@@ -1,5 +1,6 @@
 """Native input IDs retain incoming attribution across steering and failed turns."""
 
+from conftest import transcript_records
 import json
 
 import pytest
@@ -13,15 +14,11 @@ def append_input(path, native_id, text, *, role="user"):
     with path.open("a") as output:
         output.write(
             json.dumps(
-                {
-                    "type": "message",
-                    "id": native_id[:8],
-                    "message": {
+                transcript_records.message({
                         "role": role,
                         "inputId": native_id,
                         "content": [{"type": "text", "text": text}],
-                    },
-                }
+                    }, id=native_id[:8]).to_wire()
             )
             + "\n"
         )
