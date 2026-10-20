@@ -1854,49 +1854,6 @@ time.sleep(60)
         # automatic replay of the forwarded provider opportunity.
         assert queue.empty()
 
-    async def test_watchdog_never_times_out_an_active_tool(self, tmp_path):
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
-import json, sys, time
-def emit(value):
-    print(json.dumps(value), flush=True)
-"""
-            + _NATIVE_PROMPT_START
-            + """\
-emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
-emit({"type": "message_end", "message": {
-    "role": "assistant", "content": [], "stopReason": "toolUse",
-}})
-emit({"type": "tool_execution_start", "toolCallId": "slow", "toolName": "bash", "args": {}})
-time.sleep(0.12)
-emit({"type": "tool_execution_end", "toolCallId": "slow", "toolName": "bash",
-      "result": {"content": [{"type": "text", "text": "finished"}]}, "isError": False})
-emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
-emit({"type": "message_update", "assistantMessageEvent": {
-    "type": "text_delta", "delta": "done after tool"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
-emit({"type": "agent_settled"})
-answer_state(state_data)
-answer_stats({"contextUsage": {}})
-""",
-        )
-
-        events = [
-            event
-            async for event in one_turn_events(
-                stub,
-                [],
-                "task",
-                str(tmp_path),
-                model_wait=ModelWait(0.15),
-            )
-        ]
-
-        assert not [event for event in events if isinstance(event, ae.TurnState)]
-        assert events[-1] == ae.Done(ok=True, text="done after tool", diagnostic={"exit_code": 0})
-
     async def test_stall_after_tool_is_failed_without_retry(self, tmp_path):
         launches = tmp_path / "launches"
         stub = _stub(

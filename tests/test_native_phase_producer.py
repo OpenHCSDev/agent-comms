@@ -32,16 +32,10 @@ async def test_native_tool_events_project_owner_state(first, second):
                           native_session=PersistentPiSession(), startup=NativeStartup(root))
     session.native = SimpleNamespace(attestation=LostAttestation(),
                                     proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
-    session.tool_socket = SimpleNamespace(active_tools=set())
     session.watchdog.clock = asyncio.get_running_loop().time
     session.watchdog.phase = ModelWaitPhase()
 
     async def consume(event):
-        # The socket updates its admitted calls before NativeSession projects them.
-        if isinstance(event, ToolExecutionStart):
-            session.tool_socket.active_tools.add(event.tool_id)
-        elif isinstance(event, ToolExecutionEnd):
-            session.tool_socket.active_tools.discard(event.tool_call_id)
         updates = [update async for update in event.consume(session)]
         phases = [update.phase for update in updates if isinstance(update, NativePhaseChanged)]
         assert phases == [session.watchdog.phase]

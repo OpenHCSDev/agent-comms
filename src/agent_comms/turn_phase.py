@@ -30,6 +30,13 @@ class StallExempt:
         return self
 
 
+class NoModelWait:
+    """Native-owned excursions have no Core model-progress deadline."""
+
+    def model_wait(self, backstop: object) -> None:
+        return None
+
+
 class ClosingTurn:
     """Native tail observations cannot reopen a closing turn."""
 
@@ -181,7 +188,9 @@ class SettlingStatsPhase(TurnPhase):
 
 
 @dataclass(frozen=True)
-class CompactionPhase(StallExempt, Excursion):
+class CompactionPhase(StallExempt, NoModelWait, Excursion):
+    """Pi streams the summary without RPC events; provider idle bounds its request."""
+
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
     activity_state = ActivityState.WORKING
@@ -189,11 +198,6 @@ class CompactionPhase(StallExempt, Excursion):
 
     def compacting(self) -> TurnPhase:
         return self
-
-    def model_wait(self, backstop: float | None) -> float | None:
-        # Pi streams the summary without RPC events; its provider idle timeout
-        # bounds the request and compaction_end reports the outcome.
-        return None
 
     def input_started(self) -> TurnPhase:
         return replace(self, resume=self.resume.input_started())
@@ -222,7 +226,9 @@ class SummarizationRetryPhase(StallExempt, Excursion):
 
 
 @dataclass(frozen=True)
-class ToolRunningPhase(Excursion):
+class ToolRunningPhase(StallExempt, NoModelWait, Excursion):
+    """A running tool has no model budget; its terminal event ends the excursion."""
+
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
