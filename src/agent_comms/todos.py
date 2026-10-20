@@ -630,8 +630,7 @@ class ProgressSource:
     @classmethod
     def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
         owner = todo.held().owner
-        owned = tuple(sorted(path for path in storage.checkout_base.glob(f"{owner}*")
-                             if path.is_dir() and storage.owns_checkout(owner, path.resolve())))
+        owned = storage.checkout_paths(owner)
         candidates = (Path(todo.order.checked().check.directory), *owned)
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
@@ -1437,7 +1436,7 @@ class UnorderedProblemOrder(ProblemOrder):
                           *self.finding.instructions(), "No order"))
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        return replace(order, finding=self.finding)
+        return self.replaced_by(replace(order, finding=self.finding))
 
 
 @dataclass(frozen=True, kw_only=True)

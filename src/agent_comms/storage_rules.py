@@ -99,13 +99,18 @@ class StorageRule(RoomAllocation):
                 or (re.fullmatch(r'P[1-9][0-9]*', problem) is not None
                     and path == self.order_checkout(name, problem)))
 
+    def checkout_paths(self, name: str) -> tuple[Path, ...]:
+        """Candidate locations; Git worktree metadata supplies their branches."""
+        ordered = self.order_checkout(name, 'P*')
+        return tuple(path for path in (self.checkout_base.resolve() / name,
+                                       *sorted(ordered.parent.glob(ordered.name)))
+                     if path.is_dir() and self.owns_checkout(name, path))
+
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
         home = self.checkout_base / thread.name
         home = (home if home.exists() else Path(thread.worktree)).expanduser().resolve()
-        ordered = self.order_checkout(thread.name, 'P*')
-        candidates = (home, *(path for path in ordered.parent.glob(ordered.name)
-                              if path.is_dir() and self.owns_checkout(thread.name, path)))
+        candidates = (home, *self.checkout_paths(thread.name))
         checkouts = {home}
         listed = set()
         for repository in candidates:
