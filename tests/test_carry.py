@@ -687,6 +687,34 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
     assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
+def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.maintenance_barrier import ReadyPhase
+    from cutover.carry_maintenance_identity import MaintenanceIdentity, OldMarker, OldReadyState
+    from install_gate import PracticeCopy
+
+    source, destination = tmp_path / "source", tmp_path / "copy"
+    source.mkdir()
+    destination.mkdir()
+    old = MaintenanceBarrier(source / "registry.json")
+    marker = OldMarker(version=1, root=str(source), generation=7)
+    state = OldReadyState(version=1, root=str(source), generation=7,
+                         operator="old-installer", nonce="a" * 32, phase=ReadyPhase)
+    for path, record in ((old.marker_path, marker), (old.state_path, state)):
+        path.write_text(json.dumps(FieldCodec.encode(record)))
+        path.chmod(0o600)
+    original = tuple(path.read_bytes() for path in old.witness_paths)
+    PracticeCopy(Comms(source), destination).copy_maintenance(destination)
+    copied = MaintenanceBarrier(destination / "registry.json")
+    for path in copied.witness_paths:
+        assert json.loads(path.read_bytes())["version"] == 1
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert MaintenanceIdentity.before_stop(destination, apply=True).changed == 1
+    assert copied.read().version == 2
+    assert original == tuple(path.read_bytes() for path in old.witness_paths)
+
+
 def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
     import upgrade_bus
 
