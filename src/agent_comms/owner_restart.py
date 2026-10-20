@@ -41,7 +41,7 @@ class OwnerRestartRequest:
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
             return [candidate for thread in snapshot.threads.values()
-                    for candidate in thread.restart_candidates(snapshot.statuses[thread.name])]
+                    for candidate in thread.restart_candidates(snapshot.status(thread.name))]
         return list({snapshot.require_active(name).name: snapshot.require_active(name)
                      for name in self.names}.values())
 
@@ -89,7 +89,7 @@ class RetiredOwnerLaunch:
         thread = snapshot.threads[self.name]
         thread.require_local_process(self.launch.process)
         thread.turn_record.read().require_idle()
-        snapshot.statuses[self.name].require_stopped()
+        snapshot.status(self.name).require_stopped()
         if thread.process_alive:
             raise RelationViolationError('Original owner survived retirement')
         return thread
@@ -300,7 +300,7 @@ class ClaimedOwnerBatch:
             cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:
-                thread.require_restart_owner(snapshot.statuses[thread.name])
+                thread.require_restart_owner(snapshot.status(thread.name))
                 generation = snapshot.claimed_generations[thread.name]
                 lifecycle.require_restart_idle(thread)
                 captured.append((thread, generation))

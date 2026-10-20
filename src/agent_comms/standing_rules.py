@@ -218,7 +218,7 @@ class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        receiving = comms.registry.snapshot().statuses[commander].receiving
+        receiving = comms.registry.snapshot().status(commander).receiving
         return None if receiving else f"{commander} is not receiving"
 
 

@@ -49,7 +49,7 @@ from .private_bus_checkpoint import (
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
-from .registry_document import RegistrySnapshot
+from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
@@ -109,11 +109,8 @@ class Publisher:
         message.require_task_publication(sender, snapshot, original_source)
 
         def resolve_mention(name: str) -> str | None:
-            canonical = snapshot.canonical_name(name)
-            thread = snapshot.threads.get(canonical)
-            if thread is None or not snapshot.statuses[canonical].visible:
-                return None
-            return next(iter(thread.role.executor(canonical)), None)
+            return next((thread.name for thread in
+                         snapshot.visible_threads(DEFAULT_ROSTER, names=(name,))), None)
 
         return replace(
             message,
@@ -311,9 +308,8 @@ class InitialWrites(PrivateWrites):
             snapshot = self._registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
-            sender_thread = snapshot.threads.get(sender)
-            if sender_thread is None or not snapshot.statuses[sender].visible:
-                raise RelationViolationError("Initial sender must be visible and registered.")
+            sender_thread = snapshot.require(sender)
+            snapshot.status(sender).require_visible()
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(message, Path(sender_thread.worktree))

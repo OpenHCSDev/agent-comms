@@ -39,9 +39,10 @@ class Detached(UndatedStandingRule):
         owed: dict[str, list[str]] = {}
         for todo in cls.todos(comms, commander):
             owed.setdefault(todo.holder, []).append(todo.id)
-        statuses = comms.registry.snapshot().statuses
-        away = [unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving]
-        unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
+        registry = comms.registry.snapshot()
+        away = [unit for unit in sorted(owed)
+                if unit not in registry.threads or not registry.status(unit).receiving]
+        unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in registry.threads))
         return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
 
     def line(self) -> str:

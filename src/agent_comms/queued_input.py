@@ -254,7 +254,7 @@ class QueuedInput:
         input_id: str,
     ) -> None:
         owner = snapshot.require_active(name)
-        snapshot.statuses[owner.name].require_running()
+        snapshot.status(owner.name).require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.turn_record.read().require_idle()
         claim_scope = snapshot.claimed_generations[owner.name]
