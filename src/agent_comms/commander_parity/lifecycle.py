@@ -68,9 +68,12 @@ class LifecycleObservation(ParityComparison):
         )
 
 
+type LifecycleRequest = ToolRequest[ToolCaller] | ToolRequest[ThreadCaller]
+
+
 @dataclass(frozen=True)
 class NativeInvocation:
-    request: ToolRequest[ThreadCaller]
+    request: LifecycleRequest
     result: ToolResult
 
 
@@ -83,7 +86,7 @@ class MeasuredCommander(Commander):
     def invocations(self) -> tuple[NativeInvocation, ...]:
         return tuple(self._invocations)
 
-    def call(self, tool: ToolRequest[ThreadCaller]) -> ToolResult:
+    def call(self, tool: LifecycleRequest) -> ToolResult:
         result: ToolResult = super().call(tool)
         self._invocations.append(NativeInvocation(tool, result))
         return result
@@ -199,8 +202,8 @@ class LifecycleRun:
 
 
 class LifecycleCase(ABC):
-    native_owner: ClassVar[type[ToolRequest[ThreadCaller]]]
-    additional_owners: ClassVar[tuple[type[ToolRequest[ThreadCaller]], ...]] = ()
+    native_owner: ClassVar[type[LifecycleRequest]]
+    additional_owners: ClassVar[tuple[type[LifecycleRequest], ...]] = ()
 
     @classmethod
     @abstractmethod
