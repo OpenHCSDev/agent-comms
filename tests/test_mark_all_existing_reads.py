@@ -16,10 +16,10 @@ def test_mark_all_after_partial_reads_preserves_next_unread_message(tmp_path):
     page = replace(page, selection=replace(selection, scope=replace(
         scope, displayed=scope.displayed.select({first.seq}))))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'] == 1
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'].count == 1
     comms.views.mark_user_view_read('#any', worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'] == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#any'] == 0
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#team'].count == 0
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread['#any'].count == 0
     comms.messaging.send('alice', '#team', 'after the whole-bus cut')
     counts = comms.views.viewer_snapshot(str(tmp_path)).channel_unread
-    assert counts['#team'] == counts['#any'] == 1
+    assert counts['#team'].count == counts['#any'].count == 1

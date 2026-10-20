@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -13,24 +12,16 @@ if TYPE_CHECKING:
 
 class UnreadPresentation(ABC):
     @classmethod
-    def _for_count(
-        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
-    ) -> UnreadPresentation:
-        if name in snapshot.unread_pending:
-            return IndexingUnread()
-        return ExactUnread(counts.get(name, 0))
-
-    @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
         return snapshot.thread_unread[name]
 
     @classmethod
     def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.unread)
+        return snapshot.unread[name]
 
     @classmethod
     def for_channel(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.channel_unread)
+        return snapshot.channel_unread[name]
 
     @property
     @abstractmethod

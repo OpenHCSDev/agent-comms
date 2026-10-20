@@ -376,14 +376,16 @@ class HistoryViews:
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
                 display_activity,
-                unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
+                unread=self.bus.pending_counts_opened(
+                    source, basis, conversations=basis.registry.threads,
+                ), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
         )
-        return replace(snapshot, thread_unread=unread.counts)
+        return replace(snapshot, thread_unread={**snapshot.thread_unread, **unread.counts})
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""

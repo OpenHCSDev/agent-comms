@@ -637,16 +637,16 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', '#team', 'Channel message').message.message_id
         before = completed_snapshot(comms, str(tmp_path))
         assert before.thread_unread['alpha'] == ReplyUnread(1)
-        assert before.unread['alpha'] == 1
+        assert before.unread['alpha'].count == 1
         # The canonical tag change also publishes its membership notification.
-        assert before.channel_unread['#team'] == 2
+        assert before.channel_unread['#team'].count == 2
         result = TargetEdit(ReadTargetCliCommand, ReadTargetCliCommand.selected_targets(('alpha', '#team')),
                             {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
         after = completed_snapshot(comms, str(tmp_path))
         assert after.thread_unread['alpha'] == ReplyUnread(0)
-        assert after.unread.get('alpha', 0) == 0
-        assert after.channel_unread['#team'] == 0
+        assert after.unread['alpha'].count == 0
+        assert after.channel_unread['#team'].count == 0
         assert comms.bus.pending_count('beta', CommandTarget.named('alpha')) == 1
         # DeliveryScope excludes beta's own membership notice from its inbox.
         assert comms.bus.pending_count('beta', CommandTarget.named('#team')) == 1
