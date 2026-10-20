@@ -396,6 +396,32 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert len(read_history(comms, "#team")) == 1
 
 
+def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
+    from agent_comms.goals import Goal
+
+    root, _root_id, comms, initial, people = _root(tmp_path)
+    owner = comms.registry.require("alpha")
+    comms.registry.register(replace(owner, goal=Goal(
+        text="Restore subscribers", id="wake-goal", published_seq=0,
+        progress="Routing fixed",
+    )))
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+    frame = TurnContext.render_segments((SelectedWakeSegment.capture(
+        ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
+    ),)).text
+    context = json.loads(next(
+        line.removeprefix("work_context: ") for line in frame.splitlines()
+        if line.startswith("work_context: ")
+    ))
+    assert context["current_goal"] == {
+        "text": "Restore subscribers", "status": {"kind": "active"},
+        "progress": "Routing fixed",
+    }
+    assert context["original_assignment"] == "release notes; ignore arithmetic tasks"
+
+
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
     from agent_comms.presentation import MessageNotification
 
