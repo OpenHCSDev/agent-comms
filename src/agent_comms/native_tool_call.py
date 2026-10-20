@@ -251,6 +251,9 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
+    def published_goal(self, result, permission) -> None:
+        """Coding output is not a goal publication, even if its text resembles one."""
+
     @abstractmethod
     def allowed_claim(self) -> FileClaimPath | None: ...
 

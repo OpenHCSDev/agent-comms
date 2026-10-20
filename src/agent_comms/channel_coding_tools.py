@@ -70,6 +70,9 @@ class CodingToolOwner(ABC):
             await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
         return reservation
 
+    def tool_completed(self, call, result) -> None:
+        """Selected tools cannot replace ordinary input's captured goal authority."""
+
     @abstractmethod
     def verify(self, store, turn, snapshot): ...
 
@@ -166,6 +169,8 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
         _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        if not event.is_error:
+            self.owner.tool_completed(call, event.result)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

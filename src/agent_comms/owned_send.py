@@ -172,6 +172,10 @@ class OwnedSend(CodingToolOwner):
             decision = RefusedSend()
         yield decision
 
+    def tool_completed(self, call, result) -> None:
+        """Only a checked completed call may advance this original's live grant."""
+        call.published_goal(result, self.original.goal_permission)
+
     def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""
         from .native_tool_call import SelectedToolDenied

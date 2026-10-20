@@ -30,7 +30,7 @@ from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
-    OwnerGoalPermission,
+    OwnerGoalPermission, TurnGoalPermission,
 )
 from .turn_input_source import (
     CapturedInputDependency,
@@ -249,7 +249,7 @@ class OwnedTurn:
             source_type = RoutedOriginalInput
         original = source_type(
             accepted_id=self.accepted_input_id,
-            goal_permission=permission,
+            goal_permission=TurnGoalPermission(permission),
             prompt=self.context.render().text,
             original_display=self.original_display,
             origins=self.origins,

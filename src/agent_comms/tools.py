@@ -74,7 +74,7 @@ from .native_tools import ArgumentTool, NativeToolDeclaration, NativeRequestTool
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
 from .cli_result import ToolCatalogResult
-from .tool_result import ToolResult
+from .tool_result import OwnGoalPublication, ToolResult
 from .send_result import CorrectionResult, SendResult
 from .coordination_tables.refusals import SendRefusal
 from .task_sources import (
@@ -141,18 +141,18 @@ class ProjectSet(ToolResult):
 
 
 @dataclass(frozen=True)
-class GoalSet(ToolResult):
+class GoalSet(OwnGoalPublication):
     goal: GoalDeclaration
     instruction: str
 
 
 @dataclass(frozen=True)
-class GoalProgress(ToolResult, GoalSnapshot):
+class GoalProgress(OwnGoalPublication, GoalSnapshot):
     execution: ThreadGoalExecution = field(metadata={"wire_name": "goal_execution"})
 
 
 @dataclass(frozen=True)
-class GoalRead(ToolResult):
+class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
 
 
@@ -671,7 +671,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     goal_id: str = tool_field("Identity of the paused goal to resume")
     progress: str = tool_field("Progress summary for the resumed goal")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
         name = caller.name
         goal_id = self.goal_id
         current = comms.registry.require(name).goal.require().require_id(goal_id)
@@ -690,7 +690,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
         goal = goal.require()
         if not goal.state.active or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
-        return GoalRead(goal)
+        return GoalUpdated(goal)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -703,7 +703,7 @@ class CommsEditGoalTool(ThreadToolRequest):
     goal_id: str = tool_field("Identity of the existing goal to edit")
     text: str = tool_field("Revised objective text, including any @mentions")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
         name = caller.name
         goal_id = self.goal_id
         current = comms.registry.require(name).goal.require().require_id(goal_id)
@@ -713,7 +713,7 @@ class CommsEditGoalTool(ThreadToolRequest):
                 expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text
             ),
         )
-        return GoalRead(goal)
+        return GoalUpdated(goal)
 
 
 @dataclass(frozen=True, kw_only=True)

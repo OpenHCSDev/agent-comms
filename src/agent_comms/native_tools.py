@@ -83,6 +83,9 @@ class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=N
     declared_name: str
     arguments: dict[str, object]
 
+    def published_goal(self, result, permission) -> None:
+        result.published_goal(permission)
+
     def reads(self) -> str:
         return json.dumps(self.arguments)
 
