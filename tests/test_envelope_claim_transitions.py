@@ -80,7 +80,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     invalid = {**raw[key], "version": 99}
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, {**raw, key: invalid})
-    with pytest.raises(ValueError, match="Wake claim_scope version or revision"):
+    with pytest.raises(ValueError, match="version: Value does not match"):
         FieldCodec.decode(WakeClaim, invalid)
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, {**raw, key: None})
