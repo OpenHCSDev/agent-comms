@@ -18,6 +18,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from agent_comms.pi_payloads import PiOmitted
+
 from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
@@ -297,7 +299,8 @@ class PiNativeBackend(
         from .pi_commands import Compact
 
         try:
-            data = await self.inspect(thread, Compact(custom_instructions=instructions))
+            command = Compact(custom_instructions=PiOmitted.from_input(instructions))
+            data = await self.inspect(thread, command)
         except NativePiUnavailable as error:
             return FailedCompaction(str(error))
         if data.summary is None:

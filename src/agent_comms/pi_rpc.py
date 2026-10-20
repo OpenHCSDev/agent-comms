@@ -125,7 +125,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         owner = response.command
         command = (
             self.pending.take(owner, response.id, response)
-            if response.id is not None
+            if response.id
             else self.pending.take_anonymous(owner, response)
         )
         if command is None:

@@ -25,6 +25,7 @@ from .pi_payloads import (
     CompactionData,
     EmptyData,
     ModelsData,
+    PiOmitted,
     PiResponseData,
     QueueClearedData,
     SessionStatsData,
@@ -145,11 +146,11 @@ class UnknownCommand(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
     input_id: Annotated[
-        str | None, WireOmitDefault(), WireName("inputId")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("inputId")
+    ] = PiOmitted()
     message: Annotated[str, WireOmitDefault()] = None
-    images: Annotated[tuple[ImageInput, ...] | None, WireOmitDefault()] = (
-        None
+    images: Annotated[tuple[ImageInput, ...] | PiOmitted, WireOmitDefault()] = (
+        PiOmitted()
     )
     context_contributions: Annotated[
         tuple[InputContributionCoordinates, ...],
@@ -216,7 +217,7 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
     ) -> Iterable[events.AgentEvent]:
         if response.success:
             context = response.data.require_payload().context_usage
-            if context is not None:
+            if context:
                 context.token_total.confirm(session.usage)
                 if not session.native.attestation.uncertain:
                     context.context_window.update_size(session.usage)
@@ -298,8 +299,8 @@ class InterruptSteering(PiCommand):
             yield events.Error(text=str(response.error or "Send now was refused"))
 
     input_ids: Annotated[
-        list[str] | None, WireOmitDefault(), WireName("inputIds")
-    ] = None
+        list[str] | PiOmitted, WireOmitDefault(), WireName("inputIds")
+    ] = PiOmitted()
 
 
 class SettingCommand(CatalogQuery):
@@ -354,24 +355,24 @@ class SetModel(SettingCommand):
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
-    provider: Annotated[str | None, WireOmitDefault()] = None
+    provider: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
     model_id: Annotated[
-        str | None, WireOmitDefault(), WireName("modelId")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("modelId")
+    ] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
     error_message = "Thinking level change failed"
-    level: Annotated[str | None, WireOmitDefault()] = None
+    level: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetSteeringMode(PiCommand):
     """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
 
-    mode: Annotated[str | None, WireOmitDefault()] = None
+    mode: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -389,15 +390,15 @@ class Compact(NativeQuery):
     response_payload = CompactionData
     writes_session = True
     custom_instructions: Annotated[
-        str | None, WireOmitDefault(), WireName("customInstructions")
-    ] = None
+        str | PiOmitted, WireOmitDefault(), WireName("customInstructions")
+    ] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiResponse(PiCommand):
-    cancelled: Annotated[bool | None, WireOmitDefault()] = None
-    confirmed: Annotated[bool | None, WireOmitDefault()] = None
-    value: Annotated[str | None, WireOmitDefault()] = None
+    cancelled: Annotated[bool | PiOmitted, WireOmitDefault()] = PiOmitted()
+    confirmed: Annotated[bool | PiOmitted, WireOmitDefault()] = PiOmitted()
+    value: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)

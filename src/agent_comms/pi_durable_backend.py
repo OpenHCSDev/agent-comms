@@ -37,7 +37,7 @@ from .pi_commands import (
     SetThinkingLevel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
-from .pi_payloads import PiResponseData
+from .pi_payloads import PiOmitted, PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
@@ -156,8 +156,8 @@ class HostQuery(PiCommand, declared_name=None):
 class Open(HostQuery):
     path: str
     cwd: str
-    provider: str | None
-    model_id: Annotated[str | None, field_codec.WireName("modelId")]
+    provider: str | PiOmitted
+    model_id: Annotated[str | PiOmitted, field_codec.WireName("modelId")]
     thinking_level: Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel")]
     auth_path: Annotated[str, field_codec.WireName("authPath")]
     response_payload = RecoveryData
@@ -195,11 +195,11 @@ class Entries(HostQuery):
     limit: int
     cursor: dict[str, JsonValue] | None = None
     min_entry_id: Annotated[
-        int | None, field_codec.WireName("minEntryId"), field_codec.WireOmitDefault()
-    ] = None
+        int | PiOmitted, field_codec.WireName("minEntryId"), field_codec.WireOmitDefault()
+    ] = PiOmitted()
     max_entry_id: Annotated[
-        int | None, field_codec.WireName("maxEntryId"), field_codec.WireOmitDefault()
-    ] = None
+        int | PiOmitted, field_codec.WireName("maxEntryId"), field_codec.WireOmitDefault()
+    ] = PiOmitted()
     order: str = "descending"
     response_payload = HistoryData
 
@@ -252,7 +252,8 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
 
     async def compact(self, thread, instructions):
         child = await self.open(thread)
-        return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
+        command = CompactDurable(custom_instructions=PiOmitted.from_input(instructions))
+        return (await child.request(command)).outcome
 
     async def models(self, thread):
         child = await self.open(thread)

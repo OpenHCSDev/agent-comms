@@ -22,10 +22,14 @@ from .field_codec import (
     FieldCodec,
     Id128Text,
     MalformedRecord,
+    NullMember,
+    SingleFieldValue,
     TextRepresentation,
     WireName,
     WireOmitDefault,
     WireRequired,
+    WireValue,
+    boundary_decoder,
 )
 from .goals import GoalDeclaration
 from .native_file_artifact import NativeFileArtifact
@@ -55,6 +59,20 @@ if TYPE_CHECKING:
 PiValue = typing.TypeVar("PiValue")
 # A Pi payload field is omitted from the wire while it holds its default.
 PiField = Annotated[PiValue, WireOmitDefault()]
+
+
+@dataclass(frozen=True, slots=True)
+class PiOmitted(NullMember):
+    """Pi left an optional field out or sent null; it goes back out the same way."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @classmethod
+    @boundary_decoder
+    def from_input[T](cls, value: T | None) -> T | PiOmitted:
+        """Our own unset value reaches Pi's wire as Pi's omission."""
+        return cls() if value is None else value
 
 
 def wire_options(target):
@@ -348,8 +366,8 @@ class TextContent(PiContent):
 
     text: str = field()
     text_signature: Annotated[
-        PiField[str | None], WireName("textSignature")
-    ] = None
+        PiField[str | PiOmitted], WireName("textSignature")
+    ] = PiOmitted()
     tool_round_allowed = True
 
     @property
@@ -366,8 +384,8 @@ class ThinkingContent(PiContent):
 
     thinking: str = ""
     thinking_signature: Annotated[
-        PiField[str | None], WireName("thinkingSignature")
-    ] = None
+        PiField[str | PiOmitted], WireName("thinkingSignature")
+    ] = PiOmitted()
     tool_round_allowed = True
 
     @property
@@ -500,40 +518,83 @@ class TransportStageText(TextRepresentation[ProviderTransportStage]):
         return ProviderTransportStage.from_text(value)
 
 
+class TransportFact(WireValue):
+    """One optional provider transport observation; each fact renders its own description part."""
+
+    __slots__ = ()
+
+    def parts(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True, slots=True)
+class UnreportedTransportFact(PiOmitted, TransportFact):
+    """Pi left this transport observation out."""
+
+
+@dataclass(frozen=True)
+class ConfiguredTransport(SingleFieldValue, TransportFact):
+    name: str
+
+    def parts(self) -> tuple[str, ...]:
+        return (f"configured transport: {self.name}",)
+
+
+@dataclass(frozen=True)
+class FallbackTransport(SingleFieldValue, TransportFact):
+    name: str
+
+    def parts(self) -> tuple[str, ...]:
+        return (f"reported fallback transport: {self.name}",)
+
+
+@dataclass(frozen=True)
+class EventsEmitted(SingleFieldValue, TransportFact):
+    emitted: bool
+
+    def parts(self) -> tuple[str, ...]:
+        return ("provider events emitted: " + ("yes" if self.emitted else "no"),)
+
+
+@dataclass(frozen=True)
+class RequestBytes(SingleFieldValue, TransportFact):
+    count: int
+
+    def __post_init__(self) -> None:
+        if self.count < 0:
+            raise ValueError("Native request byte count must be nonnegative")
+
+    def parts(self) -> tuple[str, ...]:
+        return (f"request: {self.count:,} bytes",)
+
+
 @dataclass(frozen=True)
 class ProviderTransportDetails(PiPayload):
     configured_transport: Annotated[
-        PiField[str | None], WireName("configuredTransport")
-    ] = None
+        PiField[ConfiguredTransport | UnreportedTransportFact], WireName("configuredTransport")
+    ] = UnreportedTransportFact()
     fallback_transport: Annotated[
-        PiField[str | None], WireName("fallbackTransport")
-    ] = None
+        PiField[FallbackTransport | UnreportedTransportFact], WireName("fallbackTransport")
+    ] = UnreportedTransportFact()
     events_emitted: Annotated[
-        PiField[bool | None], WireName("eventsEmitted")
-    ] = None
+        PiField[EventsEmitted | UnreportedTransportFact], WireName("eventsEmitted")
+    ] = UnreportedTransportFact()
     phase: Annotated[ProviderTransportStage, TransportStageText] = field(
         default_factory=UnreportedTransportStage
     )
     request_bytes: Annotated[
-        PiField[int | None], WireName("requestBytes")
-    ] = None
-
-    def __post_init__(self):
-        if self.request_bytes is not None and self.request_bytes < 0:
-            raise ValueError("Native request byte count must be nonnegative")
+        PiField[RequestBytes | UnreportedTransportFact], WireName("requestBytes")
+    ] = UnreportedTransportFact()
 
     @property
     def description(self) -> str:
-        parts = [self.phase.description]
-        if self.configured_transport is not None:
-            parts.append(f"configured transport: {self.configured_transport}")
-        if self.events_emitted is not None:
-            parts.append("provider events emitted: " + ("yes" if self.events_emitted else "no"))
-        if self.request_bytes is not None:
-            parts.append(f"request: {self.request_bytes:,} bytes")
-        if self.fallback_transport is not None:
-            parts.append(f"reported fallback transport: {self.fallback_transport}")
-        return "; ".join(parts)
+        return "; ".join((
+            self.phase.description,
+            *self.configured_transport.parts(),
+            *self.events_emitted.parts(),
+            *self.request_bytes.parts(),
+            *self.fallback_transport.parts(),
+        ))
 
 
 @dataclass(frozen=True)
@@ -618,14 +679,14 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: PiField[PiUsage] = UnreportedUsage()
-    input_id: Annotated[PiField[str | None], WireName("inputId")] = None
-    input_digest: Annotated[PiField[str | None], WireName("inputDigest")] = None
+    input_id: Annotated[PiField[str | PiOmitted], WireName("inputId")] = PiOmitted()
+    input_digest: Annotated[PiField[str | PiOmitted], WireName("inputDigest")] = PiOmitted()
     stop_reason: Annotated[
         PiField[type[PiStopReason]], WireName("stopReason")
     ] = UnreportedStopReason
     error_message: Annotated[
-        PiField[str | None], WireName("errorMessage")
-    ] = None
+        PiField[str | PiOmitted], WireName("errorMessage")
+    ] = PiOmitted()
     diagnostics: tuple[PiDiagnostic, ...] = ()
 
     def __post_init__(self):
@@ -699,16 +760,16 @@ class AssistantMessage(PiMessage):
     content: Annotated[tuple[PiContent, ...], WireRequired()] = ()
     # Original Pi completion metadata. These are observations, not registry
     # configuration or permission to select a model for a later request.
-    api: PiField[str | None] = None
-    provider: PiField[str | None] = None
-    model: PiField[str | None] = None
+    api: PiField[str | PiOmitted] = PiOmitted()
+    provider: PiField[str | PiOmitted] = PiOmitted()
+    model: PiField[str | PiOmitted] = PiOmitted()
     response_model: Annotated[
-        PiField[str | None], WireName("responseModel")
-    ] = None
-    response_id: Annotated[PiField[str | None], WireName("responseId")] = None
+        PiField[str | PiOmitted], WireName("responseModel")
+    ] = PiOmitted()
+    response_id: Annotated[PiField[str | PiOmitted], WireName("responseId")] = PiOmitted()
     provider_thinking_level: Annotated[
-        PiField[str | None], WireName("providerThinkingLevel")
-    ] = None
+        PiField[str | PiOmitted], WireName("providerThinkingLevel")
+    ] = PiOmitted()
     assistant = True
 
     @property
@@ -1069,8 +1130,8 @@ class SessionSwitchData(PiResponseData):
 class NativeSessionSnapshot(PiPayload):
     """External snapshots may report only part of a saved session's identity."""
 
-    session_id: Annotated[PiField[str | None], WireName("sessionId")] = None
-    session_file: Annotated[PiField[str | None], WireName("sessionFile")] = None
+    session_id: Annotated[PiField[str | PiOmitted], WireName("sessionId")] = PiOmitted()
+    session_file: Annotated[PiField[str | PiOmitted], WireName("sessionFile")] = PiOmitted()
 
     def _known_identity(self) -> dict[str, str]:
         return {
@@ -1097,8 +1158,8 @@ class NativeSessionSnapshot(PiPayload):
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
     native_input_proof_capability: Annotated[
-        PiField[str | None], WireName("nativeInputProofCapability")
-    ] = None
+        PiField[str | PiOmitted], WireName("nativeInputProofCapability")
+    ] = PiOmitted()
     # Native omission and null both mean no model observation. Omit the named
     # default on output; its internal family tag is not a native model object.
     model: Annotated[PiModel, WireOmitDefault()] = field(
@@ -1113,10 +1174,10 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     pending_message_count: Annotated[
         PiField[NonnegativePiCount], WireName("pendingMessageCount")
     ] = UnreportedCount()
-    is_streaming: Annotated[PiField[bool | None], WireName("isStreaming")] = None
+    is_streaming: Annotated[PiField[bool | PiOmitted], WireName("isStreaming")] = PiOmitted()
     is_compacting: Annotated[
-        PiField[bool | None], WireName("isCompacting")
-    ] = None
+        PiField[bool | PiOmitted], WireName("isCompacting")
+    ] = PiOmitted()
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -1146,8 +1207,8 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 @dataclass(frozen=True)
 class SessionStatsData(NativeSessionSnapshot, PiResponseData):
     context_usage: Annotated[
-        PiField[PiContextUsage | None], WireName("contextUsage")
-    ] = None
+        PiField[PiContextUsage | PiOmitted], WireName("contextUsage")
+    ] = PiOmitted()
 
 
 @dataclass(frozen=True)
@@ -1165,8 +1226,8 @@ class CompactionData(PiResponseData):
     summary: str | None = None
     usage: PiField[PiUsage] = UnreportedUsage()
     first_kept_entry_id: Annotated[
-        PiField[str | None], WireName("firstKeptEntryId")
-    ] = None
+        PiField[str | PiOmitted], WireName("firstKeptEntryId")
+    ] = PiOmitted()
     tokens_before: Annotated[
         PiField[PiCount], WireName("tokensBefore")
     ] = UnreportedCount()
@@ -1251,11 +1312,11 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 class NativeEditDetails(PiPayload):
     """Native edit metadata, decoded only when projecting actual edit evidence."""
 
-    patch: PiField[str | None] = None
-    diff: PiField[str | None] = None
+    patch: PiField[str | PiOmitted] = PiOmitted()
+    diff: PiField[str | PiOmitted] = PiOmitted()
     first_changed_line: Annotated[
-        PiField[int | None], WireName("firstChangedLine")
-    ] = None
+        PiField[int | PiOmitted], WireName("firstChangedLine")
+    ] = PiOmitted()
 
     @classmethod
     def capture_diff(cls, raw):

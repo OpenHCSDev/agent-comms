@@ -24,6 +24,7 @@ from .pi_payloads import (
     MissingToolResult,
     PiDelta,
     PiMessage,
+    PiOmitted,
     PiPayload,
     PiResponseData,
     PiToolResult,
@@ -239,7 +240,7 @@ class ExtensionError(UnreadPayload, NativePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AgentEnd(NativePiEvent):
-    will_retry: Annotated[bool | None, WireName("willRetry")] = None
+    will_retry: Annotated[bool | PiOmitted, WireName("willRetry")] = PiOmitted()
     accepts_prompt = True
 
     @property
@@ -345,8 +346,8 @@ class RetryAttemptEvent(NativePiEvent):
     separate from the event that Pi emitted.
     """
 
-    attempt: int | None = None
-    max_attempts: Annotated[int | None, WireName("maxAttempts")] = None
+    attempt: int | PiOmitted = PiOmitted()
+    max_attempts: Annotated[int | PiOmitted, WireName("maxAttempts")] = PiOmitted()
 
     @property
     @abstractmethod
@@ -403,15 +404,15 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
-    aborted: bool | None = None
+    aborted: bool | PiOmitted = PiOmitted()
     reason: type[CompactionReason] = UnknownCompactionReason
-    result: CompactionData | None = None
-    will_retry: Annotated[bool | None, WireName("willRetry")] = None
-    error_message: Annotated[str | None, WireName("errorMessage")] = None
+    result: CompactionData | PiOmitted = PiOmitted()
+    will_retry: Annotated[bool | PiOmitted, WireName("willRetry")] = PiOmitted()
+    error_message: Annotated[str | PiOmitted, WireName("errorMessage")] = PiOmitted()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
-        completed = self.aborted is False and self.result is not None
+        completed = self.aborted is False and isinstance(self.result, CompactionData)
         if completed:
             for event in self.result.charge(session):
                 yield event
@@ -425,7 +426,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             summary=self.result.display_summary if completed else None,
             will_retry=self.will_retry is True,
         )
-        if self.error_message is not None:
+        if isinstance(self.error_message, str):
             yield session.output.error(self.error_message, source=UnrecordedFailureSource())
         if self.will_retry:
             session.request_retried()
@@ -453,13 +454,13 @@ class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCommitted(NativePiEvent, NativeInputCommit):
-    request_generation: Annotated[int | None, WireName("requestGeneration")] = (
-        None
+    request_generation: Annotated[int | PiOmitted, WireName("requestGeneration")] = (
+        PiOmitted()
     )
-    llm_context_digest: Annotated[str | None, WireName("llmContextDigest")] = (
-        None
+    llm_context_digest: Annotated[str | PiOmitted, WireName("llmContextDigest")] = (
+        PiOmitted()
     )
-    committed_at_ms: Annotated[int | None, WireName("committedAtMs")] = None
+    committed_at_ms: Annotated[int | PiOmitted, WireName("committedAtMs")] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -543,8 +544,8 @@ class ExtensionUiRequest(NativePiEvent):
 @dataclass(frozen=True, kw_only=True)
 class SetStatusUiRequest(ExtensionUiRequest):
     method: ClassVar[str] = "setStatus"
-    status_key: Annotated[str | None, WireName("statusKey")] = None
-    status_text: Annotated[str | None, WireName("statusText")] = None
+    status_key: Annotated[str | PiOmitted, WireName("statusKey")] = PiOmitted()
+    status_text: Annotated[str | PiOmitted, WireName("statusText")] = PiOmitted()
 
     async def apply(self, session):
         if self.status_key == "pi-mcp/live-v1":
@@ -671,7 +672,7 @@ class InputUiRequest(DialogUiRequest):
 @dataclass(frozen=True, kw_only=True)
 class EditorUiRequest(DialogUiRequest):
     method: ClassVar[str] = "editor"
-    default_value: Annotated[str | None, WireName("defaultValue")] = None
+    default_value: Annotated[str | PiOmitted, WireName("defaultValue")] = PiOmitted()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -723,8 +724,8 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 @dataclass(frozen=True, kw_only=True)
 class MessageUpdate(NativePiEvent, DurablePiEvent):
     assistant_message_event: Annotated[
-        PiDelta | None, WireName("assistantMessageEvent")
-    ] = None
+        PiDelta | PiOmitted, WireName("assistantMessageEvent")
+    ] = PiOmitted()
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
@@ -736,12 +737,12 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
             for event in tokens.provisional(session):
                 yield event
 
-        if self.assistant_message_event is not None:
+        if self.assistant_message_event:
             for event in await self.assistant_message_event.emit(session):
                 yield event
 
     def convert(self):
-        return self.assistant_message_event.events() if self.assistant_message_event is not None else ()
+        return self.assistant_message_event.events() if self.assistant_message_event else ()
 
     accepts_prompt = True
 
@@ -751,16 +752,16 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 
     @property
     def delta_progress(self) -> bool:
-        return self.assistant_message_event is not None and self.assistant_message_event.progress
+        return bool(self.assistant_message_event and self.assistant_message_event.progress)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Response(NativePiEvent, DurablePiEvent):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
-    error: str | None = None
-    id: str | None = None
-    success: bool | None = None
+    error: str | PiOmitted = PiOmitted()
+    id: str | PiOmitted = PiOmitted()
+    success: bool | PiOmitted = PiOmitted()
 
     async def deliver_to(self, channel) -> None:
         channel.correlate(self)
@@ -772,9 +773,9 @@ class Response(NativePiEvent, DurablePiEvent):
         """Private diagnostic projection, excluding response data and prompt content."""
         return {
             "command": self.command.declared_name,
-            "id": self.id,
-            "success": self.success,
-            "error": self.error,
+            "id": FieldCodec.encode(self.id),
+            "success": FieldCodec.encode(self.success),
+            "error": FieldCodec.encode(self.error),
         }
 
     @classmethod
@@ -825,8 +826,8 @@ class SummarizationRetryAttemptStart(RetryAttemptEvent, starts=phases.Summarizat
 
 @dataclass(frozen=True, kw_only=True)
 class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPhase):
-    result: CompactionData | None = None
-    success: bool | None = None
+    result: CompactionData | PiOmitted = PiOmitted()
+    success: bool | PiOmitted = PiOmitted()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -847,10 +848,10 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 
     accepts_prompt = True
 
-    is_error: Annotated[bool | None, WireName("isError")] = None
+    is_error: Annotated[bool | PiOmitted, WireName("isError")] = PiOmitted()
     result: PiToolResult = field(default_factory=MissingToolResult)
-    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
-    tool_name: Annotated[str | None, WireName("toolName")] = None
+    tool_call_id: Annotated[str | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[str | PiOmitted, WireName("toolName")] = PiOmitted()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         name = self.tool_name or "tool"
@@ -877,8 +878,8 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunnin
     accepts_prompt = True
 
     args: object = field(default_factory=dict)
-    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
-    tool_name: Annotated[str | None, WireName("toolName")] = None
+    tool_call_id: Annotated[str | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[str | PiOmitted, WireName("toolName")] = PiOmitted()
 
     @property
     def tool_id(self):
@@ -902,8 +903,8 @@ class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
     partial_result: Annotated[PiToolResult, WireName("partialResult")] = field(
         default_factory=MissingToolResult
     )
-    tool_call_id: Annotated[str | None, WireName("toolCallId")] = None
-    tool_name: Annotated[str | None, WireName("toolName")] = None
+    tool_call_id: Annotated[str | PiOmitted, WireName("toolCallId")] = PiOmitted()
+    tool_name: Annotated[str | PiOmitted, WireName("toolName")] = PiOmitted()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
 

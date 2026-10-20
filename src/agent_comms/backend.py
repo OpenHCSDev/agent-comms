@@ -35,30 +35,32 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from agent_comms.pi_payloads import PiOmitted
+
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
-from .agent_backend import TurnInbox
 from .acp_failure import UnrecordedFailureSource
+from .agent_backend import TurnInbox
 from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_inputs import ImageInput
+from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from .native_tool_call import NativeToolMode
+from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .native_tool_call import NativeToolMode
-from .native_tool_transport import ToolTransport, UnboundToolTransport
-from .mro_dispatch import MroDispatch, handles
 from .selected_tool_broker import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
@@ -164,7 +166,8 @@ async def stream_agent_events(
                         launch,
                         partial(commands.Prompt,
                             id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-                            input_id=Id128Text.mint(), message=task, images=tuple(images) or None,
+                            input_id=Id128Text.mint(), message=task,
+                            images=tuple(images) or PiOmitted(),
                             context_contributions=context_contributions,
                         ),
                         tool_mode=tool_mode,

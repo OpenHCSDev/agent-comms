@@ -93,8 +93,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             # Certify the isolated changed source while its original writer
             # remains held, never by reopening a missing live checkpoint.
             (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-            marker.checkpoint_version = None
-            marker.checkpoint_seal = None
+            marker.unseal()
             case.bus.log.write_metadata_unlocked(marker)
             install_private_bus_checkpoint(case.bus.log, _bus_locked=True)
         before = case.bus.log.path.read_bytes()

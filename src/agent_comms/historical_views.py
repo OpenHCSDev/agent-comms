@@ -475,8 +475,7 @@ class HistoryArchive(DurableFile):
                     marker = archived.read_metadata_unlocked(required=True)
                     marker.claimed_after_seq = marker.last_seq
                     marker.access = ArchivedAccess()
-                    marker.checkpoint_version = None
-                    marker.checkpoint_seal = None
+                    marker.unseal()
                     guard = PrivateRegistryGuard(RegistryFile.path_in(stage), marker.root_id)
                     guard.create_pending()
                     archived.write_metadata_unlocked(marker)

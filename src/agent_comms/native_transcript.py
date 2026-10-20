@@ -336,7 +336,7 @@ class NativeTranscript(TranscriptSource):
         lend another input's publication proof.
         """
         found = [None] * len(records)
-        waiting: dict[str | None, list[int]] = defaultdict(list)
+        waiting: dict[str, list[int]] = defaultdict(list)
         latest = 0
         for position, record in enumerate(records):
             entry = record.entry
@@ -344,11 +344,10 @@ class NativeTranscript(TranscriptSource):
                 continue
             if entry.input_boundary:
                 found[position] = record
-            else:
+            elif entry.parent_id:
+                # A chain that reaches a root (no parent) has no input.
                 waiting[entry.parent_id].append(position)
                 latest = max(latest, record.start)
-        # A chain that reaches a root (no parent) has no input.
-        waiting.pop(None, None)
         if waiting:
             for ancestor in self.reverse(latest):
                 entry = ancestor.entry
@@ -358,9 +357,8 @@ class NativeTranscript(TranscriptSource):
                 if entry.input_boundary:
                     for position in chain:
                         found[position] = ancestor
-                else:
+                elif entry.parent_id:
                     waiting[entry.parent_id].extend(chain)
-                    waiting.pop(None, None)
                 if not waiting:
                     break
         return tuple(found)

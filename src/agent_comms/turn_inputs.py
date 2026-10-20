@@ -10,6 +10,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.pi_payloads import PiOmitted
+
 from . import agent_events as events
 from . import pi_commands as commands
 from .agent_backend import (
@@ -161,7 +163,7 @@ class InputForwarding:
             id=public_id,
             input_id=native_id,
             message=text,
-            images=item.content.images or None,
+            images=item.content.images or PiOmitted(),
             context_contributions=item.content.contributions,
             owner_tools=session.tool_socket.listener.connection,
             streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
@@ -188,7 +190,7 @@ class InputForwarding:
         if not message.user:
             return False, None
         native_id = message.input_id
-        if native_id is None:
+        if not native_id:
             return False, None
         entry = self.pending.get(native_id)
         if entry is None or message.text != entry.message:
