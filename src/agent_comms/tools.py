@@ -950,18 +950,20 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
     order_id: str = tool_field("Immutable order ID")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
-        return comms.goals.todos.for_order(self.order_id).story()
+        (story,) = OrderStory.collect(comms.goals.todos.for_order(self.order_id))
+        return story
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = "Read one story line for every open problem of this commander."
+    description = ("Read one story line for every pending order of this commander, "
+                   "including linked problems.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        todos = comms.goals.todos.for_commander(actor)
-        return FleetStory(tuple(todo.story().line for todo in todos))
+        todos = (todo for todo in comms.goals.todos.for_commander(actor) if todo.pending)
+        return FleetStory(tuple(story.line for story in OrderStory.collect(todos)))
 
 
 @dataclass(frozen=True, kw_only=True)

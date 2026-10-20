@@ -36,7 +36,7 @@ from .field_codec import (
 )
 from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
-from .order_story import OrderStory, StoryEvent, StoryLine, StorySource
+from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
@@ -2441,7 +2441,7 @@ class Todo(TypedTable):
     def pending(self):
         return self.order.pending
 
-    def story(self) -> OrderStory:
+    def story(self) -> ProblemStory:
         implied = frozenset(strike for verdict in self.verdicts
                             for strike in verdict.implied_strikes())
         sources: tuple[StorySource, ...] = (
@@ -2450,7 +2450,7 @@ class Todo(TypedTable):
         )
         events = tuple(sorted((event for source in sources for event in source.story()),
                               key=lambda event: event.at.chronology()))
-        return OrderStory(self.id, self.order.line, events)
+        return ProblemStory(self.id, self.order.line, events)
 
     def overdue(self, now: float) -> bool:
         """An undelivered order remains past due until its result is recorded."""
@@ -2722,11 +2722,12 @@ class TodoStore(TypedStore):
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
         return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
 
-    def for_order(self, order_id: str) -> Todo:
+    def for_order(self, order_id: str) -> tuple[Todo, ...]:
+        """A sent order can cover several linked problems; its ID is not a Todo key."""
         rows = self._select("json_extract(\"order\",'$.id')=?", (order_id,))
-        if len(rows) != 1:
-            raise TodoError(f"Expected one saved order {order_id!r}, found {len(rows)}")
-        return rows[0]
+        if not rows:
+            raise TodoError(f"Unknown saved order: {order_id!r}")
+        return rows
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)

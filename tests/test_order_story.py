@@ -10,7 +10,9 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, S
 from agent_comms.goals import RequestGoalOrder
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import AcceptedVerdict, SendBackVerdict, StrikeReason, StrikeTodo, TodoError
+from agent_comms.todos import (
+    AcceptedVerdict, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
+)
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
     CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
@@ -64,5 +66,18 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert fleet.lines == (story.line,)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
-    with pytest.raises(TodoError, match="Expected one saved order"):
+    with copied.goals.todos.writing() as db:
+        for problem in ("P2", "P3"):
+            replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder(),
+                    strikes=(), verdicts=(), messages=()).insert(db)
+    copied.goals.todos.link(actor, "P2", "worker", saved.order.checked().id)
+    linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
+        copied, {"order_id": "resent-order"}, caller=caller))
+    assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")
+    assert linked.problems[0] == story.problems[0]
+    assert linked.line.count(reason) == linked.line.count(standalone) == 1
+    linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
+        copied, {"thread": "lead"}, caller=caller))
+    assert linked_fleet.lines == (linked.line,)
+    with pytest.raises(TodoError, match="Unknown saved order"):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)
