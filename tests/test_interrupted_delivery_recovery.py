@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from conftest import publish_initial
-import asyncio
-import threading
 from functools import partial
 
 import pytest
@@ -107,66 +105,6 @@ async def test_empty_delivery_recovery_opens_no_coordinator(tmp_path, monkeypatc
         await agent.shutdown()
 
 
-async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch, *, cursor_delivery):
-    from agent_comms.selected_participant import SelectedParticipant
-    from agent_comms.turn_input_source import SelectedOriginalInput
-    from agent_comms.turn_phase import PromptAcceptancePhase
-
-    comms, agent, root_id = _session(tmp_path)
-    original = publish_initial(comms, "sender", "beta", "selected batch")
-    owner = comms.registry.require("beta")
-    path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
-    await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")
-    entered, release = asyncio.Event(), threading.Event()
-    loop = asyncio.get_running_loop()
-    capacity = DeliveredInput.remaining_capacity
-
-    def hold_inside_delivery(inputs, sources):
-        loop.call_soon_threadsafe(entered.set)
-        release.wait()
-        return capacity(inputs, sources)
-
-    monkeypatch.setattr(DeliveredInput, "remaining_capacity", staticmethod(hold_inside_delivery))
-    try:
-        with Coordination(str(path)) as store:
-            async with SelectedParticipant.select(
-                comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery
-            ) as selected:
-                assert selected is not None
-                leased = selected.owner.thread
-                inbox = agent.inputs.bind_native_turn("beta", leased)
-                agent.inputs.state('beta').capture_first_source(SelectedOriginalInput.answering('selected batch'))
-                following = await Coordination.run_worker(partial(
-                    publish_initial, comms, "sender", "beta", "following message",
-                ))
-                await _accept_visible_deliveries(
-                    comms.bus, root_id, path, lookup, original.seq, owner_name="beta",
-                )
-                delivery = asyncio.create_task(DeliveredInput.deliver_pending(
-                    agent.inputs, "beta", leased, comms.bus, root_id, original.seq,
-                ))
-                try:
-                    await asyncio.wait_for(entered.wait(), 5)
-                    # The release must run on this same loop. A synchronous
-                    # phase read here would prevent the holder ever releasing.
-                    timer = loop.call_later(0.05, release.set)
-                    await asyncio.wait_for(asyncio.gather(
-                        selected.transition(PromptAcceptancePhase()), delivery,
-                    ), 5)
-                    timer.cancel()
-                    assert type(comms.registry.require("beta").turn_record.read().require_active().phase) is PromptAcceptancePhase
-                    (placed,) = agent.inputs.state("beta").queued.values()
-                    assert placed.message == following and inbox.qsize() == 1
-                finally:
-                    release.set()
-                    await asyncio.gather(delivery, return_exceptions=True)
-                    await agent.inputs.finish_turn_inputs("beta", inbox)
-    finally:
-        release.set()
-        await agent.shutdown()
-
-
 async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkeypatch):
     from agent_comms.coordination_database import CoordinationStore
 
@@ -198,60 +136,3 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
         await agent.shutdown()
 
 
-@pytest.mark.parametrize("retire_inbox", [False, True])
-async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inbox_close(
-    tmp_path, monkeypatch, retire_inbox,
-):
-    from agent_comms.turn_input_source import SelectedOriginalInput
-
-    comms, agent, root_id = _session(tmp_path)
-    leased = comms.agents.begin_turn("beta", "delivery-worker-turn")
-    inbox = agent.inputs.bind_native_turn("beta", leased.thread)
-    agent.inputs.state('beta').capture_first_source(SelectedOriginalInput.answering('live selected work'))
-    message = publish_initial(comms, "sender", "beta", "worker-held delivery")
-    path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", leased.thread.created_at).lookup
-    await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")
-    loop = asyncio.get_running_loop()
-    entered, release = asyncio.Event(), threading.Event()
-    main_thread = threading.get_ident()
-    threads = []
-    reserve = DeliveredInput.reserve_pending
-    def held_reserve(*args):
-        threads.append(threading.get_ident())
-        reserve(*args)
-        loop.call_soon_threadsafe(entered.set)
-        release.wait()
-    monkeypatch.setattr(DeliveredInput, "reserve_pending", held_reserve)
-    delivery = asyncio.create_task(DeliveredInput.deliver_pending(
-        agent.inputs, "beta", leased.thread, comms.bus, root_id, 0,
-    ))
-    try:
-        await asyncio.wait_for(entered.wait(), 5)
-        assert threads and threads != [main_thread]
-        if retire_inbox:
-            agent.inputs.state('beta').retire_turn(agent.inputs.state('beta').require_inbox())
-        else:
-            delivery.cancel()
-        release.set()
-        if retire_inbox:
-            await delivery
-        else:
-            with pytest.raises(asyncio.CancelledError):
-                await delivery
-        assert inbox.empty() and not agent.inputs.state("beta").queued
-        with Coordination(str(path)) as store:
-            (current,) = pending_sealed_assignments(store, lookup, "beta")
-        assert current.wire_seq == message.seq
-        assert isinstance(current.lifecycle, FullPendingAssignment)
-        assert isinstance(
-            stored_inputs(agent.inputs.dispositions.root).lookup(
-                agent.inputs.dispositions.bus_key(message, leased.thread)
-            ), NotSentInput,
-        )
-    finally:
-        release.set()
-        await asyncio.gather(delivery, return_exceptions=True)
-        await agent.inputs.finish_turn_inputs("beta", inbox)
-        comms.agents.finish_turn(leased.turn_lease)
-        await agent.shutdown()

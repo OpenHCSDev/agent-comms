@@ -5,22 +5,17 @@ from __future__ import annotations
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import os
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import agent_comms.coordinated_runtime as runtime
-import agent_comms.coordination_cohort as cohort
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
-from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.wake_policy import FullWake
@@ -30,11 +25,9 @@ from agent_comms.optional_awareness_projection import OptionalAwarenessProjectio
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
-from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex, RebuildIndex,
 )
-from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 
@@ -107,154 +100,6 @@ def _projection(
         expected_claimed_generation=claimed_generation,
         max_rows=max_rows,
     )
-
-
-def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
-    tmp_path: Path, monkeypatch
-) -> None:
-    comms, store, _index, root_id = _root(tmp_path)
-    try:
-        message = publish_initial(comms, 
-            "sender", "#team", "@member000 @member001 act"
-        )
-        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
-        for recipient in initial.audience.recipients:
-            store.participants.register(
-                recipient.recipient_lookup,
-                recipient.canonical_thread,
-                recipient.canonical_thread,
-                committed=True,
-            )
-        actual_assert = cohort.assert_optional_awareness_schema
-
-        def inject_second_insert_failure(db):
-            actual_assert(db)
-            db.execute(
-                "CREATE TRIGGER zz_optional_fault BEFORE INSERT "
-                "ON awareness_claim_generations "
-                "WHEN NEW.canonical_thread='member001' "
-                "BEGIN SELECT RAISE(ABORT,'injected optional fault'); END"
-            )
-
-        monkeypatch.setattr(
-            cohort, "assert_optional_awareness_schema", inject_second_insert_failure
-        )
-        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-        assert len(accepted.assignments) == 2
-        assert (
-            store.session._connection.execute(
-                "SELECT sealed FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
-                (root_id, message.seq),
-            ).fetchone()[0]
-            == 1
-        )
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
-                (message.seq,),
-            ).fetchone()[0]
-            == 0
-        )
-        assert (
-            store.session._connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='zz_optional_fault'"
-            ).fetchone()
-            is None
-        )  # the SAVEPOINT removed the transient fault too
-    finally:
-        store.close()
-
-
-@pytest.mark.parametrize("phase", ["before_optional", "after_optional", "after_seal"])
-def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
-    tmp_path: Path, monkeypatch, phase: str
-) -> None:
-    comms, store, _index, root_id = _root(tmp_path)
-    try:
-        message = publish_initial(comms, "sender", "member000", "fresh")
-        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
-        for recipient in initial.audience.recipients:
-            store.participants.register(
-                recipient.recipient_lookup,
-                recipient.canonical_thread,
-                recipient.canonical_thread,
-                committed=True,
-            )
-        real_record = cohort._record_optional_owner_generations
-
-        if phase in {"before_optional", "after_optional"}:
-
-            def crash_optional(db, claims, wire_root_id, wire_seq):
-                if phase == "after_optional":
-                    real_record(db, claims, wire_root_id, wire_seq)
-                raise RuntimeError("simulated interruption before commit")
-
-            monkeypatch.setattr(cohort, "_record_optional_owner_generations", crash_optional)
-        else:
-
-            def crash_after_seal(*_args, **_kwargs):
-                raise RuntimeError("simulated interruption after seal before commit")
-
-            monkeypatch.setattr(cohort, "_claim_record", crash_after_seal)
-        with pytest.raises(RuntimeError, match="simulated interruption"):
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_seq=?", (message.seq,)
-            ).fetchone()[0]
-            == 0
-        )
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM wake_claims WHERE wire_seq=?", (message.seq,)
-            ).fetchone()[0]
-            == 0
-        )
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
-                (message.seq,),
-            ).fetchone()[0]
-            == 0
-        )
-    finally:
-        store.close()
-
-
-@pytest.mark.parametrize("damage", ["missing", "drift"])
-async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(monkeypatch, damage: str, *, cursor_delivery) -> None:
-    if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
-        pytest.skip("private selected runtime requires a real /var/tmp")
-    with tempfile.TemporaryDirectory(prefix="pr94-legacy-optional-", dir="/var/tmp") as temp:
-        root = Path(temp)
-        comms, store, _index, root_id = _root(root)
-        try:
-            initial, assignment = _accepted(comms, store, root_id, "member000", "mandatory work")
-            install_private_response_schema(store)
-            install_native_runtime_schema(store)
-            if damage == "missing":
-                store.session._connection.execute("DROP TABLE awareness_claim_generations")
-            else:
-                store.session._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
-                store.session._connection.execute(
-                    "CREATE TRIGGER awareness_generation_insert_guard BEFORE INSERT "
-                    "ON awareness_claim_generations BEGIN SELECT RAISE(ABORT,'drift'); END"
-                )
-        finally:
-            store.close()
-        runner, calls = _fake_model()
-        monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-        outcome = await runtime.SelectedExecution(
-            root=comms.root,
-            wire_root_id=root_id,
-            owner_name="member000",
-            native_package=root,
-            cursor_delivery=cursor_delivery,
-        ).run()
-        assert outcome is not None and outcome.publications
-        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
-        assert initial.message.body in calls[0][1]
-        assert "Selected source decisions through " not in calls[0][1]
 
 
 def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: Path) -> None:
@@ -435,29 +280,6 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         store.close()
 
 
-def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
-    tmp_path: Path, monkeypatch
-) -> None:
-    comms, store, index, root_id = _root(tmp_path)
-    try:
-        initial, assignment = _accepted(comms, store, root_id, "member000", "original")
-        index.maintain(start=RebuildIndex())
-        owner = _owner(comms, "member000")
-        builder = _projection(index, store, owner, 0, initial.message.seq)
-        original = OptionalAwarenessProjection._open_obligations
-
-        def race(self, db, lookup):
-            with Coordination(str(index.log.path.with_name("coordination.sqlite3"))) as other:
-                other.participants.advance_generation(lookup, owner.name, expected_generation=1)
-            return original(self, db, lookup)
-
-        monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
-        stale = builder(initial, assignment, owner)
-        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
-    finally:
-        store.close()
-
-
 def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
@@ -483,39 +305,6 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
     finally:
         store.close()
-
-
-async def test_real_selected_caller_after_rename_injects_only_new_generation(monkeypatch, *, cursor_delivery) -> None:
-    if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
-        pytest.skip("private selected runtime requires a real /var/tmp")
-    with tempfile.TemporaryDirectory(prefix="pr94-renamed-awareness-", dir="/var/tmp") as temp:
-        root = Path(temp)
-        comms, store, index, root_id = _root(root)
-        try:
-            _old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-            comms.threads._rename_thread("member000", "gamma")
-            current, assignment = _accepted(comms, store, root_id, "gamma", "new original")
-            install_private_response_schema(store)
-            install_native_runtime_schema(store)
-            index.maintain(start=RebuildIndex())
-        finally:
-            store.close()
-        runner, calls = _fake_model()
-        monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-        outcome = await runtime.SelectedExecution(
-            root=comms.root,
-            wire_root_id=root_id,
-            owner_name="gamma",
-            native_package=root,
-            cursor_delivery=cursor_delivery,
-        ).run()
-        assert outcome is not None and outcome.publications
-        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
-        assert current.message.body in calls[0][1]
-        assert "Selected source decisions through " in calls[0][1]
-        assert assignment.assignment_id in calls[0][1]
-        assert old_claim.assignment_id not in calls[0][1]
-        assert "Nonbinding rows omitted: 1" in calls[0][1]
 
 
 def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(

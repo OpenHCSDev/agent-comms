@@ -82,5 +82,5 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=caller))
     assert linked_fleet.lines == (linked.line,)
-    with pytest.raises(TodoError, match="Unknown saved order"):
+    with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

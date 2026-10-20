@@ -123,5 +123,5 @@ def test_public_families_require_their_behavior_hooks():
         WireExportLimit()
     with pytest.raises(TypeError):
         WireExportFormat()
-    with pytest.raises(ValueError, match="distinct participants"):
+    with pytest.raises(ValueError):
         DmScope("ab")

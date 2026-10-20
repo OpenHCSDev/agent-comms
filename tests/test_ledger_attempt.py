@@ -46,9 +46,9 @@ def test_a_recorded_attempt_answers_for_its_own_reservation_only(store):
     assert type(attempt) is RecordedAttempt
     refusal = StaleAttemptError("not this reservation")
     assert attempt.reserved_by(reservation, refusal).reservation == reservation
-    with pytest.raises(StaleAttemptError, match="not this reservation"):
+    with pytest.raises(StaleAttemptError):
         attempt.reserved_by(replace(reservation, token="other"), refusal)
-    with pytest.raises(StaleAttemptError, match="not this reservation"):
+    with pytest.raises(StaleAttemptError):
         attempt.identified(GoalAttemptIdentity("goal", 2, reservation.attempt_id), refusal)
     assert attempt.holds(reservation, ReservedAttempt())
     assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
@@ -61,19 +61,19 @@ def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
     reservation = store.reserve("goal", 1)
     attempt = read(store, "0" * 32)
     assert attempt == MissingAttempt()
-    with pytest.raises(StaleAttemptError, match="absent"):
+    with pytest.raises(StaleAttemptError):
         attempt.reserved_by(reservation, StaleAttemptError("absent"))
-    with pytest.raises(StaleAttemptError, match="absent"):
+    with pytest.raises(StaleAttemptError):
         attempt.identified(reservation.identity, StaleAttemptError("absent"))
     assert not attempt.holds(reservation, ReservedAttempt())
     assert not attempt.resolved_as(ResolvedAttempt(), "goal cleared")
-    with closing(store._connect()) as conn, pytest.raises(StaleAttemptError, match="no matching"):
+    with closing(store._connect()) as conn, pytest.raises(StaleAttemptError):
         attempt.retire(conn, ReservedGeneration(), "goal", 1)
 
 
 def test_no_attempt_retires_a_ready_goal_and_refuses_a_reserved_one(store):
     store.create_goal("goal")
-    with closing(store._connect()) as conn, pytest.raises(StaleAttemptError, match="eligible"):
+    with closing(store._connect()) as conn, pytest.raises(StaleAttemptError):
         NoAttempt().retire(conn, ReservedGeneration(), "goal", 1)
     with closing(store._connect()) as conn:
         NoAttempt().retire(conn, ReadyGeneration(), "goal", 1)

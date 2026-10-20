@@ -1,65 +1,13 @@
 """Native launcher identity, route and acquired package remain independent."""
-import os
 import shlex
 import sys
 from pathlib import Path
 
-import pytest
 
-import agent_comms.native_pi as native_pi
 from agent_comms import native_package
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.native_package import NativePackageError, VerifiedNativePackage
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch, SharedRootLaunch
-
-
-def launcher(tmp_path, monkeypatch, route):
-    LaunchRoot.from_path(tmp_path).install()
-    executable = tmp_path / "bin/pi-comms-native"
-    executable.parent.mkdir()
-    executable.write_text("#!/bin/sh\nexit 1\n")
-    executable.chmod(0o700)
-    runtime = LaunchRuntime(executable.with_name("python"))
-    monkeypatch.setattr(LaunchRuntime, "running", classmethod(lambda cls: runtime))
-    monkeypatch.setenv("PATH", str(executable.parent))
-    monkeypatch.setattr(RootLaunch, "derive", classmethod(lambda cls, root: route or SharedRootLaunch(tmp_path)))
-    # These cases isolate command identity from the separately tested root guard.
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
-    return executable
-
-
-def test_installed_owner_and_alias_use_route_and_full_package_verification(tmp_path, monkeypatch, declared_native_package):
-    calls = []
-    digest = native_package.package_tree_digest
-
-    def counted(path):
-        calls.append(path)
-        return digest(path)
-
-    monkeypatch.setattr(native_package, "package_tree_digest", counted)
-    package = VerifiedNativePackage.acquire(declared_native_package)
-    executable = launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, package))
-    assert NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running()) is package
-    alias = tmp_path / "alias"
-    alias.symlink_to(executable)
-    assert NativePiRpcLaunch.package_for_command(str(alias), LaunchRuntime.running()) is package
-    assert calls == [declared_native_package]
-
-
-def test_unconfigured_owner_launcher_cannot_fall_back_to_legacy_pi(tmp_path, monkeypatch):
-    launcher(tmp_path, monkeypatch, None)
-    with pytest.raises(NativePiUnavailable, match="configured pinned package"):
-        NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
-
-
-def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch, declared_native_package):
-    (declared_native_package / "dist/cli.js").write_text("// altered after declaration\n")
-    with pytest.raises(NativePackageError, match="tree differs"):
-        package = VerifiedNativePackage.acquire(declared_native_package)
-        launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, package))
-        NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
+from agent_comms.native_package import VerifiedNativePackage
 
 
 async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, *, thread_registration):

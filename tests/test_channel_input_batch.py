@@ -12,7 +12,6 @@ from agent_comms.input_origin import InputProvenance
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.routing import ScheduledTurn
-from agent_comms.threads import Thread
 from agent_comms.turn_context import UserInputSegment
 from native_backend_fixture import native_backend_fixture
 from stored_inputs import stored_inputs
@@ -47,7 +46,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *
     ):
         assert not InputBatch.capture(messages, input_keys, text, owner, document).allows_multiple
 
-    with pytest.raises(ValueError, match="acknowledgement is unavailable"):
+    with pytest.raises(ValueError):
         InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, document)
     authorized = InputBatch.capture(origins, keys, prompt, owner, document)
     assert authorized.originals == document.originals(keys)

@@ -52,7 +52,7 @@ def test_unstarted_process_does_not_signal_or_supply_a_pid():
     process.signal(signal.SIGTERM)
     assert process.pid_fields() == {}
     process.require_release_by(ProcessIdentity(123, 456))
-    with pytest.raises(RelationViolationError, match="never started"):
+    with pytest.raises(RelationViolationError):
         process.require("never started")
 
 

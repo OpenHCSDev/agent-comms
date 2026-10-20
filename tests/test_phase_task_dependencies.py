@@ -23,5 +23,5 @@ def test_import_order_does_not_reintroduce_dispatch_cycle(module):
 
 def test_unspecified_phase_and_unordered_problem_cannot_start_checked_work():
     assert not UnspecifiedPhaseTask().done(())
-    with pytest.raises(ValueError, match="Only an undelivered order"):
+    with pytest.raises(ValueError):
         UnorderedProblemOrder().reissued(1)

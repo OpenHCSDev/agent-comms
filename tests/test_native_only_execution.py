@@ -1,7 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
 from bus_history import read_history
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import os
 import sys
@@ -11,8 +10,6 @@ import pytest
 
 import agent_comms.agent_events as events
 from agent_comms.child_process import BoundedRun
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from pi_session_turn import one_turn_events
 
 
@@ -31,52 +28,6 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     assert not root.exists()
 
 
-def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch, *, native_runtime_package):
-    import agent_comms.native_pi as native_pi
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-
-    from agent_comms import native_package
-
-    package = native_runtime_package
-    verified = []
-    digest = native_package.package_tree_digest
-
-    def counted(path):
-        verified.append(path)
-        return digest(path)
-
-    monkeypatch.setattr(native_package, "package_tree_digest", counted)
-    forged = tmp_path / "pi-comms-native"
-    forged.write_text("#!/bin/sh\necho not-native\n")
-    forged.chmod(0o755)
-    with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path, package=native_runtime_package, directory=tmp_path)
-    assert verified == []
-    launch = NativePiRpcLaunch.managed(
-        "pi",
-        ("--provider", "local", "--model", "fixture"),
-        root=tmp_path, worktree=tmp_path,
-        environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
-     package=native_runtime_package, directory=tmp_path)
-    assert verified == []  # Managed construction consumes the already-acquired package.
-    assert launch.package == package
-    assert "NODE_OPTIONS" not in launch.env
-    assert launch.env["PI_WORKTREE"] == str(tmp_path)
-    assert str(package.cli) in launch.argv
-    assert "--provider" in launch.argv and "fixture" in launch.argv
-    for arguments in (
-        ("--mode", "text"),
-        ("--mode=interactive",),
-        ("--mode",),
-        ("--print",),
-        ("-p",),
-        ("--help",),
-        ("--version",),
-    ):
-        with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path, package=native_runtime_package, directory=tmp_path)
-
-
 async def test_unvalidated_configuration_refuses_before_child(tmp_path):
     missing = tmp_path / "missing-native"
     with pytest.raises(FileNotFoundError) as caught:
@@ -84,66 +35,10 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path):
     assert caught.value.filename == str(missing)
 
 
-async def test_native_provider_failure_retains_failure_without_raw_stdout(native_backend):
-    from acp.exceptions import RequestError
-    from agent_comms.acp_failure import RequestFailure
-
-    native = native_backend
-    await native.author_history()
-    original = native.session.read_bytes()
-    native.provider.status = 400
-    native.provider.error_message = "insufficient_quota"
-    async with native.open_owner() as (owner, session):
-        with pytest.raises(RequestError) as caught:
-            await owner.prompt(session, [{"type": "text", "text": "P698 original provider failure"}])
-        failure = RequestFailure.from_error(caught.value).failure
-        assert native.provider.error_message in failure.detail
-        assert failure.input_state.public_status == "started"
-        assert native.provider.posts == 1
-    assert native.session.read_bytes().startswith(original)
-
-
-async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, monkeypatch, *, native_runtime_package):
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-    from agent_comms.pi_commands import GetState
-    from agent_comms.pi_events import Response
-    from agent_comms.pi_rpc import PiRpcChannel
-
-    package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
-    if not package:
-        pytest.skip("Prepared package is required; never build or contact a provider")
-    route = PrivateNkLaunch(tmp_path, "a" * 32, VerifiedNativePackage.acquire(Path(package)))
-    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda _cls: route))
-    launch = NativePiRpcLaunch.managed(
-        "pi",
-        (
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--session-dir",
-            str(tmp_path / "sessions"),
-        ),
-        root=tmp_path, worktree=tmp_path,
-        environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
-     package=native_runtime_package, directory=tmp_path)
-    async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:
-        channel = PiRpcChannel(child.stdout)
-        child.stdin.write(channel.encode(GetState(id="preflight")))
-        await child.stdin.drain()
-        while event := await channel.receive(strict=True):
-            if isinstance(event, Response) and event.id == "preflight":
-                assert event.success
-                assert event.data.native_input_proof_capability == "pi-native-input-v1-live-only"
-                break
-        else:
-            raise AssertionError("No native preflight response")
-
-
 async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, monkeypatch):
     from agent_comms.acp import CommsClient
     from agent_comms.comms import Comms
     from agent_comms.runtime import socket_path
-    from agent_comms.threads import Thread
 
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:

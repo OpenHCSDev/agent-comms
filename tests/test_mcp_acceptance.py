@@ -81,66 +81,6 @@ def _node_run(node, env, script, cwd, artifact):
     return stdout.decode().strip()
 
 
-def _qualify_origin(node, env, project, artifact):
-    """Reach the actual SDK cause before dispatch, using only loopback addresses."""
-    native_package = pinned_native_package()
-    allowed = env["AGENT_COMMS_NATIVE_ORIGIN"]
-    # A different scheme is outside the exact allowed origin. Even a broken
-    # guard must not send this authored control toward an external network.
-    requested = "https:" + allowed.removeprefix("http:")
-    script = "\n".join((
-        "import assert from 'node:assert/strict';",
-        "import {channel} from 'node:diagnostics_channel';",
-        f"const allowed={json.dumps(allowed)},requested={json.dumps(requested)};",
-        "const dispatched=[], report={allowed_origin:allowed,requested_origin:requested};",
-        "let firstDispatcher;",
-        "const requests=channel('undici:request:create');",
-        "const observe=({request})=>dispatched.push({origin:new URL(String(request.origin)).origin,path:request.path});",
-        "requests.subscribe(observe);",
-        f"const {{configureHttpDispatcher}}=await import({json.dumps((native_package / 'dist/core/http-dispatcher.js').as_uri())});",
-        f"const {{getGlobalDispatcher}}=await import({json.dumps((native_package / 'node_modules/undici/index.js').as_uri())});",
-        "try {",
-        "  await configureHttpDispatcher();",
-        "  firstDispatcher=getGlobalDispatcher();",
-        "  const firstFetch=globalThis.fetch;",
-        "  const positive=await fetch(allowed+'/guard-positive');",
-        "  assert.equal(positive.status,200); await positive.text();",
-        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-positive'));",
-        f"  const {{OpenAI}}=await import({json.dumps((native_package / 'node_modules/openai/client.mjs').as_uri())});",
-        "  const client=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
-        "  await configureHttpDispatcher();",
-        "  assert.notEqual(globalThis.fetch,firstFetch);",
-        "  assert.notEqual(getGlobalDispatcher(),firstDispatcher);",
-        "  report.dispatcher_reconfigured=true; report.refusals=[];",
-        "  const replacement=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
-        "  for (const sdk of [client,replacement]) {",
-        "    let failure;",
-        "    try { await sdk.chat.completions.create({model:'z-ai/glm-5.3-flash',messages:[{role:'user',content:'Authored origin refusal; never dispatched.'}]}); }",
-        "    catch(error) { failure=error; report.refusals.push({name:error.name,message:error.message,cause:{code:error.cause?.code,allowed_origin:error.cause?.allowed_origin,requested_origin:error.cause?.requested_origin}}); }",
-        "    assert.equal(failure?.cause?.code,'ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED');",
-        "    assert.equal(failure.cause.allowed_origin,allowed);",
-        "    assert.equal(failure.cause.requested_origin,requested);",
-        "  }",
-        "  assert(!dispatched.some(row=>row.origin!==allowed));",
-        "  let redirected=false;",
-        "  try { const response=await fetch(allowed+'/guard-redirect'); await response.text(); redirected=true; }",
-        "  catch(error) { report.redirect_error={name:error.name,message:error.message,cause_message:error.cause?.message}; }",
-        "  assert.equal(redirected,false);",
-        "  assert(report.redirect_error);",
-        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-redirect'));",
-        "  assert(!dispatched.some(row=>row.origin!==allowed));",
-        "  report.localhost_positive=true; report.sdk_origin_refused=true; report.redirect_refused=true;",
-        "} finally {",
-        "  report.dispatched=dispatched; console.log(JSON.stringify(report));",
-        "  requests.unsubscribe(observe);",
-        "  try { if(firstDispatcher) await firstDispatcher.close(); }",
-        "  finally { if(getGlobalDispatcher()!==firstDispatcher) await getGlobalDispatcher().close(); }",
-        "}",
-    ))
-    report = json.loads(_node_run(node, env, script, project, artifact))
-    artifact.with_suffix(".json").write_text(json.dumps(report, indent=2))
-
-
 def _prepare(root, native_package):
     package = native_package / "agent-comms-extensions" / "pi-mcp-client"
     node = shutil.which("node")

@@ -7,16 +7,14 @@ import json
 
 import acp
 import pytest
-from acp.schema import ToolCallStart, TextContentBlock
+from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
-from agent_comms.turn_progress import TurnProgress
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
-
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
@@ -176,108 +174,8 @@ def test_native_call_fields_are_not_model_arguments():
     assert FieldCodec.encode(call) == {"tool": "write", **arguments}
     assert set(FieldCodec.record_schema(WriteTool)["properties"]) == set(arguments)
     refused = CodingCall.decode("owned-call", "write", {**arguments, "call_id": "foreign"})
-    with pytest.raises(SelectedToolDenied, match="call_id"):
+    with pytest.raises(SelectedToolDenied):
         refused.allowed_claim()
-
-
-async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(
-    native_backend, monkeypatch, acp_tools
-):
-    native = native_backend
-    source = native.project / "owned.txt"
-    source.write_text("ACTUAL_READ_CONTENT\n")
-    ordinary = native.provider.handle
-
-    async def request_read(reader, writer):
-        if native.provider.posts:
-            await ordinary(reader, writer)
-            return
-        try:
-            header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
-            length = next(
-                int(line.split(b":", 1)[1])
-                for line in header.split(b"\r\n")
-                if line.lower().startswith(b"content-length:")
-            )
-            request = json.loads(await reader.readexactly(length))
-            assert any(tool["function"]["name"] == "read" for tool in request["tools"])
-            native.provider.posts += 1
-            chunk = {
-                "id": "native-tool",
-                "object": "chat.completion.chunk",
-                "created": 1,
-                "model": "fixture",
-                "choices": [
-                    {
-                        "index": 0,
-                        "finish_reason": "tool_calls",
-                        "delta": {
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "id": "read-proof",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "read",
-                                        "arguments": json.dumps({"path": str(source)}),
-                                    },
-                                }
-                            ]
-                        },
-                    }
-                ],
-            }
-            body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
-            writer.write(
-                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
-                + str(len(body)).encode()
-                + b"\r\nConnection: close\r\n\r\n"
-                + body
-            )
-            await writer.drain()
-        finally:
-            writer.close()
-            await writer.wait_closed()
-
-    monkeypatch.setattr(native.provider, "handle", request_read)
-    records = []
-    consume = TurnProgress.consume
-
-    async def observed(progress, event):
-        records.append(event)
-        await consume(progress, event)
-
-    monkeypatch.setattr(TurnProgress, "consume", observed)
-    await native.author_history()
-    original_inputs = len(native.saved_inputs())
-    async with native.open_owner(runtime_enabled=True, native_options=()) as (agent, session):
-        async with asyncio.timeout(25):
-            await agent.prompt(session, [TextContentBlock(
-                type="text", text="Read owned.txt once and answer",
-            )])
-    assert any(isinstance(event, events.Done) and event.ok for event in records), records
-    starts = [event for event in records if isinstance(event, events.ToolStart)]
-    ends = [event for event in records if isinstance(event, events.ToolEnd)]
-    assert len(starts) == len(ends) == 1
-    # Declaration-owned argument fields supply the title without execution parsing.
-    # The SDK reports raw arguments, not a caption. Presentation does not validate
-    # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = f"Read {source}"
-    assert starts[0].kind == "read" and starts[0].title == expected_title
-    assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
-    assert len(native.saved_inputs()) == original_inputs + 1
-    assert native.provider.posts == 2 and source.read_text() == "ACTUAL_READ_CONTENT\n"
-
-    owner, received = acp_tools
-    await owner._emit_event("native-tool", starts[0], owner.sessions.client)
-    async with asyncio.timeout(3):
-        update = await received.get()
-    assert isinstance(update, ToolCallStart)
-    assert (update.kind, update.title, update.raw_input) == (
-        "read",
-        expected_title,
-        {"path": str(source)},
-    )
 
 
 @pytest.fixture

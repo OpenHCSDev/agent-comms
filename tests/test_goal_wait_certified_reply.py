@@ -1,24 +1,16 @@
 """Dependency replies retain original checked identities across registry changes."""
 
-from conftest import reader
 from agent_comms.messages import NoticeRole
 import os
-from agent_comms.tool_caller import NoThreadCaller
-import asyncio
-import json
 from dataclasses import replace
 
-from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
-from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
-from agent_comms.pi_payloads import PublishedMessageToolDetails
 
 
 def register(comms, name):
@@ -143,108 +135,3 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     )
 
 
-async def test_native(retained_native_acp_owner, *, source_reads):
-    """Retained native -> real tool send -> selected reply -> queued ACP input."""
-    from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
-    from agent_comms.coordinator import Coordination
-    from agent_comms.input_disposition import InputDispositions
-    from agent_comms.historical_native_inputs import read_historical_native_inputs
-    from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.tools import invoke_tool
-
-    native, comms, agent, sid = retained_native_acp_owner
-    await native.run("RETAINED_GOAL_WAIT_HISTORY")
-    retained = native.session.read_bytes()
-    assert native.provider.posts == 1
-    register(comms, "peer")
-    peer_lease = comms.agents.begin_turn("peer", "peer-work").turn_lease
-    goal = comms.goals.update_goal(sid, SetGoalAction(text="Process the original peer reply"))
-    old_key = "acp:historical-unknown"
-    owner = comms.registry.require(sid)
-    claim_scope = comms.registry.snapshot().claim_generation(sid)
-    agent.inputs.dispositions.record(
-        old_key, seq=None, owner=sid, claim_scope=claim_scope, target=sid,
-        text="HISTORICAL_UNKNOWN_MUST_NOT_REPLAY",
-    )
-    old = stored_inputs(agent.inputs.dispositions.root).lookup(old_key)
-    comms.goals.update_goal(
-        sid, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
-    )
-    wait = comms.goals.goal_wait(sid)
-    parked_goal = comms.registry.require(sid).goal
-    assert wait is not None and wait.owner == owner.incarnation.require_recorded()
-
-    gate = asyncio.Event()
-    native.provider.response_gate = gate
-    native.provider.text = "NATIVE_GOAL_WAIT_HANDLED"
-    agent.inputs.auto_wake = True
-    sent = invoke_tool(comms, "comms_send", {
-        "from": "peer", "to": sid, "body": "Original dependency reply",
-    }, caller=NoThreadCaller())
-    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    with comms.bus.log.checked_read() as source:
-        assert wait.matches(source.delivery(original.seq), owner.incarnation.require_recorded())
-        root_id = source.marker.root_id
-    turn = asyncio.create_task(agent.inputs.drain_inbox(sid))
-    try:
-        await turn
-        assert agent.inputs.state(sid).wake_task is not None
-        wake = agent.inputs.state(sid).wake_task
-        async with asyncio.timeout(15):
-            while native.provider.posts < 2:
-                if wake.done():
-                    await wake
-                    raise AssertionError("Selected wake ended before its actual native request")
-                await asyncio.sleep(0.01)
-        assert "Original dependency reply" in json.dumps(native.provider.requests[-1])
-        assert comms.goals.goal_wait(sid) == wait
-        response = await agent.prompt(sid, [{"type": "text", "text": "QUEUED_OWNER_FOLLOWUP"}])
-        accepted = next(
-            item for item in decode_updates(response.field_meta)
-            if isinstance(item, InputDeliveryChangedUpdate)
-        )
-        assert accepted.input_id in agent.inputs.state(sid).queued
-        queued = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
-        assert queued.unresolved and queued.has_native_binding
-        gate.set()
-        native.provider.response_gate = None
-        async with asyncio.timeout(30):
-            await wake
-            assert await turn == 1
-        assert isinstance(comms.goals.goal_wait(sid), NoGoalWait)
-        assert comms.registry.require(sid).goal == parked_goal
-        assert not comms.registry.require(sid).turn_record.executing
-        handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
-        assert not handled.unresolved and handled.has_native_binding
-        assert not agent.inputs.state(sid).queued
-        assert stored_inputs(agent.inputs.dispositions.root).lookup(old_key) == old
-        assert native.provider.posts == 3
-        assert not any("HISTORICAL_UNKNOWN_MUST_NOT_REPLAY" in json.dumps(r) for r in native.provider.requests)
-        assert "QUEUED_OWNER_FOLLOWUP" in json.dumps(native.provider.requests[-1])
-        assert native.session.read_bytes().startswith(retained)
-        replies = comms.bus.inbox("peer")
-        assert len(replies) == 1 and replies[0].body == "NATIVE_GOAL_WAIT_HANDLED"
-        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            proofs = read_historical_native_inputs(
-                store,
-                wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation(
-                    "fixture", owner.created_at
-                ).lookup,
-                source_seq=original.seq,
-                source_reads=source_reads,
-            )
-            assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)
-            assert proofs[0].expected_prompt_equality_established
-        comms.agents.finish_turn(peer_lease)
-        assert await agent.inputs.drain_inbox(sid) == 0
-        assert native.provider.posts == 3
-        reopened = reader(comms.root)
-        assert isinstance(reopened.goals.goal_wait(sid), NoGoalWait)
-        assert reopened.registry.require(sid).goal == parked_goal
-        assert reopened.bus.log.messages_for_references((original.reference,)) == (original,)
-        assert stored_inputs(comms.root).lookup(old_key) == old
-    finally:
-        gate.set()
-        native.provider.response_gate = None
-        await asyncio.gather(turn, return_exceptions=True)

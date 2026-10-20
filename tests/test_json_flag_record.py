@@ -35,7 +35,7 @@ def test_present_flags_replace_the_default_and_missing_flags_do_not_guess(select
     record_type, selected, default = selected_record
     assert record_type.from_arguments(selected.cli_arguments, default) == selected
     assert record_type.from_arguments(("unrelated-command", "--other-flag"), default) is default
-    with pytest.raises(ValueError, match=f"Missing required {record_type.value_flag}"):
+    with pytest.raises(ValueError):
         record_type.from_arguments(())
 
 

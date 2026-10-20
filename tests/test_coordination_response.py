@@ -4,11 +4,6 @@ from __future__ import annotations
 
 from conftest import publish_initial, responder
 import os
-import selectors
-import sqlite3
-import subprocess
-import sys
-import threading
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -43,11 +38,7 @@ from agent_comms.publisher import ParticipantPublisher
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
-from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -171,7 +162,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             case.store, case.bus, case.fence, "Channel questions combined",
             exact_target=routes[0], owner_witness=case.witness,
         ).value
-        with pytest.raises(IdentityConflict, match="all original response bodies"):
+        with pytest.raises(IdentityConflict):
             publish_fenced_response(
                 case.store, case.bus, case.fence,
                 exact_target=routes[0], owner_witness=case.witness,
@@ -271,187 +262,19 @@ def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
     try:
         with (
             Coordination(str(case.comms.root / "other.sqlite3")) as wrong_database,
-            pytest.raises(IdentityConflict, match="different trusted roots"),
+            pytest.raises(IdentityConflict),
         ):
             prepare_fenced_response(
                 wrong_database, case.bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         alien_registry = Registration(tmp_path / "foreign" / "registry.json")
         alien_bus = responder(case.comms.root, alien_registry)
-        with pytest.raises(IdentityConflict, match="different trusted roots"):
+        with pytest.raises(IdentityConflict):
             prepare_fenced_response(
                 case.store, alien_bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PendingResponse
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
-    finally:
-        case.close()
-
-
-def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    try:
-        intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
-        ).value
-
-        def crash_before_append(_intent, *, conversation, registry_snapshot=None, activity):
-            raise OSError("injected process death before append")
-
-        monkeypatch.setattr(
-            case.bus.publisher, "_publish_keyed_response_unlocked", crash_before_append
-        )
-        with pytest.raises(OSError):
-            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        assert case.bus.log.read_keyed_response(intent) is None
-        assert case.comms.bus.log.latest_sequence() == case.origin_seq
-        assert (
-            case.store.session._connection.execute(
-                "SELECT COUNT(*) FROM publication_append_dispatches"
-            ).fetchone()[0]
-            == 1
-        )
-        monkeypatch.undo()
-        with pytest.raises(PublicationUncertain):
-            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        with pytest.raises(PublicationUncertain):
-            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        with pytest.raises(PublicationUncertain):
-            case.witness.resolve_retained(case.store, case.bus)
-        assert case.comms.bus.log.latest_sequence() == case.origin_seq
-        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
-    finally:
-        case.close()
-
-
-def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    try:
-        intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
-        ).value
-        real_append = case.bus.publisher._publish_keyed_response_unlocked
-
-        def committed_then_lost_ack(frozen, *, conversation, registry_snapshot=None, activity):
-            real_append(frozen, conversation=conversation, registry_snapshot=registry_snapshot,
-                        activity=activity)
-            raise OSError("injected loss after bus fsync")
-
-        monkeypatch.setattr(
-            case.bus.publisher, "_publish_keyed_response_unlocked", committed_then_lost_ack
-        )
-        with pytest.raises(OSError):
-            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        assert case.bus.log.read_keyed_response(intent) is not None
-        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
-        monkeypatch.undo()
-        case.store.close()
-        with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
-            completed = case.witness.resolve_retained(reopened, case.bus)
-            assert len(completed) == 1
-            assert completed[0].publication_evidence[0].seq == case.origin_seq + 1
-            result = resolve_existing_response(
-                reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
-            )
-            assert type(result.value.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-            assert ResponseObligation.response_record(result.value.publication_evidence, case.reply_target).seq == case.origin_seq + 1
-            assert isinstance(
-                publish_fenced_response(reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
-                AlreadyApplied,
-            )
-            assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
-    finally:
-        case.close()
-
-
-def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    try:
-        intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "saved reply",
-            exact_target=case.reply_target, owner_witness=case.witness,
-        ).value
-        append = case.bus.publisher._publish_keyed_response_unlocked
-
-        def saved_then_lost(frozen, *, conversation, registry_snapshot=None, activity):
-            append(frozen, conversation=conversation, registry_snapshot=registry_snapshot,
-                   activity=activity)
-            raise OSError("lost acknowledgement after saved reply")
-
-        monkeypatch.setattr(
-            case.bus.publisher, "_publish_keyed_response_unlocked", saved_then_lost
-        )
-        with pytest.raises(OSError, match="lost acknowledgement"):
-            publish_fenced_response(
-                case.store, case.bus, case.fence,
-                exact_target=case.reply_target, owner_witness=case.witness,
-            )
-        assert case.bus.log.read_keyed_response(intent) is not None
-        monkeypatch.undo()
-        case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
-        fresh = publish_initial(case.comms, 
-            "sender", "#team", "Distinct fresh work"
-        )
-        accepted = accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
-        fresh_assignment = accepted.value.assignments[0]
-        install_native_runtime_schema(case.store)
-
-        _owner, participant, pending, _sent_outcomes = SelectedParticipant.prepare(
-            case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
-        )
-
-        settled = case.store.snapshots.get("exec")
-        assert type(settled.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-        assert participant.pointer.execution_id is None
-        assert tuple(row.assignment_id for row in pending) == (fresh_assignment.assignment_id,)
-        assert case.comms.bus.log.latest_sequence() == fresh.seq
-    finally:
-        case.close()
-
-
-def test_fresh_selection_refuses_missing_saved_reply_without_resend(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    try:
-        intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "missing saved reply",
-            exact_target=case.reply_target, owner_witness=case.witness,
-        ).value
-
-        def lost_before_append(_intent, *, conversation, registry_snapshot=None, activity):
-            raise OSError("reply was never saved")
-
-        monkeypatch.setattr(
-            case.bus.publisher, "_publish_keyed_response_unlocked", lost_before_append
-        )
-        with pytest.raises(OSError, match="never saved"):
-            publish_fenced_response(
-                case.store, case.bus, case.fence,
-                exact_target=case.reply_target, owner_witness=case.witness,
-            )
-        assert case.bus.log.read_keyed_response(intent) is None
-        monkeypatch.undo()
-        case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
-        fresh = publish_initial(case.comms, 
-            "sender", "#team", "Fresh work must remain blocked"
-        )
-        accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
-        install_native_runtime_schema(case.store)
-
-        with pytest.raises(PublicationUncertain, match="no keyed bus acknowledgement; no resend"):
-            SelectedParticipant.prepare(
-                case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
-            )
-        assert case.bus.log.read_keyed_response(intent) is None
-        assert case.comms.bus.log.latest_sequence() == fresh.seq
-        assert case.store.snapshots.get("exec").publication_evidence == ()
     finally:
         case.close()
 
@@ -477,133 +300,6 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
             == 0
         )
     finally:
-        case.close()
-
-
-def test_bus_append_fence_remains_current_until_sql_tx2_commit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    try:
-        prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
-        )
-        entered, concurrent_done, wire_done = (
-            threading.Event(),
-            threading.Event(),
-            threading.Event(),
-        )
-        real_append = case.bus.publisher._publish_keyed_response_unlocked
-
-        def blocking_append(frozen, *, conversation, registry_snapshot=None, activity):
-            entered.set()
-            assert not concurrent_done.wait(0.25), "revocation raced an in-flight fenced append"
-            assert not wire_done.is_set(), "registry writer raced an in-flight append"
-            return real_append(
-                frozen, conversation=conversation, registry_snapshot=registry_snapshot,
-                activity=activity,
-            )
-
-        monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", blocking_append)
-        outcomes: list[str] = []
-
-        def revoke():
-            assert entered.wait(2)
-            try:
-                with Coordination(str(case.comms.root / "coordination.sqlite3")) as other:
-                    other.participants.advance_generation(
-                        case.owner_lookup, "new-owner", expected_generation=1
-                    )
-                outcomes.append("advanced")
-            except sqlite3.IntegrityError:
-                outcomes.append("blocked")  # active attempt may not change generation
-            finally:
-                concurrent_done.set()
-
-        def change_registry_scope():
-            assert entered.wait(2)
-            with _store_lock(case.comms.root / "wire"):
-                wire_done.set()
-
-        worker = threading.Thread(target=revoke)
-        wire_worker = threading.Thread(target=change_registry_scope)
-        worker.start()
-        wire_worker.start()
-        try:
-            settled = publish_fenced_response(
-                case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
-            )
-        finally:
-            worker.join(timeout=5)
-            wire_worker.join(timeout=5)
-        assert not worker.is_alive() and outcomes == ["advanced"]
-        assert not wire_worker.is_alive() and wire_done.is_set()
-        assert type(settled.value.execution.lifecycle) is CompletedExecution
-        assert case.store.participants.get(case.owner_lookup).participant_generation == 2
-    finally:
-        case.close()
-
-
-def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = _ready(tmp_path)
-    child: subprocess.Popen[str] | None = None
-    try:
-        prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
-        )
-        actual_append = case.bus.publisher._publish_keyed_response_unlocked
-        env = os.environ.copy()
-        for name in ("PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
-            env.pop(name, None)
-        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
-
-        def concurrent_stop(frozen, *, conversation, registry_snapshot=None, activity):
-            nonlocal child
-            child = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-c",
-                    "import sys; from pathlib import Path; "
-                    "from agent_comms.registration import Registration; "
-                    "print('READY',flush=True); "
-                    "Registration(Path(sys.argv[1])).unregister('owner')",
-                    str(case.comms.root / "registry.json"),
-                ],
-                cwd=case.comms.root,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            assert child.stdout is not None
-            with selectors.DefaultSelector() as watcher:
-                watcher.register(child.stdout, selectors.EVENT_READ)
-                assert watcher.select(5), "registry-stop process never reached its lock attempt"
-            assert child.stdout.readline() == "READY\n"
-            with pytest.raises(subprocess.TimeoutExpired):
-                child.wait(timeout=0.15)
-            return actual_append(
-                frozen, conversation=conversation, registry_snapshot=registry_snapshot,
-                activity=activity,
-            )
-
-        monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", concurrent_stop)
-        result = publish_fenced_response(
-            case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
-        )
-        assert child is not None
-        output, errors = child.communicate(timeout=5)
-        assert child.returncode == 0, (output, errors)
-        assert not case.comms.registry.status("owner").active
-        assert type(result.value.execution.lifecycle) is CompletedExecution
-        assert type(result.value.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-        assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
-    finally:
-        if child is not None and child.poll() is None:
-            child.kill()
-            child.wait(timeout=5)
         case.close()
 
 

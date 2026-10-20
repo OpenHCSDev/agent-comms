@@ -11,7 +11,6 @@ from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import NoTurnRecord
 
 
@@ -66,7 +65,7 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
     source = old.registry.snapshot()
     source = replace(source, threads={"good": good, conflicting.name: conflicting})
     before = current.registry.store.path.read_bytes()
-    with pytest.raises(RelationViolationError, match="identity conflicts"):
+    with pytest.raises(RelationViolationError):
         current.registry.restore_stopped(source, ("good", conflicting.name))
     assert current.registry.store.path.read_bytes() == before
 

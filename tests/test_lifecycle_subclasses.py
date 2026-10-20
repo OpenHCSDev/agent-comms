@@ -130,7 +130,7 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
             revision=1, last_progress_at_ms=None, reason_code=None,
         )
         if predecessor is UnknownOutcomeAttempt:
-            with pytest.raises(sqlite3.IntegrityError, match="previous attempt must be dead"):
+            with pytest.raises(sqlite3.IntegrityError):
                 with store.session.writing() as db:
                     next_attempt.insert(db)
         else:

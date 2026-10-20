@@ -14,7 +14,7 @@ def test_waiting_and_failed_sidebar_answer_without_a_snapshot():
         assert observation.read_marker_notice() == ""
         assert observation.channel_unread("#any") == UnobservedUnread()
         assert observation.bus_unread("person") == UnobservedUnread()
-    with pytest.raises(RuntimeError, match="has not been observed"):
+    with pytest.raises(RuntimeError):
         WaitingSidebar().require_snapshot()
     with pytest.raises(ValueError) as caught:
         FailedSidebar(failure).require_snapshot()

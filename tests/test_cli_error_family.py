@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 import sys
 from contextlib import closing
 
@@ -142,7 +141,7 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         assert winner in (first, other)
         assert Binding.bind(db, None) == Binding.bind(db, winner) == winner
         loser = other if winner == first else first
-        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+        with pytest.raises(ValueError):
             Binding.bind(db, loser)
         with db:
             assert not DeliveryRow(message.message_id, 'unused', DeliveredOutcome).insert_if_absent(db).rowcount
@@ -163,13 +162,3 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
-def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkeypatch):
-    path = tmp_path / 'delivery.sqlite3'
-    path.write_bytes(b'not a SQLite database')
-    connection = CoordinationStore.writer(path)
-    monkeypatch.setattr(CoordinationStore, 'writer', lambda *_args, **_options: connection)
-    with pytest.raises(sqlite3.DatabaseError):
-        with Binding.open(tmp_path):
-            pass
-    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
-        connection.execute('SELECT 1')

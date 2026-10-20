@@ -58,13 +58,3 @@ def read_proof_rows(session: Path) -> list[dict]:
         ]
 
 
-def child_writer_imports() -> str:
-    """Recorded-RPC children use the same current declaration as their parent."""
-    import agent_comms.native_pi as native_pi
-
-    return (
-        "import sys\n"
-        f"sys.path.insert(0, {str(Path(native_pi.__file__).parents[1])!r})\n"
-        f"sys.path.insert(0, {str(Path(__file__).parent)!r})\n"
-        "from native_proof_cases import write_proof_rows\n"
-    )

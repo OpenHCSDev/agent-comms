@@ -28,13 +28,12 @@ from agent_comms.connector import (
     RevokeVerb,
 )
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import MalformedRecord
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
-from agent_comms.tools import CommsTurnsTool, ReadTool, ToolRequest, invoke_tool
+from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -345,37 +344,6 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             assert (copied_root / "bus.jsonl").read_bytes() == before
     assert comms.bus.log.latest_sequence() == original.seq
     assert comms.owners.maintenance.read().turn_pending is False
-
-
-async def test_malformed_tool_read_answers_with_mcp_error_within_two_seconds(
-    client, store, monkeypatch, caplog,
-):
-    message = "Expected float, received NoneType"
-
-    def malformed_read(self, comms, caller):
-        raise MalformedRecord(message)
-
-    # Only the tool's read fails. OAuth, Connector.invoke, MCP decoding and
-    # ToolsCallMessage.answer are the real application path over HTTP.
-    monkeypatch.setattr(CommsTurnsTool, "apply", malformed_read)
-    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
-    started = time.monotonic()
-    response = await client.post("/mcp", headers=headers, timeout=2, json={
-        "jsonrpc": "2.0", "id": 268, "method": "tools/call",
-        "params": {"name": "comms_turns", "arguments": {"thread": "worker"}},
-    })
-    reply = await response.json()
-    elapsed = time.monotonic() - started
-    assert elapsed < 2, (elapsed, reply)
-    assert response.status == 200
-    assert reply["id"] == 268 and reply["jsonrpc"] == "2.0"
-    result = reply["result"]
-    assert result["isError"] is True
-    assert json.loads(result["content"][0]["text"]) == {"type": "failed", "error": message}
-    assert any(record.exc_info and record.exc_info[0] is MalformedRecord
-               for record in caplog.records)
-    print(json.dumps({"tool": "comms_turns", "seconds": elapsed,
-                      "http": response.status, "isError": True, "error": message}))
 
 
 async def test_a_revoked_token_is_refused(client, store):

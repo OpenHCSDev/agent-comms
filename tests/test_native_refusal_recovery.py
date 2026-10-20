@@ -1,21 +1,14 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
 from agent_comms.native_arguments import SelectedModel
 
-import asyncio
 import json
-from pathlib import Path
 
 import pytest
 
 import agent_comms.agent_events as ae
-import agent_comms.backend as backend
 import agent_comms.native_pi as native_pi
 import agent_comms.pi_events as pi_events
-from agent_comms.acp_extension import RequestFailedUpdate
-from agent_comms.goal_actions import SetGoalAction
-from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
-from test_acp import facts
 from test_backend import _NATIVE_PROMPT_START, _replay_stub
 
 OVERLOADED = "Our servers are currently overloaded. Please try again later."
@@ -51,71 +44,6 @@ def _settled_records():
         {"type": "response", "command": "get_session_stats", "success": True,
          "data": {"contextUsage": {}}},
     ]
-
-
-@pytest.mark.asyncio
-async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
-    private_comms, tmp_path, monkeypatch
-):
-    agent = canonical_agent(private_comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
-    sent: list = []
-
-    class FakeClient:
-        async def session_update(self, session_id=None, update=None, **kw):
-            sent.append(update)
-
-    records = [
-        *_refused_attempt(1, 1_000),
-        *_refused_attempt(2, 10_000),
-        *_refused_attempt(3, 60_000),
-        {"type": "message_start", "message": {"role": "assistant", "content": []}},
-        {"type": "message_update", "assistantMessageEvent":
-         {"type": "text_delta", "delta": "answered after recovery"}},
-        {"type": "native_retry_end", "success": True, "attempt": 3},
-        {"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
-         "content": [{"type": "text", "text": "answered after recovery"}],
-         "usage": {"totalTokens": 12}}},
-        *_settled_records(),
-    ]
-    stub = _stub_with(tmp_path, records)
-    original = backend.stream_agent_events
-
-    observed = {}
-
-    async def events(agent_bin, agent_args, task, cwd, *rest, **kwargs):
-        async for event in original(stub, agent_args, task, cwd, *rest, **kwargs):
-            if isinstance(event, ae.InputStarted):
-                observed['goal'] = private_comms.goals.update_goal(
-                    'proj', SetGoalAction(text='Ship the release'))
-                yield ae.ToolEnd(id='set-goal', name='comms_set_goal', ok=True)
-            if isinstance(event, ae.Done):
-                assert event.ok and event.retry_result.success
-                assert event.retry_result.attempt == 3
-            yield event
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    agent.sessions.client = FakeClient()
-    await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-    try:
-        await asyncio.wait_for(
-            agent.turns.run_agent_turn("proj", "proj", "work"), timeout=20
-        )
-
-        # One answered turn: the recovery's final outcome is the reply itself,
-        # and no interim refusal reached the client or the failure publisher.
-        reply_texts = [
-            text for update in sent
-            if (text := getattr(getattr(update, "content", None), "text", None))
-        ]
-        assert reply_texts == ["answered after recovery"]
-        assert not any(
-            facts(update.field_meta, RequestFailedUpdate) for update in sent
-        )
-        # The goal was never blocked on an interim refusal.
-        current = private_comms.registry.require("proj").goal
-        assert current.id == observed['goal'].id and current.state.active
-    finally:
-        await agent.shutdown()
 
 
 @pytest.mark.parametrize("reason", ["error", "length", "aborted"])

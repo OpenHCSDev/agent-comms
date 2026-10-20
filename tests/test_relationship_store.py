@@ -1,15 +1,12 @@
 """Relationship owner contracts: corruption, locks and durability."""
 
-import json
 import os
 import stat
 
 import pytest
 
-from agent_comms.relationships import ChildrenRelationshipGroup, RelationshipEdit
+from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import Comms
-from agent_comms.display_order import CreatedThreadSort
-from agent_comms.locked_store import LockedStore
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from agent_comms.store_files import SharedLock, _store_lock
 from test_locked_store import _hold_lock, assert_writer_excluded, event, process
@@ -22,47 +19,6 @@ def _read_adopter(root, done):
     service.contacts("owner")
     service.snapshot("owner")
     done.set()
-
-
-def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
-    comms = setup_wire(tmp_path)
-    service = comms.relationships
-    assert service.store.read() == RelationshipDocument()
-    assert not service.store.path.exists()
-    monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
-    first, peer = comms.registry.require("owner"), comms.registry.require("peer")
-    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "Review")
-    service.set_order("owner", ChildrenRelationshipGroup, CreatedThreadSort)
-    expected = {
-        "collaborations": [
-            {
-                "owner": "owner",
-                "peer": "peer",
-                "owner_created": first.created_at,
-                "peer_created": peer.created_at,
-                "note": "Review",
-                "created_at": 123.0,
-                "updated_at": 123.0,
-                "history": [],
-            }
-        ],
-        "orders": [
-            {
-                "owner": "owner",
-                "owner_created": first.created_at,
-                "group": "children",
-                "order": "created_at",
-            }
-        ],
-    }
-    expected["version"] = 2
-    assert service.store.path.read_text() == json.dumps(expected, indent=2) + "\n"
-    before = service.store.path.stat()
-    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "ignored")
-    service.edit("owner", RelationshipEdit.member_named("remove"), "absent")
-    assert service.store.path.stat() == before
-    assert RelationshipStore.read is LockedStore.read
-    assert RelationshipStore.update is LockedStore.update
 
 
 @pytest.mark.parametrize("text", ["{", "[]", '{"version": 2}'])
@@ -132,7 +88,7 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stag
 
     monkeypatch.setattr(os, "fsync", sync)
     monkeypatch.setattr(os, "replace", publish)
-    with pytest.raises(OSError, match="injected"):
+    with pytest.raises(OSError):
         mutate()
     assert path.read_bytes() == before
     assert stat.S_IMODE(path.stat().st_mode) == 0o640

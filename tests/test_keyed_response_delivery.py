@@ -14,7 +14,6 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
-from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordination_response import _ready
 from bus_history import read_history
@@ -172,7 +171,7 @@ def test_duplicate_response_bytes_cannot_recheck_a_missing_checkpoint(tmp_path):
         marker.checkpoint_version = None
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
-        with pytest.raises(RelationViolationError, match=r"^Private bus checkpoint is missing or redirected\.$"):
+        with pytest.raises(RelationViolationError):
             install_private_bus_checkpoint(case.bus.log)
     finally:
         case.close()

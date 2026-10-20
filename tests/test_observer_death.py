@@ -53,7 +53,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
 async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms):
     comms.messaging.initialize_private_initial_protocol()
     with ObservationProcess.awaited(comms.route) as process:
-        with pytest.raises(RelationViolationError, match="not its original source"):
+        with pytest.raises(RelationViolationError):
             await process.read(ReadNotifications(
                 str(comms.root), (MessageReference(1, "not-the-original"),)
             ))

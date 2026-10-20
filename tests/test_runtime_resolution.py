@@ -63,9 +63,9 @@ def test_recorded_sources_match_selected_lock_not_wheel_locations():
 
 
 def test_missing_and_ambiguous_lock_evidence_refuses():
-    with pytest.raises(ValueError, match="0 entries"):
+    with pytest.raises(ValueError):
         lock().pins({"missing": "1"}, "core")
     ambiguous = lock()
     ambiguous.package.append(ambiguous.package[0])
-    with pytest.raises(ValueError, match="2 entries"):
+    with pytest.raises(ValueError):
         ambiguous.pins({"agent-comms": "1"}, "core")

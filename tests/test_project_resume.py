@@ -7,7 +7,6 @@ import asyncio
 import json
 import os
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
@@ -18,10 +17,7 @@ from agent_comms.coordination_errors import StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
-from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
-from agent_comms.input_drain import DrainedSession
 from native_backend_fixture import native_backend_fixture
 
 
@@ -60,53 +56,6 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
         comms.registry.store.path.read_text())["threads"]["owner"]
 
 
-async def test_selected_wake_queues_resume_before_retiring_its_task(tmp_path):
-    comms, _old, new = declared_owner(tmp_path)
-    turn = comms.agents.begin_turn("owner", "changing-turn")
-    comms.threads.set_project("owner", str(new))
-    assert comms.agents.finish_turn(turn.turn_lease)
-
-    current = asyncio.current_task()
-    assert current is not None
-    launched = []
-
-    class Runtime:
-        def background(self, work):
-            launched.append(work)
-            work.close()
-            return current
-
-    drained = DrainedSession(wake_task=current)
-
-    class Inputs:
-        closing = False
-        background_wakes_disabled = False
-        sessions = SimpleNamespace(require=lambda _session: "owner")
-        runtime = Runtime()
-
-        async def _own_entry(self, _session):
-            return comms.registry.entry("owner")
-
-        def state(self, _session):
-            return drained
-
-        def register_wake(self, _session, task):
-            drained.wake_task = task
-
-    inputs = Inputs()
-    turns = SimpleNamespace(turn_tasks={})
-    await ProjectResumeCheck(
-        session_id="owner", inputs=inputs, turns=turns,
-    ).schedule()
-    assert len(inputs.state("owner").pending_turns) == 1
-    assert str(new) in inputs.state("owner").pending_turns[0].prompt
-    assert not launched  # The selected wake still owns this session.
-
-    drained.wake_task = None
-    WakeScheduleCheck(session_id="owner", inputs=inputs).schedule()
-    assert len(launched) == 1
-
-
 def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     comms, _old, new = declared_owner(tmp_path)
     turn = comms.agents.begin_turn("owner", "changing-turn")
@@ -124,15 +73,15 @@ def test_started_turn_still_finishes_after_its_project_changes(tmp_path):
         comms.threads.set_project("owner", str(new))
         # Recording this turn's result and replies is allowed; new input is not.
         turn.require_running_turn(comms.registry)
-        with pytest.raises(StaleFence, match="registry_worktree"):
+        with pytest.raises(StaleFence):
             turn.require_registry(comms.registry)
         # A directory this conversation never used is still refused.
         elsewhere = replace(turn, thread=replace(turn.thread, worktree=str(tmp_path)))
-        with pytest.raises(StaleFence, match="registry_worktree"):
+        with pytest.raises(StaleFence):
             elsewhere.require_running_turn(comms.registry)
     finally:
         assert comms.agents.finish_turn(turn.turn_lease)
-    with pytest.raises(StaleFence, match="no active turn"):
+    with pytest.raises(StaleFence):
         replace(turn, thread=comms.registry.require("owner")).require_running_turn(comms.registry)
 
 

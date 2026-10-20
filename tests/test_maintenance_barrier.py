@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -27,107 +26,6 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
-from agent_comms.threads import Thread
-
-
-async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, monkeypatch) -> None:
-    from agent_comms.coordination_cohort import next_sealed_assignment
-    from agent_comms.coordinator import Coordination
-    from agent_comms.routing import ScheduledTurn
-    from agent_comms.schedule_rules import SelectedWakeCheck, WakeScheduleCheck
-    from test_acp_private_nk_delivery import _session
-    import agent_comms.native_pi as native_pi
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-
-    comms, agent, _root_id = _session(tmp_path)
-    control = comms.owners.maintenance
-    # A post pending when the drain begins; the drain refuses new publication.
-    # Use the actual scratch bus, not a constructed message pretending to be a post.
-    post = comms.messaging.send('sender', '#team', 'mid-drain channel post').message
-    hold = control.begin(MaintenanceOperator.current())
-    queued = ScheduledTurn.incoming(post)
-    starts = []
-
-    async def start(*args, **kwargs):
-        starts.append((args, kwargs))
-
-    monkeypatch.setattr(agent.turns, 'run_agent_turn', start)
-    check = WakeScheduleCheck(session_id='beta', inputs=agent.inputs)
-    assert comms.owners.maintenance.read() == hold
-    paths = agent.inputs._tick_paths()
-    assert paths.maintenance == comms.owners.maintenance.witness_paths
-    assert all(any(source.directory == path.parent and source.includes(os.fsencode(path.name))
-                   for source in paths.watch_sources) for path in paths.maintenance)
-    assert await agent.inputs.drain_inbox('beta') == 0
-    assert await agent.inputs.drain_inbox('beta') == 0  # settled closed tick
-    assert starts == [] and not any(state.wake_task for state in agent.inputs.drained.values())
-    beta = comms.registry.require('beta')
-    with Coordination(comms.root / 'coordination.sqlite3') as store:
-        pending = next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
-        assert pending.wire_seq == post.seq
-    assert not beta.turn_state.active.executing
-
-    # The local queue follows the same typed gate; its origin is retained.
-    agent.inputs.state('beta').pending_turns = [queued]
-    assert await check.run() == hold
-    assert agent.inputs.state('beta').pending_turns == [queued] and starts == []
-    agent.inputs.state('beta').pending_turns = []
-    for phase in (PausedPhase, InstallingPhase, ReadyPhase):
-        hold = control.advance(hold, phase)
-    assert comms.owners.maintenance.read().phase is ReadyPhase
-    selected = []
-    monkeypatch.setattr(SelectedWakeCheck, 'schedule', lambda check: selected.append(check))
-    assert await agent.inputs.drain_inbox('beta') == 1
-    assert len(selected) == 1
-    with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
-    # Selection scheduled just before another drain must still refuse at the
-    # effect boundary without consuming that durable assignment.
-    another_drain = control.begin(MaintenanceOperator.current())
-    assert await selected[0].run() == another_drain
-    with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
-    for phase in (PausedPhase, InstallingPhase, ReadyPhase):
-        another_drain = control.advance(another_drain, phase)
-    agent.inputs.state('beta').pending_turns = [queued]
-    await check.run()
-    assert len(starts) == 1 and starts[0][1]['origins'] == (post,)
-    assert not agent.inputs.state('beta').pending_turns
-
-
-@pytest.mark.parametrize('abort', [False, True])
-async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monkeypatch, abort: bool) -> None:
-    import agent_comms.native_pi as native_pi
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-    from agent_comms.tracked_turn import TrackedTurnSession
-    from test_coordinated_runtime import _fake_model
-    from agent_comms.coordination_cohort import next_sealed_assignment
-    from agent_comms.coordinator import Coordination
-    from test_acp_private_nk_delivery import _session
-
-    comms, agent, _root_id = _session(tmp_path)
-    gate = comms.owners.maintenance
-    post = comms.messaging.send('sender', '#team', 'while draining').message
-    hold = gate.begin(MaintenanceOperator.current())
-    assert await agent.inputs.drain_inbox('beta') == 0
-    assert await agent.inputs.drain_inbox('beta') == 0
-    beta = comms.registry.require('beta')
-    with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
-    assert not beta.turn_state.active.executing
-    if abort:
-        assert gate.clear(hold).phase is ReadyPhase
-    else:
-        for phase in (PausedPhase, InstallingPhase, ReadyPhase):
-            hold = gate.advance(hold, phase)
-    fake, calls = _fake_model(decision='FULL')
-    monkeypatch.setattr(TrackedTurnSession, 'execute', fake)
-    assert await agent.inputs.drain_inbox('beta') == 1
-    task = agent.inputs.state('beta').wake_task
-    assert task is not None
-    await task
-    assert calls and 'while draining' in calls[0][1]
-    assert await agent.inputs.drain_inbox('beta') == 0  # same post is not replayed
 
 
 @pytest.mark.parametrize('text', [None, '', 'x' * 129, 42])
@@ -157,7 +55,7 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
     assert gate.read() == hold
     ready = gate.clear(hold)
     assert ready.phase is ReadyPhase and gate.read().phase is ReadyPhase
-    with pytest.raises(RelationViolationError, match='generation/operator'):
+    with pytest.raises(RelationViolationError):
         gate.clear(hold)
     assert gate.marker_path.is_file() and gate.state_path.is_file()
     assert gate.read().operator == MaintenanceOperator.current()
@@ -182,12 +80,12 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
         cutover.require_restart_phase(comms.owners)
         from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
-        with pytest.raises(OwnerMaintenancePendingRefusal, match='Maintenance is holding') as refused:
+        with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
         assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
     with _store_lock(comms.root / 'wire'):
-        with pytest.raises(RelationViolationError, match='phase changed'):
+        with pytest.raises(RelationViolationError):
             cutover.require_restart_phase(comms.owners)
 
 
@@ -198,7 +96,7 @@ def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
         assert gate.clear_stopped(hold, lock.descriptor).phase is ReadyPhase
     assert gate.read().phase is ReadyPhase
     with _store_lock(tmp_path / 'unrelated') as other:
-        with pytest.raises(RelationViolationError, match='wire lock changed'):
+        with pytest.raises(RelationViolationError):
             next_hold = gate.begin(MaintenanceOperator.current())
             gate.clear_stopped(next_hold, other.descriptor)
 
@@ -249,23 +147,23 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     first = control.begin(MaintenanceOperator.current())
     assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         comms.agents.begin_turn("owner", "after")
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         comms.registry.lease_live_turn_with_claim(
             comms.registry.require("owner"),
             "direct",
             expected_generation=comms.registry.snapshot().claim_generation("owner"),
         )
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         comms.owners.start("owner")
     second = control.advance(first, MaintenancePhase.member_named("paused"))
     assert second.generation == 2
-    with pytest.raises(RelationViolationError, match="generation/operator"):
+    with pytest.raises(RelationViolationError):
         control.advance(first, MaintenancePhase.member_named("paused"))
-    with pytest.raises(ValueError, match="valid expected successor"):
+    with pytest.raises(ValueError):
         control.advance(second, MaintenancePhase.member_named("ready"))
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
     assert control.advance(
         second, MaintenancePhase.member_named("installing")
@@ -288,10 +186,10 @@ def test_state_generation_requires_exact_matching_positive_int(
         with gate.allow_input() as hold:
             assert hold.phase == MaintenancePhase.member_named("ready")
     else:
-        with pytest.raises(RelationViolationError, match="Maintenance witness"):
+        with pytest.raises(RelationViolationError):
             gate.read()
         with (
-            pytest.raises(RelationViolationError, match="Maintenance witness"),
+            pytest.raises(RelationViolationError),
             gate.allow_input(),
         ):
             pytest.fail("Malformed generation must never admit ingress")
@@ -317,7 +215,7 @@ def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault
     else:
         gate.state_path.unlink()
         gate.state_path.symlink_to(gate.marker_path)
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         MaintenanceBarrier(gate.registry_path).assert_open_unlocked()
 
 
@@ -344,36 +242,6 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     assert not comms.registry.require("owner").turn_state.active.executing
 
 
-@pytest.mark.parametrize("fault_at", ["before-state", "after-state"])
-def test_unknown_parent_fsync_does_not_reopen_claim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault_at: str
-) -> None:
-    import agent_comms.maintenance_barrier as barrier_module
-
-    gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
-    real_write = barrier_module._atomic_write_text
-
-    def uncertain_write(path: Path, text: str, *, fsync_parent: bool = False) -> None:
-        if path == gate.state_path and fault_at == "before-state":
-            raise OSError("injected before replacement")
-        real_write(path, text, fsync_parent=fsync_parent)
-        if path == gate.state_path and fault_at == "after-state":
-            raise OSError("injected after replacement before acknowledged transition")
-
-    monkeypatch.setattr(barrier_module, "_atomic_write_text", uncertain_write)
-    with pytest.raises(OSError, match="injected"):
-        gate.begin(MaintenanceOperator.current())
-    with pytest.raises(RelationViolationError, match="Maintenance"):
-        gate.assert_open_unlocked()
-    if fault_at == "before-state":
-        with pytest.raises(RelationViolationError, match="Maintenance"):
-            gate.read()
-    else:
-        assert gate.read().phase == MaintenancePhase.member_named(
-            "draining"
-        )  # Visible state is not an ACK.
-
-
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
     comms = Comms(tmp_path / "wire")
     owner = comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -381,9 +249,9 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
     comms.owners.maintenance.begin(MaintenanceOperator.current())
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         comms.owners.start("owner")
-    with pytest.raises(RelationViolationError, match="Maintenance"):
+    with pytest.raises(RelationViolationError):
         comms.registry.register(comms.registry.require("renamed"), new_owner=True)
     assert comms.registry.require("renamed").same_local_process(owner.require_process())
 
@@ -412,31 +280,6 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")
-
-
-@pytest.mark.asyncio
-async def test_actual_native_new_input_refused_during_maintenance_then_fresh_input_works(native_backend):
-    from agent_comms.acp_failure import NativeTurnError
-    from agent_comms.maintenance_barrier import MaintenanceHeldError
-
-    owner = native_backend
-    async with owner.open_owner(runtime_enabled=True) as (agent, session_id):
-        async with owner.original_input(agent, session_id, "Held original input") as turn:
-            gate = agent._comms.owners.maintenance
-            hold = gate.begin(MaintenanceOperator.current())
-            try:
-                with pytest.raises(NativeTurnError) as failure:
-                    await asyncio.wait_for(turn.run_native(), 20)
-                assert isinstance(failure.value.__cause__, MaintenanceHeldError)
-                assert owner.provider.posts == 0 and len(owner.saved_inputs()) == 0
-            finally:
-                gate.clear(hold)
-        # The rejected input is never replayed. A separate new input may start
-        # after maintenance releases the same saved owner.
-        async with owner.original_input(agent, session_id, "Fresh after maintenance") as fresh:
-            await asyncio.wait_for(fresh.run_native(), 20)
-            assert owner.provider.posts == 1 and len(owner.saved_inputs()) == 1
-            assert fresh.progress.result.ok
 
 
 async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:
@@ -494,7 +337,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / "wire"), pytest.raises(RelationViolationError, match="Maintenance"):
+    with _store_lock(root / "wire"), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 

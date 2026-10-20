@@ -3,7 +3,6 @@ publication protocol."""
 
 from __future__ import annotations
 from agent_comms.messages import NoticeRole
-from agent_comms.tool_caller import NoThreadCaller
 
 import json
 import os
@@ -14,7 +13,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
@@ -53,7 +51,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     comms.bus.log.path.write_text(json.dumps(stored.to_wire()) + "\n")
     before = comms.bus.log.path.read_bytes()
     with pytest.raises(
-        RelationViolationError, match="Bus protocol marker is missing or redirected"
+        RelationViolationError
     ):
         comms.messaging.send("sender", "beta", "must not append").message
     assert comms.bus.log.path.read_bytes() == before

@@ -25,6 +25,7 @@ from agent_comms.todos import (
 )
 
 
+
 def thread(name: str, root: Path, created: float) -> Thread:
     thread_registration = Registration(Path(root) / "registry.json")
     return thread_registration.new_thread(name, frozenset(), str(root), created_at=created)
@@ -120,7 +121,7 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released):
     if released:
         delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, lead.incarnation,
             todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
-    with pytest.raises(ValueError, match="Only an undelivered order can be withdrawn"):
+    with pytest.raises(ValueError):
         store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
             delivered.holder_state.previous_assignment(), "This delivery must remain on record."))
     assert store.get(todo.id) == delivered

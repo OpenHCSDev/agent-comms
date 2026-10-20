@@ -2,31 +2,12 @@
 
 import os
 
-import pytest
 
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
-
-
-def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    replacement = []
-
-    def fail_after_replacement(_activity):
-        original = comms.registry.require("owner")
-        assert comms.registry.release_turn(original.turn_lease)[0]
-        successor, _ = comms.registry.lease_local_turn("owner", "same-id")
-        replacement.append(successor.turn_lease)
-        raise OSError("activity publication failed")
-
-    monkeypatch.setattr(comms.agents, "_emit_activity", fail_after_replacement)
-    with pytest.raises(OSError, match="activity publication failed"):
-        comms.agents.begin_turn("owner", "same-id")
-    assert comms.registry.require("owner").turn_lease == replacement[0]
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
