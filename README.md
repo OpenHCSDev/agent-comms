@@ -84,7 +84,7 @@ stamp. Rebuild after changing the checked-out commit to refresh the build identi
 git clone --recurse-submodules https://github.com/OpenHCSDev/agent-comms.git
 cd agent-comms
 pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
-PYTHONPATH=src python -m pytest
+python -m pytest
 black src tests
 ruff check src tests
 mypy src
