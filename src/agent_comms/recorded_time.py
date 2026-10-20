@@ -116,6 +116,13 @@ class RecordedEventTime(EventTime):
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
 
+    def at_clock(self, clock: str) -> RecordedEventTime:
+        """The next local HH:MM minute, anchored to this recorded instant."""
+        hour, minute = map(int, clock.split(':'))
+        day = time.localtime(self.at)
+        at = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, hour, minute, 0, 0, 0, -1))
+        return RecordedEventTime(at + 86400 if at < self.at - 60 else at)
+
     def recorded_at(self, label: str) -> float:
         return self.at
 
