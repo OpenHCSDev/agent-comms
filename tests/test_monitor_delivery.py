@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
-    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
+    ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
@@ -18,8 +18,12 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 
 
+def decoded_record(data):
+    return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
+
+
 def notification(line, record_id='notification-record'):
-    return CLAUDE_RECORD.validate_python(dict(
+    return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
@@ -27,7 +31,7 @@ def notification(line, record_id='notification-record'):
 
 
 def attachment_notification(line, record_id='notification-record'):
-    return CLAUDE_RECORD.validate_python(dict(
+    return decoded_record(dict(
         type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         attachment=dict(type='queued_command', commandMode='task-notification',
             origin=dict(kind='task-notification', producer='session-task'),
@@ -95,14 +99,14 @@ def test_frame_cap_and_exact_reconstruction(body, sender):
 
 
 def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
-    record=CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+    record=decoded_record(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
     assert record.updates(ClaudeSession())==()
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
-        CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+        decoded_record(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
             sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
             message=dict(content='<task-notification>')))
     assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
@@ -110,12 +114,12 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
 
 
 def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
-    record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record',
+    record=decoded_record(dict(type='attachment', uuid='foreign-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind='peer'), prompt='Not a Monitor notification')))
     assert isinstance(record.attachment, ForeignAttachment)
     assert record.updates(ClaudeSession())==()
-    queued=CLAUDE_RECORD.validate_python(dict(type='queue-operation', operation='enqueue',
+    queued=decoded_record(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
     assert queued.updates(ClaudeSession())==()
 
@@ -168,25 +172,3 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert {m.reference for m in wired.bus.inbox('fixer')}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
     assert [m.reference for m in wired.bus.inbox('fixer')]==[second.reference]
-
-
-@pytest.mark.asyncio
-async def test_watch_prints_its_monitor_probe_before_waiting(tmp_path, capsys):
-    import asyncio
-    with Binding.open(tmp_path/'state') as db:
-        binding=Binding(str(tmp_path),'viewer','session')
-        Binding.bind(db, binding)
-        bridge=ClaudeBridge(Options(Watch(),None,tmp_path/'state'),binding,db)
-        bridge.PROBE_NOTICE_SECONDS=0.05
-        waiting=asyncio.create_task(bridge.prepare_delivery())
-        await asyncio.sleep(0)
-        # The probe is flushed before the wait, with no later loop pass to flush it.
-        assert capsys.readouterr().out==bridge.probe.model_dump_json()+'\n'
-        assert not waiting.done()
-        async with asyncio.timeout(3):
-            while 'not observed' not in (notice:=capsys.readouterr().out):
-                await asyncio.sleep(0.01)
-        assert notice.startswith('Monitor probe not observed after 0.05s') and not waiting.done()
-        bridge.confirm_probe(bridge.probe)
-        async with asyncio.timeout(3):
-            await waiting
