@@ -1,7 +1,12 @@
+import sys
 from dataclasses import replace
+from pathlib import Path
+
+import pytest
 
 from agent_comms.commander.capacity import Load
-from agent_comms.commander_parity.load import LoadComparison, state_files
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander_parity.load import CommandComparison, LoadComparison, state_files
 from agent_comms.commander_parity.observations import MeasuredOutput
 
 
@@ -23,3 +28,35 @@ def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_
     path.write_text("after")
     after = state_files(tmp_path)
     assert not LoadComparison(observed, before, after).passed
+
+
+@pytest.mark.parametrize(
+    ("program", "expected"),
+    (
+        ("raise SystemExit(7)", "exited with code 7"),
+        ("import time; time.sleep(10)", "timed out"),
+    ),
+)
+def test_failed_real_children_remain_named_unverified(tmp_path, program, expected):
+    """Negative process checks produce no fabricated native measurement or parity pass."""
+
+    class BriefComparison(CommandComparison):
+        timeout = 3
+
+    config = CommanderConfig(
+        commander="reader",
+        root=tmp_path / "bus",
+        cli=Path(sys.executable),
+        state=tmp_path / "state",
+        board=tmp_path / "board.md",
+        narrative=tmp_path / "narrative.md",
+        repos=(),
+        worktrees=tmp_path / "projects",
+        scratch=tmp_path / "scratch",
+        disk=tmp_path,
+    )
+    comparison = BriefComparison.invoke(config, ("-c", program))
+    assert not comparison.passed
+    assert expected in comparison.describe()
+    assert "bound=3s" in comparison.describe()
+    assert LoadComparison.timeout == 30
