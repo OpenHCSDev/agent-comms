@@ -187,6 +187,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
+        entry_start = session_file.stat().st_size
         entries.append(
             {
                 "type": "message",
@@ -242,6 +243,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             NativeContextProof(
                 input_id, session_id, entry_id, generation, digest,
                 1_791_964_800_000 + generation, session_file,
+                session_entry_start=entry_start,
             ),
         )
 

@@ -231,11 +231,7 @@ class ContextManifests(Carry):
         if not path.exists():
             return Carried(0)
         with closing(_connect(path, readonly=True)) as db:
-            old = db.execute(
-                "SELECT 1 FROM sqlite_master WHERE name=?",
-                (RecordedContextManifestSources.declared_name,),
-            ).fetchone()
-            if old is None:
+            if not RecordedContextManifestSources.present(db):
                 return Carried(0)
             count = RecordedContextManifestSources.count(db)
         if not apply:
