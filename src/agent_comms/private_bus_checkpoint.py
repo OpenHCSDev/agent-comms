@@ -22,8 +22,8 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
+from collections.abc import Callable, Iterator, Mapping
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
@@ -37,7 +37,9 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from .message_reference import MessageReference
+from .messages import Message
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -46,8 +48,7 @@ from .turn_context import ContextEntryManifest, RecordedContextManifest
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .wire_log import WireLog
-    from .messages import Message
+    from .wire_log import WireLog, WireSnapshot
     from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -610,31 +611,25 @@ class CheckedRead:
         )
         return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
-    def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
-        """The sealed key index filters absence; an original row proves presence."""
+    @boundary_decoder
+    def keyed_message(self, intent: PublicationIntents) -> Message | None:
+        """The sealed key filters absence; the original delivery proves the message."""
         self.require_current()
-        if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
+        if not ResponseKeys.one(self.connection, key=intent.publication_key):
             return None
-        # The original intent already owns its Message-derived identity. Use
-        # that exact pointer relation; never decode unrelated history while
-        # the publication transaction holds its current source fence. Message
-        # IDs are not assumed unique: the original acknowledgement still proves key,
-        # execution and complete publication content for every candidate.
-        cursor = self.connection.execute(
-            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
-            (intent.expected_message_id,),
-        )
-        for row in DeliverySources.iterate(cursor):
-            original = row.delivery(self.stream, self.witness.root_id)
+        # IDs can repeat across senders; only this publication key selects the answer.
+        for original in DeliverySources.by_message_id(self, intent.expected_message_id):
             acknowledgement = original.acknowledgement
-            if acknowledgement is not None and acknowledgement.publication_key == intent.publication_key:
-                if acknowledgement.execution_id != intent.execution_id:
-                    raise RelationViolationError("Response publication identity conflicts.")
-                if not intent.matches_publication(original.message):
-                    raise RelationViolationError("Response publication intent conflicts.")
-                self.require_current()
-                return original.message
+            if not acknowledgement or acknowledgement.publication_key != intent.publication_key:
+                continue
+            if acknowledgement.execution_id != intent.execution_id:
+                raise RelationViolationError("Response publication identity conflicts.")
+            if not intent.matches_publication(original.message):
+                raise RelationViolationError("Response publication intent conflicts.")
+            self.require_current()
+            return original.message
         raise RelationViolationError("checked response key has no original source row.")
+
 
 
 class CheckpointTable:
@@ -780,7 +775,37 @@ class PublicMessages(CheckpointTable, TypedTable):
     sender: str
     message_id: str
     gap: ClassVar[str] = "seq != previous_seq + 1"
-    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap))
+    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap),
+               Index(("message_id", "seq")))
+
+    @classmethod
+    @boundary_decoder
+    def message_by_id(
+        cls, source: CheckedRead, public: WireSnapshot, message_id: str
+    ) -> Message | None:
+        """Resolve public identities, including imported history without delivery rows."""
+        source.require_current()
+        opened = public.checked(source)
+        rows = cls.read(source.connection.execute(
+            f"SELECT * FROM {cls.declared_name} "
+            "WHERE message_id=? ORDER BY seq DESC LIMIT 1", (message_id,),
+        ))
+        if not rows:
+            source.require_current()
+            return None
+        row = rows[0]
+        delivery = DeliverySources.one(source.connection, seq=row.seq)
+        if delivery:
+            original = delivery.delivery(source.stream, source.witness.root_id)
+            source.require_current()
+            return original.message
+        message = cast(Message, opened.messages_for_references((
+            MessageReference(row.seq, row.message_id),))[0])
+        if message.sender != row.sender:
+            raise RelationViolationError(
+                "Checked public message sender differs from its original.")
+        source.require_current()
+        return message
 
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
@@ -803,7 +828,21 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
     seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
     message_id: str
     sender_lookup: str
-    indexes = (Index(("sender_lookup", "seq")),)
+    indexes = (Index(("sender_lookup", "seq")), Index(("message_id", "seq")))
+
+    @classmethod
+    def by_message_id(
+        cls, source: CheckedRead, message_id: str
+    ) -> Iterator[CommittedDelivery]:
+        """Read each original delivery by its declared message-ID index."""
+        source.require_current()
+        cursor = source.connection.execute(
+            f"SELECT * FROM {cls.declared_name} WHERE message_id=? ORDER BY seq DESC",
+            (message_id,),
+        )
+        for row in cls.iterate(cursor):
+            yield row.delivery(source.stream, source.witness.root_id)
+        source.require_current()
 
     def delivery(self, stream, root_id: str) -> CommittedDelivery:
         """A pointer has no message authority: resolve its original frozen row."""
@@ -1210,6 +1249,22 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
             published.seal_with(FinalSeal.capture(witness, path))
             bus.write_metadata_unlocked(published)
             return witness
+
+    @classmethod
+    def reindex_messages(cls, bus: WireLog) -> PrefixWitness:
+        """Verify the old saved cut before rebuilding its two declared message indexes.
+
+        The caller holds the wire lock and the update owner's original backup.
+        A failed publish leaves a refused seal, never an unproved index.
+        """
+        marker = bus.private_marker_unlocked()
+        path = _path(bus.path)
+        with closing(_connect(path, readonly=True)) as db:
+            witness = cls.read_witness(db)
+        witness.require_marker(marker)
+        witness.require_current_revision(bus.path.stat())
+        marker.seal.check_final(witness, path)
+        return cls._install(bus, marker)
 
     @classmethod
     def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:

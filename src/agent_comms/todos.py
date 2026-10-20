@@ -50,6 +50,7 @@ from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .maintenance_barrier import MaintenanceBarrier
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
+from .private_bus_checkpoint import PublicMessages
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .repo import Repo
 from .repository_name import RepositoryName
@@ -2392,11 +2393,10 @@ class PeerAcceptedVerdict(AcceptedVerdict):
     peer: str
 
     def prepare(self, goals, current):
-        with goals.bus.log.opened_wire_snapshot() as source:
-            message = next((message for message in source.newest_messages()
-                            if message.message_id == self.peer), None)
+        with goals.bus.log.opened_wire_snapshot() as opened, goals.bus.log.checked_read() as source:
+            message = PublicMessages.message_by_id(source, opened, self.peer)
         if message is None:
-            raise ValueError("The peer order message is absent from recent retained history.")
+            raise ValueError("The peer order message does not exist.")
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
                  current.holder not in {mention.name for mention in message.mentions})):

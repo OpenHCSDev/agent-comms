@@ -37,10 +37,12 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from typing import TextIO, cast
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
@@ -56,11 +58,13 @@ from cutover.backup import (
     bus_files,
     transcripts_held,
 )
+from cutover import practice_copy_worker
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
-from install_gate import PracticeCopy, prepare_runtime_home
+from install_gate import PracticeMeasurement, prepare_runtime_home
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
+from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
@@ -248,6 +252,41 @@ publish_active_route(ActiveRoute(root, marker.root_id))
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
+    @contextmanager
+    def practice_copy(
+        self, root: Path, into: Path
+    ) -> Iterator[tuple[Comms, PracticeMeasurement]]:
+        """Let the installed reader create and hold an old-format copy until carry finishes.
+
+        The staged reader cannot open the old sealed index before its carry runs.
+        The installed source holds the copy's lifetime; only the staged source
+        reads it after the carry. No live bus row is rewritten by rehearsal.
+        """
+        child = subprocess.Popen(
+            [str(self.python), str(practice_copy_worker.__file__), str(root), str(into)],
+            cwd=self.checkout, env=self.environment(Path(__file__).resolve().parent),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            # PIPE was supplied for both streams; Popen's optional annotations
+            # do not describe this constructed child.
+            ready = cast(TextIO, child.stdout).readline()
+            if not ready:
+                raise UpgradeRefused(
+                    f"Installed practice copy failed: {cast(TextIO, child.stderr).read()}"
+                )
+            measurement = FieldCodec.decode(PracticeMeasurement, FieldCodec.parse(ready))
+            yield Comms(into), measurement
+        finally:
+            # The staged reader can own background work on the copied bus;
+            # finish it before the installed reader retires the directory.
+            try:
+                drain_candidate_catchup(into)
+            finally:
+                _, error = child.communicate(input="\n", timeout=60)
+                if child.returncode:
+                    raise UpgradeRefused(f"Installed practice copy did not retire: {error}")
+
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         selected = run(self.python, "-c", """import json, sys
@@ -343,13 +382,14 @@ def carry_all(
     return results
 
 
-def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> dict:
+def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
+             installed: Stack) -> dict:
     source = Comms(root)
     parent = source.registry.storage_rule.initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
-        PracticeCopy(source=source, into=Path(scratch) / "bus").open() as (copied, measurement),
+        installed.practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
         prepare_runtime_home(home)
@@ -448,7 +488,7 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.staged, self.revisions, self.installer)
+        return rehearse(self.root, self.staged, self.revisions, self.installer, self.installed)
 
     def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
@@ -479,12 +519,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)
-    running = staged.running_owners(root)
+    running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        staged.owners(root, "stop", running)
+        installed.owners(root, "stop", running)
         with transcripts_held(root):
             before = bus_files(root)
             backup = (StoreBackup if selected else NoBackup).take(

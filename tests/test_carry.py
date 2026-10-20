@@ -466,9 +466,10 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     with pytest.raises(RegistryNeedsConversion):
         RegistryStore.at(root).read()
     chain = CarryChain.at(REPO, "HEAD").steps
-    for step in chain[:-1]:
+    position = next(i for i, step in enumerate(chain)
+                    if step.name == "carry_registry_version")
+    for step in chain[:position]:
         CarryLedger(root).record(step.name)
-    assert chain[-1].name == "carry_registry_version"
 
     before = bus_files(root)
     dry = [run_step("carry_registry_version", root)]
@@ -800,15 +801,16 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
 
     (root / "storage.json").write_text(json.dumps({"scratch_base": str(requested)}))
 
-    def refused_copy(practice):
-        assert practice.source.root == root
-        assert practice.into.parent.parent == requested / "worker"
-        destinations.append(practice.into)
+    def refused_copy(self, source, into):
+        assert source == root
+        assert into.parent.parent == requested / "worker"
+        destinations.append(into)
         raise RuntimeError("copy refused")
 
-    monkeypatch.setattr(upgrade_bus.PracticeCopy, "open", refused_copy)
+    monkeypatch.setattr(upgrade_bus.Stack, "practice_copy", refused_copy)
     with pytest.raises(RuntimeError, match="copy refused"):
-        upgrade_bus.rehearse(root, Stack(tmp_path), None, "worker")
+        stack = Stack(tmp_path)
+        upgrade_bus.rehearse(root, stack, None, "worker", stack)
     assert len(destinations) == 1
     assert list((requested / "worker").iterdir()) == []
     assert root.is_dir()
@@ -816,7 +818,7 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
 
 def rehearsed(stack: Stack, root: Path) -> dict:
     from upgrade_bus import rehearse
-    return rehearse(root, stack, None, "worker")
+    return rehearse(root, stack, None, "worker", stack)
 
 
 def installed_live(stack: Stack, root: Path) -> dict:
