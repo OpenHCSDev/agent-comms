@@ -10,12 +10,13 @@ import shlex
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
-from types import FrameType, FunctionType
 from typing import ClassVar
 from uuid import uuid4
+
+from pydantic import PrivateAttr
 
 from ..change_report import FileLine
 from ..check_root import CheckRoot
@@ -25,15 +26,16 @@ from ..commander.request import RequestAddVerb
 from ..comms import Comms
 from ..field_codec import FieldCodec
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from ..tool_caller import ToolCaller
+from ..tool_caller import ThreadCaller, ToolCaller
 from ..tool_result import ToolResult
 from ..tools import (
     CommsChangeProblemTool, CommsFireTool, CommsOrderTool,
-    CommsProblemCloseTool, CommsTodoCreateTool, ProblemOrdered, ThreadToolRequest, TodoChanged, TodoList,
+    CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, ProblemOrdered,
+    ThreadToolRequest, TodoChanged, TodoList, ToolRequest,
 )
 from ..todos import (
     ApplicationOrderRun, MergedProgress, Moving, NoCommitProgress,
-    OrderProgress, PendingProblemOrder, Todo,
+    PendingProblemOrder, Todo,
 )
 from . import ParityComparison, UnverifiedParity
 
@@ -54,8 +56,29 @@ class LifecycleObservation(ParityComparison):
 
 
 @dataclass(frozen=True)
+class NativeInvocation:
+    request: ToolRequest[ThreadCaller]
+    result: ToolResult
+
+
+class MeasuredCommander(Commander):
+    """Keep actual native returns at the existing command boundary, not frame locals."""
+
+    _invocations: list[NativeInvocation] = PrivateAttr(default_factory=list)
+
+    @property
+    def invocations(self) -> tuple[NativeInvocation, ...]:
+        return tuple(self._invocations)
+
+    def call(self, tool: ToolRequest[ThreadCaller]) -> ToolResult:
+        result = super().call(tool)
+        self._invocations.append(NativeInvocation(tool, result))
+        return result
+
+
+@dataclass(frozen=True)
 class LifecycleRun:
-    commander: Commander
+    commander: MeasuredCommander
     worker: str
     decisions: Path
     document: Path
@@ -73,7 +96,7 @@ class LifecycleRun:
         directory = worker.storage_roots.scratch / "commander-parity" / uuid4().hex
         with CheckRoot(source, (config.commander, worker.name), directory).open() as copied:
             root = copied.root
-            commander = Commander(
+            commander = MeasuredCommander(
                 commander=config.commander, root=root, cli=config.cli,
                 state=root / "commander-state", board=root / "board.md",
                 narrative=root / "narrative.md", repos=config.repos,
@@ -139,33 +162,16 @@ class LifecycleCase(ABC):
     @classmethod
     def read(cls) -> ParityComparison:
         owners = (cls.native_owner, *cls.additional_owners)
-        codes = set()
-        for owner in owners:
-            function = owner.apply
-            if not isinstance(function, FunctionType):
-                raise TypeError("A native tool must declare its executable apply method")
-            codes.add(function.__code__)
-        native: list[ToolResult] = []
-
-        def observe(frame: FrameType, event: str, value: object) -> None:
-            if event == "return" and frame.f_code in codes:
-                request = frame.f_locals["self"]
-                if type(request) in owners and isinstance(value, ToolResult):
-                    native.append(value)
-
         with LifecycleRun.open() as run:
-            previous = sys.getprofile()
             output = io.StringIO()
-            sys.setprofile(observe)
-            try:
-                with contextlib.redirect_stdout(output):
-                    rows = cls.exercise(run)
-            finally:
-                sys.setprofile(previous)
+            with contextlib.redirect_stdout(output):
+                rows = cls.exercise(run)
+            native = tuple(invocation.result for invocation in run.commander.invocations
+                           if type(invocation.request) in owners)
             text = output.getvalue()
             return LifecycleObservation(
                 ", ".join(f"{owner.__module__}.{owner.__qualname__}" for owner in owners), len(native),
-                cls.checks(run, rows, tuple(native), text), text)
+                cls.checks(run, rows, native, text), text)
 
 
 class CreateProblemCase(LifecycleCase):
@@ -235,6 +241,16 @@ class InstalledEvidenceCase(LifecycleCase):
                 ("closed in native store", not rows[-1].state.open),
                 ("actual artifact exists", run.artifact.is_file()),
                 ("current close printed", f"{rows[-1].id} closed" in output))
+
+
+class BuildBoundProofCase(InstalledEvidenceCase):
+    @classmethod
+    def read(cls) -> ParityComparison:
+        closing = super().read()
+        return UnverifiedParity(
+            "Missing native owner: a build-bound application-run record linking the "
+            "runtime and Core/Toad revisions to closing evidence. The actual close "
+            "owner currently accepts a bare artifact path. " + closing.describe())
 
 
 class StrikeLimitCase(LifecycleCase):
@@ -315,24 +331,17 @@ class ProgressComparison(ParityComparison):
 
 
 def verify_order_progress() -> ParityComparison:
-    context = Commander.read(CommanderConfig.path())
-    observed: dict[str, str] = {}
-    merged: list[bool] = []
-
-    def observe(frame: FrameType, event: str, value: object) -> None:
-        if event == "return" and frame.f_code is OrderProgress.read.__func__.__code__:
-            todo = frame.f_locals["todo"]
-            if not isinstance(todo, Todo) or not isinstance(value, OrderProgress):
-                raise TypeError("The native progress reader returned an unexpected record")
-            observed[todo.id] = value.line
-            if isinstance(value, MergedProgress):
-                merged.append(not value.stalled(todo.order.checked().at.recorded_at("An order"), time.time()))
-
-    previous = sys.getprofile()
-    sys.setprofile(observe)
-    try:
-        current = {key: value.line for key, value in context.progress().items()}
-    finally:
-        sys.setprofile(previous)
+    context = MeasuredCommander.read(CommanderConfig.path())
+    current = {key: value.line for key, value in context.progress().items()}
+    results = tuple(invocation.result for invocation in context.invocations
+                    if type(invocation.request) is CommsTodoListTool)
+    if len(results) != 1 or not isinstance(results[0], TodoList):
+        return UnverifiedParity("Current progress did not return one native TodoList measurement")
+    result = results[0]
+    observed = {key: value.line for key, value in result.progress.items()}
+    merged = tuple(not result.progress[todo.id].stalled(
+        todo.order.checked().at.recorded_at("An order"), time.time())
+        for todo in result.todos if todo.id in result.progress
+        and isinstance(result.progress[todo.id], MergedProgress))
     return ProgressComparison(current, observed, NoCommitProgress.seconds, Moving.seconds,
-                              tuple(merged), OrderProgressMutationCase.read())
+                              merged, OrderProgressMutationCase.read())

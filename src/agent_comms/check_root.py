@@ -15,6 +15,7 @@ from .attempt_recovery import RecoveryMonitorCapability
 from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms
+from .candidate_maintenance import drain_candidate_catchup
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
 from .launch_runtime import RestartEnvironment, ThreadLaunch
@@ -74,6 +75,7 @@ class CheckRoot:
                 ):
                     copied.owners.stop(thread.name)
         finally:
+            drain_candidate_catchup(root)
             RecoveryMonitorCapability.retire_check_root(root)
 
     def _populate(self, copied: Comms) -> None:

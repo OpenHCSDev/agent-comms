@@ -13,7 +13,7 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
-from .lifecycle import AssignOrderCase, CreateProblemCase, InstalledEvidenceCase, StrikeLimitCase, verify_order_progress
+from .lifecycle import AssignOrderCase, BuildBoundProofCase, CreateProblemCase, InstalledEvidenceCase, StrikeLimitCase, verify_order_progress
 
 
 class CreateProblemParityRow(ParityRow):
@@ -294,6 +294,10 @@ class BuildBoundProofParityRow(ParityRow):
     current = "none; screenshots and logs are bare paths"
     native = "Build run records runtime and Core/Toad revisions; close requires delivered commit"
     phases = (RecordPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return BuildBoundProofCase.read()
 
 
 class DeletionTargetParityRow(ParityRow):
