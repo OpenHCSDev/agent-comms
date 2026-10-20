@@ -29,7 +29,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence, StaleRevision
 from agent_comms.coordinator import Coordination
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
@@ -131,7 +131,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
 
 
 @pytest.mark.parametrize("managed", [False, True])
-async def test_private_owner_rename_migrates_generation_before_canonical_selected_send(
+async def test_private_owner_rename_preserves_generation_before_canonical_selected_send(
     tmp_path, monkeypatch, managed
 ):
     comms, agent, _ = _session(tmp_path)
@@ -147,7 +147,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert renamed.previous == "beta" and renamed.current == "gamma"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participants.get(lookup)
-    assert after.owner_thread == "gamma" and after.participant_generation == 2
+    assert after.owner_thread == "gamma" and after.participant_generation == 1
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 
@@ -198,6 +198,45 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
     await reply_turn_finished(agent, "beta")
     assert len(calls) == 1 and "new canonical" in calls[0][1]
     assert await agent.inputs.drain_inbox("beta") == 0
+
+
+@pytest.mark.parametrize("managed", [False, True])
+def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
+    from agent_comms.attempt_start import AttemptStart
+    from agent_comms.attempt_states import SucceededAttempt
+    from agent_comms.coordination_tables.executions import ExecutionOrigin
+    from agent_comms.owner_fence import prepare_fence_token
+    from test_coordination_store import final_evidence
+
+    comms, _ = _private_comms(tmp_path)
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        before = store.participants.get(lookup)
+        store.executions.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.executions.mark_pending("rename-active", expected_revision=1)
+        fence = store.attempts.start(AttemptStart(
+            "rename-active", 1, "beta", 1, prepare_fence_token(),
+            expected_execution_revision=2, expected_pointer_revision=0,
+        )).value.fence
+        active = store.participants.get(lookup)
+    if managed:
+        comms.threads.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
+    else:
+        comms.threads._rename_thread("beta", "gamma")
+    assert comms.registry.require("beta").name == "gamma"
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        after = store.participants.get(lookup)
+        assert after.owner_thread == "gamma"
+        assert after.participant_generation == before.participant_generation
+        assert after.pointer == active.pointer
+        with pytest.raises(StaleRevision):
+            store.participants.rename_owner(lookup, "wrong", expected_generation=2)
+        fence = final_evidence(store, fence)
+        settled = store.attempts.settle_nonpublication(
+            fence, expected_pointer_revision=1, outcome=SucceededAttempt(),
+        ).value
+        assert isinstance(settled.attempt.lifecycle, SucceededAttempt)
+        assert not settled.is_current
 
 
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
@@ -253,7 +292,7 @@ async def test_headless_owner_start_launches_no_catalog_discovery(tmp_path, monk
 
 
 @pytest.mark.asyncio
-async def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
+async def test_private_rename_compensates_registry_failure_without_advancing_generation(
     tmp_path, monkeypatch
 ):
     comms, _, root_id = _session(tmp_path)
@@ -270,7 +309,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert comms.registry.require("beta").name == "beta"
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         person = store.participants.get(lookup)
-    assert person.owner_thread == "beta" and person.participant_generation == 3
+    assert person.owner_thread == "beta" and person.participant_generation == 1
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send("sender", "beta", "not published after uncertain rename").message
@@ -306,7 +345,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     def fail_before_sql(*args, **kwargs):
         raise OSError("synthetic SQL rename CAS outage")
 
-    monkeypatch.setattr(ParticipantStore, "advance_generation", fail_before_sql)
+    monkeypatch.setattr(ParticipantStore, "rename_owner", fail_before_sql)
     with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
         comms.threads._rename_thread("beta", "gamma")
     assert (comms.root / ".private-owner-rename.pending").is_file()
