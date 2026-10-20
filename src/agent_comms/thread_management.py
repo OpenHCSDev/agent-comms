@@ -595,7 +595,7 @@ class PrivateOwnerRename(ThreadRename):
                             person.lookup, before.name, expected_generation=generation)
                 except BaseException as compensation:
                     # Ambiguous dual-store failure: the inspection needs both failures.
-                    uncertain.add_note(f"Compensating owner rename failed: {compensation!r}")
+                    raise uncertain from compensation
                 raise uncertain from error
 
     def applied(self, title: str | None) -> RenameThreadResult:
