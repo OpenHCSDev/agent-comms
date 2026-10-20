@@ -10,7 +10,9 @@ from .cli_result import CliResult
 from .coordination_database import CoordinationStore
 from .declared_family import UnknownFamilyMember
 from .field_codec import FieldCodec
-from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedStore, TypedTable
+from .typed_table import (
+    SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedStore, TypedTable,
+)
 
 
 @dataclass(frozen=True)
@@ -23,13 +25,17 @@ class StoreSchemaReport:
     path: str
     differences: tuple[SQLiteSchemaDifference, ...]
     undeclared_tables: tuple[str, ...]
-    index_names: tuple[str, ...]
+    index_sql: dict[str, str]
+    non_index_names: tuple[str, ...]
 
     @classmethod
-    def for_store(cls, db: sqlite3.Connection, path: Path, store: type[TypedStore]) -> StoreSchemaReport:
+    def for_store(
+        cls, db: sqlite3.Connection, path: Path, store: type[TypedStore],
+    ) -> StoreSchemaReport:
         """A physical store declares its complete schema, including missing tables."""
-        return cls(str(path), SQLiteSchemaObject.differences(
-            store._schema(db), store.declared_schema()), (), tuple(store.declared_indexes()))
+        schema, indexes = store.declared_schema(), store.declared_indexes()
+        return cls(str(path), SQLiteSchemaObject.differences(store._schema(db), schema), (),
+                   indexes, tuple(sorted(schema.keys() - indexes.keys())))
 
     @classmethod
     def scan(cls, comms) -> tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]:
@@ -66,7 +72,7 @@ class StoreSchemaReport:
         tables = _StoredTable.read(db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
         expected = {}
-        indexes = set()
+        indexes: dict[str, str] = {}
         compared = set()
         unknown = []
         for table in tables:
@@ -85,7 +91,8 @@ class StoreSchemaReport:
                 (table.name,))))
         changes = SQLiteSchemaObject.differences(
             [item for item in actual if item.name in compared], expected)
-        return cls(str(path), changes, tuple(sorted(unknown)), tuple(sorted(indexes)))
+        return cls(str(path), changes, tuple(sorted(unknown)), indexes,
+                   tuple(sorted(expected.keys() - indexes.keys())))
 
 
 @dataclass(frozen=True)

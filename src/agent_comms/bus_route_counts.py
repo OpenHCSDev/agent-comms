@@ -20,11 +20,11 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .locked_store import RootFile
 from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
-from .locked_store import RootFile
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
 
 if TYPE_CHECKING:
