@@ -148,8 +148,8 @@ class RootFile:
         return frozenset((path, store_lock_path(path)))
 
     @classmethod
-    def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared: set[Path] = set()
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
+        """Each declaring owner and its directory, once across composed capabilities."""
         pending: list[type[RootFile]] = [cls]
         visited: set[type[RootFile]] = set()
         while pending:
@@ -159,8 +159,14 @@ class RootFile:
             visited.add(family)
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                declared.update(family.files_in(root / family.root_directory))
-        return frozenset(declared)
+                yield family, root / family.root_directory
+
+    @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            path for owner, directory in cls.declarations_in(root)
+            for path in owner.files_in(directory)
+        )
 
 
 class FileStore(RootFile, ABC):
@@ -196,7 +202,19 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
-class RegistryFile(DurableFile):
+class WireWakeFile(RootFile):
+    """Commits to this primary file wake idle wire readers, unlike lock-file churn."""
+
+    __slots__ = ()
+
+    @classmethod
+    def watched_paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            owner.path_in(directory) for owner, directory in cls.declarations_in(root)
+        )
+
+
+class RegistryFile(DurableFile, WireWakeFile):
     """Registry location usable by record types without importing their decoder."""
 
     __slots__ = ()

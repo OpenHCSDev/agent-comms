@@ -50,7 +50,7 @@ from .errors import (
     StoredHistoryUnreadable,
 )
 from .field_codec import FieldCodec, MalformedRecord
-from .locked_store import DurableFile
+from .locked_store import DurableFile, WireWakeFile
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead, RecordedContextManifestSources
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
@@ -557,7 +557,7 @@ class CheckedWireStoreLock(WireStoreLock):
             yield source
 
 
-class WireLog(DurableFile, StoreLockOwner):
+class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
     filename = "bus.jsonl"
     lock_type = WireStoreLock
     page_index_type = BusPageIndex

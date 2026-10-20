@@ -32,7 +32,7 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .locked_store import DurableFile
+from .locked_store import DurableFile, WireWakeFile
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ class PublicRegistry(RegistryPrivacy):
         """A public bus has no coordinator identities for restored threads."""
 
 
-class PrivateRegistryGuard(DurableFile, RegistryPrivacy):
+class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     filename = ".registry-owner-guard"
 
     def __init__(self, registry_path: Path, wire_root_id: str):

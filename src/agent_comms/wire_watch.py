@@ -18,8 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .goal_waits import GoalWaits
-from .locked_store import RegistryFile
+from .locked_store import WireWakeFile
 from .private_path import FileRevision
 
 _IN_MODIFY = 0x00000002
@@ -52,12 +51,8 @@ class WatchSource(ABC):
 
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
-        from .private_registry_guard import PrivateRegistryGuard
-        from .wire_log import WireLog
-
         return ReplacedWatchSource(root, frozenset(
-            owner.filename.encode()
-            for owner in (WireLog, RegistryFile, PrivateRegistryGuard, GoalWaits)
+            os.fsencode(path.name) for path in WireWakeFile.watched_paths_in(root)
         ))
 
     @classmethod

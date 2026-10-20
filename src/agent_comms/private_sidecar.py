@@ -29,6 +29,7 @@ from typing import Literal
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 
+from .private_path import ObservedPath
 from .store_files import StoreOwner
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 
@@ -139,7 +140,11 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
-        if directory.stat(StoreOwner.snapshot_intent(path).name) is not None:
+        intent = ObservedPath.at(
+            Path(StoreOwner.snapshot_intent(path).name),
+            dir_fd=directory.fd, follow_symlinks=False,
+        )
+        if not intent.is_absent():
             raise SidecarCommitUnknown("Private sidecar has an unresolved commit intent; no retry.")
         yield directory
         directory.unchanged(lock_name, os.fstat(lock))

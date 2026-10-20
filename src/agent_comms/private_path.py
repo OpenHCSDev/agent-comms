@@ -10,12 +10,12 @@ import os
 import stat
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import BinaryIO, ClassVar
-from collections.abc import Iterator
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -46,9 +46,11 @@ class FileIdentity:
 
 class ObservedPath(ABC):
     @staticmethod
-    def at(path: Path) -> ObservedPath:
+    def at(
+        path: Path, *, dir_fd: int | None = None, follow_symlinks: bool = True
+    ) -> ObservedPath:
         try:
-            observed = path.stat()
+            observed = os.stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
         except FileNotFoundError:
             return AbsentPath()
         return PresentPath(FileIdentity.from_stat(observed))
@@ -56,7 +58,7 @@ class ObservedPath(ABC):
     @abstractmethod
     def same_file(self, identity: FileIdentity) -> bool: ...
 
-    def shows_no_bus(self) -> bool:
+    def is_absent(self) -> bool:
         return False
 
 
@@ -65,7 +67,7 @@ class AbsentPath(ObservedPath):
     def same_file(self, identity: FileIdentity) -> bool:
         return False
 
-    def shows_no_bus(self) -> bool:
+    def is_absent(self) -> bool:
         return True
 
 

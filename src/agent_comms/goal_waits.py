@@ -10,17 +10,24 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
+from .goal_presentation import (
+    GoalExecution,
+    GoalExecutionState,
+    GoalWaitTarget,
+    IdleGoalExecution,
+    ThreadGoalExecution,
+)
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
-from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
+from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .typed_table import Column, ForeignKey, Index, TypedStore, TypedTable
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
 
 
@@ -250,7 +257,7 @@ class GoalWaitTargetRow(TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, TypedStore):
+class GoalWaits(ThreadOwnedState, TypedStore, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)
