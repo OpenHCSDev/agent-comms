@@ -18,6 +18,7 @@ from .transcript_events import TurnDigest
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .todos import Todo
 
@@ -122,13 +123,25 @@ class OrderRead[Result](TranscriptRead[Result]):
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        actor = comms.registry.require(commander).incarnation
-        for todo in comms.goals.todos.held_for_commander(actor):
+        snapshot = comms.registry.snapshot()
+        actor = snapshot.require(commander).incarnation
+        yield from cls.for_orders(
+            comms.root, snapshot, comms.goals.todos.held_for_commander(actor)
+        )
+
+    @classmethod
+    def for_orders(
+        cls, root: Path, snapshot: RegistrySnapshot, todos: Iterable[Todo]
+    ) -> Iterator[Self]:
+        """Read these orders against their captured roster, without reopening the registry."""
+        for todo in todos:
             assignment = todo.held()
-            holder = comms.registry.require(assignment.owner)
+            holder = snapshot.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
                 raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
-            yield cls(comms.root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo)
+            yield cls(
+                root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo
+            )
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         judged = {verdict.tool_call_id for verdict in self.todo.verdicts}

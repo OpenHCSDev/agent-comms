@@ -5,39 +5,13 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from ..commander.config import CommanderConfig
 from ..field_codec import FieldCodec
 from ..private_path import FileRevision
 from . import ParityComparison, UnverifiedParity
-
-# Profile the real return, never replace the measurement, command, bus or reply.
-# Comparing independent reads of a running fleet confuses new edits with drift.
-OBSERVE_CAPACITY = """
-import contextlib, io, json, sys
-import agent_comms.commander.capacity as capacity
-from agent_comms.commander.cli import main
-measured = []
-contexts = []
-def observe(frame, event, value):
-    if event == 'return' and frame.f_code is capacity.Load.of.__func__.__code__:
-        measured.append(value)
-    if event == 'call' and frame.f_code is capacity.main.__code__:
-        contexts.append(frame.f_locals['ctx'])
-output = io.StringIO()
-sys.setprofile(observe)
-try:
-    with contextlib.redirect_stdout(output):
-        main()
-finally:
-    sys.setprofile(None)
-if len(measured) != 1 or len(contexts) != 1:
-    raise ValueError('Capacity must use exactly one native measurement and selected context')
-config = contexts[0]
-print(json.dumps(dict(current=output.getvalue(), native=str(measured[0]),
-                      source=capacity.__file__, root=str(config.root),
-                      commander=config.commander)))
-"""
+from .observations import CapacityObservation, MeasuredOutput
 
 
 def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
@@ -49,16 +23,9 @@ def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
 
 
 @dataclass(frozen=True)
-class MeasuredOutput:
-    current: str
-    native: str
-    source: str
-    root: str
-    commander: str
-
-
-@dataclass(frozen=True)
-class LoadComparison(ParityComparison):
+class CommandComparison(ParityComparison):
+    arguments: ClassVar[tuple[str, ...]]
+    timeout: ClassVar[int] = 30
     observation: MeasuredOutput
     state_before: tuple[tuple[str, FileRevision], ...]
     state_after: tuple[tuple[str, FileRevision], ...]
@@ -80,16 +47,25 @@ class LoadComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> ParityComparison:
-        config = CommanderConfig.read(CommanderConfig.path())
+        return cls.invoke(CommanderConfig.read(CommanderConfig.path()), cls.arguments)
+
+    @classmethod
+    def invoke(cls, config: CommanderConfig, arguments: tuple[str, ...]) -> ParityComparison:
+        """Bind one native invocation and all its observations to the selected configuration."""
         before = state_files(config.state)
         # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
         # HOME and the environment stay unchanged; the actual CLI main runs.
-        current = subprocess.run(
-            (str(config.cli.parent / "python"), "-I", "-c", OBSERVE_CAPACITY, "capacity"),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        try:
+            current = subprocess.run(
+                (str(config.cli.parent / "python"), "-I", *arguments),
+                capture_output=True,
+                text=True,
+                timeout=cls.timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            return UnverifiedParity(
+                f"{cls.__name__}: configured native owner timed out after {error.timeout} seconds"
+            )
         if current.returncode:
             return UnverifiedParity(current.stderr)
         observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
@@ -103,3 +79,7 @@ class LoadComparison(ParityComparison):
                 "The installed command used a different configuration or source"
             )
         return cls(observed, before, state_files(config.state))
+
+
+class LoadComparison(CommandComparison):
+    arguments = CapacityObservation.arguments()
