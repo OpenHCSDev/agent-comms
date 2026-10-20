@@ -25,6 +25,7 @@ from ..todos import (
     CheckedCommitDelivery,
     CommitDelivery,
     DeliveredProblemOrder,
+    FailedCheckStrike,
     FamilyDeletion,
     MechanicalOrderRun,
     Todo,
@@ -136,6 +137,10 @@ class DeletionPath(ABC):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             before = cls.send(run, document)
+        goal_threads = (run.commander.commander, run.worker)
+        before_goals = tuple(
+            run.commander.comms.registry.require(name).goal for name in goal_threads
+        )
         partial = cls.commit(
             repository,
             family + "def decisions():\n    return []\n",
@@ -146,6 +151,22 @@ class DeletionPath(ABC):
         )
         after_refusal = run.commander.comms.goals.todos.get(before.id)
         remaining = count.recorded(partial, str(repository))
+        after_refusal_goals = tuple(
+            run.commander.comms.registry.require(name).goal for name in goal_threads
+        )
+        failed_check = False
+        strike_only = False
+        match after_refusal.strikes[len(before.strikes) :]:
+            case (FailedCheckStrike() as strike,):
+                failed_check = strike == FailedCheckStrike.make(
+                    before, strike.at.recorded_at("The failed delivery"), strike.reason
+                ) and strike.reason.startswith(
+                    f"reported done at {partial} but its order check failed: "
+                    f"The order check is 1 away from {count.result}."
+                )
+                strike_only = after_refusal == replace(
+                    before, strikes=(*before.strikes, strike), revision=before.revision + 1
+                )
         complete = cls.commit(
             repository,
             "def decisions():\n    return []\n",
@@ -171,7 +192,18 @@ class DeletionPath(ABC):
                 bool(remaining) and count.result.distance(remaining[0]) == CountPrinted(1),
             ),
             ("nonzero delivery refused", refused.outcome == ExitedOutcome(1)),
-            ("refusal preserved pending order", before == after_refusal and after_refusal.pending),
+            (
+                "refusal preserved pending order and assignment",
+                after_refusal.order == before.order
+                and after_refusal.assignment == before.assignment
+                and after_refusal.pending,
+            ),
+            (
+                "refusal preserved order and thread goals",
+                after_refusal.goal == before.goal and after_refusal_goals == before_goals,
+            ),
+            ("partial delivery recorded its precise failed-check strike", failed_check),
+            ("refusal changed only the failed-check strike and revision", strike_only),
             (
                 "zero count checked on delivered commit",
                 bool(zero) and count.result.distance(zero[0]) == CountPrinted(0),
