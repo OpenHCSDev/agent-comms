@@ -2,9 +2,10 @@
 
 Run only after native owners have stopped. The existing checked prefix proves the
 old bus before the current source rebuilds the index and publishes its new seal.
-The source revision must include the Message codec for original info-kind claim
-envelopes: rebuilding reads that committed history too, not only recent notices.
 """
+
+# This step's source revision must include the Message codec for original info-kind
+# claim envelopes: rebuilding reads committed history, not only recent notices.
 
 from __future__ import annotations
 
