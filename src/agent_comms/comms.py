@@ -12,6 +12,7 @@ from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
+from .context_store import ContextStore
 from .goal_management import Goals
 from .history_views import HistoryViews
 from .maintenance_barrier import MaintenanceBarrier
@@ -45,8 +46,6 @@ class Comms:
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
-        from .context_store import ContextStore
-
         self.contexts = ContextStore(self.root)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus, self.goals, self.messaging)

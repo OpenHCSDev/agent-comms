@@ -119,9 +119,39 @@ An existing TypedStore can own append-only context/entry/segment-version rows
 and stable logical row pointers. That avoids inventing another WireLog with
 its message delivery seals. Unchanged segment versions can share one stored
 row; context appends and their entry/version references commit together. This
-is a proposed implementation direction, not implemented or verified behavior.
+was the proposed direction at the original census.
 
-This checkpoint is the census, not a conversion or an installation. No live bus,
-session or UNKNOWN input was changed. The order's 15.7 GB / 95% numbers have not
-been independently remeasured except for the exact bus size above. Conversion bytes and affected live-path
-acceptance remain unfinished.
+At that census, no conversion or installation had run. The order's 95% figure
+was not independently measured; the exact bus size above was measured.
+
+## Implementation and failed practice run, October 20
+
+Core draft #2234 and paired Toad draft #1098 now use ContextStore. Native recording,
+CLI inspection and Toad requests no longer read context observations from WireLog.
+ContextRequest owns ordered request identities and segment-version references;
+ContextEntry preserves the first journal-entry value. The migration decoder lives
+only in tools/cutover/carry_context_store.py. Direct segment keyframes replace
+recursive request-dependency traversal.
+
+I made an unsafe practice runner: it streamed from the live bus and held its
+read-only SQL transaction open during conversion. That blocked desktop sends
+about 11:00–11:05. Claude-code killed the process; its recorded exit was 143.
+Read-only did not mean harmless. No installation or successful conversion resulted.
+
+The live-copy method and its driver are deleted. The converter accepts only the
+normal Carry-selected root; practice must select an already copied bus. It closes
+the original SQL connection immediately after the SQL backup, before processing
+context records. The generated-data check explicitly verifies that connection is
+closed, preserves nonempty claim tables and an UNKNOWN reservation, and checks
+that the reservation still blocks a new human message. The standing instruction
+is updated in .pi/APPEND_SYSTEM.md. After checking actual process users, I removed
+all three failed output directories (about 1.7 GB) and kept the short logs.
+
+The generated-data and CLI batch passes 21 tests on the rebased branch. The
+context store assigns its own logical IDs; the converter cannot choose IDs from
+old byte positions. AST enumeration covers 407 src modules and 59 tools modules,
+with no parse omissions; lexical attribute matches are not receiver-identity proof.
+The source debt check failed; its report remains in owned scratch. Full saved-bus
+conversion size, old-test API migration, debt cleanup and actual Toad history/DM
+acceptance remain unfinished. These drafts are not ready to install.
+There is no valid bus-bytes-after-conversion result.

@@ -11,7 +11,8 @@ from agent_comms.turn_context import ContextManifest, RecordedContextManifest, R
 from agent_comms.pi_commands import Prompt
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
-from agent_comms.wire_record import WireRecord, AuthoredObservationWireRecord, RecordedContextManifestWireObservation
+from agent_comms.wire_record import WireRecord
+from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
@@ -40,15 +41,28 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
         entered.set()
         return comms.bus.awareness_segments(owner, (), blocking=True)
 
-    with ThreadPoolExecutor(max_workers=1) as worker:
+    locked, release = Event(), Event()
+
+    def hold_writer():
         with comms.bus.log.locked():
-            # Ordinary input still omits optional awareness immediately.
+            locked.set()
+            assert release.wait(2)
+
+    with ThreadPoolExecutor(max_workers=2) as worker:
+        writer = worker.submit(hold_writer)
+        assert locked.wait(1)
+        try:
+            # A different thread owns the writer: this is real contention,
+            # unlike reentering this thread's own source lease.
             omitted = comms.bus.awareness_segments(owner, ())
             assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
             pending = worker.submit(read)
             assert entered.wait(1)
             with pytest.raises(TimeoutError):
                 pending.result(timeout=.05)
+        finally:
+            release.set()
+        writer.result(timeout=2)
         assert pending.result(timeout=2) == original
     inspection = TurnContext.for_inspection(comms, owner)
     assert original[0] in inspection.segments
@@ -65,12 +79,11 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
         activity=clocks.channels
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
     awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
-    comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
-    assert comms.bus.log.path.read_bytes().startswith(raw)
-    assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
+    comms.contexts.record(manifest(comms.registry.require('Alice')))
+    assert comms.bus.log.path.read_bytes() == raw
     assert comms.bus.log.latest_sequence()==first.seq
     assert len(read_history(comms))==1
-    assert _page(comms,lookup)[0].offset>prior[0].offset
+    assert _page(comms,lookup)[0].offset==prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
     with comms.bus.opened_activity() as clocks:
         assert clocks.channels==activity
@@ -81,7 +94,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
         assert list(messages)==[first]
     second=publish_initial(comms, 'sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
-    comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
+    comms.contexts.record(manifest(comms.registry.require('Alice'),2))
     reopened=Comms(comms.root)
     assert read_history(reopened)==[first,second]
     assert len(_page(reopened,lookup)[1])==2
@@ -98,11 +111,14 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     comms,root_id=_root(tmp_path)
     recorded, _entries = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
-    row=AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded))
-    assert WireRecord.from_wire(row.to_wire(),root_id).messages()==()
-    assert row.sequence_after(39)==39
+    row = {'observation': {'kind': 'recorded_context_manifest',
+                           'manifest': FieldCodec.encode(recorded)}}
+    # Only the one-time conversion accepts the old context envelope. Runtime
+    # message readers never silently accept a second storage location.
     with pytest.raises(ValueError):
-        WireRecord.from_wire({**row.to_wire(),'seq':40},root_id)
+        WireRecord.from_wire(row, root_id)
+    with pytest.raises(ValueError):
+        WireRecord.from_wire({**row, 'seq': 40}, root_id)
 
 
 def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):

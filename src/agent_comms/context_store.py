@@ -1,15 +1,18 @@
 """Append-only original turn contexts, independent of message delivery bytes."""
+
 from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
-from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
+from .errors import RelationViolationError, StoredHistoryUnreadable
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
@@ -25,6 +28,9 @@ from .typed_table import Column, Index, TypedStore, TypedTable
 @dataclass(frozen=True)
 class ContextStoreIdentity:
     value: str
+
+    def __post_init__(self):
+        Id128Text.from_text(self.value)
 
 
 @dataclass(frozen=True)
@@ -47,8 +53,12 @@ class ContextEntry(TypedTable):
 
     @classmethod
     def original(cls, db, reference: ContextEntryReference) -> SegmentManifest:
-        row = cls.one(db, session_id=reference.identity.session_id,
-                      session_file=reference.identity.session_file, entry_id=reference.entry_id)
+        row = cls.one(
+            db,
+            session_id=reference.identity.session_id,
+            session_file=reference.identity.session_file,
+            entry_id=reference.entry_id,
+        )
         if row is None:
             raise RelationViolationError("Recorded context entry is missing")
         return row.manifest
@@ -70,33 +80,45 @@ class ContextSegmentVersion(TypedTable):
             if row.segment != segment:
                 raise RelationViolationError("Context segment version hash collision")
             return row.id
-        return cls.insert_values(db, digest=digest, segment=segment).lastrowid
+        return cast(int, cls.insert_values(db, digest=digest, segment=segment).lastrowid)
 
 
 @dataclass(frozen=True)
 class ContextRequest(TypedTable):
     id: int = field(metadata={"sql": Column(primary_key=True, auto_increment=True)})
     identity: RecordedContextIdentity
-    thread_name: str = field(metadata={"sql": Column(generated="json_extract(identity,'$.thread.name')")})
-    thread_birth: float = field(metadata={"sql": Column(generated="json_extract(identity,'$.thread.created_at')")})
+    thread_name: str = field(
+        metadata={"sql": Column(generated="json_extract(identity,'$.thread.name')")}
+    )
+    thread_birth: float = field(
+        metadata={"sql": Column(generated="json_extract(identity,'$.thread.created_at')")}
+    )
     versions: tuple[int, ...]
     size: int
     indexes = (Index(("thread_name", "thread_birth", "id")),)
 
     @classmethod
     def owner_filter(cls, owners):
-        return ("(thread_name,thread_birth) IN (" + ",".join("(?,?)" for _ in owners) + ")",
-                tuple(value for owner in owners for value in (owner.name, owner.wire_birth)))
+        return (
+            "(thread_name,thread_birth) IN (" + ",".join("(?,?)" for _ in owners) + ")",
+            tuple(value for owner in owners for value in (owner.name, owner.wire_birth)),
+        )
 
     @classmethod
-    def append(cls, db, record: RecordedContextManifest, *, record_id: int | None = None) -> int:
+    def append(cls, db, record: RecordedContextManifest) -> int:
         versions = tuple(ContextSegmentVersion.append(db, part) for part in record.segments)
-        identity = FieldCodec.decode(RecordedContextIdentity, FieldCodec.project(record, "identity"))
-        values = dict(identity=identity, versions=versions,
-                      size=len(json.dumps(FieldCodec.encode(record)).encode()))
-        if record_id is not None:
-            values["id"] = record_id
-        return cls.insert_values(db, **values).lastrowid
+        identity = FieldCodec.decode(
+            RecordedContextIdentity, FieldCodec.project(record, "identity")
+        )
+        return cast(
+            int,
+            cls.insert_values(
+                db,
+                identity=identity,
+                versions=versions,
+                size=len(json.dumps(FieldCodec.encode(record)).encode()),
+            ).lastrowid,
+        )
 
     def recorded(self, db) -> RecordedContextManifest:
         parts = []
@@ -125,8 +147,15 @@ class ContextManifestCursor:
 
     def available(self, db, owners):
         where, parameters = ContextRequest.owner_filter(owners)
-        return self if ContextRequest.exists(db, where=where + f" AND id {self.comparison} ?",
-                                             parameters=(*parameters, self.record_id)) else None
+        return (
+            self
+            if ContextRequest.exists(
+                db,
+                where=where + f" AND id {self.comparison} ?",
+                parameters=(*parameters, self.record_id),
+            )
+            else None
+        )
 
 
 class BeforeContextManifest(ContextManifestCursor):
@@ -145,8 +174,9 @@ class ContextManifestReference:
     record_id: int
 
     def read(self, store: ContextStore, name, registry) -> ContextManifest:
-        page = store.page(name, registry,
-            cursor=BeforeContextManifest(self.source, self.record_id + 1), limit=1)
+        page = store.page(
+            name, registry, cursor=BeforeContextManifest(self.source, self.record_id + 1), limit=1
+        )
         if len(page.resources) != 1 or page.resources[0].record_id != self.record_id:
             raise MalformedRecord("Recorded context reference is absent from this owner")
         return page.resources[0].value
@@ -178,6 +208,15 @@ class ContextStore(TypedStore):
     rows = (ContextStoreInfo, ContextEntry, ContextSegmentVersion, ContextRequest)
     max_page_rows: ClassVar[int] = 8
     max_page_bytes: ClassVar[int] = 512 * 1024
+    schema_error = StoredHistoryUnreadable
+
+    @contextmanager
+    def snapshot(self):
+        try:
+            with super().snapshot() as db:
+                yield db
+        except (MalformedRecord, sqlite3.DatabaseError) as error:
+            raise StoredHistoryUnreadable(f"Unreadable recorded context: {error}") from error
 
     def initialize(self, db) -> ContextStoreIdentity:
         row = ContextStoreInfo.one(db, singleton=1)
@@ -189,37 +228,42 @@ class ContextStore(TypedStore):
     def record(self, manifest: ContextManifest) -> None:
         with self.writing() as db:
             source = self.initialize(db)
-            previous = ContextRequest.select(db, thread_name=manifest.thread.name,
-                    thread_birth=manifest.thread.wire_birth, order_by=("id",), descending=True, limit=1)
+            previous = ContextRequest.select(
+                db,
+                thread_name=manifest.thread.name,
+                thread_birth=manifest.thread.wire_birth,
+                order_by=("id",),
+                descending=True,
+                limit=1,
+            )
             prior = self.resolve(db, source, previous[0]) if previous else None
             record, entries = RecordedContextManifest.capture(manifest, prior)
             self.append(db, record, entries)
 
-    def append(self, db, record: RecordedContextManifest, entries=(), *, record_id=None) -> int:
+    def append(self, db, record: RecordedContextManifest, entries=()) -> int:
         self.initialize(db)
         record.turn.require_recorded()
         for entry in entries:
             # The journal identity owns the entry, not each later request's
             # publication clock. Preserve the first recorded entry value.
             ContextEntry.capture(entry).insert_if_absent(db)
-        return ContextRequest.append(db, record, record_id=record_id)
+        return ContextRequest.append(db, record)
 
     def resolve(self, db, source: ContextStoreIdentity, row: ContextRequest) -> CapturedContext:
         records = {row.id: row.recorded(db)}
-        pending = [row.id]
-        while pending:
-            current = pending.pop()
-            for part in records[current].segments:
-                for predecessor in part.predecessors(current):
-                    if predecessor in records:
-                        continue
+        references = set()
+        for position, part in enumerate(records[row.id].segments):
+            references.update(part.entries)
+            for predecessor in part.predecessors(row.id):
+                if predecessor not in records:
                     prior = ContextRequest.one(db, id=predecessor)
                     if prior is None or prior.identity.thread != row.identity.thread:
                         raise RelationViolationError("Context predecessor is missing or foreign")
                     records[predecessor] = prior.recorded(db)
-                    pending.append(predecessor)
-        references = {ref for record in records.values() for part in record.segments
-                      for ref in part.entries}
+                # Only the referenced segment is needed, not the predecessor
+                # request's other segments and their unrelated dependencies.
+                prior_part = part.predecessor(records, position)
+                references.update(prior_part.entries)
         entries = {ref: ContextEntry.original(db, ref) for ref in references}
         record = records[row.id]
         return CapturedContext(source, row.id, record, record.restore(entries, records))
@@ -234,6 +278,8 @@ class ContextStore(TypedStore):
         with self.snapshot() as db:
             info = ContextStoreInfo.one(db, singleton=1)
             if info is None:
+                if ContextRequest.exists(db):
+                    raise RelationViolationError("Recorded context store identity is missing")
                 return ContextManifestPage((), None, None)
             source = info.source
             where, parameters = ContextRequest.owner_filter(owners)
@@ -243,8 +289,14 @@ class ContextStore(TypedStore):
                 where += f" AND id {cursor.comparison} ?"
                 parameters += (cursor.record_id,)
             descending = cursor is None or cursor.descending
-            candidates = ContextRequest.select(db, where=where, parameters=parameters,
-                        order_by=("id",), descending=descending, limit=limit)
+            candidates = ContextRequest.select(
+                db,
+                where=where,
+                parameters=parameters,
+                order_by=("id",),
+                descending=descending,
+                limit=limit,
+            )
             rows, size = [], 0
             for row in candidates:
                 if rows and size + row.size > self.max_page_bytes:
@@ -257,8 +309,10 @@ class ContextStore(TypedStore):
                 older = BeforeContextManifest(source, rows[0].id).available(db, owners)
                 newer = AfterContextManifest(source, rows[-1].id).available(db, owners)
             retained = {item.record_id: item for item in previous if item.source == source}
-            resources = tuple(retained[row.id] if row.id in retained
-                              else self.resolve(db, source, row) for row in rows)
+            resources = tuple(
+                retained[row.id] if row.id in retained else self.resolve(db, source, row)
+                for row in rows
+            )
             for resource in resources:
                 if resource.value.thread.resolved(snapshot) != incarnation:
                     raise RelationViolationError("Context source differs from recorded owner")
