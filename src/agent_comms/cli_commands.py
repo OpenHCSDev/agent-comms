@@ -91,7 +91,7 @@ from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
-from .message_reference import MessageReference
+from .message_reference import FirstUnreadStart, InboxStart, MessageReference
 from .messages import (
     Message,
 )
@@ -1231,7 +1231,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: Annotated[str, Argument(flags=("--thread",))]
     after: Annotated[
-        MessageReference | None,
+        InboxStart,
         Argument(
             flags=("--after",),
             options={
@@ -1239,7 +1239,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
                 "help": "Exclusive original message reference already attempted by this receiver (JSON)",
             },
         ),
-    ] = None
+    ] = FirstUnreadStart()
     acknowledgment: Annotated[
         type[WatchAcknowledgment],
         Editor(ChoiceTargetField),

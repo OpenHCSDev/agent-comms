@@ -26,7 +26,7 @@ from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.threads import ChosenModel
+from agent_comms.threads import ChosenModel, NextTurnConfiguration
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -198,7 +198,7 @@ class TestThreadOps:
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired):
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), model=ChosenModel("configured/model")
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel("configured/model"))
         )
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
@@ -216,7 +216,7 @@ class TestThreadOps:
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), model=ChosenModel("configured/model")
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel("configured/model"))
         )
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"

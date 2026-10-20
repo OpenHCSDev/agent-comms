@@ -43,7 +43,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import MessageReference
+from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -225,12 +225,12 @@ class DeliveryRow(TypedTable):
         return objects
 
     @classmethod
-    def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
+    def resume_after(cls, db: CoordinationStore) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
             f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
-        return latest[0].message.reference if latest else None
+        return AfterMessageStart(latest[0].message.reference) if latest else FirstUnreadStart()
 
     id: Annotated[str, Column(primary_key=True)]
     payload: str

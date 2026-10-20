@@ -53,7 +53,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert explicit.agent_bin == "/a pi"
     assert explicit.agent_args == ["--label", "two words"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
-    assert build_parser().parse_args(["restart", "--all"]).agent_bin is None
+    fresh = build_parser().parse_args(["restart", "--all"])
+    assert CliCommand.member_named(fresh.command).from_arguments(fresh).agent_bin is None
 
 
 @pytest.mark.parametrize(
