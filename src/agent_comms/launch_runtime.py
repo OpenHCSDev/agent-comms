@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import json
+import subprocess
 import sys
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
@@ -11,7 +13,7 @@ from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
+from .field_codec import FieldCodec, GitCommitText, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -47,6 +49,52 @@ class LaunchRuntime:
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
+
+
+@dataclass(frozen=True)
+class StackBuild:
+    """The installed pair, observed from its interpreter rather than this caller's imports."""
+
+    core: Annotated[str, GitCommitText]
+    toad: Annotated[str, GitCommitText]
+
+    @classmethod
+    def installed(cls) -> StackBuild:
+        from .owner_cutover import StoppedOwnerInstallation
+
+        runtime = LaunchRuntime(StoppedOwnerInstallation.current_pointer() / "bin/python")
+        runtime.require_available()
+        output = subprocess.check_output(
+            (str(runtime.interpreter), "-c",
+             "import json; from importlib.metadata import distribution; "
+             "from agent_comms.package_stamp import STAMP; "
+             "print(json.dumps([STAMP.commit(), "
+             "distribution('batrachian-toad').read_text('direct_url.json')]))"),
+            env=runtime.environment(os.environ), text=True, timeout=30,
+        )
+        core, metadata = FieldCodec.decode(tuple[str, str], json.loads(output))
+        source = FieldCodec.decode(DistributionSource, json.loads(metadata))
+        return cls(core, source.vcs_info.commit_id)
+
+    def require_same(self, installed: StackBuild) -> None:
+        if self != installed:
+            raise ValueError(
+                f"Proof build Core {self.core}, Toad {self.toad} differs from installed "
+                f"Core {installed.core}, Toad {installed.toad}; run the proof again."
+            )
+
+
+@dataclass(frozen=True)
+class VcsSource:
+    commit_id: Annotated[str, GitCommitText]
+    vcs: str
+    requested_revision: str
+
+
+@dataclass(frozen=True)
+class DistributionSource:
+    url: str
+    vcs_info: VcsSource
 
 
 class RestoredRuntime(LaunchRuntime):

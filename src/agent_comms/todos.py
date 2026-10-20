@@ -34,6 +34,7 @@ from .bus_publication import AgentOrigin
 from .external_transcript import ExternalTranscript
 from .messages import InfoKind, Message
 from .command import Command
+from .launch_runtime import StackBuild
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
@@ -84,6 +85,7 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
     evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
                                       metadata={"wire_omit_default": True})
+    proof_build: StackBuild | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property
     def work(self) -> str:
@@ -109,7 +111,17 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
         for each in (check, *order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each))
-        return replace(self, at=await self.delivery_time(check))
+        return replace(self, at=await self.delivery_time(check),
+                       proof_build=self.proof_build or await asyncio.to_thread(StackBuild.installed))
+
+    def require_current_build(self) -> None:
+        installed = StackBuild.installed()
+        if self.proof_build is None:
+            raise ValueError(
+                f"Proof build is unrecorded; installed Core {installed.core}, "
+                f"Toad {installed.toad}; run and record a new proof."
+            )
+        self.proof_build.require_same(installed)
 
     @abstractmethod
     async def require_source(self, check): ...
@@ -1687,6 +1699,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
     def installed(self, works, artifact):
         self.run.require_closing(works)
+        self.delivery.require_current_build()
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
     def require_checked(self, problem: str) -> None:
