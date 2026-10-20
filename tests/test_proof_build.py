@@ -15,6 +15,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.launch_runtime import RecordedBuildIdentity
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from agent_comms.todos import (
@@ -46,7 +47,8 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_pat
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
     artifact.write_text(works)
-    with CheckRoot(source, ("lead", "worker"), tmp_path / "copied").open() as copied:
+    source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
+    with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
         copied.goals.update_goal(
             "lead",
             SetGoalAction(
@@ -73,7 +75,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_pat
                         request="request",
                         deadline=RecordedEventTime(4102444800),
                         commander="lead",
-                        repo="OpenHCSDev/agent-comms",
+                        repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
                         text="Bind proof to its build",
                     ),
                 ),

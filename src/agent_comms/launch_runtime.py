@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import os
-import subprocess
 import sys
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
+
+from pydantic import BaseModel
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -73,6 +73,13 @@ class ProofBuildMismatchError(ValueError):
     """A retained proof does not identify the currently installed pair."""
 
 
+class InstalledBuildManifest(BaseModel):
+    """Commit fields in the installer's build.json; unrelated build details remain there."""
+
+    core_commit: str
+    toad_commit: str
+
+
 class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
     @abstractmethod
     def recorded(self) -> RecordedBuildIdentity: ...
@@ -108,22 +115,15 @@ class RecordedBuildIdentity(BuildIdentity):
     def installed(cls) -> RecordedBuildIdentity:
         runtime = LaunchRuntime.installed()
         runtime.require_available()
-        output = subprocess.check_output(
-            (
-                str(runtime.interpreter),
-                "-c",
-                "import json; from importlib.metadata import distribution; "
-                "from agent_comms.package_stamp import STAMP; "
-                "print(json.dumps([STAMP.commit(), "
-                "distribution('batrachian-toad').read_text('direct_url.json')]))",
-            ),
-            env=runtime.environment(os.environ),
-            text=True,
-            timeout=30,
+        # The installer records both source commits for this exact runtime. A wheel's
+        # direct_url.json names its local archive, not the commit it was built from.
+        build = InstalledBuildManifest.model_validate_json(
+            (runtime.prefix / "build.json").read_bytes()
         )
-        core, metadata = FieldCodec.decode(tuple[str, str], json.loads(output))
-        source = FieldCodec.decode(DistributionSource, json.loads(metadata))
-        return cls(core, source.vcs_info.commit_id)
+        return FieldCodec.decode(
+            cls,
+            {"kind": cls.declared_name, "core": build.core_commit, "toad": build.toad_commit},
+        )
 
     def require_installed(self) -> None:
         installed = self.installed()
@@ -132,19 +132,6 @@ class RecordedBuildIdentity(BuildIdentity):
                 f"Proof build Core {self.core}, Toad {self.toad} differs from installed "
                 f"Core {installed.core}, Toad {installed.toad}; run the proof again."
             )
-
-
-@dataclass(frozen=True)
-class VcsSource:
-    commit_id: Annotated[str, GitCommitText]
-    vcs: str
-    requested_revision: str
-
-
-@dataclass(frozen=True)
-class DistributionSource:
-    url: str
-    vcs_info: VcsSource
 
 
 class RestoredRuntime(LaunchRuntime):
