@@ -22,7 +22,7 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
@@ -51,7 +51,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
 from .repo import Repo
 from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
@@ -958,8 +958,7 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        record = json.loads(path.read_text())
-        return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
+        return FieldCodec.decode_document(PlannedInstallDeadline, json.loads(path.read_text()))
 
     @abstractmethod
     def refusals(self, work: str, commander: str) -> tuple[str, ...]:
@@ -982,7 +981,7 @@ class UnplannedInstallDeadline(InstallDeadline):
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
-    at: RecordedEventTime
+    at: Annotated[RecordedEventTime, RecordedEventSeconds]
     installer: str
 
     @classmethod
@@ -996,7 +995,7 @@ class PlannedInstallDeadline(InstallDeadline):
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
+        staged.write_text(json.dumps(FieldCodec.encode_document(self, PlannedInstallDeadline)))
         staged.replace(path)
 
     def refusals(self, work: str, commander: str) -> tuple[str, ...]:

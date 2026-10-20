@@ -10,6 +10,20 @@ from math import isfinite
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
 
+class RecordedEventSeconds(FieldRepresentation):
+    """The recorded-time value of an existing numeric-seconds contract."""
+
+    @classmethod
+    def decode(cls, value: object) -> RecordedEventTime:
+        return RecordedEventTime(FieldCodec.decode(int | float, value))
+
+    @classmethod
+    def encode(cls, value: object) -> float:
+        if not isinstance(value, RecordedEventTime):
+            raise TypeError("A Unix-seconds field requires a recorded event time")
+        return value.at
+
+
 class UnrecordedTimeError(ValueError):
     """An operation requires a source-recorded time, but none was supplied."""
 

@@ -8,9 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar
-
-from pydantic import JsonValue
+from typing import ClassVar, Literal
 
 from .locked_store import LockedStore, RootFile
 
@@ -51,6 +49,16 @@ class IssuedAccess:
 
 
 @dataclass(frozen=True)
+class IssuedTokens:
+    """The OAuth token response; secrets leave storage only in this returned value."""
+
+    access_token: str
+    refresh_token: str
+    token_type: Literal["Bearer"] = "Bearer"
+    expires_in: int = ACCESS_SECONDS
+
+
+@dataclass(frozen=True)
 class ConnectorGrants:
     """Registered clients and outstanding grants; every secret is stored as its digest."""
 
@@ -60,7 +68,7 @@ class ConnectorGrants:
     access: dict[str, IssuedAccess] = field(default_factory=dict)
     refresh: dict[str, str] = field(default_factory=dict)
 
-    def issued(self, client_id: str) -> tuple[ConnectorGrants, dict[str, JsonValue]]:
+    def issued(self, client_id: str) -> tuple[ConnectorGrants, IssuedTokens]:
         """A new access and refresh token pair for the client, dropping expired grants."""
         now = time.time()
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -71,12 +79,7 @@ class ConnectorGrants:
             | {digest(access): IssuedAccess(client_id, now + ACCESS_SECONDS)},
             refresh=self.refresh | {digest(refresh): client_id},
         )
-        return grants, {
-            "access_token": access,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_SECONDS,
-            "refresh_token": refresh,
-        }
+        return grants, IssuedTokens(access, refresh)
 
     def holds(self, token: str) -> bool:
         held = self.access.get(digest(token))
