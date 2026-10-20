@@ -97,7 +97,12 @@ class FinalSeal(CheckpointSeal):
         return cls(1, FileRevision.from_stat(db_path.stat()), witness.seal())
 
     def check_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
-        if self.witness != saved.seal() or self.db_revision != FileRevision.from_stat(db_path.stat()):
+        if self.witness != saved.seal():
+            raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
+        current = FileRevision.from_stat(db_path.stat())
+        if self.db_revision != current:
+            if (current.size, current.mtime_ns) == (self.db_revision.size, self.db_revision.mtime_ns):
+                raise CheckpointNeedsRepairError("Private bus checkpoint index relocated.")
             raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
     def recover(
@@ -116,7 +121,13 @@ class FinalSeal(CheckpointSeal):
                 return saved.rebuild_from_empty(bus, marker, db, path, info)
             saved = saved.rebind_source(bus, marker, db, info)
         else:
-            self.check_final(saved, path)
+            try:
+                self.check_final(saved, path)
+            except CheckpointNeedsRepairError:
+                saved.require_prefix(bus, info)
+                self.require_rebuilt(saved, saved)
+                marker.seal_with(FinalSeal.capture(saved, path))
+                bus.write_metadata_unlocked(marker)
         if saved.revision == FileRevision.from_stat(info):
             return saved
         return super().recover(bus, marker, db, path, saved, info)

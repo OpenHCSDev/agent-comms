@@ -1,17 +1,21 @@
 """Actual marker/seal persistence contract and every writer-seal fsync seam."""
 
 from conftest import publish_initial
+from contextlib import closing
 import copy
 import json
+import os
 import shutil
+import sqlite3
 
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.checkpoint_seals import FinalSeal, PendingSeal
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError
 from agent_comms.wire_log import WireLog
-from agent_comms.private_bus_checkpoint import PrefixWitness
+from agent_comms.private_bus_checkpoint import PrefixWitness, opened_private_checkpoint_unlocked
+from agent_comms.store_files import SharedLock, _store_lock
 from test_private_bus_checkpoint import _page, _root
 
 
@@ -197,6 +201,54 @@ def test_interrupted_rebind_checks_prefix_before_resuming(tmp_path, monkeypatch,
             pass
         assert isinstance(comms.bus.log.private_marker_unlocked().seal, FinalSeal)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("change", ["copy", "ctime", "corrupt"])
+def test_restored_checkpoint_copy_reopens(tmp_path, change):
+    comms, _ = _root(tmp_path)
+    publish_initial(comms, "sender", "Alice", "original restored message")
+    bus = comms.bus.log
+    checkpoint = comms.root / "private_bus_checkpoint.sqlite3"
+    before = checkpoint.stat()
+    wire = bus.path.read_bytes()
+    marker = bus.metadata_path.read_bytes()
+    if change == "ctime":
+        checkpoint.chmod(0o600)
+    else:
+        replacement = checkpoint.with_suffix(".restored")
+        shutil.copy2(checkpoint, replacement)
+        if change == "corrupt":
+            with closing(sqlite3.connect(replacement)) as db, db:
+                db.execute("UPDATE prefix_certificate SET digest=?", ("0" * 64,))
+            os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+            assert replacement.read_bytes() != checkpoint.read_bytes()
+        else:
+            assert replacement.read_bytes() == checkpoint.read_bytes()
+        os.replace(replacement, checkpoint)
+    assert checkpoint.stat().st_size == before.st_size
+    assert checkpoint.stat().st_mtime_ns == before.st_mtime_ns
+    error = RelationViolationError if change == "corrupt" else CheckpointNeedsRepairError
+    with pytest.raises(error):
+        with _store_lock(bus.path, mode=SharedLock()), opened_private_checkpoint_unlocked(
+            bus, bus.private_marker_unlocked(), mode=SharedLock()
+        ):
+            pass
+    assert bus.metadata_path.read_bytes() == marker  # Shared reads never reseal.
+    if change == "corrupt":
+        with pytest.raises(RelationViolationError):
+            with bus.locked():
+                pass
+        assert bus.metadata_path.read_bytes() == marker
+    else:
+        with bus.locked() as locked:
+            locked.checked_read.require_current()
+        with bus.checked_read() as source:
+            source.require_current()
+        assert bus.metadata_path.read_bytes() != marker
+        assert [row.message.seq for row in _page(
+            comms, RecordedThreadIncarnation("fixture", 17002.0).lookup
+        )[1]] == [1]
+    assert bus.path.read_bytes() == wire
 
 
 def test_absent_public_marker_never_substitutes_for_required_or_redirected_marker(tmp_path):
