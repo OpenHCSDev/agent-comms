@@ -31,14 +31,14 @@ class FileLine(WireValue):
         if type(self.line) is not int or self.line < 1:
             raise ValueError(f"FileLine line must be a positive line number: {self.line!r}")
 
-    def require_exists(self) -> None:
-        path = Path(self.file)
+    def require_exists(self, root: Path) -> None:
+        path = root / self.file
         if path.is_file():
             with path.open() as source:
                 for line, _ in enumerate(source, 1):
                     if line == self.line:
                         return
-        raise ValueError(f"Source owner {self.to_wire()} does not exist.")
+        raise ValueError(f"Source owner {path}:{self.line} does not exist.")
 
     def to_wire(self) -> str:
         return f"{self.file}:{self.line}"

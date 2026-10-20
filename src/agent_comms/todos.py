@@ -1259,12 +1259,6 @@ class Slop:
                             'fix: use an ID from the packaged pattern catalog.')
         if len(self.fact.split()) < 4:
             problems.append('fact: fix: describe the duplicated fact in at least four words')
-        for name, reference in (('at', self.at), ('by', self.by)):
-            try:
-                with MalformedRecord.refusing(name):
-                    reference.require_exists()
-            except MalformedRecord as error:
-                problems.append(f'{name}: {error}; fix: cite an existing source line')
         if problems:
             raise ValueError('\n'.join(problems))
 
@@ -1879,7 +1873,7 @@ class Hunt(DeclaredFamily, affix="Hunt"):
         self.at.require_recorded("A hunt")
 
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        self.where.require_exists()
+        """The commander boundary validates source references before recording a hunt."""
 
 
 @dataclass(frozen=True)
@@ -2009,8 +2003,6 @@ class Assignment:
         if owner != self.owner and len(owners) >= 2 and traced is None:
             raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
                              "and pass --traced PATH:LINE.")
-        if traced is not None:
-            traced.require_exists()
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:

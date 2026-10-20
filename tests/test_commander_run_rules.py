@@ -26,7 +26,7 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path):
         ApplicationOrderRun('a grep passed')
 
 
-def test_clean_transfers_keep_history_and_third_owner_needs_a_real_line(tmp_path):
+def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path):
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1)
     first = store.create('P1', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
@@ -41,11 +41,11 @@ def test_clean_transfers_keep_history_and_third_owner_needs_a_real_line(tmp_path
         assigner=lead.incarnation, generation='three', goal=GoalRef('third', 3, 'three'), deadline=RecordedEventTime(1000), order=order(tmp_path))
     with pytest.raises(ValueError, match='--traced PATH:LINE'):
         store.assign('P1', **kwargs)
-    with pytest.raises(ValueError, match='does not exist'):
-        store.assign('P1', traced=FileLine(__file__, 999999), **kwargs)
-    third = store.assign('P1', traced=FileLine(__file__, 1), **kwargs)
+    # Source existence belongs to the commander boundary, not a Core record.
+    traced = FileLine('source-not-local-to-core.py', 999999)
+    third = store.assign('P1', traced=traced, **kwargs)
     assert [old.name for old in third.assignment.previous_owners] == ['lead', 'second']
-    assert store.assign('P1', traced=FileLine(__file__, 1), **kwargs) == third
+    assert store.assign('P1', traced=traced, **kwargs) == third
 
 
 def test_send_requires_a_declared_run_including_mechanical_orders(commander_script):

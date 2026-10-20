@@ -603,6 +603,35 @@ def problem(script, body):
     script.problem(body, 'worker', '23:59', f'{__file__}:1')
 
 
+def test_reassignment_validates_trace_at_commander_boundary(commander, commander_script):
+    comms, caller = commander
+    script, repo = commander_script
+    for name in ('second', 'third'):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(repo)))
+    first = create(commander, 'P1')
+    CommsOrderTool(owner='second', order=OrderGoalAction(
+        problem='P1', expected_revision=first.revision,
+        order=order(comms.root, 'second-order'), request='request',
+        deadline=RecordedEventTime(1000), commander='lead',
+        assigner=comms.registry.require('lead').incarnation,
+    )).apply(comms, caller)
+    second = comms.goals.todos.get('P1')
+    (repo / 'count.txt').write_text('0\n')
+    document = replace(commander_order.OrderFile.read(Path(order_body(repo)).read_text()),
+                       problems=('P1',))
+    source = repo / 'trace.py'
+    source.write_text('first = True\n')
+    why = 'The previous worker stopped after its provider rejected every new turn'
+    with pytest.raises(SystemExit, match='does not exist'):
+        script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+    assert comms.goals.todos.get('P1') == second
+    source.write_text('first = True\nsecond = True\n')
+    script.send('third', '23:59', document, clean=True, reassign=why, traced='trace.py:2')
+    transferred = comms.goals.todos.get('P1')
+    assert transferred.holder == 'third'
+    assert [old.name for old in transferred.assignment.previous_owners] == ['worker', 'second']
+
+
 def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
         commander, commander_script):
     from agent_comms.rule_reviews import (

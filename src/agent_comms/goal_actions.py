@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
@@ -534,7 +535,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         commander = ctx.goals.registry.require(self.commander)
         commander.goal.require().require_id(self.request).require_active().order.require_request()
         self.deadline.require_deadline()
-        self.order.owner.require_exists()
+        self.order.owner.require_exists(Path(self.order.check.directory))
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)
         return request
