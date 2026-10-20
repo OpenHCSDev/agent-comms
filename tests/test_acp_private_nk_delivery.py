@@ -51,7 +51,7 @@ tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
-def _session(tmp_path):
+def _private_comms(tmp_path):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.registry.declare(
@@ -65,6 +65,11 @@ def _session(tmp_path):
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
         install_native_runtime_schema(store)
+    return comms, root_id
+
+
+def _session(tmp_path):
+    comms, root_id = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -196,7 +201,7 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
 
 
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
-    comms, _, _ = _session(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "unexpected", expected_generation=1)
@@ -208,7 +213,7 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
 
 
 def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
-    comms, _, _ = _session(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
     renamed = comms.threads._rename_thread("sender", "courier")
     assert (renamed.previous, renamed.current) == ("sender", "courier")
