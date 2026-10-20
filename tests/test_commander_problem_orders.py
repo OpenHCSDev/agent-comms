@@ -35,7 +35,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, ModuleDeletion, NoOrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -311,11 +311,11 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
         script.done('P2', side, seen=working(comms)[0].screenshot)
     script.done('P2', late, seen=working(comms)[0].screenshot)
     struck = comms.goals.todos.get('P2')
-    assert commander_order.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
+    assert commander_order.struck(struck, 'worker') == 0
 
 
-def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_script):
-    """P136 was due 21:20:00 and delivered 21:20:35; its strike read "due 21:20 delivered 21:20"."""
+def test_delivery_retains_commit_seconds_without_inventing_deadline_strikes(commander, commander_script):
+    """Recording delivery retains its exact commit time; only progress can prove no work."""
     comms, _ = commander
     script, _ = commander_script
 
@@ -325,7 +325,6 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
                                         *args), env=env, stderr=subprocess.DEVNULL).decode().strip()
     git('init', '-q', '-b', 'main')
     git('commit', '-q', '--allow-empty', '-m', 'base', at=500)
-    clock = lambda at: time.strftime('%H:%M:%S', time.localtime(at))  # noqa: E731
     for pid, at in (('P1', 2000), ('P2', 2035)):
         create(commander, pid, deadline=2000)
         git('commit', '-q', '--allow-empty', '-m', f'{pid} delivered', at=at)
@@ -333,28 +332,21 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
         git('update-ref', 'refs/remotes/origin/main', delivered)
         script.done(pid, delivered, seen=working(comms)[0].screenshot)
     assert commander_order.struck(comms.goals.todos.get('P1'), 'worker') == 0
-    (strike,) = comms.goals.todos.get('P2').strikes
-    assert strike.reason.startswith(f'P2 order order-P2 late by 35 s: due {clock(2000)}, '
-                                    f'delivered {clock(2035)} as {delivered}')
+    delivered_order = comms.goals.todos.get('P2').order
+    assert delivered_order.delivery.at == RecordedEventTime(2035)
+    assert comms.goals.todos.get('P2').strikes == ()
 
 
-def test_each_delivery_declares_the_strikes_it_carries(commander):
-    """A commit delivered after the deadline strikes its holder once; one on time strikes nobody,
-    and an operation strikes nobody, whenever it is recorded."""
+def test_progress_owns_deadline_strikes_not_delivery_records(commander):
+    from agent_comms.todos import MissedDeadlineStrike, PullRequests
+    from agent_comms.thread_identity import StallWatcherIncarnation
     comms, _ = commander
-    create(commander, 'P1', deadline=2000)
-    todo = comms.goals.todos.get('P1')
-    lead = comms.registry.require('lead').incarnation
-
-    def strikes(delivery, at):
-        return replace(delivery, at=RecordedEventTime(at)).strikes(todo, todo.order.id, lead)
-
-    commit = CommitDelivery(commit='a' * 40, delivered_commit='b' * 40)
-    (late,) = strikes(commit, 2035)
-    assert (late.previous, late.actor, late.expected_revision) == (todo.held(), lead, todo.revision)
-    assert late.reason.startswith('P1 order order-P1 late by 35 s') and 'b' * 40 in late.reason
-    assert strikes(commit, 2000) == ()
-    assert strikes(OperationDelivery(), 9000) == ()
+    todo = create(commander, 'P1', deadline=2000)
+    (late,) = MissedDeadlineStrike.observe(comms.goals, todo, 2035, PullRequests((todo,)))
+    assert (late.previous, late.actor, late.expected_revision) == (
+        todo.held(), StallWatcherIncarnation.watcher(), todo.revision)
+    assert 'late by 35 s' in late.reason
+    assert MissedDeadlineStrike.observe(comms.goals, todo, 2000, PullRequests((todo,))) == ()
 
 
 @pytest.mark.parametrize('retained_problem', [None, 'P197', 'P1970'])
@@ -388,8 +380,8 @@ def test_done_distinguishes_non_git_home_from_exact_order_checkout(
         assert not comms.goals.todos.get('P197').pending
 
 
-def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
-    """Core strikes a late delivered commit in the revision that records it; no script is needed."""
+def test_a_verified_commit_delivery_does_not_invent_a_deadline_strike(commander):
+    """Delivered source is work; its recording path never creates an absence-of-work strike."""
     comms, caller = commander
 
     def git(*args, at=1000):
@@ -413,9 +405,7 @@ def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander
 
     assert done('P1', on_time).strikes == ()
     delivered = done('P2', late)
-    (strike,) = delivered.strikes
-    assert not delivered.pending and strike.previous.owner == 'worker'
-    assert strike.reason.startswith('P2 order order-P2 late by 35 s') and late in strike.reason
+    assert not delivered.pending and delivered.strikes == ()
 
 
 def test_a_main_merge_is_never_the_delivered_commit(commander):
@@ -537,7 +527,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
         path.name for path in (repo.parent / 'state').iterdir()}
 
 
-def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
+def order_body(repo, check=None, edit='Set count.txt to 1.', extra='', deletes=NoOrderDeletion()):
     """Raw JSON input; the application, not the test, constructs the order."""
     body = repo.parent / 'order.json'
     checked = OrderCheck.parse(f'{repo} :: {check or "cat count.txt -> 1"}')
@@ -546,6 +536,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
         'why_stupid': 'The counter is wrong and that is stupid.',
         'order': {'kind': 'pending', 'owner': f'{__file__}:1',
                   'check': FieldCodec.encode(checked), 'edits': [edit],
+                  'deletes': FieldCodec.encode(deletes),
                   'run': {'kind': 'application', 'text': 'the installed app shows the counter at one after restart'},
                   'banned': ['no second store', 'no cache'],
                   'report': 'the commit and the count before -> after ' + extra}}))
@@ -696,11 +687,14 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     script = script.model_copy(update={'repos': (
         Repo(checkout=toad, github='OpenHCSDev/toad'),)})
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
-    edit = 'Delete src/agent_comms/acp_ingress.py.'
+    edit = 'Remove the obsolete ingress implementation.'
+    deletes = ModuleDeletion(('src/agent_comms/acp_ingress.py',))
     with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
-        problem(script, order_body(repo, 'grep -rl Ingress . | wc -l -> 0', edit))
-    problem(script, order_body(repo, f'grep -rl Ingress . {toad} | wc -l -> 0', edit))
+        problem(script, order_body(repo, 'grep -rl Ingress . | wc -l -> 0', edit, deletes=deletes))
+    problem(script, order_body(repo, f'grep -rl Ingress . {toad} | wc -l -> 0', edit, deletes=deletes))
     assert comms.goals.todos.get('P1').order.check.command == f'grep -rl Ingress . {toad} | wc -l'
+    assert comms.goals.todos.get('P1').order.deletes == deletes
+    assert deletes.instructions() == ('Deletes: src/agent_comms/acp_ingress.py',)
 
 
 def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
@@ -708,7 +702,11 @@ def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_sc
     script, repo = commander_script
     monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
-    edit = 'Count the measure in tools/debt_ratchet.py.'
+    tools = repo / 'tools'
+    tools.mkdir()
+    measure = tools / 'debt_ratchet.py'
+    measure.write_text('# Existing measure owner\n')
+    edit = f'Count the measure at {measure}:1.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
         problem(script, order_body(repo, edit=edit))
     problem(script, order_body(repo, edit=edit, extra='Ratchet with --root tools and with --root src, each as its own command.\n'))
@@ -727,7 +725,6 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = order_body(repo, 'grep -c two count.txt -> 1')
     problem(script, body)
-    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -744,10 +741,15 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     fixed = git('rev-parse', 'HEAD')
     with pytest.raises(ValueError, match=r'The order check is 1 away from CountCheckResult\(expected=1\)\.'):
         script.done('P1', fixed, seen=working(comms)[0].screenshot)
+    failed = comms.goals.todos.get('P1')
+    from agent_comms.todos import FailedCheckStrike
+    assert len(failed.strikes) == 1 and isinstance(failed.strikes[0], FailedCheckStrike)
+    assert (failed.order.id, failed.assignment, failed.deadline) == (
+        sent.order.id, sent.assignment, sent.deadline)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
     assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
-        sent.order.id, sent.assignment, sent.deadline, sent.strikes)
+        failed.order.id, failed.assignment, failed.deadline, failed.strikes)
     [record] = current.order.check_corrections
     assert (record.previous, record.check, record.reason) == (
         sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)
@@ -1222,29 +1224,6 @@ def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
     assert comms.goals.todos.get('P1') == saved
 
 
-def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander, commander_script, tmp_path):
-    """Two CLI units hold orders; only the one whose bridge left is detached, with its unread count."""
-    import importlib
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.thread_execution import ExternalThreadExecution
-    from agent_comms.thread_status import StoppedThreadStatus
-
-    comms, _ = commander
-    for created, unit in enumerate(('parted', 'watching'), 3):
-        comms.registry.declare(comms.registry.new_thread(
-            unit, frozenset(), str(tmp_path), created_at=float(created), execution=ExternalThreadExecution),
-            StoppedThreadStatus())
-        comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
-    create(commander, 'P1', owner='parted')
-    create(commander, 'P2', owner='watching')
-    comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
-    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
-    with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
-        lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
-    assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
-
-
 def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
     from agent_comms.todos import LocatedProblemFinding, UnlocatedProblemFinding
     comms, caller = commander
@@ -1405,11 +1384,13 @@ def test_each_verdict_kind_reaches_its_unit_and_the_threads_whose_goal_the_order
     assert kind.audience.of('worker', own).threads == ('worker',)
 
 
-def test_each_send_target_takes_its_send_audience_and_a_channel_send_wakes_only_it(commander):
+def test_each_send_target_preserves_collective_body_and_prefixes_named_audience(commander):
     comms, caller = commander
-    with pytest.raises(ValueError, match='declare its audience'):
-        CommsSendTool(sender='lead', target='#all', body='Read the order').apply(comms, caller)
-    for target, audience in (('worker', ()), ('#all', ('worker',))):
+    channel = CommandTarget.named('#all')
+    assert channel.addressed((), 'Read the order') == 'Read the order'
+    assert channel.addressed(('worker', 'lead'), 'Read the order') == '@worker @lead Read the order'
+    for target, audience in (('worker', ()), ('#all', ()), ('#all', ('worker',)),
+                             ('#all', ('worker', 'lead'))):
         CommsSendTool(sender='lead', target=target, body='Read the order', audience=audience).apply(comms, caller)
         with comms.bus.log.opened_wire_snapshot() as source:
             message, _ = list(source.public_records())[-1]

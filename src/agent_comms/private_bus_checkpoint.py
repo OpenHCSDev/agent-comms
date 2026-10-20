@@ -102,18 +102,58 @@ class PrefixWitness(PrefixSeal):
         if self.through_seq > marker.last_seq:
             raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
 
+    def require_current_revision(self, info: os.stat_result) -> None:
+        """Shared readers name relocation without adopting a new source."""
+        current = FileRevision.from_stat(info)
+        if self.revision.identity != current.identity:
+            raise CheckpointNeedsRepairError("Private bus checkpoint source relocated.")
+        if self.revision != current:
+            raise CheckpointNeedsRepairError(
+                "Bus revision requires exclusive checkpoint validation."
+            )
+
+    def require_prefix(self, bus: WireLog, info: os.stat_result) -> None:
+        """Prove the old byte cut before any recovery publishes rows or a marker."""
+        revision = FileRevision.from_stat(info)
+        digest = _SEED
+        with bus.path.open("rb") as stream:
+            for _, raw in WireRecord.rows(stream, self.offset, self.offset):
+                digest = _chain(digest, raw)
+            if stream.tell() != self.offset or digest.hex() != self.digest:
+                raise RelationViolationError("Private bus checked prefix changed.")
+            if (FileRevision.from_file(stream) != revision
+                    or FileRevision.from_stat(bus.path.stat()) != revision):
+                raise RelationViolationError("Private bus changed during prefix validation.")
+
     def rebind_source(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                       info: os.stat_result) -> PrefixWitness:
         """Publish the unchanged prefix's new revision under the exclusive bus lock."""
+        self.require_prefix(bus, info)
         rebound = replace(self, revision=replace(FileRevision.from_stat(info), size=self.offset))
         return CheckedPrefix.commit_tail(bus, marker, db, self, rebound, [])
+
+    @classmethod
+    def empty(cls, root_id: str, info: os.stat_result) -> PrefixWitness:
+        """The proved zero-byte cut from which the existing indexer can start."""
+        return cls(root_id, replace(FileRevision.from_stat(info), size=0), 0,
+                   _SEED.hex(), hashlib.sha256(b"").hexdigest())
+
+    def rebuild_from_empty(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                           path: Path, info: os.stat_result) -> PrefixWitness:
+        """Prove the saved prefix, then replay through the existing tail indexer."""
+        self.require_prefix(bus, info)
+        empty = PrefixWitness.empty(self.root_id, info)
+        marker.seal_with(PendingSeal.capture(empty, self, path))
+        with db:
+            for table in reversed(TypedTable.members_with(CheckpointTable)):
+                table.delete(db)
+            return empty.index_tail(bus, marker, db, path, info)
 
     def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                    path: Path, info: os.stat_result) -> PrefixWitness:
         """Continue the proved cut, committing bounded chunks without a prefix rescan."""
+        self.require_prefix(bus, info)
         saved = self
-        if saved.offset == 0 and saved.digest != _SEED.hex():
-            raise RelationViolationError("Private bus has no proved empty prefix.")
         digest = bytes.fromhex(saved.digest)
         last_seq = saved.through_seq
         additions: list[tuple[int, bytes, WireRecord]] = []
@@ -280,6 +320,11 @@ class CheckedRead:
         """Look up the current claim for a resource in the checked index."""
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
+
+    def claims_for(self, resources: tuple[str, ...]) -> ClaimProjection:
+        """Read only the requested current holders from the checked index."""
+        self.require_open_prefix()
+        return ResourceClaims.claims_for(self.connection, resources)
 
     def claim_operation_used(self, operation_id: str) -> bool:
         self.require_open_prefix()
@@ -1133,7 +1178,8 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = _index_row(db, offset, raw, record, through_seq)
+                        through_seq = _index_row(db, offset, raw, record, through_seq,
+                                                 marker.claimed_after_seq)
 
                     with db:
                         for _ in bus.verified_records_unlocked(marker, on_row=collect):
@@ -1220,7 +1266,8 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         with db:
             sequence = prior.through_seq
             for offset, raw, record in additions:
-                sequence = _index_row(db, offset, raw, record, sequence)
+                sequence = _index_row(db, offset, raw, record, sequence,
+                                      marker.claimed_after_seq)
             if sequence != expected.through_seq:
                 raise RelationViolationError("Indexed tail differs from its sealed sequence.")
             cls.from_witness(expected).upsert(db)
@@ -1286,9 +1333,9 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
 
 
 def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
-               record: WireRecord, previous_sequence: int) -> int:
+               record: WireRecord, previous_sequence: int, claimed_after_seq: int) -> int:
     sequence = record.sequence_after(previous_sequence)
-    for row in record.checkpoint_rows(offset, len(raw), previous_sequence):
+    for row in record.checkpoint_rows(offset, len(raw), previous_sequence, claimed_after_seq):
         row.insert(db)
     return sequence
 
@@ -1338,8 +1385,7 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
     saved = _saved(db)
     info = os.fstat(stream.fileno())
     saved.require_source(marker, info, stream)
-    if FileRevision.from_stat(info) != saved.revision:
-        raise CheckpointNeedsRepairError("Bus revision requires exclusive checkpoint validation.")
+    saved.require_current_revision(info)
     marker.seal.require_final(saved, path)
     return saved
 

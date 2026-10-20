@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
@@ -17,7 +19,7 @@ from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import Goal, RequestDirective
+    from .goals import RequestDirective
     from .storage_rules import MemoryUse, StorageRule
     from .todos import Todo
 
@@ -35,6 +37,35 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
+
+    def heartbeat_group(self) -> object:
+        """Ordinary violations each own one heartbeat line."""
+        return self
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        return self.line()
+
+    @staticmethod
+    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
+        groups: dict[object, list[StandingRule]] = defaultdict(list)
+        for rule in rules:
+            groups[rule.heartbeat_group()].append(rule)
+        return groups
+
+    @classmethod
+    def heartbeat_changes(cls, previous: Iterable[StandingRule],
+                          current: Iterable[StandingRule]) -> tuple[str, ...]:
+        """Render changed groups through their owning rule, without replaying unchanged ones."""
+        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
+        lines = []
+        for group in dict.fromkeys((*after, *before)):
+            old, new = before.get(group, []), after.get(group, [])
+            if frozenset(old) == frozenset(new):
+                continue
+            rule = (new or old)[0]
+            prefix = "RULE" if new else "NO LONGER CURRENT:"
+            lines.append(f"{prefix} {rule.heartbeat_line(new)}")
+        return tuple(lines)
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
@@ -68,7 +99,7 @@ class DatedStandingRule(StandingRule, declared_name=None):
 class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
-    why: str
+    why: str = field(compare=False)
     text: ClassVar[str]
 
     @classmethod
@@ -117,14 +148,14 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 class DirectiveUnacted(DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
-    goal: Goal
+    request: str
     directive: RequestDirective
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(goal, directive)
+            cls(goal.id, directive)
             for goal in thread.goal.active()
             for directive in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
@@ -135,10 +166,25 @@ class DirectiveUnacted(DatedStandingRule):
         return self.directive.deadline
 
     def line(self) -> str:
-        due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
-            f" due {due} -> order its next step or mark the request done"
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f" due {self.directive.due_time} -> order its next step or mark the request done"
+        )
+
+    def heartbeat_group(self) -> object:
+        return type(self), self.request
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        if not current:
+            return (f"DIRECTIVE UNACTED: request {self.request}: 0 claude-ai directives; "
+                    "oldest none; newest none")
+        oldest = min(current, key=lambda rule: rule.directive.seq).directive
+        newest = max(current, key=lambda rule: rule.directive.seq).directive
+        return (
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
+            f"oldest {oldest.seq} due {oldest.due_time}; "
+            f"newest {newest.seq} due {newest.due_time} "
+            "-> order the next step or mark the request done"
         )
 
 
@@ -147,7 +193,7 @@ class RulesDue(DatedStandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
-    why: str
+    why: str = field(compare=False)
     since: float
 
     @classmethod
@@ -217,10 +263,13 @@ class PlanIdle(UndatedStandingRule):
             if phase.ready(todos) and not phase.ordered(todos)
         )
 
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.phase.task.start(comms, comms.registry.require(commander), self.phase)
+
     def line(self) -> str:
         return (
             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
-            " -> dispatch it this wake"
+            f" -> {self.phase.task.instruction}"
         )
 
 
@@ -229,7 +278,7 @@ class MemoryLow(UndatedStandingRule):
     """Under the memory threshold a cleanup owner is due, told what holds the memory."""
 
     rule: StorageRule
-    memory: MemoryUse
+    memory: MemoryUse = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -253,21 +302,29 @@ class DiskLow(UndatedStandingRule):
     """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
 
     rule: StorageRule
-    free_gib: float
+    free_gib: float = field(compare=False)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def violations(cls, comms: Comms, commander: str) -> tuple[DiskLow, ...]:
         rule = comms.registry.storage_rule
         free = rule.free_gib()
-        return (cls(rule, free),) if rule.cleanup_due(free) else ()
+        member = DiskFloorLow if rule.below_floor(free) else cls
+        return (member(rule, free),) if rule.cleanup_due(free) else ()
+
+    def floor_warning(self) -> str:
+        return ""
 
     def line(self) -> str:
-        floor = (
-            f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
-            if self.rule.below_floor(self.free_gib)
-            else ""
-        )
         return (
             f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
-            f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
+            f" {self.rule.cleanup_gib:g} GiB{self.floor_warning()})"
+            " -> put a cleanup owner on it now"
         )
+
+
+@dataclass(frozen=True)
+class DiskFloorLow(DiskLow, declared_name=None):
+    """The allocation-floor warning, selected by DiskLow rather than a second rule scan."""
+
+    def floor_warning(self) -> str:
+        return f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"

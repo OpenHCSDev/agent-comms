@@ -48,6 +48,19 @@ def lines(comms, member, commander="lead"):
     return [found.line() for found in member.violations(comms, commander)]
 
 
+def test_wheel_spin_reads_external_owner_and_requires_actual_recent_turns(standing, tmp_path):
+    from agent_comms.transcript_events import AssistantTranscript
+
+    comms, _, rules = standing
+    for name in ('recent-cli', 'old-cli', 'empty-cli'):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    for name, timestamp in (('recent-cli', time.time()), ('old-cli', 1.0)):
+        comms.transcripts.external(name).finish(turn_id='original-turn', item_id='reply', events=(
+            AssistantTranscript('retained answer', position=1, timestamp=timestamp),))
+    assert [thread.name for thread in rules.WheelSpin.idle(comms, 'lead')] == ['recent-cli']
+
+
 @pytest.mark.parametrize("reported,alarms", [
     (NoCommitProgress(), True),
     (MergedProgress("d" * 9), False),
@@ -94,7 +107,8 @@ def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(command
 
     assert RecordPlanePhase in idle() and ReviewQueuePhase not in idle()
     assert PlanIdle(RecordPlanePhase).line() == (
-        "PLAN IDLE: phase record_plane ready, no open order -> dispatch it this wake")
+        "PLAN IDLE: phase record_plane ready, no open order -> "
+        "no checked task declared; supply its source, check and brief")
     create(commander, "P1")
     assert comms.goals.todos.get("P1").order.serves is UnplannedPhase
     assert RecordPlanePhase in idle()
@@ -228,10 +242,17 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     taken = StrikeReason("The unit was taken off P2 so the test leaves it unowned.")
     comms.goals.fire("worker", taken, "lead")
     assert comms.goals.todos.get("P2").holder is None
-    read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
-    assert ("WHEEL SPIN: worker holds no order while P2 is unowned -> Core gives it to worker"
-            in read.broken)
-    assert comms.goals.todos.get("P2").holder == "worker"
+    [unowned] = module.UnownedWheelSpin.violations(comms, "lead")
+    assert unowned.todo.id == "P2"
+    # Firing releases P2 without striking its recently active worker on that order.
+    # Reuse that eligible idle unit instead of allocating a second process.
+    assert type(unowned.dispatch) is module.ReusedWorkDispatch
+    assert unowned.unit == "worker"
+    assert unowned.line() == (
+        f"WHEEL SPIN: {unowned.unit} holds no order while P2 is unowned"
+        f" -> Core gives it to {unowned.unit}")
+    # Actual unit launch/first reply is a separate native application proof.
+    assert comms.goals.todos.get("P2").holder is None
 
 
 def test_unjudged_follows_the_unjudged_edits(commander, standing):
@@ -364,19 +385,47 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     git("init", "-q", "-b", "main")
     git("remote", "add", "origin", str(origin))
     git("commit", "-q", "--allow-empty", "-m", "base")
-    for branch, grown in (("big", 41), ("small", 40)):
+    for branch, files in (
+        ("big", {"src/big.py": 41}),
+        ("small", {"src/small.py": 40}),
+        ("odd", {"src/odd\tname\ncafé.py": 2}),
+        ("mixed", {"src/mixed.py": 4, "tests/mixed.py": 1}),
+        ("docs", {"README.md": 1}),
+    ):
         git("checkout", "-q", "-b", branch, "main")
-        (checkout / "src").mkdir(exist_ok=True)
-        (checkout / "src" / f"{branch}.py").write_text("x = 1\n" * grown)
+        for name, grown in files.items():
+            path = checkout / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x = 1\n" * grown)
         git("add", "-A")
         git("commit", "-q", "-m", f"{branch} work")
         git("checkout", "-q", "main")
         git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
     git("push", "-q", "origin", "main")
+    # Read the captured tracking ref even when the remote is unavailable.
+    git("remote", "set-url", "origin", str(tmp_path / "absent-remote"))
     config = CommanderConfig.read_root(comms.root).model_copy(update={"repos": (
         Repo(checkout=checkout, github="fleet/growth"),)})
     config.write(tmp_path / 'growth-home')
-    big = git("rev-parse", "main~1")[:9]
+    actual_git, commands = Repo.git, []
+
+    def read_git(directory, *args):
+        commands.append(args)
+        return actual_git(directory, *args)
+
+    monkeypatch.setattr(Repo, "git", staticmethod(read_git))
+    growth = tuple(module.MergeGrowth.merges(config.repos[0]))
+    assert len(commands) == 1 and commands[0][0] == "log"
+    assert {item.subject: (item.src, item.tests) for item in growth} == {
+        "Merge big": ((41, 0), (0, 0)),
+        "Merge small": ((40, 0), (0, 0)),
+        "Merge odd": ((2, 0), (0, 0)),
+        "Merge mixed": ((4, 0), (1, 0)),
+        "Merge docs": ((0, 0), (0, 0)),
+        "base": ((0, 0), (0, 0)),
+    }
+    big, = (item for item in growth if item.subject == "Merge big")
     assert lines(comms, module.MergeGrowth) == [
-        f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
+        f"GROWTH fleet/growth {big.sha[:9]} src +41/-0 (net +41) tests +0/-0: Merge big "
         "-> justify or send back the owner with a deletion order"]
+    assert len(commands) == 2  # One local process for each independent read.

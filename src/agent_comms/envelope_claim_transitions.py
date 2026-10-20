@@ -36,6 +36,9 @@ if TYPE_CHECKING:
     from .coordination_tables.attempts import AttemptRecord
     from .registry_document import RegistrySnapshot
 
+if TYPE_CHECKING:
+    from .registry_provenance import RegistryProvenance
+
 
 class ClaimTransitionError(ValueError):
     """An invalid request or unverified/corrupt projection input."""

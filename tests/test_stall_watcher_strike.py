@@ -16,8 +16,10 @@ from agent_comms.commander import standing
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
+from agent_comms import coordinator
 from agent_comms.thread_identity import StallWatcherIncarnation
 from agent_comms.todos import (BlockedTodoState, ChangeTodoState, CorrectCheckTodo,
+                              MissedDeadlineStrike, MissedFirstCallStrike,
                               ReleaseTodo, StrikeReason, StrikeTodo, TodoConflict)
 from test_commander_problem_orders import create
 from test_standing_rules import working
@@ -77,13 +79,14 @@ def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(com
             raise asyncio.CancelledError
 
     monkeypatch.setattr(standing.UnownedWheelSpin, "after_stall", classmethod(after_stall))
-    monkeypatch.setattr(standing.asyncio, "sleep", wait)
+    monkeypatch.setattr(coordinator.asyncio, "sleep", wait)
     try:
-        asyncio.run(standing.UnownedWheelSpin.watch(opened_wire))
+        asyncio.run(coordinator.Coordination.watch_worker(
+            lambda: standing.UnownedWheelSpin.watch_pass(opened_wire)))
     except asyncio.CancelledError:
         pass
     assert len(passes) == 2 and not borrowed
-    assert "Stall watcher pass failed" in caplog.text
+    assert "Service worker pass failed" in caplog.text
     assert "FileNotFoundError: no commander config" in caplog.text
 
 
@@ -107,8 +110,9 @@ def test_blocked_held_orders_are_not_struck_or_released(commander, commander_scr
     comms = Comms(copied)
     standing.UnownedWheelSpin.after_stall(comms)
     with pytest.raises(TodoConflict):
-        standing.UnownedWheelSpin(blocked, 'spare').assign(
-            comms, 'lead', comms.registry.require('spare'), StallWatcherIncarnation.watcher())
+        action = standing.WheelSpin.order_for(blocked, 'lead', StallWatcherIncarnation.watcher())
+        dispatch = standing.ReusedWorkDispatch(action, blocked.revision, comms.registry.require('spare'))
+        standing.UnownedWheelSpin(blocked, dispatch).enforce(comms, 'lead')
     assert comms.goals.todos.get('P1') == blocked == original.goals.todos.get('P1')
 
 
@@ -118,8 +122,35 @@ def test_commander_released_backlog_is_not_automatically_reassigned(commander):
     released = comms.goals.todos.apply('P1', ReleaseTodo(
         todo.revision, comms.registry.require('lead').incarnation, todo.held(),
         StrikeReason('Commander intentionally froze this unfinished order without authorizing automatic reassignment.')))
+    comms.registry.declare(comms.registry.new_thread(
+        'spare', frozenset({'comms'}), str(comms.root), created_at=3.0))
+    working(comms, 'spare', 3.0)
     standing.UnownedWheelSpin.after_stall(comms)
     assert comms.goals.todos.get('P1') == released
+
+
+def test_core_released_order_waits_for_a_spare_without_striking_the_replacement(
+        commander, commander_script):
+    comms, _ = commander
+    create(commander, 'P1')
+    comms.goals.todos.advance_objective_failures(comms.goals)
+    released = comms.goals.todos.get('P1')
+    assert released.holder is None
+    assert {type(strike) for strike in released.strikes} == {
+        MissedDeadlineStrike, MissedFirstCallStrike}
+    standing.UnownedWheelSpin.after_stall(comms)
+    assert comms.goals.todos.get('P1') == released
+    comms.registry.declare(comms.registry.new_thread(
+        'spare', frozenset({'comms'}), str(comms.root), created_at=3.0))
+    working(comms, 'spare', 3.0)
+    standing.UnownedWheelSpin.after_stall(comms)
+    assigned = comms.goals.todos.get('P1')
+    assert assigned.holder == 'spare'
+    assert assigned.strikes == released.strikes
+    assert assigned.released == released.released
+    comms.goals.todos.advance_objective_failures(comms.goals)
+    standing.UnownedWheelSpin.after_stall(comms)
+    assert comms.goals.todos.get('P1') == assigned
 
 
 def test_no_spare_leaves_the_old_holder_and_strikes_untouched(commander, commander_script):
@@ -197,12 +228,16 @@ finally:
             await asyncio.Future()
 
     active_route_path().parent.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(standing.asyncio, 'sleep', between)
+    monkeypatch.setattr(coordinator.asyncio, 'sleep', between)
     async with TestClient(TestServer(connector.application())):
         await asyncio.wait_for(done.wait(), timeout=30)
-    assert 'Stall watcher pass failed' not in caplog.text
+    assert 'Service worker pass failed' not in caplog.text
     after = Comms(copied).goals.todos.get('P1')
-    assert after.holder == 'spare' and len(after.strikes) == len(after.released) == 1
+    assert after.holder == 'spare'
+    assert len(after.strikes) == 2 and len(after.released) == 1
+    assert {type(strike) for strike in after.strikes} == {
+        MissedDeadlineStrike, MissedFirstCallStrike}
+    assert all(strike.previous == before.held() for strike in after.strikes)
     assert original.goals.todos.get('P1') == before
     (tmp_path / 'three-pass-result.json').write_text(json.dumps({
         'copy': str(copied), 'passes': 3, 'maintenance': receipts,

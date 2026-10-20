@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 from ..comms import Comms
 from ..errors import RelationViolationError
@@ -35,7 +35,6 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     commander: str
     root: Path
-    cli: Path
     state: Path
     board: Path
     narrative: Path
@@ -55,11 +54,21 @@ class CommanderConfig(CommanderRole, BaseModel):
 
     @staticmethod
     def packaged_rules() -> Path:
-        return Path(str(files('agent_comms.commander') / 'rules'))
+        return Path(str(files(__package__) / 'rules'))
 
     @staticmethod
     def packaged_skill() -> Path:
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
+
+    @staticmethod
+    def packaged_indictment() -> Path:
+        return Path(str(files(__package__) / 'indictment.md'))
+
+    @field_validator('root')
+    @classmethod
+    def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
+        """Select the root before a context's post-init can open any stores."""
+        return info.context if isinstance(info.context, Path) else root
 
     @classmethod
     def read(cls, path: Path | str) -> Self:
@@ -72,7 +81,7 @@ class CommanderConfig(CommanderRole, BaseModel):
     @classmethod
     def read_root(cls, root: Path | str) -> Self:
         root = Path(root).resolve()
-        return cls.read(cls.root_path(root)).model_copy(update={'root': root})
+        return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
 
     @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:
@@ -96,7 +105,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         record.write_text(self.model_dump_json(indent=1) + '\n')
         path.unlink(missing_ok=True)
         path.symlink_to(record)
-        for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
+        for directory in (self.state, self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
         return path

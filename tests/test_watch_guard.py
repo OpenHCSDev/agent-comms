@@ -21,7 +21,7 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
                               input=stdin, capture_output=True, text=True, check=True).stdout
 
     assert hook() == ''
-    with WatchClaim('session').held(record):
+    with WatchClaim('session').held(record), WatchClaim('session').reader_held():
         assert hook() == ''
     lapsed = json.loads(hook('UserPromptSubmit'))['hookSpecificOutput']
     assert lapsed['hookEventName'] == 'UserPromptSubmit'
@@ -36,12 +36,14 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
     ClaudeCodeHarness(tmp_path).configure()
     ClaudeCodeHarness(tmp_path).configure()
     hooks = json.loads((tmp_path / '.claude/settings.json').read_text())['hooks']
-    assert {event: [hook['command'] for entry in entries for hook in entry['hooks']]
-            for event, entries in hooks.items()} == {
-        'PreToolUse': ['agent-comms-commander send-guard'],
-        'UserPromptSubmit': ['agent-comms-watch-guard', 'agent-comms-commander order peer-sync'],
-        'PostToolUse': ['agent-comms-watch-guard', 'agent-comms-commander order peer-sync'],
-        'Stop': ['agent-comms-commander order peer-sync']}
+    programs = agent_comms_hooks.ClaudeHookProgram.members()
+    expected = {event: {program.command() for program in programs if event in program.events}
+                for program in programs for event in program.events}
+    actual = {event: [hook['command'] for entry in entries for hook in entry['hooks']]
+              for event, entries in hooks.items()}
+    assert {event: set(commands) for event, commands in actual.items()} == expected
+    assert all(len(commands) == len(set(commands)) for commands in actual.values())
     assert hooks['PreToolUse'][0]['matcher'] == 'Bash'
     assert 'matcher' not in hooks['PostToolUse'][0]
+    assert 'matcher' not in hooks['SessionStart'][0]
 

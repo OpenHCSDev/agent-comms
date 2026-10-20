@@ -21,7 +21,7 @@ from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
 
 sys.path.insert(0, str(
@@ -38,7 +38,7 @@ from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from cutover.carry import STEPS, Step, carry_parents
+from cutover.carry import STEPS, Carry, Step, carry_parents
 from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -47,6 +47,11 @@ AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
 class Measure(DeclaredFamily, affix="Measure"):
+    @classmethod
+    def blocks(cls, delta: dict[str, int]) -> bool:
+        return any(value > 0 for key, value in delta.items()
+                   if key.partition(":")[0] == cls.__name__)
+
     @staticmethod
     def environment(root: str) -> dict[str, str]:
         return dict(os.environ)
@@ -240,27 +245,6 @@ class TypeErrors(CheckedRevision):
         installed one."""
         paths = dict.fromkeys((Path(root).parts[0], "src"))
         return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
-
-
-class SourceLines(Measure):
-    """Budget edited lines, retaining moves across the source boundary (50% similarity)."""
-
-    trailer: typing.ClassVar[str] = "Src-Budget"
-
-    @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        added = removed = 0
-        records = iter(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--find-renames=50%",
-                           "--numstat", "-z", base, head, "--").split(b"\0")[:-1])
-        for record in records:
-            increase, decrease, path = record.split(b"\t", 2)
-            paths = (path,) if path else (next(records), next(records))
-            if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
-                added += int(increase)
-                removed += int(decrease)
-        # Each commit's trailer budgets that commit's lines, so a range's budget is their sum.
-        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return {cls.__name__: removed + sum(int(value) for value in declared.split())}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)
@@ -1413,7 +1397,10 @@ class EditedCarry(Measure):
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
                           base, head, "--", str(STEPS)).decode().split("\0")[:-1])
-        parents = carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
+        @cache
+        def parents() -> dict[str, type[Carry]]:
+            return carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
+
         edited = 0
         for status in fields:
             path = next(fields)
@@ -1424,7 +1411,7 @@ class EditedCarry(Measure):
                 continue
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
-                if Step.holds_carry(before, parents):
+                if Step.holds_carry(before, parents()):
                     edited += (status != "M" or cls.conversion(before) !=
                                cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":
@@ -1471,10 +1458,9 @@ class UncarriedRecordFormat(Measure):
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
-            # Tools import Core too; stamp its archived owner, not the tool module.
-            module = Path(*WheelStamp.__module__.split(".")).with_suffix(".py")
-            for owner in Path(scratch).glob(f"**/{module}"):
-                WheelStamp(revision(repo, ref)).write(owner.with_name("package_stamp.py"))
+            # Extracted source is stamped with its commit the way a build stamps it.
+            for stamp in Path(scratch).rglob("package_stamp.py"):
+                WheelStamp(revision(repo, ref)).write(stamp)
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),
@@ -1536,7 +1522,8 @@ class Comparison:
 
     @property
     def failed(self) -> bool:
-        return any(value > 0 for value in self.delta.values()) or any(self.introduced.values())
+        return (any(measure.blocks(self.delta) for measure in Measure.members_with(Measure))
+                or any(self.introduced.values()))
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:

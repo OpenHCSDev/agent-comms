@@ -14,7 +14,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_tool_transport import ToolListener
-from agent_comms.publisher import Publisher, ResponseWrites
+from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
@@ -41,9 +41,9 @@ def reader(root: Path) -> Comms:
     return Comms(root, Publisher)
 
 
-def responder(root: Path, registry: Registration) -> MessageBus[ResponseWrites]:
-    """The bus a selected owner publishes its keyed responses through."""
-    return MessageBus(root / "bus.jsonl", registry, ResponseWrites)
+def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
+    """The selected owner publishes replies and releases its attempt's claims."""
+    return MessageBus(root / "bus.jsonl", registry, ParticipantPublisher)
 
 
 def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
@@ -282,9 +282,8 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
-    import sys
     from agent_comms.commander.config import CommanderConfig
-    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
+    CommanderConfig(commander="lead", root=comms.root,
         state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
         repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
         disk=tmp_path).write(tmp_path)

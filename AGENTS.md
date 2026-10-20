@@ -18,6 +18,8 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
 - Carry the source-first ownership method into every delegated task and after compaction through these existing instructions. Reason from source before implementation; tests and the actual configured saved-session/application path confirm the coherent change last. Each check, review and handoff needs a concrete delivery or risk reason; "industry best practice" alone justifies nothing. Propagate the instruction directly without acknowledgement chatter or another reminder mechanism.
 - Work in persistent isolated worktrees under `/home/ts/wt`. Preserve the dirty
   main checkout, other agents' work, native sessions and uncertain input records.
+- Rebase your own branch onto current `origin/main` before delivery; do not merge
+  `main` into it. Never rewrite another agent's branch.
 - Reuse a finished isolated checkout on a new branch. Create another worktree only when genuinely concurrent source changes or a different repository require it. Publish unfinished implementation as a branch checkpoint; stashes are temporary, not delivery. Keep a checkout only while source, an installed package, a running job or retained evidence actually needs that path, and remove closed owned checkouts once published branches and borrower checks permit it.
 - Fix a demonstrated defect yourself or assign a named implementation owner at
   the next safe checkpoint. Follow through to the actual affected entry path.

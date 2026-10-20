@@ -22,8 +22,11 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Self
 
 from pydantic import PrivateAttr
 
@@ -76,7 +79,7 @@ from ..todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from ..tool_caller import ThreadCaller
+from ..tool_caller import NoThreadCaller, ThreadCaller
 from ..tools import (
     CommsChangeProblemTool,
     CommsFireTool,
@@ -89,7 +92,6 @@ from ..tools import (
     CommsTodoListTool,
     TodoList,
 )
-from . import capacity
 from .config import CommanderConfig, CommanderRole
 from .send_guard import CommanderSession
 
@@ -104,19 +106,6 @@ def refuse(text, *families):
 def struck(todo, unit):
     """Strikes count per unit and task, across every order of that task the unit held."""
     return len(todo.live_strikes(unit))
-
-
-def hhmm(event):
-    return time.strftime('%H:%M', time.localtime(event.at))
-
-
-def deadline(due):
-    """HH:MM local time: the first such minute at or after now."""
-    hour, minute = map(int, due.split(':'))
-    now = time.time()
-    day = time.localtime(now)
-    at = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, hour, minute, 0, 0, 0, -1))
-    return RecordedEventTime(at + 86400 if at < now - 60 else at)
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
@@ -228,6 +217,18 @@ class CommanderContext(CommanderConfig):
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+
+    @boundary_decoder
+    def model_copy(self, *, update: Mapping[str, object] | None = None,
+                   deep: bool = False) -> Self:
+        """Normalize Pydantic's optional updates; copy values, never live resources."""
+        values = {name: getattr(self, name) for name in type(self).model_fields}
+        if deep:
+            values = deepcopy(values)
+        changes = update or {}
+        values.update(changes)
+        return type(self).model_construct(
+            _fields_set=self.model_fields_set.union(changes), **values)
 
     @property
     def comms(self) -> Comms:
@@ -349,20 +350,19 @@ class Commander(CommanderContext):
                     problems += check.result.distance(ran).unproven(check.command, 0)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
-        for reference in FileLine.scan('\n'.join((document.prose, *edits))):
+        references = FileLine.scan('\n'.join((document.prose, *edits)))
+        for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
                     reference.require_exists()
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
-        # A module deleted here can still be imported by another repo:
-        # P12 deleted acp_ingress.py, which Toad imports.
-        deleted = {stem for edit in edits
-                   for stem in re.findall(r'(?i)\bdelete\s+`?(?:\S*/)?(\w+)\.py\b', edit)}
+        deleted = {Path(module).stem for module in order.deletes.modules}
         if check and deleted and (unread := self.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                             'the check must also count their `from agent_comms` imports')
-        if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
+        if any(Path(reference.file).resolve().is_relative_to(Path(check.directory) / 'tools/')
+               for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
             problems.append('the order changes tools/: say "ratchet with --root tools and with '
                             '--root src, each as its own command"')
@@ -405,14 +405,17 @@ class Commander(CommanderContext):
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
-        common = dict(order=order, request=order.request(self.comms.registry.require(self.commander), tuple(group)), deadline=deadline(due), commander=self.commander)
+        request = order.request(self.comms.registry.require(self.commander), tuple(group))
+        due_at = RecordedEventTime(time.time()).at_clock(due)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-                problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
+                problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
+                order=order, request=request, deadline=due_at, commander=self.commander)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=trace, **common)))
+                assigner=self.incarnation, traced=trace,
+                order=order, request=request, deadline=due_at, commander=self.commander)))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -486,18 +489,15 @@ class Commander(CommanderContext):
         lines = ['# Fleet board', '',
                  "GENERATED by agent-comms-commander order from Core's Todo store. Do not edit by hand:",
                  '`order problem FILE.json` adds a row, `order send` orders it, `order close` or `order withdraw` removes it.', '',
-                 '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
+                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
                  '| Strikes | Owner last acted |',
-                 '|---|---|---|---|---|---|---|---|---|']
+                 '|---|---|---|---|---|---|---|---|---|---|']
         listed, read = self.todos(), self.progress()
         activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
         for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
-            unit, last = t.holder, t.released[-1:]
-            owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
-            lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {owner} | {t.order.id} | '
-                         f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
-                         f'{"no" if t.pending else "yes, install pending"} | '
-                         f'{t.strike_count} | {activity[unit].clock() if unit else "-"} |')
+            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
+                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
+                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         lines += ['', '## Withdrawn orders', '',
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
@@ -602,9 +602,6 @@ class Commander(CommanderContext):
             claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid,
             order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-        delivered_todo = self.comms.goals.todos.get(pid)
-        for late in delivered_todo.strikes[len(todo.strikes):]:
-            self.posted(unit, delivered_todo, late)
         print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
     def first_calls(self, held, activity):
@@ -620,7 +617,7 @@ class Commander(CommanderContext):
             self.call(CommsChangeProblemTool(problem=todo.id, operation=RecordFirstCallTodo(
                 todo.revision, self.incarnation, event)))
             if not acted and self.comms.goals.todos.get(todo.id).revision != todo.revision:
-                missing.append(f'{unit} (order {order.id}, sent {hhmm(order.at)})')
+                missing.append(f'{unit} (order {order.id}, sent {order.at.clock()})')
         return missing
 
     def hunt(self, where, why, sent):
@@ -664,7 +661,7 @@ class Commander(CommanderContext):
             if not t.overdue(now):
                 continue
             answer = self.reply(t.holder, ordered)
-            due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+            due = f'due {t.deadline.clock()}, order {t.order.id}'
             late.append(f'{t.holder} ({due}, {work.line}{answer})')
         alarm = f'OVERDUE: {", ".join(late)} -> push or merge unfinished work now'
         return [alarm] * bool(late)
@@ -705,7 +702,7 @@ class Commander(CommanderContext):
     def unstrike(self, task: str, why: str, at: str | None = None) -> None:
         """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
         todo = self.comms.goals.todos.get(task)
-        live = [s for s in todo.live_strikes() if at in (None, hhmm(s.at))]
+        live = [s for s in todo.live_strikes() if at in (None, s.at.clock())]
         if not live:
             sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
         voided = live[-1]
@@ -715,7 +712,7 @@ class Commander(CommanderContext):
         unit = voided.previous.owner
         n = struck(self.comms.goals.todos.get(task), unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
-                f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
+                f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
         print(f'{unit}: {n} strike(s) on {task}')
 
@@ -727,13 +724,13 @@ class Commander(CommanderContext):
         if len(why.split()) < 8:
             sys.exit('Refused: --why says why the deadline moves (8+ words)')
         refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
-        moved = deadline(at)
+        moved = RecordedEventTime(time.time()).at_clock(at)
         self.call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
             todo.revision, todo.assignment, moved, todo.order, todo.goal)))
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
-                  f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline',
+                  f'{todo.deadline.clock()} moved to {moved.clock()}): {why}', 'Deadline',
                   VerdictAudience.of(todo.held().owner, todo.goal))
-        print(f'{pid}: due {hhmm(moved)}')
+        print(f'{pid}: due {moved.clock()}')
 
     @boundary_decoder
     def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
@@ -765,10 +762,12 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
+    fork: ThreadCaller | NoThreadCaller = option(
+        "--fork", type=ThreadCaller, normalize=FieldCodec.encode,
+        default=NoThreadCaller(), help="the acting commander's name")
 
     def who(self, ctx: Commander) -> str:
-        return self.fork or ctx.commander
+        return self.fork.acting_name(ctx.commander)
 
     def apply(self, ctx: Commander) -> None:
         self.gate(ctx)
@@ -776,8 +775,6 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
 
     def gate(self, ctx: Commander) -> None:
         self.require_commander(ctx.comms.registry.require(self.who(ctx)))
-        if self.fork:
-            capacity.beat(ctx.state / 'forks', self.fork)
 
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...
@@ -925,13 +922,14 @@ class DueVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallVerb(RuledVerb):
+class InstallVerb(OrderVerb, RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
     installer: str = option("installer", help="the unit that runs the install")
 
     def run(self, ctx: Commander) -> None:
-        PlannedInstallDeadline(deadline(self.at), self.installer).plan(ctx.comms.root)
+        planned = RecordedEventTime(time.time()).at_clock(self.at)
+        PlannedInstallDeadline(planned, self.installer).plan(ctx.comms.root)
         print(f'install due {self.at}, run by {self.installer}')
 
 

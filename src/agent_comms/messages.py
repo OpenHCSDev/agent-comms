@@ -550,5 +550,3 @@ class ClaimMessage(Message):
 
     def require_retained_claim(self, claimed_after_seq: int) -> None:
         """The envelope carries its own committed claim facts."""
-
-

@@ -124,14 +124,15 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     # The dedicated cursor scan cannot cross the second bounded page. The
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(SourceCoverage, "page_budget", 1)
-    turn = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert turn is not None and turn.cursor_status == "unavailable" and len(calls) == 1
+    with pytest.raises(IdentityConflict, match="page budget"):
+        await runtime.SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
+        ).run()
+    assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
@@ -236,7 +237,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-    original = SourceCoverage.since
+    original = SourceCoverage.recorded_witness
 
     def advance_generation(*args, **kwargs):
         coverage = original(*args, **kwargs)
@@ -245,7 +246,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
         args[0].store.participants.advance_generation(lookup, "alpha", expected_generation=1)
         return coverage
 
-    monkeypatch.setattr(SourceCoverage, "since", advance_generation)
+    monkeypatch.setattr(SourceCoverage, "recorded_witness", advance_generation)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
@@ -256,7 +257,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
             f"SELECT owner_generation,input_id FROM {CurrentNativeCursor.declared_name}"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
-    monkeypatch.setattr(SourceCoverage, "since", original)
+    monkeypatch.setattr(SourceCoverage, "recorded_witness", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
             NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
@@ -282,14 +283,15 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
         return result
 
     monkeypatch.setattr(SourceCoverage, "since", replace_source)
-    result = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert result is not None and result.cursor_status == "unavailable" and len(calls) == 1
+    with pytest.raises(IdentityConflict, match="canonical source changed before commit"):
+        await runtime.SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
+        ).run()
+    assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(

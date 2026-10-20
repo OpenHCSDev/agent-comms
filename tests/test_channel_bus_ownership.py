@@ -32,7 +32,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
     current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
     assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
-    assert not comms.registry.require("beta").active_turn.executing
+    assert not comms.registry.require("beta").executing
     assert original.message in read_history(comms, "#team")
     assert message in read_history(comms, "#team")
     assert not (root / "acp_passive_channel_awareness.json").exists()
@@ -48,7 +48,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert any(isinstance(decision, NoWakeDecision) for decision in initial.decisions)
     for number in range(6):
         message = comms.messaging.send("sender", "#team", f"@beta review {number}").message
-    assert not comms.registry.require("alpha").active_turn.executing
+    assert not comms.registry.require("alpha").executing
     references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")))
     comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()

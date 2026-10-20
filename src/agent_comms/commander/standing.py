@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
-import subprocess
 import time
+from abc import abstractmethod
+from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from ..comms import Comms
-from ..coordinator import Coordination
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..repo import Repo
@@ -25,18 +22,16 @@ from ..standing_rules import (
 )
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import (
-    FlatTrend, OrderProgress, PullRequests, Todo,
-)
-from ..tools import CommsUnjudgedTool
-from ..turn_digests import TurnDigestRead, TurnsSince
+from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
+from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
 from .config import CommanderConfig
 
 
 @dataclass(frozen=True)
 class Detached(UndatedStandingRule):
     unit: str
-    unread: int
+    unread: int = field(compare=False)
     orders: tuple[str, ...]
 
     @classmethod
@@ -91,16 +86,22 @@ class WheelSpin(StandingRule, declared_name=None):
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    def assign(self, comms: Comms, commander: str, unit: Thread,
-               assigner: ThreadIncarnation) -> None:
-        """The order sent again to ``unit`` through its Goal, with the order's own text."""
-        todo = self.todo
-        order = todo.order.reissued(time.time())
-        comms.goals.update_goal(unit.name, OrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision, order=order,
-            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
-            assigner=assigner, traced=todo.order.owner))
-        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
+    @staticmethod
+    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> OrderGoalAction:
+        return OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision,
+            order=todo.order.reissued(time.time()), request=todo.goal.request(),
+            deadline=todo.deadline, commander=commander, assigner=assigner,
+            traced=todo.order.owner)
+
+    @abstractmethod
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]: ...
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        for dispatch in self.dispatches(comms, commander):
+            unit = dispatch.start(comms)
+            comms.messaging.send(commander, unit.name,
+                f"{self.line()}\n{dispatch.action.order.instructions(self.todo)}")
 
 
 @dataclass(frozen=True)
@@ -129,33 +130,44 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " to done did not fall across two readings -> Core strikes it and gives the order"
                 " to an idle unit")
 
-    def enforce(self, comms: Comms, commander: str) -> None:
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
         for unit in self.idle(comms, commander)[:1]:
-            self.assign(comms, commander, unit, StallWatcherIncarnation.watcher())
+            yield ReusedWorkDispatch(self.order_for(
+                self.todo, commander, StallWatcherIncarnation.watcher()), self.todo.revision, unit)
 
 
 @dataclass(frozen=True)
 class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     """A unit holds no next order while the board has unowned rows."""
 
-    unit: str
+    dispatch: WorkDispatch
+
+    @property
+    def unit(self) -> str:
+        return self.dispatch.name
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, commander, (todo for todo in
-            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
-            if not todo.holder))
+        actor = comms.registry.require(commander).incarnation
+        rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
+                     if todo.pending and not todo.holder)
+        paired = cls.paired(comms, commander, rows, actor)
+        assigned = {rule.todo.id for rule in paired}
+        return paired + tuple(cls(todo, WorkDispatch(
+            cls.order_for(todo, commander, actor), todo.revision))
+            for todo in rows if todo.id not in assigned)
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str,
-               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
+    def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
+               assigner: ThreadIncarnation) -> tuple[UnownedWheelSpin, ...]:
         """Each pending row with the first idle unit not struck on it."""
         idle, found = cls.idle(comms, commander), []
         for todo in (todo for todo in todos if todo.pending):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(cls(todo, unit.name))
+                    found.append(cls(todo, ReusedWorkDispatch(
+                        cls.order_for(todo, commander, assigner), todo.revision, unit)))
                     break
         return tuple(found)
 
@@ -163,36 +175,24 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        self.assign(comms, commander, comms.registry.require(self.unit),
-                    comms.registry.require(commander).incarnation)
+    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
+        return (self.dispatch,)
 
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
-        """Assign first: refused or unavailable replacements leave the old holder untouched."""
-        stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
-        for commander in {todo.creator_identity.name for todo in stalled}:
-            mine = (todo for todo in stalled if todo.creator_identity.name == commander)
-            for rule in cls.paired(comms, commander, mine):
-                rule.assign(comms, commander, comms.registry.require(rule.unit),
-                            StallWatcherIncarnation.watcher())
+        """Assign eligible work; refused replacements preserve the observed row."""
+        available = comms.goals.todos.reassignable(comms.registry.storage_rule)
+        for commander in {todo.creator_identity.name for todo in available}:
+            mine = (todo for todo in available if todo.creator_identity.name == commander)
+            for rule in cls.paired(comms, commander, mine, StallWatcherIncarnation.watcher()):
+                rule.enforce(comms, commander)
 
     @classmethod
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
+            comms.goals.todos.advance_objective_failures(comms.goals)
             cls.after_stall(comms)
-
-    @classmethod
-    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Run a pass each minute; failures go to the existing service log."""
-        while True:
-            (outcome,) = await asyncio.gather(
-                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
-                return_exceptions=True)
-            if isinstance(outcome, Exception):
-                logging.error("Stall watcher pass failed", exc_info=outcome)
-            await asyncio.sleep(60)
 
 
 @dataclass(frozen=True)
@@ -202,7 +202,7 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = CommsUnjudgedTool.count(comms, commander)
+        total = OrderEditCountRead.count(comms, commander)
         return str(total) if total > cls.limit else None
 
 
@@ -220,37 +220,47 @@ class MergeGrowth(DatedStandingRule):
     src: tuple[int, int]
     tests: tuple[int, int]
 
-    @staticmethod
-    def git(checkout: Path, *args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(checkout), *args], capture_output=True, text=True
-        ).stdout
-
-    @classmethod
-    def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
-        diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
-        counted = [
-            (int(a), int(d))
-            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
-            if a.isdigit()
-        ]
-        return sum(a for a, _ in counted), sum(d for _, d in counted)
-
     @classmethod
     def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
-        """Each first-parent commit on the repository's main inside the window, newest first."""
-        cls.git(repo.checkout, "fetch", "-q", "origin", "main")
-        log = cls.git(
+        """Read first-parent growth in one local Git stream; updates own fetching.
+
+        Keep every first-parent commit, including zero-growth commits, rather
+        than letting a path filter simplify the merge history.
+        """
+        log = repo.git(
             repo.checkout,
             "log",
             "--first-parent",
             f"--since={cls.window}",
-            "--format=%H %ct %s",
+            "--format=%H%x00%ct%x00%s",
+            "--numstat",
+            "-z",
+            "--no-renames",
+            "--diff-merges=first-parent",
             "origin/main",
         )
-        for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
-            src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
-            yield cls(repo.github, sha, subject, float(at), src, tests)
+        # -z keeps paths intact, including quoted names, tabs and newlines.
+        # A header starts with its SHA; each numstat row starts with two counts
+        # separated by tabs. Consume header fields before inspecting diff rows.
+        records = deque(log.split("\x00"))
+        while records:
+            sha = records.popleft().lstrip("\n")
+            if not sha:
+                continue
+            at, subject = records.popleft(), records.popleft()
+            src, tests = [0, 0], [0, 0]
+            while records and (not records[0] or "\t" in records[0]):
+                row = records.popleft().lstrip("\n")
+                if not row:
+                    continue
+                added, deleted, path = row.split("\t", 2)
+                if not (added.isdigit() and deleted.isdigit()):
+                    continue
+                for root, counts in ((repo.source, src), ("tests", tests)):
+                    if path == root or path.startswith(root.rstrip("/") + "/"):
+                        counts[0] += int(added)
+                        counts[1] += int(deleted)
+            yield cls(repo.github, sha, subject, float(at), (src[0], src[1]), (tests[0], tests[1]))
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:

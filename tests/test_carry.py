@@ -16,6 +16,7 @@ import pytest
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.activity import Activity, ActivityLog, ActivityState
 from agent_comms.runtime_updates import ThreadOutput
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
@@ -748,7 +749,7 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
         "drain-unit", frozenset({"drain"}), str(comms.root), execution=ExternalThreadExecution))
     transcript = ExternalTranscript(comms.root, unit.incarnation)
     output = ThreadOutput(transcript, comms.agents)
-    output.status(ActivityState.WORKING, "before the drain")
+    output.enter(ToolRunningPhase("before the drain"))
     with transcript.writing():
         pass
     MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator("drain-test"))
@@ -756,7 +757,7 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
     monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
     with transcripts_held(comms.root):
         with pytest.raises(MaintenanceHeldError):
-            output.status(ActivityState.THINKING, "a hook on this checkout")
+            output.enter(ModelWaitPhase("a hook on this checkout"))
         # A bridge started before the barrier existed writes activity without asking it.
         ActivityLog.at(comms.root).emit(Activity.create(unit.name, ActivityState.THINKING))
         with pytest.raises(sqlite3.OperationalError, match="locked"):

@@ -12,8 +12,9 @@ RULES DUE in rotate until the last review is answered and fresh.
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
-import os, random, re, sys
+import random, re, sys
 from dataclasses import dataclass
+from pathlib import Path
 
 
 from ..field_codec import option
@@ -23,6 +24,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
 from .order import Commander, CommanderVerb
+from .rule_file import RuleFile
 
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
@@ -32,18 +34,15 @@ PINNED = ('branch-vs-polymorphism', 'factor-into-parent-hard-rule', 'paper-is-la
 
 def principles() -> list[str]:
     """Paper 1's correct-maintenance results, the definitions every judgment is measured against."""
-    text = open(PAPER).read()
+    text = RuleFile.read(Path(PAPER)).body
     return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
 
 
 def rules() -> list[str]:
     found = [(m.group(1) + m.group(2)).strip() for m in re.finditer(
         r'^\s*- \*\*(.+?)\*\*(.*)$', CommanderConfig.packaged_skill().read_text(), re.M)]
-    for path in CommanderConfig.packaged_rules_files():
-        text = path.read_text()
-        if re.search(r'^\s*type: feedback', text, re.M):
-            desc = re.search(r'^description: (.+)$', text, re.M)
-            found.append(f'{os.path.basename(path)[:-3]}: {desc.group(1) if desc else ""}')
+    for rule in RuleFile.packaged():
+        found.extend(rule.review_rules())
     return found
 
 
