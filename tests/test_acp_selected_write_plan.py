@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from conftest import responder
 
+import asyncio
 import json
 import os
-import select
 import signal
 import subprocess
 import sys
-import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -285,13 +284,15 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
         )
         env.pop("PI_PROMPT", None)
         child = Path(__file__).with_name("selected_write_owner_child.py")
+        stderr_path = base / "worker-stderr.log"
+        stderr_file = stderr_path.open("w")
         process = subprocess.Popen(
             [sys.executable, "-u", str(child), str(base), *LaunchRoot.from_path(root).arguments()],
             env=env,
             cwd=work,
             text=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=stderr_file,
             start_new_session=True,
         )
         attached = None
@@ -306,29 +307,25 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
                 )
             (base / "registered").touch()
 
-            def event(expected: str) -> dict:
-                deadline = time.monotonic() + 20
-                while time.monotonic() < deadline:
-                    if process.poll() is not None:
-                        raise AssertionError(
-                            f"worker exited {process.returncode}: {process.stderr.read()[-1000:]}"
-                        )
-                    readable, _, _ = select.select(
-                        [process.stdout], [], [], max(0.01, deadline - time.monotonic())
-                    )
-                    if readable:
-                        line = process.stdout.readline()
-                        if not line:
-                            process.wait(timeout=3)
-                            raise AssertionError(
-                                f"worker EOF {process.returncode}: {process.stderr.read()[-1600:]}"
-                            )
-                        row = json.loads(line)
-                        if row["event"] == expected:
-                            return row
-                raise AssertionError(f"worker did not report {expected}")
+            async def event(expected: str) -> dict:
+                try:
+                    async with asyncio.timeout(20):
+                        while True:
+                            line = await asyncio.to_thread(process.stdout.readline)
+                            if not line:
+                                await asyncio.to_thread(process.wait, timeout=3)
+                                raise AssertionError(
+                                    f"worker EOF {process.returncode}: {stderr_path.read_text()[-1600:]}"
+                                )
+                            row = json.loads(line)
+                            if row["event"] == expected:
+                                return row
+                except TimeoutError as error:
+                    raise AssertionError(
+                        f"worker did not report {expected}: {stderr_path.read_text()[-1600:]}"
+                    ) from error
 
-            assert event("ready")["pid"] == process.pid
+            assert (await event("ready"))["pid"] == process.pid
             attached = CommsAgent(
                 comms,
             )
@@ -349,16 +346,19 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
             assert isinstance(acknowledgement, SelectedWriteAcceptedUpdate)
             assert resource.read_bytes() == b"before\n"
             (base / "dispatch").touch()
-            result = event("terminal")
+            result = await event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
-            owner = Comms(root).bus.log.claim_projection()[str(resource)]
-            assert owner.owner == "beta" and owner.claim_scope is not None
+            with Comms(root).bus.log.checked_read() as source:
+                assert source.claim_operation_used(acknowledgement.operation_id)
+                assert source.claim(str(resource)) == UnclaimedResource()
+            rows = list((root / "selected-write-plans").glob("*.json"))
+            assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
             with Coordination(str(root / "coordination.sqlite3")) as store:
-                assert (
-                    store.assignments.get(owner.claim_scope.wake_assignment_id).lifecycle.declared_name
-                    == "completed"
+                selected = sealed_cohort_assignments(
+                    store, RecordedThreadIncarnation("fixture", 61003.0).lookup
                 )
+                assert len(selected) == 1 and selected[0].lifecycle.declared_name == "completed"
                 assert (
                     store.session._connection.execute(
                         f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
@@ -376,3 +376,4 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runti
             except subprocess.TimeoutExpired:
                 process.kill()  # fixture process only
                 process.communicate(timeout=5)
+            stderr_file.close()
