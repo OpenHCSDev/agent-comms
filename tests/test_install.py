@@ -1,0 +1,82 @@
+"""agent-comms install: the bus it creates or practises on, and the route to it."""
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import closing
+from pathlib import Path
+
+from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
+from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.installer.backup import bus_files
+from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.practice import practice_copy
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.wire_log import WireLog
+from test_native_prompt_binding import _root
+from test_native_prompt_binding import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
+REPO = Path(__file__).resolve().parents[1]
+
+
+def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(tmp_path):
+    root = tmp_path / "bus"
+    root.mkdir(mode=0o700)
+    log = WireLog(WireLog.path_in(root))
+    assert log.fresh()
+    Comms(root).messaging.initialize_private_initial_protocol()
+    assert not log.fresh()
+    chain = CarryChain.at(REPO, "HEAD")
+    CarryLedger(root).start(chain)
+    assert chain.pending(CarryLedger(root).applied()) == ()
+
+
+def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(
+        tmp_path, declared_native_package):
+    first, first_id, *_ = _root(tmp_path)
+    (tmp_path / "second").mkdir()
+    second, second_id, *_ = _root(tmp_path / "second")
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o700)
+    route_file = directory / "active-route.json"
+
+    assert route_new_bus(ActiveRoute(first, first_id), route_file) == f"published {route_file}"
+    assert route_new_bus(ActiveRoute(second, second_id), route_file) == (
+        f"kept {route_file}: it selects {first}")
+    assert read_active_route(route_file) == ActiveRoute(first, first_id)
+
+    first.rename(first.with_name("retired"))
+    # A route whose bus is gone still decodes, so an explicit --root is never refused by it.
+    assert read_active_route(route_file) == ActiveRoute(first, first_id)
+    replaced = route_new_bus(ActiveRoute(second, second_id), route_file)
+    assert replaced.startswith(f"replaced {route_file}; old route kept at ")
+    assert read_active_route(route_file) == ActiveRoute(second, second_id)
+    backup = Path(replaced.rsplit(" ", 1)[1])
+    assert json.loads(backup.read_text())["root"] == str(first)
+
+
+def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(tmp_path):
+    root, *_ = _root(tmp_path)
+    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
+    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier.begin(MaintenanceOperator.current())
+    witnesses = {str(path.relative_to(root)) for path in barrier.witness_paths if path.exists()}
+    assert witnesses
+    saved = bus_files(root)
+    databases = {name for name in saved if CoordinationStore.is_database(root / name)}
+
+    with practice_copy(root, tmp_path / "practice/bus") as (copy, measurement):
+        copied = bus_files(copy)
+        assert copied.keys() == {name for name in saved.keys() - witnesses
+                                 if name.removesuffix("-wal") not in databases}
+        assert measurement.bytes > 0
+        for name in databases:
+            query = "SELECT name FROM sqlite_schema ORDER BY name"
+            with (closing(sqlite3.connect(root / name)) as original,
+                  closing(sqlite3.connect(copy / name)) as practised):
+                assert practised.execute(query).fetchall() == original.execute(query).fetchall()
+        for name in copied.keys() - databases:
+            assert (copy / name).read_bytes() == (root / name).read_bytes()
+    assert bus_files(root) == saved

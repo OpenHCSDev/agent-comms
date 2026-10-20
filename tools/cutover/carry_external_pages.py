@@ -14,7 +14,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalEventRow, ExternalTranscript, NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 def carry(root: Path, *, apply: bool) -> int:
@@ -67,3 +67,7 @@ class ExternalPages(Carry):
         changed = carry(root, apply=apply)
         rewritten = tuple(path.name for path in root.glob(f'{ExternalTranscript.path_in(root).name}*'))
         return Carried(changed, {}, rewritten if changed and apply else ())
+
+
+if __name__ == '__main__':
+    ExternalPages.main()

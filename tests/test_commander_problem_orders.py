@@ -16,7 +16,7 @@ import pytest
 from contextlib import closing
 from dataclasses import replace
 
-from cutover.carry import CarryChain
+from agent_comms.installer.carry import CarryChain
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander import order as commander_order

@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from agent_comms.runtime_info import RuntimeInfoStore
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class RuntimeInfo(Carry):
@@ -19,3 +19,7 @@ class RuntimeInfo(Carry):
         if apply:
             path.unlink()
         return Carried(1, rewritten=(path.name,))
+
+
+if __name__ == "__main__":
+    RuntimeInfo.main()

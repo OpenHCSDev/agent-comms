@@ -153,21 +153,20 @@ raise SystemExit(main(sys.argv[2:]))
         assert children[0].returncode is not None
 
 
-PROBE = ("from cutover.carry import Carried, Carry\n\n\n"
+PROBE = ("from agent_comms.installer.carry import Carried, Carry\n\n\n"
          "class Probe(Carry):\n"
          "    @classmethod\n    def carry(cls, root, *, apply):\n"
-         "        (root / 'carried').write_text('carried')\n        return Carried(1, {}, ('carried',))\n\n\n"
-         "if __name__ == '__main__':\n    Probe.main()\n")
+         "        (root / 'carried').write_text('carried')\n        return Carried(1, {}, ('carried',))\n")
 
 
 @pytest.mark.asyncio
 async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_path, monkeypatch):
     """The upgrade declares maintenance; the Core watch closes, the carry runs, and once
     maintenance clears the bridge's next child receives a message sent after it."""
-    from cutover.carry import STEPS, CarryChain, CarryLedger
+    from agent_comms.installer.carry import CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
-    from test_carry import REPO, CheckoutStack, Repository
-    from upgrade_bus import Revisions, carry_all
+    from test_carry import CheckoutStack, Repository
+    from agent_comms.installer.upgrade import Revisions, carry_all
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = _case(tmp_path / 'wire', monkeypatch)
@@ -199,7 +198,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             assert await asyncio.wait_for(children[0].wait(), 20) is not None
             (tmp_path / 'checkout/src').mkdir(parents=True)
             repo = Repository(tmp_path / 'checkout')
-            head = repo.commit({'carry': (REPO / STEPS / 'carry.py').read_text(), 'carry_probe': PROBE})
+            head = repo.commit({'carry_probe': PROBE})
             revisions = Revisions(repo.path, tmp_path / 'trees')
             try:
                 carry_all(comms.root, CarryChain.at(repo.path, head).pending(()),

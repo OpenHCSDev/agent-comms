@@ -6,7 +6,7 @@ from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_store import RegistryStore
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class CatalogTags(Carry):
@@ -38,3 +38,7 @@ class CatalogTags(Carry):
                 catalog._publish_unlocked(document)
         return Carried(changed, {"added_tags": len(known - declared), "filled_times": filled},
                        (catalog.filename,) if apply and changed else ())
+
+
+if __name__ == "__main__":
+    CatalogTags.main()

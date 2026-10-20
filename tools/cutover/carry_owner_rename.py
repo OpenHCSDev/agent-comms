@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agent_comms.coordination_tables.participants import OwnerGenerations
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class OwnerRename(Carry):
@@ -47,3 +47,7 @@ class OwnerRename(Carry):
                 db.execute('DROP TRIGGER "owner_generation_monotonic"')
                 db.execute(declared)
         return Carried(1, rewritten=("coordination.sqlite3",))
+
+
+if __name__ == "__main__":
+    OwnerRename.main()

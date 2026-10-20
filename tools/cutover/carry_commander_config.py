@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent_comms.commander.config import CommanderConfig
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class CommanderConfigRoot(Carry):
@@ -27,3 +27,7 @@ class CommanderConfigRoot(Carry):
         if apply:
             config.write(home)
         return Carried(1, {"commander_configs": 1}, (record.name,) if apply else ())
+
+
+if __name__ == "__main__":
+    CommanderConfigRoot.main()

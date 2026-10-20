@@ -21,7 +21,7 @@ Everything lives in `~/.agent-comms/`:
 - `bus.jsonl`: the message log.
 - `todos.sqlite3`: problems and orders.
 - `goal_history.sqlite3`: Goals and their history.
-- `carries.json`: which upgrade steps have run on this bus. The steps are in `tools/cutover/`; `tools/upgrade_bus.py` runs them in order.
+- `carries.json`: which upgrade steps have run on this bus. The steps are in `tools/cutover/`; `agent-comms install` runs them in order.
 
 Back up with `cp -a ~/.agent-comms <backup path>` before any upgrade step, and stop the writers first.
 

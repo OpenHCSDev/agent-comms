@@ -13,7 +13,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from .active_route import ActiveRoute, resolve_comms_route
+from .active_route import resolve_comms_route
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
@@ -55,15 +55,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
         if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
             raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
+        declaration = CliCommand.member_named(args.command)
         LaunchRoot.startup(
             arguments,
             lambda: (
-                LaunchRoot.from_path(args.root) if args.root else ActiveRoute.published_launch()
+                LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()
             ),
         )
         route = resolve_comms_route(args.root)
         with LaunchRoot.from_path(route.root).selected():
-            command = CliCommand.member_named(args.command).from_arguments(args)
+            command = declaration.from_arguments(args)
             return command.execute(route, sys.stdout)
     except KeyboardInterrupt:
         return 130

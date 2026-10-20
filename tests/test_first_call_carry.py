@@ -12,7 +12,7 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain, CarryLedger
 from cutover.carry_first_call import FirstCalls
 from test_todos import order, thread
 

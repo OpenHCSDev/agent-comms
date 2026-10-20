@@ -10,7 +10,7 @@ from typing import cast
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import StrikeTodo, Todo, TodoStore, VoidStrikeTodo
 
-from agent_comms.installer.carry import Carried, TodoRows
+from .carry import Carried, TodoRows
 
 
 class StorageRefusals(TodoRows):
@@ -73,3 +73,7 @@ class StorageRefusals(TodoRows):
                 current.upsert(db)
                 changed += len(indices)
         return cls.carried(root, changed, {"strikes": changed, "voids": voids}, apply=apply)
+
+
+if __name__ == "__main__":
+    StorageRefusals.main()

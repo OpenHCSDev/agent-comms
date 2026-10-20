@@ -9,3 +9,7 @@ class ExternalEventIndexes(ToolCallIndex):
     allowed_indexes = frozenset(ExternalEventRow.schema_objects()) - {
         ExternalEventRow.declared_name
     }
+
+
+if __name__ == "__main__":
+    ExternalEventIndexes.main()

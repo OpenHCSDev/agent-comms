@@ -399,7 +399,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         chain = CarryChain.at(checkout, target)
         member = Install.member(root, retire)
         try:
-            pending = member.pending(root, chain)
+            pending = member.pending_steps(root, chain)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
         installed = Stack(checkout)
@@ -447,7 +447,7 @@ class Install(ABC):
         return Install
 
     @classmethod
-    def pending(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
         return chain.pending(CarryLedger(root).applied())
 
     @classmethod
@@ -496,7 +496,7 @@ class FreshInstall(Install):
     The target's source creates the bus already in its format and routes to it."""
 
     @classmethod
-    def pending(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
         return ()
 
     @classmethod
@@ -566,7 +566,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     except BaseException as error:
         maintenance.clear(held)
         installed.owners(root, "start", running)
-        print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
+        print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     try:
@@ -585,7 +585,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
             staged.owners(root, "stop", running)
             raise
     except BaseException as error:
-        print(f"upgrade-bus: install failed ({type(error).__name__}: {error}); "
+        print(f"install: install failed ({type(error).__name__}: {error}); "
               "restoring original installation", file=sys.stderr)
         state = maintenance.read()
         recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
@@ -598,10 +598,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         if run("git", "-C", checkout, "rev-parse", "HEAD").strip() != current:
             run("git", "-C", checkout, "reset", "-q", "--keep", current)
             Revisions.prepare(checkout)
-        installed.publish()
+        # Republish only when current moved: the outgoing runtime may predate this publisher.
+        if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
+            installed.publish()
         maintenance.clear(restored_hold)
         installed.owners(root, "start", running)
-        print(f"upgrade-bus: restored after failure ({type(error).__name__}: {error}); "
+        print(f"install: restored after failure ({type(error).__name__}: {error}); "
               f"original runtime selected and {running} restarted; "
               f"backup: {backup.description}",
               file=sys.stderr)

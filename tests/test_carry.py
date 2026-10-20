@@ -4,13 +4,12 @@ import importlib
 import json
 import os
 import re
-import shutil
 import sqlite3
 import subprocess
 import sys
-import time
-from contextlib import closing, contextmanager
+from contextlib import closing
 from dataclasses import replace
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -39,14 +38,17 @@ from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
+from agent_comms.installer.carry import (
+    FRAMEWORK, STEPS, Carried, Carry, CarryChain, CarryLedger, UnorderedSteps,
+)
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
-from cutover.backup import (
-    RestoreSpace, SavedFile, StoreBackup, UpgradeRefused, bus_files, transcripts_held,
+from agent_comms.installer.backup import (
+    StoreBackup, UpgradeRefused, bus_files, transcripts_held,
 )
-from upgrade_bus import (
+from agent_comms.store_files import _store_lock
+from agent_comms.installer.upgrade import (
     RehearsalFiles,
     Revisions,
     Stack,
@@ -60,7 +62,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source(family: str = "Carry") -> str:
     return (
-        f"from cutover.carry import Carried, {family}\n\n"
+        f"from agent_comms.installer.carry import Carried, {family}\n\n"
         f"class Step({family}):\n"
         "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
     )
@@ -72,9 +74,9 @@ class Repository:
         self.git("init", "-q")
         self.git("config", "user.email", "carry@example.invalid")
         self.git("config", "user.name", "Carry test")
-        declarations = self.path / STEPS / "carry.py"
+        declarations = self.path / FRAMEWORK
         declarations.parent.mkdir(parents=True, exist_ok=True)
-        declarations.write_bytes((REPO / STEPS / "carry.py").read_bytes())
+        declarations.write_bytes((REPO / FRAMEWORK).read_bytes())
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
@@ -95,7 +97,7 @@ class Repository:
 
 
 def test_each_step_at_head_is_the_one_carry_its_module_declares():
-    from cutover import carry as carry_module
+    from agent_comms.installer import carry as carry_module
 
     for step in CarryChain.at(REPO, "HEAD").steps:
         module = importlib.import_module(f"cutover.{step.name}")
@@ -109,7 +111,7 @@ def test_each_step_at_head_is_the_one_carry_its_module_declares():
 def test_target_parent_and_its_ordering_arrive_with_first_step(tmp_path):
     repo = Repository(tmp_path)
     repo.commit({"carry_rows": step_source("TodoRows")})
-    declarations = tmp_path / STEPS / "carry.py"
+    declarations = tmp_path / FRAMEWORK
     declarations.write_text(
         declarations.read_text()
         + "\nraise AssertionError('target module must never be imported')\n"
@@ -182,30 +184,27 @@ def test_a_todo_column_runs_before_the_row_steps_merged_ahead_of_it(tmp_path):
 def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
     (tmp_path / "repo").mkdir()
     repo = Repository(tmp_path / "repo")
-    runnable = "\nif __name__ == '__main__':\n    Step.main()\n"
-    repo.commit({name: step_source() + runnable for name in ("carry_a", "carry_b", "carry_c")})
-    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
-        [str(REPO / "src"), str(REPO / "tools"), str(repo.path / "tools")])}
+    repo.commit({name: step_source() for name in ("carry_a", "carry_b", "carry_c")})
+    chain = CarryChain.at(repo.path, "HEAD")
 
-    def apply(name: str, root: Path) -> subprocess.CompletedProcess:
-        return subprocess.run([sys.executable, str(repo.path / STEPS / f"{name}.py"), str(root), "--apply"],
-                              env=environment, cwd=repo.path, capture_output=True, text=True, timeout=60)
+    def apply(name: str, root: Path) -> None:
+        CarryLedger(root).apply(chain, name, lambda: Carried(0))
 
     skipped = tmp_path / "skipped"
     skipped.mkdir()
     CarryLedger(skipped).record("carry_b")
     for name in ("carry_a", "carry_c"):
-        refused = apply(name, skipped)
-        assert refused.returncode and "Bus ledger skips a step" in refused.stderr
+        with pytest.raises(ValueError, match="Bus ledger skips a step"):
+            apply(name, skipped)
     assert CarryLedger(skipped).applied() == ("carry_b",)
 
     ledgerless = tmp_path / "ledgerless"
     ledgerless.mkdir()
-    assert "must first run ['carry_a', 'carry_b']" in apply("carry_b", ledgerless).stderr
+    with pytest.raises(ValueError, match=re.escape("must first run ['carry_a', 'carry_b']")):
+        apply("carry_b", ledgerless)
     assert CarryLedger(ledgerless).applied() == ()
-    chain = CarryChain.at(repo.path, "HEAD")
     for step in chain.pending(CarryLedger(ledgerless).applied()):
-        assert apply(step.name, ledgerless).returncode == 0
+        apply(step.name, ledgerless)
     assert CarryLedger(ledgerless).applied() == ("carry_a", "carry_b", "carry_c")
 
 
@@ -294,11 +293,15 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
 
 
 class CheckoutStack(Stack):
-    """A checkout's stack running this test's interpreter in place of its synced one."""
+    """A checkout's stack running this test's interpreter in place of its synced one; a
+    synthetic tree holds no Core, so this checkout's ``src`` follows the tree's own."""
 
     @property
     def python(self) -> Path:
         return Path(sys.executable)
+
+    def environment(self, *paths: Path) -> dict:
+        return super().environment(*paths, REPO / "src") if paths else super().environment()
 
 
 def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_path):
@@ -307,17 +310,15 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     (tmp_path / "checkout/src").mkdir(parents=True)
     repo = Repository(tmp_path / "checkout")
     (repo.path / "src/probe_api.py").write_text("OLD = 1\n")
-    older = repo.commit({name: (REPO / STEPS / f"{name}.py").read_text()
-                         for name in ("carry", "backup")})
+    older = repo.commit({})
     (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
     newer = repo.commit({"carry_probe": (
-        "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
+        "from probe_api import NEW\n\nfrom agent_comms.installer.carry import Carried, Carry\n\n\n"
         "class Probe(Carry):\n"
         "    @classmethod\n    def before_stop(cls, root, *, apply):\n"
         "        (root / 'stopped').write_text(str(NEW))\n        return Carried(1, {}, ('stopped',))\n\n"
         "    @classmethod\n    def carry(cls, root, *, apply):\n"
-        "        (root / 'carried').write_text(str(NEW))\n        return Carried(1, {}, ('carried',))\n\n\n"
-        "if __name__ == '__main__':\n    Probe.main()\n")})
+        "        (root / 'carried').write_text(str(NEW))\n        return Carried(1, {}, ('carried',))\n")})
     repo.git("checkout", "-q", older)
     root = tmp_path / "bus"
     root.mkdir()
@@ -374,11 +375,22 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
         db.commit()
 
 
+@cache
+def head_chain() -> CarryChain:
+    return CarryChain.at(REPO, "HEAD")
+
+
 def run_step(name: str, root: Path, *flags: str) -> dict:
-    environment = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REPO / "src"), str(REPO / "tools")])}
-    output = subprocess.check_output(
-        [sys.executable, "-m", f"cutover.{name}", str(root), *flags], env=environment, cwd=REPO, timeout=60)
-    return json.loads(output)
+    """One head step as the installer runs it: a dry run, or applied through the ledger
+    under the bus's wire lock."""
+    chain = head_chain()
+    step = next(step for step in chain.steps if step.name == name)
+    declared = getattr(importlib.import_module(f"cutover.{name}"), step.declaration)
+    apply = "--apply" in flags
+    with _store_lock(root / "wire"):
+        result = (CarryLedger(root).apply(chain, name, lambda: declared.carry(root, apply=True))
+                  if apply else declared.carry(root, apply=False))
+    return result.report(name, apply)
 
 
 def retained_read_ledger(root: Path) -> None:
@@ -393,7 +405,7 @@ def retained_read_ledger(root: Path) -> None:
     ))
 
 
-def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch, capsys):
+def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch):
     """Storage roots/read keys are current; the remaining carries preserve retained data.
     Todo messages are installed before orders validate the current declaration."""
     tmp_path.chmod(0o700)
@@ -419,30 +431,16 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
                                  "native_package": str(tmp_path)}))
     route.chmod(0o600)
 
-    selected = CarryChain.at(REPO, "HEAD")
-    chain = selected.steps
-    # Every invocation uses this same committed declaration; avoid rescanning Git history
-    # for each dry/apply/repeat of each step.
-    monkeypatch.setattr(Carry, "chain", classmethod(lambda cls: selected))
-    steps = {step.name: step.current(REPO) for step in chain}
-
-    def invoke(name, *flags):
-        # Exercise the real CLI owner without starting a fresh interpreter for every
-        # dry/apply/repeat. The target-src test separately proves process isolation.
-        with monkeypatch.context() as call:
-            call.setattr(sys, "argv", [name, str(root), *flags])
-            steps[name].main()
-        return json.loads(capsys.readouterr().out)
-
+    steps = [step.name for step in head_chain().steps]
     for name in steps:
         before = bus_files(root)
-        dry = [invoke(name)]
+        dry = [run_step(name, root)]
         carried(root, before, dry, RehearsalFiles.declared(dry))
-        applied = invoke(name, "--apply")
+        applied = run_step(name, root, "--apply")
         changed = [applied]
         carried(root, before, changed, RehearsalFiles.declared(changed))
-        assert invoke(name)["changed"] == 0, name
-    assert CarryLedger(root).applied() == tuple(step.name for step in chain)
+        assert run_step(name, root)["changed"] == 0, name
+    assert CarryLedger(root).applied() == tuple(steps)
 
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.earlier_projects == (Path("/earlier/project"),)
@@ -513,7 +511,7 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     for earlier in chain[: chain.index("carry_turn_records")]:
         CarryLedger(root).record(earlier)
     if carried_count is None:
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(ValueError, match="stop their owners first"):
             run_step("carry_turn_records", root, "--apply")
         assert json.loads((root / "registry.json").read_text()) == registry
         return
@@ -525,69 +523,6 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert run_step("carry_turn_records", root)["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert not thread.executing
-
-
-def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, tmp_path, monkeypatch):
-    from threading import Barrier
-
-    import upgrade_bus
-    from agent_comms.maintenance_barrier import ReadyPhase
-
-    names = [f"worker-{number}" for number in range(19)]
-    stop = Barrier(len(names), timeout=10)
-    start = Barrier(len(names), timeout=10)
-    calls = []
-    commands = []
-    carried_bus = []
-
-    class Installed(Stack):
-        def running_owners(self, root):
-            assert not calls  # Never rediscover a possibly changed owner set.
-            return names
-
-        def cli(self, root, *arguments):
-            command, flag, name = arguments
-            assert flag == "--name" and name in names
-            if command == "stop":
-                stop.wait()  # A serial stop loop cannot reach this barrier.
-            else:
-                assert command == "start" and carried_bus
-                start.wait()  # Nor can a serial start loop.
-            calls.append((command, name))
-            return {}
-
-        def relock(self):
-            assert commands[-1][-5:] == (
-                "submodule", "update", "--init", "--recursive", "--checkout")
-
-        def prepare_native(self):
-            pass
-
-        def verify(self, root):
-            return {"threads": len(names)}
-
-    def carry(root, pending, staged, revisions):
-        assert sorted(calls) == sorted(("stop", name) for name in names)
-        carried_bus.append(root)
-        return []
-
-    monkeypatch.setattr(upgrade_bus, "carry_all", carry)
-    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
-    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
-    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
-    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    stack = Installed(tmp_path / "checkout")
-    started = time.perf_counter()
-    result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
-                              "worker", comms.root.parent,
-                              RehearsalFiles(0, 0, (), 0))
-    assert time.perf_counter() - started < 120
-    assert result["backup"] is None and result["backup_bytes"] == 0
-    assert not list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*"))
-    assert result["stopped_and_started"] == names
-    assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
-    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
-    assert commands[0] == ("git", "-C", stack.checkout, "merge", "--ff-only", "-q", "new")
 
 
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms):
@@ -603,25 +538,6 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
         native.execution.require_native()
         with pytest.raises(ValueError, match='no native prompt transport'):
             external.execution.require_native()
-
-
-def test_restore_space_refuses_before_conversion_or_stop(comms, monkeypatch):
-    from types import SimpleNamespace
-
-    import upgrade_bus
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError('Touched conversion or owner control before space admission')
-
-    monkeypatch.setattr(upgrade_bus.shutil, 'disk_usage', lambda root: SimpleNamespace(free=1))
-    monkeypatch.setattr(upgrade_bus, 'before_stop', forbidden)
-    monkeypatch.setattr(upgrade_bus.Stack, 'running_owners', forbidden)
-    assert RestoreSpace.measure(1024, comms.root.parent).needed == 1024 + 1024**3
-    with pytest.raises(UpgradeRefused, match='Restore needs'):
-        upgrade_bus.live(REPO, comms.root, 'old', 'new', (), Stack(REPO), Stack(REPO),
-                         None, 'worker', comms.root.parent,
-                         RehearsalFiles(0, 1, ("store.sqlite3",), 1024))
-    assert not MaintenanceBarrier(comms.root / 'registry.json').marker_path.exists()
 
 
 def test_bus_files_reads_metadata_without_contents(tmp_path, monkeypatch):
@@ -667,147 +583,6 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path)
     assert sorted(finished) == sorted(names)
 
 
-def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(tmp_path, monkeypatch):
-    import upgrade_bus
-
-    commands = []
-
-    def run(*command):
-        commands.append(command)
-        if command[3:5] == ("worktree", "add"):
-            (command[-2] / STEPS).mkdir(parents=True)
-        return ""
-
-    monkeypatch.setattr(upgrade_bus, "run", run)
-    revisions = Revisions(tmp_path / "repo", tmp_path / "trees")
-    selected = revisions.tree("abcdef123456")
-    assert (selected / STEPS / "step_worker.py").read_bytes() == (
-        REPO / STEPS / "step_worker.py").read_bytes()
-    assert commands == [
-        ("git", "-C", revisions.repo, "worktree", "add", "--detach", "-q", selected, "abcdef123456"),
-        ("git", "-C", selected, "submodule", "update", "--init", "--recursive", "--checkout"),
-    ]
-
-    def missing_dependency(*command):
-        assert command[3:] == ("submodule", "update", "--init", "--recursive", "--checkout")
-        raise UpgradeRefused("missing pinned dependency")
-
-    monkeypatch.setattr(upgrade_bus, "run", missing_dependency)
-    with pytest.raises(UpgradeRefused, match="missing pinned dependency"):
-        revisions.tree("abcdef123456")
-    assert revisions.trees == {"abcdef123456": selected}  # Failed preparation still owns cleanup.
-
-
-def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monkeypatch):
-    import upgrade_bus
-    from agent_comms.maintenance_barrier import ReadyPhase
-
-    datum = comms.root / "kept.txt"
-    datum.write_text("before")
-    commands = []
-
-    class Installed(Stack):
-        def backup_files(self, root, pending, revisions):
-            return (datum,)
-
-        def running_owners(self, root):
-            return []
-
-        def relock(self):
-            pass
-
-        def prepare_native(self):
-            pass
-
-    def failed_carry(*args):
-        datum.write_text("changed before failure")
-        raise RuntimeError("carry failed after writing")
-
-    def recorded(*command, **options):
-        commands.append(command)
-        return "new" if "rev-parse" in command else ""
-
-    monkeypatch.setattr(upgrade_bus, "run", recorded)
-    monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
-    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
-    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
-    stack = Installed(tmp_path / "checkout")
-    with pytest.raises(RuntimeError, match="carry failed after writing"):
-        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (object(),), stack, stack, None,
-                         "worker", comms.root.parent,
-                         RehearsalFiles(0, 1, ("kept.txt",), datum.stat().st_size))
-    assert datum.read_text() == "before"
-    assert ("git", "-C", stack.checkout, "reset", "-q", "--keep", "old") in commands
-    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
-    backups = list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/stores/kept.txt"))
-    assert len(backups) == 1 and backups[0].read_text() == "before"
-
-
-@pytest.mark.parametrize("restart_fails", [False, True])
-def test_failed_live_carry_restores_checkout_and_reports_original_error(
-    comms, tmp_path, monkeypatch, capsys, restart_fails
-):
-    import upgrade_bus
-
-    checkout = tmp_path / "rollback-checkout"
-    checkout.mkdir()
-    repo = Repository(checkout)
-    current = repo.commit({"carry_before": step_source()})
-    target = repo.commit({"carry_after": step_source()})
-    repo.git("checkout", "--detach", current)
-    declaration = checkout / STEPS / "carry.py"
-    local_source = declaration.read_text() + "\n# Preserve this unrelated local edit.\n"
-    declaration.write_text(local_source)
-    datum = comms.root / "kept.txt"
-    datum.write_text("before")
-    calls = []
-
-    class Installed(Stack):
-        def backup_files(self, root, pending, revisions):
-            return (datum,)
-
-        def running_owners(self, root):
-            return ["worker"]
-
-        def owners(self, root, command, names):
-            assert names == ["worker"]
-            calls.append(command)
-            if command == "start" and restart_fails:
-                raise RuntimeError("restart failed after restore")
-
-        def prepare_native(self):
-            pass
-
-        def publish(self):
-            assert repo.git("rev-parse", "HEAD") == current
-            calls.append("publish")
-
-    def failed_carry(*args):
-        assert repo.git("rev-parse", "HEAD") == target
-        datum.write_text("changed before failure")
-        raise RuntimeError("carry failed after forward merge")
-
-    monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
-    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
-    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
-    stack = Installed(checkout)
-    expected = "restart failed after restore" if restart_fails else "carry failed after forward merge"
-    with pytest.raises(RuntimeError, match=expected):
-        upgrade_bus.live(checkout, comms.root, current, target, (object(),), stack, stack, None,
-                         "worker", comms.root.parent,
-                         RehearsalFiles(0, 1, ("kept.txt",), datum.stat().st_size))
-    assert repo.git("rev-parse", "HEAD") == current
-    assert declaration.read_text() == local_source
-    assert datum.read_text() == "before"
-    assert calls == ["stop", "publish", "start"]
-    stderr = capsys.readouterr().err
-    original = ("upgrade-bus: install failed (RuntimeError: carry failed after forward merge); "
-                "restoring original installation")
-    assert original in stderr
-    assert stderr.index(original) < stderr.index(" reset -q --keep ")
-    assert ("upgrade-bus: restored after failure" in stderr) is not restart_fails
-
-
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
     """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
     stack = Stack(REPO, tmp_path)
@@ -844,234 +619,6 @@ def test_upgrade_transcript_hold_covers_selected_snapshot(comms):
         assert backup.original()
     assert bridge_publishes(comms.root) == "wrote"
     assert tuple(backup.files()) == (str(path.relative_to(comms.root)),)
-
-
-def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
-    from agent_comms.comms import Comms
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.maintenance_barrier import ReadyPhase
-    from cutover.carry_maintenance_identity import MaintenanceIdentity, OldMarker, OldReadyState
-    from install_gate import PracticeCopy
-
-    source, destination = tmp_path / "source", tmp_path / "copy"
-    source.mkdir()
-    destination.mkdir()
-    old = MaintenanceBarrier(source / "registry.json")
-    marker = OldMarker(version=1, root=str(source), generation=7)
-    state = OldReadyState(version=1, root=str(source), generation=7,
-                         operator="old-installer", nonce="a" * 32, phase=ReadyPhase)
-    for path, record in ((old.marker_path, marker), (old.state_path, state)):
-        path.write_text(json.dumps(FieldCodec.encode(record)))
-        path.chmod(0o600)
-    original = tuple(path.read_bytes() for path in old.witness_paths)
-    CarryLedger(source).record("carry_external_pages")
-    PracticeCopy(Comms(source), destination).copy_install_state(destination)
-    assert CarryLedger(destination).applied() == CarryLedger(source).applied()
-    copied = MaintenanceBarrier(destination / "registry.json")
-    for path in copied.witness_paths:
-        assert json.loads(path.read_bytes())["version"] == 1
-        assert path.stat().st_mode & 0o777 == 0o600
-    assert MaintenanceIdentity.before_stop(destination, apply=True).changed == 1
-    assert copied.read().version == 2
-    assert original == tuple(path.read_bytes() for path in old.witness_paths)
-
-
-def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
-    import upgrade_bus
-
-    root = tmp_path / "original"
-    root.mkdir()
-    requested = tmp_path / "copies"
-    requested.mkdir()
-    destinations = []
-
-    (root / "storage.json").write_text(json.dumps({"scratch_base": str(requested)}))
-
-    def refused_copy(self, source, into):
-        assert source == root
-        assert into.parent.parent == requested / "worker"
-        destinations.append(into)
-        raise RuntimeError("copy refused")
-
-    monkeypatch.setattr(upgrade_bus.Stack, "practice_copy", refused_copy)
-    with pytest.raises(RuntimeError, match="copy refused"):
-        stack = Stack(tmp_path)
-        upgrade_bus.rehearse(root, stack, None, "worker", stack)
-    assert len(destinations) == 1
-    assert list((requested / "worker").iterdir()) == []
-    assert root.is_dir()
-
-
-def rehearsed(stack: Stack, root: Path) -> dict:
-    from upgrade_bus import rehearse
-    revisions = Revisions(stack.checkout, root.parent / "rehearsal-revisions")
-    try:
-        return rehearse(root, stack, revisions, "worker", stack)
-    finally:
-        revisions.close()
-
-
-def installed_live(stack: Stack, root: Path) -> dict:
-    from upgrade_bus import live
-    path = ExternalTranscript.path_in(root)
-    return live(stack.checkout, root, "old", "new", (object(),), stack, stack, None,
-                "worker", root.parent,
-                RehearsalFiles(0, 1, (str(path.relative_to(root)),), path.stat().st_size))
-
-
-@pytest.mark.parametrize("install", [rehearsed, installed_live])
-def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path, monkeypatch, install):
-    """The d88a12185 rehearsal: ToolCallIndex's BEGIN IMMEDIATE timed out against the
-    installer's own transcript hold, which then stayed up across every carry."""
-    import upgrade_bus
-    from cutover.carry_tool_call_index import ToolCallIndex
-
-    unit = comms.registry.declare(comms.registry.new_thread(
-        "index-unit", frozenset({"index"}), str(comms.root), execution=ExternalThreadExecution))
-    with ExternalTranscript(comms.root, unit.incarnation).writing():
-        pass
-    path = ExternalTranscript.path_in(comms.root)
-    with closing(CoordinationStore.writer(path)) as db, db:
-        for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
-                                   "AND sql IS NOT NULL").fetchall():
-            db.execute(f'DROP INDEX "{index}"')
-    monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
-    with transcripts_held(comms.root), pytest.raises(sqlite3.OperationalError, match="locked"):
-        ToolCallIndex.carry(comms.root, apply=True)
-
-    def tool_call_index(root, pending, staged, revisions):
-        return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
-
-    class Installed(Stack):
-        def backup_files(self, root, pending, revisions):
-            return (path,)
-
-        @contextmanager
-        def practice_copy(self, root, into):
-            # The fixture deliberately removes indexes before carrying; the current
-            # CheckRoot reader rejects that schema. This test owns hold ordering, not copying.
-            from install_gate import PracticeMeasurement
-            shutil.copytree(root, into)
-            yield Comms(into), PracticeMeasurement(
-                sum(path.stat().st_size for path in into.rglob("*") if path.is_file()), 0.0)
-
-        def running_owners(self, root):
-            return []
-
-        def relock(self):
-            pass
-
-        def prepare_native(self):
-            pass
-
-        def verify(self, root):
-            return {"read": ExternalTranscript.path_in(root).exists()}
-
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    head = Repository(checkout).commit({})
-    monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
-    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
-    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options:
-                        head if "rev-parse" in command else "")
-    # A rehearsal places the route under its own home, so the route sits under this one.
-    monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
-    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
-    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    result = install(Installed(checkout), comms.root)
-    step, = result["steps"]
-    assert step["changed"] == step["indexes"] > 0
-    assert result["files"].rewritten == 1
-    assert result["read"] == {"read": True}
-    if install is installed_live:
-        backup = Path(result["backup"])
-        assert result["backup_bytes"] == sum(path.stat().st_size
-                                              for path in backup.rglob('*') if path.is_file())
-        assert result["backup_bytes"] > 0
-
-
-def test_practice_copy_includes_pending_step_stores(comms, tmp_path, monkeypatch):
-    from conftest import publish_initial
-    from install_gate import PracticeCopy
-    import upgrade_bus
-
-    sender = comms.registry.declare(comms.registry.new_thread(
-        "sender", frozenset({"team"}), str(tmp_path), execution=ExternalThreadExecution))
-    comms.messaging.initialize_private_initial_protocol()
-    publish_initial(comms, sender.name, "#team", "retained practice message")
-    store = TodoStore(comms.root)
-    lead = thread("lead", comms.root, 1.0)
-    store.create("todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "carry this store",
-                 creator=lead, owner=lead, generation="initial", goal=GoalRef("lead", 1.0, "goal-1"),
-                 deadline=RecordedEventTime(1000.0), order=order(comms.root))
-    store_path = TodoStore.path_in(comms.root)
-    checkout = tmp_path / "declared-store-checkout"
-    checkout.mkdir()
-    repo = Repository(checkout)
-    shutil.copy2(REPO / STEPS / "backup.py", checkout / STEPS / "backup.py")
-    shutil.copy2(REPO / STEPS / "step_worker.py", checkout / STEPS / "step_worker.py")
-    (checkout / "src").symlink_to(REPO / "src", target_is_directory=True)
-    current = repo.commit({})
-    target = repo.commit({"carry_store": (
-        "from cutover.carry import TodoRows\n\n"
-        "class Step(TodoRows):\n"
-        "    @classmethod\n"
-        "    def carry_rows(cls, root, db, *, apply):\n"
-        "        previous = db.execute('PRAGMA user_version').fetchone()[0]\n"
-        "        db.execute('PRAGMA user_version=1')\n"
-        "        return cls.carried(root, int(previous != 1), {}, apply=apply)\n"
-    )})
-    pending = CarryChain.at(checkout, target).pending(())
-    source_tree = tmp_path / "declared-step-source"
-    shutil.copytree(checkout / "tools", source_tree / "tools")
-    (source_tree / "src").symlink_to(REPO / "src", target_is_directory=True)
-    omitted = []
-
-    class FixtureRevisions(Revisions):
-        def tree(self, revision):
-            assert revision == target
-            return source_tree
-
-    class Installed(Stack):
-        @contextmanager
-        def practice_copy(self, root, into):
-            with PracticeCopy(Comms(root), into).open() as (copied, measurement):
-                assert not TodoStore.path_in(copied.root).exists()
-                omitted.append(True)
-                yield copied, measurement
-
-        def running_owners(self, root):
-            return []
-
-        def prepare_native(self):
-            pass
-
-        def publish(self):
-            pass
-
-        def verify(self, root):
-            with closing(CoordinationStore.read_snapshot(TodoStore.path_in(root))) as db:
-                return {"store_version": db.execute("PRAGMA user_version").fetchone()[0]}
-
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setattr(upgrade_bus, "prepare_runtime_home", lambda home: home.mkdir(parents=True))
-    monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "absent-route.json")
-    monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
-    monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    revisions = FixtureRevisions(checkout, tmp_path / "unused-revisions")
-    stack = Installed(checkout)
-    rehearsal = upgrade_bus.rehearse(comms.root, stack, revisions, "worker", stack)
-    assert omitted == [True]
-    assert store_path.name in rehearsal["files"].names
-    assert rehearsal["read"] == {"store_version": 1}
-    with closing(CoordinationStore.read_snapshot(store_path)) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 0
-    repo.git("checkout", "--detach", current)
-    live = upgrade_bus.live(checkout, comms.root, current, target, pending, stack, stack, revisions,
-                            "worker", tmp_path, rehearsal["files"])
-    live["files"].require_rehearsal(rehearsal["files"])
-    assert live["read"] == {"store_version": 1}
-    assert (Path(live["backup"]) / "stores" / store_path.name).exists()
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):

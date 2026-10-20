@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.active_route import acquire_exclusive_route_lock, active_route_path, read_active_route
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 def selects(path: Path, root: Path) -> bool:
@@ -54,3 +54,7 @@ class RoutePackage(Carry):
         finally:
             os.close(directory)
         return Carried(1)
+
+
+if __name__ == "__main__":
+    RoutePackage.main()

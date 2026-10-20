@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_comms.registry_store import RegistryStore
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class EarlierProjects(Carry):
@@ -30,3 +30,7 @@ class EarlierProjects(Carry):
                 edit.commit()
         written = (store.path.name, store.guard_path.name) if apply and changed else ()
         return Carried(len(changed), dict(sorted(changed.items())), written)
+
+
+if __name__ == "__main__":
+    EarlierProjects.main()

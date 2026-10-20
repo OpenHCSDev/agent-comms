@@ -20,7 +20,7 @@ from agent_comms.maintenance_barrier import (
     ReadyPhase,
 )
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -91,3 +91,7 @@ class MaintenanceIdentity(Carry):
             ),
         )
         return state.carried(barrier, apply=apply)
+
+
+if __name__ == "__main__":
+    MaintenanceIdentity.main()

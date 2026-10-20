@@ -27,24 +27,14 @@ class PracticeMeasurement:
     max_bytes = 3 * 1024**3
 
     @classmethod
-    def of(cls, copy: Path, seconds: float) -> PracticeMeasurement:
+    def of(cls, copy: Path, seconds: float, floor: float) -> PracticeMeasurement:
         """Refuse a copy over its cap or without room for the rehearsal's second copy."""
         size = sum(path.stat().st_size for path in copy.rglob("*") if path.is_file())
         if size > cls.max_bytes:
-            raise UpgradeRefused(f"Retained-tail copy is {size} bytes, over its {cls.max_bytes} cap")
-        if shutil.disk_usage(copy.parent).free < 2 * size + storage_floor():
+            raise UpgradeRefused(f"Practice copy is {size} bytes, over its {cls.max_bytes} cap")
+        if shutil.disk_usage(copy.parent).free < 2 * size + floor:
             raise UpgradeRefused(f"Insufficient free space for rehearsal of {size} copied bytes")
         return cls(size, seconds)
-
-
-def storage_floor() -> float:
-    return float(StorageRule.load(Path.home() / ".agent-comms").floor_gib) * 2**30
-
-
-def require_room(parent: Path) -> None:
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if shutil.disk_usage(parent).free < storage_floor():
-        raise UpgradeRefused("Insufficient free space before building the retained-tail copy")
 
 
 def prepare_runtime_home(home: Path) -> None:
@@ -73,7 +63,10 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     log under its own lock, every other saved file byte for byte. The maintenance witnesses
     stay behind: the rehearsal holds its copy itself. Stored paths keep naming the live bus,
     and every step writes only inside the root it is given."""
-    require_room(into.parent)
+    floor = StorageRule.load(root).floor_gib * 2**30
+    into.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if shutil.disk_usage(into.parent).free < floor:
+        raise UpgradeRefused("Insufficient free space before building the practice copy")
     started = time.monotonic()
     witnesses = {str(path.relative_to(root))
                  for path in MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths}
@@ -94,4 +87,4 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
                 original.backup(copied)
         elif name.removesuffix("-wal") not in databases:
             shutil.copy2(source, copy)
-    yield into, PracticeMeasurement.of(into, time.monotonic() - started)
+    yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)

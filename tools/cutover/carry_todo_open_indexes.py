@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.installer import carry
+from . import carry
 
 from agent_comms.todos import Todo
 
@@ -21,3 +21,7 @@ class TodoOpenIndexes(carry.TodoRows):
             Todo.create(db, if_not_exists=True)
             changed = len(set(db.execute(query)) - before)
         return cls.carried(root, changed, {"indexes": changed}, apply=apply)
+
+
+if __name__ == "__main__":
+    TodoOpenIndexes.main()

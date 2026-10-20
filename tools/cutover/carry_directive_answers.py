@@ -17,7 +17,7 @@ from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 from agent_comms.typed_table import Column, JsonStorage, TypedRow
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 @dataclass(frozen=True)
@@ -97,3 +97,7 @@ class DirectiveAnswers(Carry):
                     store.save_unlocked(document)
                     rewritten.extend((store.path.name, store.guard_path.name))
         return Carried(changed, rewritten=tuple(rewritten))
+
+
+if __name__ == "__main__":
+    DirectiveAnswers.main()

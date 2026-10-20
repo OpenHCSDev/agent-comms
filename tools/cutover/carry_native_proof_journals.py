@@ -24,7 +24,7 @@ from agent_comms.private_path import FileRevision, NativeSessionFileRole, fsync_
 from agent_comms.store_files import StoreOwner
 from agent_comms.typed_table import TypedRow
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 @dataclass(frozen=True)
@@ -175,3 +175,7 @@ class NativeProofJournals(Carry):
                             staged.unlink(missing_ok=True)
                         rewritten.append(str(files.input_proof.relative_to(root)))
         return Carried(len(pending), rewritten=tuple(rewritten))
+
+
+if __name__ == "__main__":
+    NativeProofJournals.main()

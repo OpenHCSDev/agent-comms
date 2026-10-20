@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
@@ -29,3 +29,7 @@ class GoalWaitTargets(Carry):
         return Carried(
             len(waits), {"waits": len(waits)}, (previous.name, store.path.name) if apply else ()
         )
+
+
+if __name__ == "__main__":
+    GoalWaitTargets.main()

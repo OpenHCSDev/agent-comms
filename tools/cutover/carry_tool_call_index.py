@@ -6,7 +6,7 @@ from typing import ClassVar
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.typed_table import SQLiteSchemaObject
 
-from agent_comms.installer.carry import Carried, StoreCarry
+from .carry import Carried, StoreCarry
 
 
 class ToolCallIndex(StoreCarry):
@@ -32,3 +32,7 @@ class ToolCallIndex(StoreCarry):
                 db.execute(f'DROP INDEX IF EXISTS "{change.name}"')
                 db.execute(change.declared)
         return cls.carried(root, len(changes), {"indexes": len(changes)}, apply=apply)
+
+
+if __name__ == "__main__":
+    ToolCallIndex.main()

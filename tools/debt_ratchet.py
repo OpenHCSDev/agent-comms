@@ -1576,20 +1576,9 @@ class EditedCarry(ChangeMeasure):
     @staticmethod
     def conversion(source: bytes) -> str:
         """Conversion code is immutable; publication backups are metadata, as was the
-        predecessor an ``after`` string once restated. The framework moved from
-        ``tools/cutover`` into the installer package, so an absolute import of it names
-        the module a step's relative import named; steps have no command line to run."""
+        predecessor an ``after`` string once restated."""
         tree = ast.parse(source)
-        installer = ".".join(FRAMEWORK.with_suffix("").parts[1:-1])
-        tree.body = [node for node in tree.body if not (
-            isinstance(node, ast.If) and ast.unparse(node.test) in (
-                "__name__ == '__main__'", '__name__ == "__main__"'))]
         for node in tree.body:
-            match node:
-                case ast.ImportFrom(module=str(module), level=0) if (
-                        module == installer or module.startswith(installer + ".")):
-                    node.module = module.removeprefix(installer).removeprefix(".") or None
-                    node.level = 1
             if isinstance(node, ast.ClassDef):
                 node.body = [statement for statement in node.body
                              if not (isinstance(statement, ast.FunctionDef)

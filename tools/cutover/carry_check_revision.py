@@ -13,8 +13,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from agent_comms.installer import carry
-from agent_comms.installer.carry import Carried
+from . import carry
+from .carry import Carried
 
 from agent_comms.goals import OrderCheck
 from agent_comms.todos import Todo, TodoStore
@@ -53,3 +53,7 @@ class CheckRevisions(carry.TodoRows):
                 order = replace(todo.order, check=replace(check, command=command))
                 Todo.update(rows, where="{id} = ?", parameters=(todo.id,), order=order)
         return cls.carried(root, changed, {"open": changed}, apply=apply)
+
+
+if __name__ == "__main__":
+    CheckRevisions.main()

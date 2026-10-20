@@ -11,7 +11,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import Hunt, HuntRecord
 from agent_comms.typed_table import TypedRow
-from agent_comms.installer import carry
+from . import carry
 
 
 @dataclass(frozen=True)
@@ -45,3 +45,7 @@ class HuntRecords(carry.TodoRows):
                     db.execute('ALTER TABLE todo DROP COLUMN hunts')
                     schema += 1
         return cls.carried(root, moved + schema, {'hunts': moved, 'schema': schema}, apply=apply)
+
+
+if __name__ == '__main__':
+    HuntRecords.main()

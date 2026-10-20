@@ -23,7 +23,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
 
-from .active_route import ActiveRoute, CommsRoute, replace_unreadable_active_route
+from .active_route import ActiveRoute, CommsRoute, LocalRoute, read_active_route, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
@@ -56,8 +56,9 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
-from .harness_install import Harness, HarnessInstalled
+from .field_codec import FieldCodec, FieldPlan, MalformedRecord, PathText, WireForm, option
+from agent_comms.launch_root import LaunchRoot
+from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
@@ -560,13 +561,7 @@ class SubagentsImportedResult(CliResult):
 @dataclass(frozen=True)
 class InstallResult(CliResult):
     config: str
-    harnesses: Mapping[str, HarnessInstalled]
-
-    def to_wire(self) -> object:
-        # Each harness's installation sits beside the config path on the wire.
-        return {"config": self.config,
-                **{name: FieldCodec.encode(installed)
-                   for name, installed in self.harnesses.items()}}
+    registered: Mapping[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -725,6 +720,11 @@ class CliCommand(
         json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
+
+    @classmethod
+    def published_launch(cls) -> LaunchRoot:
+        """The root a command reads when no --root is given."""
+        return ActiveRoute.published_launch()
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Open the bus this command reads, then run it; a command that must act before
@@ -1251,12 +1251,45 @@ class RegisterCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InstallCliCommand(CliCommand):
-    help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
+    help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
+            "harness to use the bus, with the commander skill and tools")
+    checkout: Annotated[Path, PathText] = option("--checkout", default_factory=Path.cwd, parser_default=".")
+    to: str = option("--to", default="origin/main")
+    installer: str = option("--installer", default="claude-code",
+                            help="The unit running this install; the next install's plan names it")
+    rehearse: bool = option("--rehearse", default=False,
+                            help="Carry and read a copy of the bus; change nothing")
+    retire: bool = option("--retire", default=False,
+                          help="Move the bus aside, kept, and install a fresh one in its place")
+    spill_dir: Annotated[Path, PathText] = option(
+        "--spill-dir", default_factory=lambda: Path.home() / ".cache/agent-rehearsal",
+        parser_default=str(Path.home() / ".cache/agent-rehearsal"),
+        help="Parent directory for live backups")
     project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
     repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
     commander: str = option("--commander", default="claude-code")
 
+    @classmethod
+    def published_launch(cls) -> LaunchRoot:
+        """Install runs where no route selects a bus yet: the published bus while its route
+        still selects it, otherwise the default root, where install creates one."""
+        try:
+            route = read_active_route()
+        except MalformedRecord:
+            route = None
+        if route is not None and route.selects_its_root():
+            return LaunchRoot.from_path(route.root)
+        return LaunchRoot.from_path(LocalRoute.default().root)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """The bus may be unreadable by this runtime, or absent, until the target's own
+        source has carried or created it, so nothing opens it here."""
+        from agent_comms.installer.launch import InstallRun
+
+        return InstallRun.start(self, route.root).launch(output)
+
     def apply(self, ctx: Comms) -> CliResult:
+        """The install child's last step, on the bus it carried or created."""
         from .commander.config import CommanderConfig
 
         home = Path.home()
@@ -1268,7 +1301,7 @@ class InstallCliCommand(CliCommand):
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.install(ctx, self.commander, project)
+            type(harness).declared_name: harness.register(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
 

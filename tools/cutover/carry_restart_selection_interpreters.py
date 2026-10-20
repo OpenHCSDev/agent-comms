@@ -7,7 +7,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.restart_queue import DIRECTORY, RestartQueue, RestartState
 from agent_comms.thread_identity import OwnerIdentity
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class RestartSelectionInterpreters(Carry):
@@ -39,3 +39,7 @@ class RestartSelectionInterpreters(Carry):
             len(settled), {"settled_deleted": len(settled)},
             tuple(str(path.relative_to(root)) for path in settled) if apply else (),
         )
+
+
+if __name__ == "__main__":
+    RestartSelectionInterpreters.main()

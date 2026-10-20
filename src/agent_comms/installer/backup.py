@@ -38,7 +38,7 @@ with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as wri
 
 class UpgradeRefused(Exception):
     """The update stopped without permission to discard its original data."""
-    prefix: ClassVar[str] = "upgrade-bus: refused:"
+    prefix: ClassVar[str] = "install: refused:"
 
     @property
     def output(self) -> str:

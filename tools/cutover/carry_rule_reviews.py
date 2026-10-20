@@ -7,7 +7,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.rule_reviews import RuleReviews
 from agent_comms.typed_table import SQLiteSchemaObject
 
-from agent_comms.installer.carry import Carried, StoreCarry
+from .carry import Carried, StoreCarry
 
 
 class ResetRuleReviews(StoreCarry):
@@ -30,3 +30,7 @@ class ResetRuleReviews(StoreCarry):
                         row.drop(db)
                         row.create(db)
         return Carried(1, rewritten=(path.name,) if apply else ())
+
+
+if __name__ == "__main__":
+    ResetRuleReviews.main()

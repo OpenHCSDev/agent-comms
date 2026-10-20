@@ -443,7 +443,7 @@ def test_install_due_reads_the_schedule_time_alone(commander):
         return [rule.line() for rule in InstallDue.violations(comms, 'lead')]
 
     assert due() == ['INSTALL DUE (no install is planned on this bus) -> the installer rehearses and '
-                     'installs main with tools/upgrade_bus.py and posts the result to the commander']
+                     'installs main with agent-comms install and posts the result to the commander']
     PlannedInstallDeadline.after('worker', time.time()).plan(comms.root)
     assert due() == []
     PlannedInstallDeadline.after('worker', time.time() - InstallDeadline.cadence).plan(comms.root)
