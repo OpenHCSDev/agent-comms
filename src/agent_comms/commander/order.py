@@ -29,9 +29,6 @@ from typing import Self
 
 from pydantic import PrivateAttr
 
-from agent_comms_hooks import ClaudeHook
-from agent_comms_hooks.watch import PeerSync
-
 from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
@@ -88,7 +85,6 @@ from ..tools import (
     TodoList,
 )
 from .config import CommanderConfig, CommanderRole
-from .send_guard import CommanderSession
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -240,7 +236,6 @@ class CommanderContext(CommanderConfig):
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
         published = self.comms.messaging.send(self.commander, target,
             audience.addressed(target, body), answers=answers)
-        PeerSync.sent(self, target)
         return published.message.message_id
 
     def call(self, tool):
@@ -999,17 +994,6 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander):
             print(path)
-
-
-class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
-    """Run the hook against the selected commander's existing context and session owner."""
-
-    help = "inject or block when the selected commander owes its peer a relay"
-
-    def run(self, ctx: Commander) -> None:
-        hook = ClaudeHook.read()
-        if CommanderSession(hook.session_id, ctx).is_commander():
-            PeerSync.report(hook, ctx)
 
 
 class BoardVerb(OrderVerb):

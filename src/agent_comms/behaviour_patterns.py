@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .child_process import CountPrinted, NoIntegerPrinted
-from .commander.send_guard import TacticalCommand
 from .declared_family import DeclaredFamily
 from .goals import OrderCheck
 from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
@@ -335,15 +334,6 @@ class BoardDisagreesPattern(BehaviourPattern):
     )
     checks = (RuleCheck(BoardDisagrees),)
     sources = (ProblemFix("P170", "c9c0c04db"), IntentionsAsAccomplishmentsFailure())
-
-
-class TacticalCommandPattern(BehaviourPattern):
-    signature = (
-        "The commander's own session runs an install, maintenance, connector restart or carry"
-        " command instead of ordering a unit to."
-    )
-    checks = (CallableCheck(TacticalCommand.install_refusals),)
-    sources = (ProblemFix("P171", "cba7b09c3"),)
 
 
 class PlainTextPattern(BehaviourPattern):

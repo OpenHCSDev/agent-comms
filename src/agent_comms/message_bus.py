@@ -53,8 +53,14 @@ if TYPE_CHECKING:
     from .relationships import PeerRelation
     from .threads import Thread
 
+from agent_comms.wire_log import (
+    FRESH_SNAPSHOT_OPENING,
+    CurrentSnapshotOpening,
+    WireLog,
+    WireSnapshot,
+)
+
 from .publisher import Publisher
-from .wire_log import CurrentSnapshotOpening, WireLog, WireSnapshot
 from .wire_watch import WatchSource, WireWatch
 
 
@@ -86,9 +92,11 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         self.publisher = publisher(self.log, registry, self._channels, self.opened_activity)
 
     @contextmanager
-    def opened_activity(self) -> Iterator[ActivityClocks]:
+    def opened_activity(
+        self, opening: CurrentSnapshotOpening = FRESH_SNAPSHOT_OPENING,
+    ) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
-        with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+        with self.log.opened_wire_snapshot(opening=opening) as source:
             yield self.activity_index.snapshot(source)
 
     def require_channel(self, target: str):

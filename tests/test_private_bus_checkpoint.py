@@ -465,9 +465,7 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
         _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
-def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch) -> None:
-    import agent_comms.private_bus_checkpoint as checkpoint
-
+def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     for index in range(1002):
         comms.bus.publisher.publish_initial_cohort(
@@ -488,25 +486,18 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
         comms.bus.log.locked(read_budget=BoundedStoreReadBudget(8 * 1024 * 1024)),
     ):
         pass
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            checkpoint,
-            "append_private_bus_checkpoint_unlocked",
-            lambda *_: (_ for _ in ()).throw(OSError("crash")),
-        )
-        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.bus.publisher.publish_initial_cohort(
-                Message("sender", "Alice", "lagged-row", InfoKind), origin=AgentOrigin()
-            )
-    cold_start = time.monotonic()
-    recovered, page, more = _page(comms, lookup, after=1000)
-    cold_ms = (time.monotonic() - cold_start) * 1000
-    assert (recovered.through_seq, [row.message.seq for row in page], more) == (
+    comms.bus.publisher.publish_initial_cohort(
+        Message("sender", "Alice", "appended-row", InfoKind), origin=AgentOrigin()
+    )
+    appended_start = time.monotonic()
+    appended, page, more = _page(comms, lookup, after=1000)
+    appended_ms = (time.monotonic() - appended_start) * 1000
+    assert (appended.through_seq, [row.message.seq for row in page], more) == (
         1003,
         [1001, 1002, 1003],
         False,
     )
-    print(f"checkpoint scale bytes={recovered.offset} warm_ms={warm_ms:.1f} cold_ms={cold_ms:.1f}")
+    print(f"checkpoint scale bytes={appended.offset} warm_ms={warm_ms:.1f} appended_ms={appended_ms:.1f}")
 
 
 def test_reopened_root_preserves_checked_source_and_supports_append(

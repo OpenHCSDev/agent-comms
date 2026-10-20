@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, FieldRepresentation
+from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -24,6 +25,11 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     @classmethod
     def error_notice(cls, message) -> str:
         return ""
+
+    @classmethod
+    def measured(cls, total: PiCount) -> PiCount:
+        """The context usage a message ending this way measures with its reported total."""
+        return total
 
     @classmethod
     def unpublished_attempt(cls):
@@ -142,6 +148,12 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
     @classmethod
     def permits_progress(cls):
         return False
+
+    @classmethod
+    def measured(cls, total: PiCount) -> PiCount:
+        # Pi measures context from its last message that neither errored nor
+        # aborted; a failed request's billed total is not the session's context.
+        return UnreportedCount()
 
     @classmethod
     async def apply(cls, session, message):
