@@ -15,7 +15,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import ClassVar, Generic, Literal, Self, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -39,7 +39,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms import field_codec
-from agent_comms.field_codec import FieldCodec, option
+from agent_comms.field_codec import FieldCodec, PathText, option
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms import messages
@@ -440,7 +440,7 @@ class Watch(Inbox):
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
     owner: ProcessIdentity = option('--owner', type=FieldCodec.parse)
-    transcript: Path = option('--transcript', type=Path)
+    transcript: Annotated[Path, PathText] = option('--transcript')
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
