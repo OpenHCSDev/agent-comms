@@ -1,47 +1,84 @@
-name: Debt ratchet
+name: Merge queue
 
 on:
-  pull_request:
-    branches: [main]
+  status:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
-      base:
-        required: true
-        type: string
-      head:
-        required: true
-        type: string
+      enter_queue:
+        description: Enqueue the already reviewed head after successful checks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: debt-ratchet-${{ github.ref }}
-  cancel-in-progress: true
+  group: merge-queue-${{ github.event.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
-  debt-ratchet:
-    name: Debt ratchet
-    runs-on: ubuntu-latest
+  dispatch-reviewed:
+    if: github.event_name == 'status' && github.event.state == 'success'
+    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          ref: ${{ github.event.pull_request.head.sha || inputs.head }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version-file: pyproject.toml
-      - name: Install development dependencies
-        run: python -m pip install --disable-pip-version-check -e src/agent_comms/skills/refactor-audit '.[all,dev]'
-      - name: Compare touched production files
+      - name: Dispatch checks on the approved PR head, not the default-branch status event
         env:
-          PR_BASE: ${{ github.event.pull_request.base.sha || inputs.base }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha || inputs.head }}
-        run: python tools/debt_ratchet.py --root src/agent_comms --base "$PR_BASE" --head "$PR_HEAD"
-      - name: Run every marked surface guard
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+          RUN_ID: ${{ github.run_id }}
+          REVIEWED_HEAD: ${{ github.event.sha }}
+          REVIEW_CONTEXT: ${{ github.event.context }}
+        run: |
+          set -euo pipefail
+          request=$(python3 -c 'import shlex, sys; print(shlex.join(sys.argv[1:]))' \
+            "$RUN_ID" dispatch "$REVIEWED_HEAD" "$REVIEW_CONTEXT")
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$request"
+
+  ratchet:
+    if: github.event_name != 'status'
+    name: debt-${{ matrix.kind }}
+    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [src, tools]
+    steps:
+      - name: Check the exact GitHub run through the restricted host entrypoint
         env:
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
-        run: python -m pytest -p pytest_asyncio.plugin -o addopts='' --strict-markers -m refactor_guard -q
+          RUN_ID: ${{ github.run_id }}
+          CHECK_KIND: ${{ matrix.kind }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID $CHECK_KIND"
+
+  practice-install:
+    if: github.event_name != 'status'
+    name: install-rehearsal
+    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
+    timeout-minutes: 60
+    steps:
+      - name: Practice install; private buses and logs never enter the runner sandbox
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID install"
+
+  enqueue-approved:
+    if: github.event_name == 'workflow_dispatch' && inputs.enter_queue
+    needs: [ratchet, practice-install]
+    runs-on: [self-hosted, Linux, X64, ts-gaming, agent-comms-merge]
+    timeout-minutes: 5
+    steps:
+      - name: Enter GitHub's queue after approval and successful checks
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -i "$AGENT_COMMS_GATE_KEY" "$AGENT_COMMS_GATE_ENDPOINT" "$RUN_ID enqueue"

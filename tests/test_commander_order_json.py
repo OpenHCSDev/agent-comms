@@ -49,3 +49,22 @@ def test_json_problem_and_send_report_all_fields_then_record_the_correction(comm
     assert after.order.report == original['order']['report']
     assert after.order.check == before.order.check
     assert after.order.id in accepted.stdout
+
+
+def test_json_revision_check_refuses_before_execution(commander_script, tmp_path):
+    commander, repo = commander_script
+    path = Path(order_body(repo))
+    document = json.loads(path.read_text())
+    marker = tmp_path / 'must-not-run'
+    document['order']['check']['command'] = f'touch "{marker}"; git checkout main'
+    path.write_text(json.dumps(document))
+    result = subprocess.run(
+        [str(Path(sys.executable).with_name('agent-comms-commander')),
+         '--root', str(commander.comms.root), 'order', 'problem', str(path),
+         '--to', 'worker', '--due', '23:59', '--where', f'{__file__}:1'],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src')})
+    assert result.returncode != 0
+    assert 'never checks out' in result.stderr
+    assert not marker.exists()
+    assert commander.comms.goals.todos.for_commander(commander.incarnation) == ()
