@@ -23,7 +23,7 @@ class FileLine(WireValue):
     file: str
     line: int
 
-    _line_token: ClassVar[re.Pattern[str]] = re.compile(r"\b[\w./-]*\.[\w-]+:\d+\b")
+    _line_token: ClassVar[re.Pattern[str]] = re.compile(r"(?<![\w./-])[\w./-]*\.[\w-]+:\d+\b")
 
     def __post_init__(self) -> None:
         if not self.file or not self.file.strip() or "\n" in self.file:
