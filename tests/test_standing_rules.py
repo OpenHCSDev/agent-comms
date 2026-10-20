@@ -298,6 +298,29 @@ def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standi
     assert "external-empty" not in names and "worker" not in names
 
 
+def test_wheel_spin_restarts_a_day_old_deadline_at_handoff(commander, standing):
+    comms, _, module = standing
+    now, window = time.time(), 900
+    deadline = now - 86400
+    todo = create(commander, "P1", deadline=deadline)
+    original = replace(todo, order=replace(todo.order,
+        at=RecordedEventTime(deadline - window),
+        first_call_deadline=RecordedEventTime(deadline - window + 120)))
+    with comms.goals.todos.writing() as db:
+        original.upsert(db)
+    assert original.overdue(now)
+    working(comms, "worker", 2.0)
+    working(comms, "spare", 3.0)
+    comms.goals.todos.advance_objective_failures(comms.goals)
+    assert comms.goals.todos.get("P1").holder is None
+    module.UnownedWheelSpin.after_stall(comms)
+    moved = comms.goals.todos.get("P1")
+    issued = moved.order.checked().at.recorded_at("An order")
+    assert moved.holder == "spare"
+    assert moved.deadline == RecordedEventTime(issued + window)
+    assert not moved.overdue(issued)
+
+
 def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
         commander, standing, tmp_path, monkeypatch):
     from agent_comms.storage_rules import StorageRule
@@ -361,7 +384,8 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
             " two readings -> Core strikes it and gives the order to an idle unit") in read.broken
     moved = comms.goals.todos.get("P1")
     assert [strike.previous.owner for strike in moved.live_strikes()] == ["worker"]
-    assert moved.holder == "spare" and moved.deadline == todo.deadline
+    assert moved.holder == "spare"
+    assert moved.deadline == todo.reissued_deadline(moved.order.checked().at.recorded_at("An order"))
     assert moved.order.id != todo.order.id and moved.order.check == todo.order.check
 
     create(commander, "P2", owner="worker", deadline=time.time() + 3600)

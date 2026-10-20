@@ -67,8 +67,8 @@ class RequestStalled(UndatedStandingRule):
 
 @dataclass(frozen=True)
 class WheelSpin(StandingRule, declared_name=None):
-    """An order is not getting closer to done, or a unit sits with no order; Core gives the
-    order to a unit that will move it, with no deadline and no commander turn involved."""
+    """Core hands stalled or unowned work to an idle unit without a commander turn,
+    restarting the original completion window at the handoff's issue time."""
 
     todo: Todo
 
@@ -87,10 +87,11 @@ class WheelSpin(StandingRule, declared_name=None):
 
     @staticmethod
     def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> OrderGoalAction:
+        now = time.time()
         return OrderGoalAction(
             problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(time.time()), request=todo.goal.request(),
-            deadline=todo.deadline, commander=commander, assigner=assigner,
+            order=todo.order.reissued(now), request=todo.goal.request(),
+            deadline=todo.reissued_deadline(now), commander=commander, assigner=assigner,
             traced=todo.order.owner)
 
     @abstractmethod
