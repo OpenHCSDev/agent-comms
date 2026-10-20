@@ -1436,6 +1436,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
 
+    def require_writable(self) -> None:
+        for check in (self.check, *self.deletes.checks):
+            check.require_writable()
+
     def untouched(self, touched: Sequence[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
@@ -1909,6 +1913,8 @@ class AssignTodo(TodoOperation):
             return current
         current.require_revision(self.expected_revision)
         self.actor.require_may_change(current)
+        if self.order != current.order:
+            self.order.require_writable()
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
         assigned = replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
@@ -2123,6 +2129,7 @@ class CorrectCheckTodo(TodoOperation):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         _text(self.reason, "Check correction reason", 2000)
+        self.check.require_writable()
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
 
@@ -2663,6 +2670,7 @@ class TodoStore(TypedStore):
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
         goal.require_reference()
+        order.require_writable()
         proposed = Todo(
             id=todo_id,
             repo=repo_id,
