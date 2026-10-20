@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
 
 
 class TextChoice(ABC):
@@ -38,6 +38,12 @@ class AbsentText(NullMember, TextChoice):
 
 class ThreadText(SubclassUnion, TextChoice, affix="ThreadText"):
     """A thread's title or original assignment."""
+
+    @staticmethod
+    @boundary_decoder
+    def external(text: str | None) -> ThreadText:
+        """An imported record's title: its missing or empty text is no title."""
+        return GivenThreadText(text) if text else NoThreadText()
 
     @abstractmethod
     def applied(self, previous: ThreadText) -> ThreadText:

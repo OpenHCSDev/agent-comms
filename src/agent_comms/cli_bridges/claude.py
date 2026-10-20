@@ -17,7 +17,7 @@ from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeM
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import GivenThreadText, NoThreadText
+from agent_comms.thread_text import NoThreadText, ThreadText
 
 
 class SubagentMeta(WireModel):
@@ -42,7 +42,7 @@ class ClaudeJsonLines(JsonLinesFile):
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """The file is named by its session; a subagent's task description is beside it, not in it."""
         meta = self.source.with_suffix('.meta.json')
-        title = (GivenThreadText(SubagentMeta.model_validate_json(meta.read_bytes()).description)
+        title = (ThreadText.external(SubagentMeta.model_validate_json(meta.read_bytes()).description)
                  if meta.is_file() else NoThreadText())
         yield SessionFacts(source_id=self.source.stem, title=title)
 
