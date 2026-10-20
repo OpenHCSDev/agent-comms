@@ -960,7 +960,8 @@ class CommsFleetStoryTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        return FleetStory(tuple(todo.story().line for todo in comms.goals.todos.for_commander(actor)))
+        todos = comms.goals.todos.for_commander(actor)
+        return FleetStory(tuple(todo.story().line for todo in todos))
 
 
 @dataclass(frozen=True, kw_only=True)

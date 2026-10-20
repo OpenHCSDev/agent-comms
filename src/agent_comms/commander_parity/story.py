@@ -21,16 +21,30 @@ class StoryCase(LifecycleCase):
         created = run.create()
         run.commander.strike(run.worker, created.id, cls.strike_reason)
         struck = run.commander.comms.goals.todos.get(created.id)
-        verdict = SendBackVerdict(struck.revision, run.commander.incarnation, struck.held(),
-                                  "story-review", StrikeReason(cls.back_reason))
+        verdict = SendBackVerdict(
+            struck.revision,
+            run.commander.incarnation,
+            struck.held(),
+            "story-review",
+            StrikeReason(cls.back_reason),
+        )
         run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
         document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
-        run.commander.send(run.worker, run.due, document, clean=True)
+        sent_back = run.commander.comms.goals.todos.get(created.id)
+        run.commander.send(
+            run.worker,
+            run.due,
+            document,
+            clean=True,
+            replaces=sent_back.messages[-1].message_id,
+        )
         saved = run.commander.comms.goals.todos.get(created.id)
         for _ in range(2):
             story = run.commander.call(CommsOrderStoryTool(order_id=saved.order.checked().id))
+            assert isinstance(story, OrderStory)
             print(story.line)
         fleet = run.commander.call(CommsFleetStoryTool())
+        assert isinstance(fleet, FleetStory)
         print("\n".join(fleet.lines))
         return created, saved, run.commander.comms.goals.todos.get(created.id)
 
@@ -50,7 +64,9 @@ class StoryCase(LifecycleCase):
             ("strike reason once", bool(orders) and orders[-1].line.count(cls.strike_reason) == 1),
             ("send-back reason once", bool(orders) and orders[-1].line.count(cls.back_reason) == 1),
             ("one fleet line per open order", bool(fleets) and len(fleets[-1].lines) == 1),
-            ("fleet agrees with order read", bool(fleets and orders)
-             and fleets[-1].lines == (orders[-1].line,)),
+            (
+                "fleet agrees with order read",
+                bool(fleets and orders) and fleets[-1].lines == (orders[-1].line,),
+            ),
             ("actual output printed", bool(orders) and orders[-1].line in output),
         )

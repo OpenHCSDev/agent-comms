@@ -2084,6 +2084,9 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
 class QuotedVerdict(OrderVerdict, declared_name=None):
     quote: str
 
+    def story_text(self) -> str:
+        return f'{super().story_text()}; quoted: "{self.quote}"'
+
     def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
         if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
@@ -2166,6 +2169,9 @@ class SupersededVerdict(ToolCallVerdict):
     reason: str
     line = "Superseded"
 
+    def story_text(self) -> str:
+        return f"{super().story_text()} by {self.replacement}: {self.reason}"
+
     def prepare(self, goals, current):
         replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
                      if todo.sent_in(self.replacement)]
@@ -2214,7 +2220,8 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
     def story_text(self) -> str:
-        return f"{self.actor.name} voided a strike against {self.strike.previous.owner}: {self.reason}"
+        return (f"{self.actor.name} voided a strike against {self.strike.previous.owner}: "
+                f"{self.reason}")
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
@@ -2435,9 +2442,12 @@ class Todo(TypedTable):
         return self.order.pending
 
     def story(self) -> OrderStory:
-        implied = frozenset(strike for verdict in self.verdicts for strike in verdict.implied_strikes())
-        sources = (self.order, *(strike for strike in self.strikes if strike not in implied),
-                   *self.voided, *self.released, *self.verdicts)
+        implied = frozenset(strike for verdict in self.verdicts
+                            for strike in verdict.implied_strikes())
+        sources: tuple[StorySource, ...] = (
+            self.order, *(strike for strike in self.strikes if strike not in implied),
+            *self.voided, *self.released, *self.verdicts,
+        )
         events = tuple(sorted((event for source in sources for event in source.story()),
                               key=lambda event: event.at.chronology()))
         return OrderStory(self.id, self.order.line, events)

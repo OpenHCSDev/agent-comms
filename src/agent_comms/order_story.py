@@ -38,7 +38,9 @@ class OrderStory(ToolResult):
 
     @property
     def line(self) -> str:
-        return f"{self.problem}: {self.state}; " + "; ".join(event.text for event in self.events)
+        return f"{self.problem}: {self.state}; " + "; ".join(
+            " ".join(event.text.split()) for event in self.events
+        )
 
 
 @dataclass(frozen=True)
