@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
+from .context_segments.wake_values import WakeText, WakeWorkContext
 from .cli_result import ThreadToolCatalogResult
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -49,7 +50,6 @@ from .thread_identity import (
 from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
-    from .context_segments.wake import WakeWorkContext
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
@@ -305,11 +305,10 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         return TaskScope.for_goal(self.worktree, self.goal)
 
     def wake_context(self, goals: Goals) -> WakeWorkContext:
-        from .context_segments.wake import WakeWorkContext
-
         return WakeWorkContext(
-            name=self.name, title=self.title, tags=tuple(sorted(self.tags)),
-            original_assignment=self.task,
+            name=self.name, title=FieldCodec.decode(WakeText, self.title),
+            tags=tuple(sorted(self.tags)),
+            original_assignment=FieldCodec.decode(WakeText, self.task),
             current_goal=self.goal.wake_context(goals, self.incarnation),
         )
 

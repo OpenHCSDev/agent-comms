@@ -9,15 +9,15 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import SentMessageOutcome
 
 from ..bus_publication import CommittedDelivery
-from ..goal_states import GoalState
 from ..threads import Thread
+from .wake_values import WakeWorkContext
 from ..turn_context import (
     InstructionFile,
     InstructionSegment,
@@ -26,30 +26,6 @@ from ..turn_context import (
     WireProvenance,
 )
 from ..wake_policy import WakePolicy
-
-
-class WakeGoalValue(SubclassUnion):
-    """A woken thread's goal, including the declared absence of one."""
-
-
-class NoWakeGoalContext(NullMember, WakeGoalValue):
-    pass
-
-
-@dataclass(frozen=True)
-class WakeGoalContext(RecordMember, WakeGoalValue):
-    text: str
-    state: GoalState = field(metadata={"wire_name": "status"})
-    progress: str
-
-
-@dataclass(frozen=True)
-class WakeWorkContext(RecordMember):
-    name: str
-    title: str | None
-    tags: tuple[str, ...]
-    original_assignment: str | None
-    current_goal: WakeGoalValue
 
 
 @dataclass(frozen=True, kw_only=True)

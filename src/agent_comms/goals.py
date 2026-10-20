@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
+from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
@@ -42,7 +43,6 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .thread_status import ThreadStatus
     from .turn_context import TurnContext
-    from .context_segments.wake import WakeGoalValue
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -740,8 +740,6 @@ class NoGoal(NullMember, GoalDeclaration):
         return False
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
-        from .context_segments.wake import NoWakeGoalContext
-
         return NoWakeGoalContext()
 
     shows_document: ClassVar[bool] = False
@@ -849,8 +847,6 @@ class Goal(RecordMember, GoalDeclaration):
         return waits.clear(self.id, wait_id=wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
-        from .context_segments.wake import WakeGoalContext
-
         todos = self.order.todos(goals, owner, self.id)
         return WakeGoalContext(
             text=self.order.goal_text(self), state=self.state,
