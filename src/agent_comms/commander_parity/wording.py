@@ -14,11 +14,10 @@ from typing import ClassVar
 from ..commander.config import CommanderConfig
 from ..commander.order import CommanderContext, OrderFile, refuse
 from ..comms import Comms
-from ..errors import RelationViolationError, ToolRefusedError
+from ..errors import ToolRefusedError
 from ..goal_actions import GoalActionContext, OrderGoalAction
 from ..message_reference import MessageReference
 from ..messages import AlertKind, Message
-from ..task_sources import Decision
 from ..todos import (
     OrderText,
     OrderWords,
@@ -27,7 +26,7 @@ from ..todos import (
     Todo,
     WordingCorrection,
 )
-from ..tools import CommsDecisionTool, CommsProblemCloseTool
+from ..tools import CommsProblemCloseTool
 from . import ParityComparison, UnverifiedParity
 
 
@@ -60,15 +59,6 @@ def messages(comms: Comms) -> tuple[Message, ...]:
         return tuple(islice(source.newest_messages(), 2000))
 
 
-def decisions(source: Iterable[Message]) -> Iterable[tuple[Message, Decision]]:
-    for message in source:
-        try:
-            decision = message.task.require_decision()
-        except RelationViolationError:
-            continue  # This actual message carries a different task capability.
-        yield message, decision
-
-
 @dataclass(frozen=True)
 class WordingComparison(ParityComparison):
     observations: tuple[tuple[WordingOutcome, WordingOutcome], ...]
@@ -85,6 +75,8 @@ class WordingComparison(ParityComparison):
         different = sum(a != b for a, b in self.observations)
         return (
             f"{len(self.observations)} retained texts; mismatches={different}; "
+            f"current_refusals={sum(not a.accepted for a, _ in self.observations)}; "
+            f"native_refusals={sum(not b.accepted for _, b in self.observations)}; "
             f"current={self.current_owner.__module__}.{self.current_owner.__qualname__}; "
             f"native={self.owner}; sources={self.references}; "
             "compared refusal and warnings; no publication"
@@ -139,13 +131,17 @@ class OrderWordingComparison(WordingComparison):
     @classmethod
     def read(cls) -> ParityComparison:
         context = selected_context()
+        return cls.compare_messages(context, messages(context.comms))
+
+    @classmethod
+    def compare_messages(
+        cls, context: CommanderContext, source: Iterable[Message]
+    ) -> ParityComparison:
         held = tuple(todo for todo in history(context) if todo.pending and todo.holder)
         if not held:
             return UnverifiedParity("No held order exists for the native pre-reservation check.")
         todo = max(held, key=lambda item: item.order.checked().at.recorded_at("A live order"))
-        cases = tuple(
-            message for message in messages(context.comms) if cls.native_owner.refused(message.body)
-        )
+        cases = tuple(message for message in source if cls.native_owner.refused(message.body))
         if not cases:
             return UnverifiedParity(
                 "No actual soft-worded message exists for a refusal comparison."
@@ -232,18 +228,10 @@ class DecisionAlertsComparison:
                 partial(AlertKind.require_publishable, message, Path(sender.worktree))
             )
             allowed += outcome.accepted
-        rendered = matched = 0
-        for message, decision in decisions(source):
-            tool = CommsDecisionTool(
-                target=message.target, chosen=decision.chosen, rejected=decision.rejected
-            )
-            rendered += 1
-            matched += tool.original_body(decision) == message.body
         return UnverifiedParity(
             "Missing native decision-only alert policy: "
             f"{AlertKind.require_publishable.__qualname__} allowed "
-            f"{allowed}/{len(alerts)} actual alerts. CommsDecisionTool rendered "
-            f"{rendered} actual authored decisions, {matched} matching original bodies; "
-            "that separate tool does not restrict AlertKind publication. "
+            f"{allowed}/{len(alerts)} actual alerts. CommsDecisionTool declares authored "
+            "choices separately; that does not restrict AlertKind publication. "
             "No alert, decision or input was published or replayed."
         )

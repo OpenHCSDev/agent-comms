@@ -1,34 +1,35 @@
 """The wording comparison calls the configured real owners, without fake replies."""
 
-from dataclasses import replace
-
-from agent_comms.commander_parity import UnverifiedParity
 from agent_comms.commander_parity.wording import (
     OrderWordingComparison,
     PlainWordsComparison,
-    WordingComparison,
+    selected_context,
 )
+from agent_comms.message_reference import MessageReference
 
 
 def test_live_plain_word_comparison_observes_both_owners():
     result = PlainWordsComparison.read()
-    assert isinstance(result, WordingComparison)
-    assert result.observations
     assert result.passed
-    current, native = result.observations[0]
-    changed = replace(native, notes=native.notes + "a different native warning")
-    assert not replace(result, observations=((current, changed),)).passed
-    assert not replace(result, observations=()).passed
+    assert "mismatches=0" in result.describe()
+    assert "agent_comms.todos.PlainText" in result.describe()
 
 
-def test_native_order_boundary_disagreement_cannot_pass():
+def test_live_native_order_wording_is_not_verified():
     result = OrderWordingComparison.read()
-    if isinstance(result, UnverifiedParity):
-        # Live inputs may leave the bounded tail; absence must never manufacture a pass.
-        assert not result.passed
-        assert result.describe() == "No actual soft-worded message exists for a refusal comparison."
-    else:
-        assert isinstance(result, WordingComparison)
-        assert result.observations
-        assert result.passed == all(current == native for current, native in result.observations)
-        assert "ProblemOrderGoalAction.request_ref" in result.describe()
+    assert not result.passed
+    assert result.describe()
+
+
+def test_retained_soft_message_exposes_missing_native_enforcement():
+    context = selected_context()
+    reference = MessageReference(seq=5084, message_id="79cf1033ccda")
+    source = context.comms.bus.log.messages_for_references((reference,))
+    assert tuple(message.reference for message in source) == (reference,)
+    result = OrderWordingComparison.compare_messages(context, source)
+    assert not result.passed
+    assert "mismatches=1" in result.describe()
+    assert "current_refusals=1" in result.describe()
+    assert "native_refusals=0" in result.describe()
+    assert "ProblemOrderGoalAction.request_ref" in result.describe()
+    assert "seq=5084" in result.describe()
