@@ -50,6 +50,7 @@ class Messaging:
         releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
         report: ChangeReport | None = None,
+        answers: Sequence[MessageReference] = (),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -65,6 +66,9 @@ class Messaging:
             todos = TodoStore(self.root)
             with todos.snapshot():
                 pass  # The store validates its schema before any envelope is committed.
+            if answers:
+                with self.bus.log.checked_read() as source:
+                    tuple(source.references(answers))
             message = Message(
                 sender=owner.name,
                 target=target,
@@ -73,7 +77,7 @@ class Messaging:
                 role=role,
                 task=task,
                 report=report,
-                answers=self._answered_by(owner, target),
+                answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
             publisher: OwnerPublisher = self.bus.publisher
             if claims or releases:

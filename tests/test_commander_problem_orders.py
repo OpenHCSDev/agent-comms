@@ -650,7 +650,7 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
@@ -670,7 +670,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
         commander, commander_script, monkeypatch):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
@@ -689,7 +689,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
@@ -706,7 +706,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
 def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
     edit = 'Count the measure in tools/debt_ratchet.py.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
@@ -823,7 +823,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     script, repo = commander_script
     create(commander, 'P1')
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: posted.append((recipients, body)))
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
     script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit')
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
@@ -840,7 +840,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     script, _ = commander_script
     create(commander, 'P1', deadline=1)
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: posted.append((recipients, body)))
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
     script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
     withdrawn = comms.goals.todos.get('P1')
     assert script.held_orders() == () and not withdrawn.pending and commander_order.struck(withdrawn, 'worker') == 0
@@ -1043,45 +1043,51 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     assert stalled() == []
 
 
-def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_serves_it(
-        commander, tmp_path, monkeypatch):
-    """claude-ai's sends through the connector are directives: one to a thread holding owner requests
-    is recorded on its open request with a deadline, or opens a new request once that one is done;
-    a thread holding no request records nothing. Past its deadline it alarms until an order serves
-    the request."""
-    from agent_comms import standing_rules
+def test_each_directive_requires_its_own_linked_answer(commander, tmp_path):
+    """An unrelated order answers neither ask; an order linked to one answers only that ask."""
     from agent_comms.connector import CALLER
-    from agent_comms.goal_actions import CompletedGoalAction
     from agent_comms.goals import RequestDirective
-    from agent_comms.tools import CommsSendTool
+
     comms, caller = commander
-    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
-    def direct(target, body):
-        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
+    comms.registry.declare(comms.registry.new_thread(
+        'claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+
+    def direct(body):
+        CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': 'lead', 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
-    def unacted(after):
-        monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
-        return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
-    worker = comms.registry.require('worker').goal
-    seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
-    assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
+
+    first = direct('Make the slowdowns impossible by mechanism.')
+    second = direct('Clear the board without losing the unfinished requests.')
+    owner = comms.registry.require('lead').incarnation
     goal = comms.registry.require('lead').goal
-    (directive,) = goal.order.directives
-    assert (goal.id, directive.seq, directive.served) == ('request', seq, 0)
-    assert unacted(directive.deadline - 1) == []
-    due = time.strftime('%H:%M', time.localtime(directive.deadline))
-    assert unacted(directive.deadline + 1) == [
-        f'DIRECTIVE UNACTED: claude-ai {seq} on request request, due {due}'
-        ' -> order its next step or mark the request done']
+    now = max(item.deadline for item in goal.order.directives) + 1
+
+    def overdue():
+        current = comms.registry.require('lead').goal
+        return tuple(item.seq for item in current.order.overdue_directives(
+            current, comms.goals, owner, now))
+
+    assert overdue() == (first, second)
     create(commander, 'P1')
-    assert unacted(directive.deadline + 1) == []
-    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+    assert overdue() == (first, second)
+    original = goal.order.directives[0].original(comms.goals)
+    reply = comms.messaging.send('lead', 'worker', 'P1 answers the slowdown directive.',
+                                answers=(original.reference,)).message
+    assert reply.answers == (original.reference,)
+    assert overdue() == (second,)
+    original = goal.order.directives[1].original(comms.goals)
+    comms.messaging.send('lead', 'claude-ai', 'The board directive is answered separately.',
+                         answers=(original.reference,))
+    assert overdue() == ()
+    CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id,
+                      delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
-    seq = direct('lead', 'A second directive after the first request is done.')
+    third = direct('A new directive after the original request is done.')
     goal = comms.registry.require('lead').goal
-    assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
-    assert goal.order.directives == (RequestDirective(seq, goal.order.directives[0].deadline, 0),)
-    assert unacted(goal.order.directives[0].deadline + 1) != []
+    assert goal.id != 'request' and goal.state.active
+    assert goal.order.directives == (RequestDirective(third, goal.order.directives[0].deadline),)
+    assert goal.order.directives[0].overdue(comms.goals, owner,
+                                          goal.order.directives[0].deadline + 1)
 
 
 def stray(commander, problem, generation):
@@ -1372,7 +1378,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
     posted = []
-    monkeypatch.setattr(type(script), 'post', lambda self, to, body: posted.append((to, body)) or 'sent')
+    monkeypatch.setattr(type(script), 'post', lambda self, to, body, answers=(): posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
     judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
