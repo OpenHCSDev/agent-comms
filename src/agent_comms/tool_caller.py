@@ -5,9 +5,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
-from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
-from .launch_runtime import CallingThreadUnavailable
+from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .field_codec import WireForm
+from .launch_root import LaunchRoot
+from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 
@@ -100,7 +101,11 @@ class ThreadCaller(ToolCaller):
         return ThreadListing(threads, presentation.sent_notifications)
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
-        return ThreadToolCatalogResult(tools, comms.registry.require(self.name).service_tier)
+        return ThreadToolCatalogResult(
+            tools,
+            comms.registry.require(self.name).service_tier,
+            LaunchRoot.from_path(comms.root).arguments(),
+        )
 
     def acting_name(self, default: str) -> str:
         return self.name

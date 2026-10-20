@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-from dataclasses import dataclass, replace
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Callable
 from contextlib import aclosing
+from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
@@ -16,29 +16,30 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 from acp import Client, RequestError
 from acp.schema import (
     ConfigOptionUpdate,
-    SessionConfigOptionSelect,
     SessionConfigOptionBoolean,
+    SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SetSessionConfigOptionResponse,
 )
 
-from .pi_vocabulary import ThinkingChoice
-from .comms import Comms
 from .agent_backend import UseSettings
+from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable, NativePiRpcLaunch
-from .native_package import VerifiedNativePackage
+from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .native_arguments import NativeArguments
+from .native_package import VerifiedNativePackage
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .pi_vocabulary import ThinkingChoice
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
+    from .pi_commands import SettingCommand
     from .runtime import RuntimeServer, SocketClient
     from .session_effects import SessionEffects
-    from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
 
 
@@ -206,7 +207,10 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
+                self.agent_bin,
+                self.agent_args.argv,
+                LaunchRoot.current().path,
+                package=self.package,
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -236,7 +240,9 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            self.agent_bin,
+            self.agent_args.with_model(thread.model).argv,
+            LaunchRoot.current().path,
             package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
@@ -279,7 +285,7 @@ class ConfigOptions:
         configuration = RestartEnvironment.inherit(os.environ)
         package = partial(
             NativePiRpcLaunch.package_for_command,
-            command, LaunchRuntime.running(), configuration.root,
+            command, LaunchRuntime.running(), LaunchRoot.current().path,
         )
         return cls(command, NativeArguments.configured(), configuration, package)
 
@@ -321,7 +327,7 @@ class SessionConfigOptions(ConfigOptions):
         super().__init__(
             agent_bin,
             agent_args,
-            replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            RestartEnvironment.inherit(os.environ),
             partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects

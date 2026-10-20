@@ -8,13 +8,15 @@ import pytest
 
 import agent_comms.native_pi as native_pi
 from agent_comms import native_package
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_package import NativePackageError, VerifiedNativePackage
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch, SharedRootLaunch
 
 
 def launcher(tmp_path, monkeypatch, route):
+    LaunchRoot.from_path(tmp_path).install()
     executable = tmp_path / "bin/pi-comms-native"
     executable.parent.mkdir()
     executable.write_text("#!/bin/sh\nexit 1\n")
@@ -22,7 +24,7 @@ def launcher(tmp_path, monkeypatch, route):
     runtime = LaunchRuntime(executable.with_name("python"))
     monkeypatch.setattr(LaunchRuntime, "running", classmethod(lambda cls: runtime))
     monkeypatch.setenv("PATH", str(executable.parent))
-    monkeypatch.setattr(PrivateNkLaunch, "derive", classmethod(lambda cls, root=None: route))
+    monkeypatch.setattr(RootLaunch, "derive", classmethod(lambda cls, root: route or SharedRootLaunch(tmp_path)))
     # These cases isolate command identity from the separately tested root guard.
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     return executable
@@ -68,7 +70,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     package = VerifiedNativePackage.acquire(native_package.pinned_native_package())
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
-    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+    LaunchRoot.from_path(comms.root).install()
     selected = tmp_path / "selected-core"
     (selected / "bin").mkdir(parents=True)
     marker = tmp_path / "selected-python"

@@ -8,14 +8,14 @@ the side effect, so a route publication cannot interleave with it.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from .active_route import CommsRoute, guard_default_route_write, resolve_comms_route
+from .active_route import CommsRoute, resolve_comms_route
+from .launch_root import LaunchRoot
 
 
 class RouteChanged(ValueError):
@@ -34,71 +34,35 @@ def root_is_current(root: str | Path) -> bool:
     return current_root() == Path(root).expanduser().resolve()
 
 
-def implicit_root() -> bool:
-    """Whether this process's requests select the managed default route."""
-    return "AGENT_COMMS_ROOT" not in os.environ
-
-
 def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
-    """Resolve a child's wire; never mistake the parent's route for another HOME."""
-    if "AGENT_COMMS_ROOT" not in env:
-        home_key = "USERPROFILE" if os.name == "nt" else "HOME"
-        home = env.get(home_key)
-        if (not home or not Path(home).is_absolute()
-                or home != str(Path.home())
-                or "AGENT_COMMS_ROOT" in os.environ):
-            raise ValueError(
-                "ACP default route requires the client process HOME and no parent "
-                "root override; set an explicit child AGENT_COMMS_ROOT"
-            )
-        return current_root()
-    text = env["AGENT_COMMS_ROOT"]
-    if text == "~" or text.startswith("~/"):
-        home = env.get("HOME") if os.name != "nt" else env.get("USERPROFILE")
-        if not home or not Path(home).is_absolute():
-            raise ValueError("ACP home for maintenance claim_scope is unknown")
-        text = str(Path(home) / text[2:]) if text != "~" else home
-    elif text.startswith("~"):
-        raise ValueError("Unsupported ACP home expansion during maintenance claim_scope")
-    raw = Path(text)
-    return (raw if raw.is_absolute() else Path(cwd) / raw).resolve()
+    """The explicit process launch selects its child; HOME never supplies a route."""
+    return LaunchRoot.current().path
 
 
 @dataclass(frozen=True)
 class RouteSelection:
     route: CommsRoute
     root: Path
-    implicit: bool
 
     @classmethod
     def capture(cls, source: str | Path | None = None) -> RouteSelection:
         route = resolve_comms_route()
-        selection = cls(route, route.observe_root(), implicit_root())
+        selection = cls(route, route.observe_root())
         if source is not None and Path(source).expanduser().resolve() != selection.root:
             raise RouteChanged("Comms route changed; reopen this view")
         return selection
 
     @classmethod
     def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
-        """Capture selection before projecting a root into a child environment."""
+        """Capture the explicit process selection before launching its child."""
         root = child_root(env, cwd)
-        implicit = "AGENT_COMMS_ROOT" not in env
-        route = resolve_comms_route() if implicit else resolve_comms_route(root)
-        if route.observe_root() != root:
-            raise RouteChanged("ACP route changed while selecting its child")
-        return cls(route, root, implicit)
+        return cls(resolve_comms_route(root), root)
 
 
 @contextmanager
-def selected_write(root: str | Path, *, implicit: bool) -> Iterator[None]:
-    """Guard one default-root side effect through the actual synchronous sink.
-
-    Explicit overrides retain their independent-root behavior.
-    """
-    scope = guard_default_route_write(Path(root)) if implicit else nullcontext()
-    with scope:
-        if implicit and not root_is_current(root):
-            raise RouteChanged("default Comms route changed before write")
+def selected_write(root: str | Path) -> Iterator[None]:
+    """Hold the selected route through the synchronous side effect."""
+    with RouteSelection.capture(root).route.hold_client_route():
         yield
 
 
@@ -106,9 +70,8 @@ def run_selected_write(
     root: str | Path,
     operation: Callable[..., T],
     *args: object,
-    implicit: bool,
     **kwargs: object,
 ) -> T:
     """Acquire the route locks inside the worker that actually performs the write."""
-    with selected_write(root, implicit=implicit):
+    with selected_write(root):
         return operation(*args, **kwargs)

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
 from .native_input_record import NativeInputCommit, NativeInputLocation
@@ -153,7 +154,7 @@ class NativePiOperationFailed(NativePiUnavailable):
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     from .active_route import resolve_comms_route
-
+    LaunchRoot.startup(sys.argv)
     package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(

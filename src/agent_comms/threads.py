@@ -14,7 +14,7 @@ from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
-from .launch_runtime import RestartEnvironment
+from .launch_root import LaunchRoot
 from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
@@ -171,19 +171,20 @@ class Thread(ThreadProvenance):
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
-            "AGENT_COMMS_ROOT": str(root),
             **project.environment(root),
         }
 
     def native_launch_arguments(self, arguments: NativeArguments, package: Path) -> tuple[str, ...]:
-        """Write this native launch's catalog in its config directory, not a CLI cache; only a
-        launch that loads the agent-comms extension registers the flag that reads it."""
+        """The existing native session directory owns this root's launch catalog."""
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
-        directory = RestartEnvironment.inherit(os.environ).native_config
+        launch = LaunchRoot.current()
+        directory = self.native_session_directory(launch.path)
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
-        catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
+        path = directory / "comms-catalog.json"
+        catalog = ThreadToolCatalogResult(
+            tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
+        )
         _atomic_write_text(path, json.dumps(catalog.to_wire(), separators=(",", ":")))
         return (*arguments.argv, "--comms-catalog", str(path))
 

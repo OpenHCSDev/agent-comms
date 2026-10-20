@@ -22,6 +22,7 @@ from .field_codec import (
     PathText,
     TextRepresentation,
 )
+from .launch_root import LaunchRoot
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -56,6 +57,9 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        return LaunchRoot.environment(self._environment(source))
+
+    def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
             RestartEnvironment.inherit(source)
             .for_interpreter(self.interpreter)
@@ -137,7 +141,7 @@ class RecordedBuildIdentity(BuildIdentity):
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
 
-    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+    def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
 
 
@@ -180,7 +184,11 @@ class EnvironmentRecord:
 
     def encode(self) -> dict[str, str]:
         encoded: dict[str, str] = FieldCodec.encode(self)
-        return encoded
+        return {
+            FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+            for declaration in fields(self)
+            if FieldCodec.wire_key(declaration) in encoded
+        }
 
 
 @dataclass(frozen=True)
@@ -207,10 +215,6 @@ class RestartEnvironment(EnvironmentRecord):
     )
     config: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
-    )
-    root: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT", "runtime": True},
     )
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[Path, PathText] = field(
