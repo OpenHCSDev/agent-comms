@@ -81,18 +81,13 @@ class GoalRegistryClaimCheck(GoalRegistryIdentityCheck, RegistryClaimCheck):
 
 class RegistryIncarnationRule(ReservationRule):
     check_type = RegistryIdentityCheck
-    explanation = "The registered thread incarnation changed before native send."
+    explanation = "The registered thread incarnation or name changed before native send."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.incarnation != check.expected.incarnation
-
-
-class RegistryNameRule(ReservationRule):
-    check_type = RegistryIdentityCheck
-    explanation = "The captured owner name changed."
-
-    def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.name != check.expected.name
+        return (
+            check.actual.incarnation != check.expected.incarnation
+            or check.actual.name != check.expected.name
+        )
 
 
 class RegistryProcessRule(ReservationRule):
