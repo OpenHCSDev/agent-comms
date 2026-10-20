@@ -545,6 +545,13 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     @abstractmethod
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
 
+    def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
+                        *excluded: str) -> Iterator[ProgressPoint]:
+        return iter(())
+
+    def published(self, pattern: str) -> Iterator[ProgressPoint]:
+        return iter(())
+
 
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
@@ -564,6 +571,12 @@ class MissingCheckout(ProgressCheckout):
 
 
 class PresentCheckout(ProgressCheckout):
+    default_reference: ClassVar[str] = "refs/remotes/origin/HEAD"
+
+    @property
+    def default_refs(self) -> tuple[str, ...]:
+        return (self.default_reference,) if self.default_reference in self.git_refs else ()
+
     def git(self, *args: str) -> str:
         return CheckedCommit.git(str(self.path), *args)
 
@@ -591,15 +604,24 @@ class PresentCheckout(ProgressCheckout):
                                  *refs, "--not", *excluded).splitlines():
                 yield ProgressPoint.listed(line)
 
+    def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
+                        *excluded: str) -> Iterator[ProgressPoint]:
+        """The actual check receipt links a head even without a problem token in its title."""
+        return (point for point in self.commits("", refs, *excluded)
+                if order.check.recorded(point.sha, str(self.path)))
+
+    def published(self, pattern: str) -> Iterator[ProgressPoint]:
+        return self.commits(pattern, self.origin_refs, *self.default_refs)
+
     def readings(self, source: ProgressSource) -> DistanceReadings:
-        """Read the bounded distance trend only from explicitly recorded check results."""
+        """Read bounded recorded results; an absent remote default supplies no invented base."""
+        if not self.default_refs:
+            return DistanceReadings()
         readings: list[DistanceReading] = []
-        for tip in source.commits("origin/HEAD"):
-            base = self.git("merge-base", tip.sha, "origin/HEAD").strip()
+        for tip in source.commits(*self.default_refs):
+            base = self.git("merge-base", tip.sha, self.default_reference).strip()
             commits = [ProgressPoint.listed(line) for line in reversed(self.git(
                 "log", f"--max-count={DistanceReadings.window}", "--first-parent",
-                "--extended-regexp", "--regexp-ignore-case",
-                f"--grep={source.todo.reference_pattern}",
                 f"--format={ProgressPoint.format}", tip.sha, "--not", base).splitlines())]
             points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
             readings.extend(reading for point in points for reading in self.recorded_distances(
@@ -616,7 +638,7 @@ class PresentCheckout(ProgressCheckout):
 
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
         """Retained origin commits prove publication; their push reflog supplies its clock."""
-        published = {point.sha for point in self.commits(pattern, self.origin_refs)}
+        published = {point.sha for point in self.published(pattern)}
         for row in self.git("reflog", "show", "--all", "--date=unix",
                             "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
             selector, sha = row.split("\t")
@@ -653,7 +675,13 @@ class ProgressSource:
         return list(self.pulls.listed(self.todo.repo, state, self.todo))
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        return self.checkout.commits(self.todo.reference_pattern, self.references, *excluded)
+        points = (*self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
+                  *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded))
+        return iter(sorted({point.sha: point for point in points}.values(),
+                           key=lambda point: point.at, reverse=True)[:1])
+
+    def published(self) -> Iterator[ProgressPoint]:
+        return self.checkout.published(self.todo.reference_pattern)
 
     @cached_property
     def pushes(self) -> tuple[PushedProgress, ...]:
@@ -832,7 +860,7 @@ class PushedProgress(CommittedProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        moves = (*source.commits("origin/HEAD"),
+        moves = (*source.published(),
                  *(ProgressPoint(push.sha, push.at) for push in source.pushes))
         return (cls(move.sha[:9], at=move.at, readings=source.readings())
                 for move in sorted(moves, key=lambda move: move.at, reverse=True)[:1])
