@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
+from .errors import ToolRefusedError
+from .external_transcript import ExternalTranscript
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .external_transcript import ExternalTranscript
-from .transcript_events import TurnDigest
-from .tool_result import ToolResult
 from .tool_declaration import EditCall
+from .tool_result import ToolResult
+from .transcript_events import TurnDigest
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .threads import Thread
     from .todos import Todo
 
@@ -92,7 +94,8 @@ class TranscriptRead[Result](ConversationPreparation):
         return self.thread.execution.prepare_conversation(self)
 
     def native(self) -> Result:
-        turns = self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
+        source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
+        turns = source.turns(self.bound)
         return self.from_turns(turns)
 
     def external(self) -> Result:
@@ -117,9 +120,19 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
 class OrderRead[Result](TranscriptRead[Result]):
     todo: Todo
 
+    @classmethod
+    def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
+        actor = comms.registry.require(commander).incarnation
+        for todo in comms.goals.todos.held_for_commander(actor):
+            assignment = todo.held()
+            holder = comms.registry.require(assignment.owner)
+            if holder.incarnation != assignment.owner_identity:
+                raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
+            yield cls(comms.root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo)
+
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
-        since = self.todo.order.at.recorded_at("An order")
+        since = self.todo.order.checked().at.recorded_at("An order")
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)
@@ -139,6 +152,10 @@ class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
 
 class OrderEditCountRead(OrderRead[int]):
     """Load needs a count, never external event bodies or edit hunks."""
+
+    @classmethod
+    def count(cls, comms: Comms, commander: str) -> int:
+        return sum(read.read() for read in cls.for_commander(comms, commander))
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))

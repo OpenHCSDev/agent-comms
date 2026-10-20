@@ -96,7 +96,7 @@ class CommanderConfig(CommanderRole, BaseModel):
         record.write_text(self.model_dump_json(indent=1) + '\n')
         path.unlink(missing_ok=True)
         path.symlink_to(record)
-        for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
+        for directory in (self.state, self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
         return path
