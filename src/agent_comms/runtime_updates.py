@@ -72,20 +72,28 @@ class NoPrefixDraft(DraftAccumulator):
 NO_PREFIX = NoPrefixDraft()
 
 
-@dataclass
-class ToolDraft(DraftAccumulator):
-    prefix: tuple[ToolStartTranscript, ...]
+class PresentableDraft(DraftAccumulator, ABC):
+    """A recorded prefix that can be projected as a live transcript row."""
 
     @property
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.prefix
+    @abstractmethod
+    def events(self) -> tuple[TranscriptEvent, ...]: ...
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
 
 
 @dataclass
-class TextDraft(DraftAccumulator):
+class ToolDraft(PresentableDraft):
+    prefix: tuple[ToolStartTranscript, ...]
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return self.prefix
+
+
+@dataclass
+class TextDraft(PresentableDraft):
     event_type: type[LiveTextTranscript]
     sections: dict[int, list[str]]
     position: int | str
@@ -106,9 +114,6 @@ class TextDraft(DraftAccumulator):
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         self.sections.setdefault(update.section, []).append(update.text)
         return self.snapshot(update.turn_id, update.item_id)
-
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
-        return (DraftItem(turn_id, item_id, self),)
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
@@ -417,7 +422,7 @@ class DraftItem(KeyedItem, RuntimeUpdate):
 
     turn_id: str
     item_id: str
-    accumulator: DraftAccumulator
+    accumulator: PresentableDraft
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
