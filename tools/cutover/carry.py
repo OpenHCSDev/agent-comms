@@ -225,13 +225,24 @@ class TodoRows(StoreCarry):
         return step.revision
 
     @classmethod
-    @contextmanager
-    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
         with cls.store_transaction(root, apply=apply) as db:
-            yield db
-            if db is not None:
-                for _row in Todo.stream(db):
-                    pass
+            if db is None:
+                return cls.carried(root, 0, {}, apply=apply)
+            with cls.todo_rows(db):
+                return cls.carry_rows(root, db, apply=apply)
+
+    @classmethod
+    @abstractmethod
+    def carry_rows(cls, root: Path, db: sqlite3.Connection, *, apply: bool) -> Carried:
+        """Convert an existing store; the step owns its changed count and detail."""
+
+    @classmethod
+    @contextmanager
+    def todo_rows(cls, db: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        yield db
+        for _row in Todo.stream(db):
+            pass
 
 
 @dataclass(frozen=True)

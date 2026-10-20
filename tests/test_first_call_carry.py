@@ -19,7 +19,7 @@ from test_todos import order, thread
 
 def test_new_row_step_does_not_convert_a_missing_store(tmp_path):
     result = FirstCalls.carry(tmp_path, apply=True)
-    assert result.changed == 0 and result.detail == {"first_call_keys": 0} and result.rewritten == ()
+    assert result.changed == 0 and result.detail == {} and result.rewritten == ()
     assert not TodoStore.path_in(tmp_path).exists()
 
 

@@ -9,6 +9,7 @@ declared schema.
 from __future__ import annotations
 
 import json
+import sqlite3
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -44,24 +45,22 @@ class OrderRuns(carry.TodoRows):
 
 
     @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
+    def carry_rows(cls, root: Path, db: sqlite3.Connection, *, apply: bool) -> Carried:
         counts: Counter[str] = Counter()
-        with cls.todo_rows(root, apply=apply) as db:
-            if db is not None:
-                lacking = """json_type("{order}", '$.run') IS NULL"""
-                saved = cast(
-                    "list[SavedOrder]", Todo.select(db, where=lacking, row_type=SavedOrder)
-                )
-                for row in saved:
-                    run = declared_run(row.text)
-                    counts[run.declared_name] += 1
-                    order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
-                    Todo.update(
-                        db,
-                        where="{id} = ?",
-                        parameters=(row.id,),
-                        order=FieldCodec.decode(ProblemOrder, order),
-                    )
+        lacking = """json_type("{order}", '$.run') IS NULL"""
+        saved = cast(
+            "list[SavedOrder]", Todo.select(db, where=lacking, row_type=SavedOrder)
+        )
+        for row in saved:
+            run = declared_run(row.text)
+            counts[run.declared_name] += 1
+            order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
+            Todo.update(
+                db,
+                where="{id} = ?",
+                parameters=(row.id,),
+                order=FieldCodec.decode(ProblemOrder, order),
+            )
         return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
 
 
