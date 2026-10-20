@@ -12,6 +12,7 @@ import json
 import shutil
 import sys
 from contextlib import closing, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.commander import order, tool_watch
@@ -44,7 +45,9 @@ def main() -> None:
         copy_store(source, root / source.name)
     first = StorageRefusals.carry(root, apply=True)
     assert StorageRefusals.carry(root, apply=True).changed == 0
+    print(json.dumps(first.report("carry_storage_refusals", True)), flush=True)
     copied = wire(root)
+    order.COMMANDER = replace(order.COMMANDER, comms=copied)
     order.COMMS = copied
     board = copied.goals.todos
     before = board.for_commander(copied.registry.require(order.ME).incarnation)
@@ -59,7 +62,6 @@ def main() -> None:
     after = board.for_commander(copied.registry.require(order.ME).incarnation)
     assert before == after, "Watching the refusal changed the copied board"
     assert "VIOLATION storage pi-cmd-tools:" in output.getvalue(), output.getvalue()
-    print(json.dumps(first.report("carry_storage_refusals", True)))
     print(output.getvalue().strip())
     print("copied board unchanged by refusal; all assignments and strike counts preserved")
     print("original stores opened read-only; no provider input or tool command replayed")
