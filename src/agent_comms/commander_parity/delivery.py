@@ -31,6 +31,7 @@ class DeliveryOutcome:
 
 @dataclass(frozen=True)
 class DeliveryComparison(ParityComparison):
+    checked_commit: str
     cases: tuple[tuple[str, str, DeliveryOutcome, DeliveryOutcome], ...]
 
     @property
@@ -38,12 +39,13 @@ class DeliveryComparison(ParityComparison):
         return len(self.cases) == 3 and not self.cases[0][2].pending and all(
             current.pending == native.pending
             and current.order_line == native.order_line
-            and (not current.pending or (commit in current.refusal and commit in native.refusal
-                 and "not in" in current.refusal and "not in" in native.refusal))
+            and (all(commit in outcome.refusal and "not in" in outcome.refusal
+                     for outcome in (current, native))
+                 if current.pending else commit in current.order_line)
             for _, commit, current, native in self.cases)
 
     def describe(self) -> str:
-        return repr(self.cases)
+        return f"checked main={self.checked_commit}; outcomes={self.cases!r}"
 
 
 @dataclass(frozen=True)
@@ -141,5 +143,6 @@ class DeliveredCommitCase:
                 native = DeliveryOutcome.saved(
                     run.commander.comms.goals.todos.get(native_order.id), refusal)
                 cases.append((name, commit, current, native))
-        return DeliveryComparison(tuple(cases))
+            checked_commit = repository.git("rev-parse", "HEAD")
+        return DeliveryComparison(checked_commit, tuple(cases))
 
