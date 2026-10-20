@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import ArgumentsLaunchChange, CommandLaunchChange, LaunchRuntime
 from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
@@ -55,12 +55,12 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
             mismatched = Comms(tmp_path)
             before = comms.registry.snapshot()
             with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
-                mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+                mismatched.owners.restart_owners(("worker",), agent_bin=CommandLaunchChange("pi"), agent_args=ArgumentsLaunchChange(()))
         assert owner.process_alive
         assert comms.registry.snapshot() == before
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)
         restarted = comms.owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[]
+            ("worker",), agent_bin=CommandLaunchChange("pi"), agent_args=ArgumentsLaunchChange(())
         )
         replacement = comms.registry.require("worker")
         assert len(restarted) == 1
@@ -79,7 +79,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
                 assert not replacement.process_alive
 
         (installed,) = Comms(tmp_path).owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
+            ("worker",), agent_bin=CommandLaunchChange("pi"), agent_args=ArgumentsLaunchChange(()), cutover=BindInstalledLaunch()
         )
         assert installed.previous_pid == replacement.require_process().pid
         assert not replacement.process_alive
@@ -104,7 +104,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
             comms.registry.new_thread('stale', frozenset(), str(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
         )
         with pytest.raises(RelationViolationError, match="another live owner"):
-            comms.owners.restart_owners(["stale"])
+            comms.owners.restart_owners(("stale",))
         assert child.alive()
         comms.owners.stop("stale")
         assert child.alive()
@@ -125,7 +125,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
                 comms.registry.new_thread(f'worker-{index}', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('busy', child.pid) if index else NoTurn())
             )
         with pytest.raises(RelationViolationError, match="idle before restart"):
-            comms.owners.restart_owners(["worker-0", "worker-1"])
+            comms.owners.restart_owners(("worker-0", "worker-1"))
         assert all(child.alive() for child in children)
         assert all(comms.registry.status(f"worker-{i}").active for i in range(2))
     finally:
@@ -275,7 +275,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             originals.append(original)
         # The original process launch name remains valid through registry rename.
         comms.registry.rename("batch-b", "batch-renamed")
-        selected = ["batch-a", "batch-renamed"]
+        selected = ("batch-a", "batch-renamed")
         before = comms.registry.snapshot()
         last = before.require_active("batch-renamed")
         busy = replace(last, active_turn=ActiveTurn("protected-turn", last.require_process().pid))
@@ -287,7 +287,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         assert all(owner.process_alive for owner in originals)
         comms.registry.register(last)
         with pytest.raises(RelationViolationError, match="complete batch"):
-            comms.owners.restart_owners([selected[0]], cutover=cutover)
+            comms.owners.restart_owners((selected[0],), cutover=cutover)
         assert all(original.process_alive for original in originals)
         original_goals = {name: comms.registry.require(name).goal for name in selected}
         source_files = {
@@ -302,7 +302,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)
         receipts = comms.owners.restart_owners(
-            selected, agent_bin=str(target_binary), cutover=cutover
+            selected, agent_bin=CommandLaunchChange(str(target_binary)), cutover=cutover
         )
         assert len(receipts) == 2
         assert all(not owner.process_alive for owner in originals)

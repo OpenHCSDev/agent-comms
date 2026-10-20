@@ -14,14 +14,19 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
-from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import (
-    AnySourceInterpreter, ArgumentsLaunchChange, CommandLaunchChange,
-    ConfigurationLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter,
-    LaunchChange, LaunchRecord, LaunchRuntime, NoConfigurationLaunchChange,
-    NoLaunchChange, RestartEnvironment, SourceInterpreter,
+    AnySourceInterpreter,
+    ArgumentsLaunchChange,
+    CommandLaunchChange,
+    ConfigurationLaunchChange,
+    LaunchRecord,
+    LaunchRuntime,
+    NoConfigurationLaunchChange,
+    NoLaunchChange,
+    RestartEnvironment,
+    SourceInterpreter,
 )
-from .field_codec import boundary_decoder
+from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
@@ -37,31 +42,12 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class OwnerRestartRequest:
     names: tuple[str, ...] | None = None
-    changes: tuple[LaunchChange, ...] = field(
-        default_factory=lambda: (NoLaunchChange(), NoLaunchChange()),
-    )
+    command: NoLaunchChange | CommandLaunchChange = field(default_factory=NoLaunchChange)
+    arguments: NoLaunchChange | ArgumentsLaunchChange = field(default_factory=NoLaunchChange)
     expected: OwnerRestartSelection | None = None
     runtime: ConfigurationLaunchChange = field(default_factory=NoConfigurationLaunchChange)
     source_interpreter: SourceInterpreter = field(default_factory=AnySourceInterpreter)
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
-
-    @classmethod
-    @boundary_decoder
-    def capture(
-        cls, names: tuple[str, ...] | None = None, agent_bin: str | None = None,
-        agent_args: tuple[str, ...] | None = None,
-        expected: OwnerRestartSelection | None = None,
-        runtime: RestartEnvironment | None = None, source_interpreter: str | None = None,
-        *, launch_runtime: LaunchRuntime,
-    ) -> OwnerRestartRequest:
-        """Decode optional values at the public restart API before retaining its request."""
-        return cls(names=names, expected=expected,
-            changes=(NoLaunchChange() if agent_bin is None else CommandLaunchChange(agent_bin),
-                     NoLaunchChange() if agent_args is None else ArgumentsLaunchChange(agent_args)),
-            runtime=NoConfigurationLaunchChange() if runtime is None else EnvironmentLaunchChange(runtime),
-            source_interpreter=(AnySourceInterpreter() if source_interpreter is None
-                                else ExactSourceInterpreter(source_interpreter)),
-            launch_runtime=launch_runtime)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
@@ -128,15 +114,15 @@ class OwnerRestartHandoff:
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
     runtime: RestartEnvironment
-    changes: tuple[LaunchChange, ...]
+    command: NoLaunchChange | CommandLaunchChange
+    arguments: NoLaunchChange | ArgumentsLaunchChange
     launch_runtime: LaunchRuntime
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
             record = replace(source.record, runtime=runtime, configuration=self.runtime,
                 agent_bin=lifecycle.restart_entrypoint(source.record.agent_bin, runtime))
-            for change in self.changes:
-                record = change.apply(record)
+            record = self.arguments.apply(self.command.apply(record))
             return lifecycle._launch_owner_unlocked(
                 thread, record, environment=self.runtime.apply_runtime(source.environment),
             )
@@ -298,7 +284,7 @@ class FencedOwnerBatch:
                 owner.require_current(snapshot)
                 progress = replace(progress, retired=progress.retired + (owner,))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
-                                         self.request.changes,
+                                         self.request.command, self.request.arguments,
                                          self.request.launch_runtime)
             stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.ownership.pop_all())
         except BaseException as cause:

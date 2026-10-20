@@ -109,9 +109,9 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,
                                   VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
         results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
-            agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
-            runtime=RestartEnvironment.inherit(target_environment),
-            source_interpreter=source_python)
+            agent_bin=CommandLaunchChange(str(Path(sys.executable).with_name('pi-comms-native'))),
+            runtime=EnvironmentLaunchChange(RestartEnvironment.inherit(target_environment)),
+            source_interpreter=ExactSourceInterpreter(source_python))
         assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
         assert not original.process_alive
         current = await attach_current()
@@ -132,6 +132,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert native.provider.posts == 0
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
+from agent_comms.launch_runtime import ArgumentsLaunchChange, CommandLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 from agent_comms.store_files import _store_lock
@@ -244,7 +245,8 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         comms.owners.stop("worker")
     else:
         (result,) = comms.owners.restart_owners(
-            ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments
+            ("worker",), agent_bin=CommandLaunchChange(sys.executable),
+            agent_args=ArgumentsLaunchChange(("-c", "print('local')")), **arguments
         )
         replacement = comms.registry.require("worker")
         assert replacement.process_alive
@@ -273,7 +275,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=sys.executable)
+        stopping = pool.submit(comms.owners.restart_owners, ("worker",), agent_bin=CommandLaunchChange(sys.executable))
         wait_for(comms.root / "released")
         current = comms.registry.require("worker")
         if change == "birth":

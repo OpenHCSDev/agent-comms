@@ -13,7 +13,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, NoLaunchChange, RestoredRuntime, RestartEnvironment
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
@@ -129,7 +129,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
-    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
+    original = OwnerRestartHandoff("/authored", (owner,), runtime, NoLaunchChange(), NoLaunchChange(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
     assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
@@ -159,7 +159,7 @@ def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_laun
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
-    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None, LaunchRuntime(Path("/target/bin/python")))
+    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), NoLaunchChange(), NoLaunchChange(), LaunchRuntime(Path("/target/bin/python")))
     lifecycle = SimpleNamespace(root=Path("/authored"))
     # No registry/launch member supplied: refusal must precede either access.
     with pytest.raises(RelationViolationError, match="acquired source interpreter"):
