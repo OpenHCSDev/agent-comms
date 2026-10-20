@@ -19,6 +19,7 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from native_backend_fixture import native_backend_fixture
 
 
@@ -268,6 +269,20 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def comms(root: Path) -> Comms:
     return Comms(root)
+
+
+@pytest.fixture
+def source(tmp_path):
+    root = tmp_path / "source"
+    c = Comms(root)
+    c.messaging.initialize_private_initial_protocol()
+    for name in ("A", "B", "other"):
+        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(tmp_path)),
+                           StoppedThreadStatus())
+    c.messaging.send("A", "B", "old history is not a new input")
+    c.registry.register(c.registry.require("other"), RunningThreadStatus())
+    c.registry.rename("other", "unselected")
+    return c
 
 
 @pytest.fixture

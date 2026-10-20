@@ -20,23 +20,9 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript,
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.messages import ClaimMessage
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_digests import LastTurns, TurnDigestRead
-
-
-@pytest.fixture
-def source(tmp_path):
-    root = tmp_path / "source"
-    c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
-    for name in ("A", "B", "other"):
-        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(tmp_path)),
-                           StoppedThreadStatus())
-    c.messaging.send("A", "B", "old history is not a new input")
-    c.registry.register(c.registry.require("other"), RunningThreadStatus())
-    c.registry.rename("other", "unselected")
-    return c
 
 
 def test_only_selected_registry_and_history_without_old_pending_input(source, tmp_path):

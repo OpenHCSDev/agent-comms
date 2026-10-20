@@ -38,6 +38,7 @@ from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
+from cutover import carry
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
 from cutover.carry_registry_version import RegistryVersion
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
@@ -100,7 +101,7 @@ def test_each_step_at_head_is_the_one_carry_its_module_declares():
         (declared,) = [value for value in vars(module).values() if isinstance(value, type)
                        and issubclass(value, Carry) and value.__module__ == module.__name__]
         assert (declared.__name__, declared.name()) == (step.declaration, step.name)
-        assert declared.__mro__[1].__name__ == step.family.__name__
+        assert issubclass(declared, getattr(carry, step.family.__name__))
 
 
 def test_target_parent_and_its_ordering_arrive_with_first_step(tmp_path):
@@ -820,7 +821,11 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
 
 def rehearsed(stack: Stack, root: Path) -> dict:
     from upgrade_bus import rehearse
-    return rehearse(root, stack, None, "worker")
+    revisions = Revisions(REPO, stack.home / "revisions")
+    try:
+        return rehearse(root, stack, revisions, "worker")
+    finally:
+        revisions.close()
 
 
 def installed_live(stack: Stack, root: Path) -> dict:
@@ -832,24 +837,31 @@ def installed_live(stack: Stack, root: Path) -> dict:
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
-def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path, monkeypatch, install):
+def test_a_step_writing_the_transcript_store_runs_after_the_hold(source, tmp_path, monkeypatch, install):
     """The d88a12185 rehearsal: ToolCallIndex's BEGIN IMMEDIATE timed out against the
     installer's own transcript hold, which then stayed up across every carry."""
     import upgrade_bus
     from cutover.carry_tool_call_index import ToolCallIndex
 
-    unit = comms.registry.declare(comms.registry.new_thread(
-        "index-unit", frozenset({"index"}), str(comms.root), execution=ExternalThreadExecution))
-    with ExternalTranscript(comms.root, unit.incarnation).writing():
-        pass
-    path = ExternalTranscript.path_in(comms.root)
-    with closing(CoordinationStore.writer(path)) as db, db:
-        for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
-                                   "AND sql IS NOT NULL").fetchall():
-            db.execute(f'DROP INDEX "{index}"')
+    def unindexed(root, *args):
+        # A retained copy imports sessions, not the source's SQLite files. Prepare
+        # the old index state on the actual install root before its hold begins.
+        unit = Comms(root).registry.require("A")
+        with ExternalTranscript(root, unit.incarnation).writing():
+            pass
+        with closing(CoordinationStore.writer(ExternalTranscript.path_in(root))) as db, db:
+            for (index,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'index' "
+                                       "AND sql IS NOT NULL").fetchall():
+                db.execute(f'DROP INDEX "{index}"')
+        return []
+
+    unindexed(source.root)
     monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
-    with transcripts_held(comms.root), pytest.raises(sqlite3.OperationalError, match="locked"):
-        ToolCallIndex.carry(comms.root, apply=True)
+    with transcripts_held(source.root), pytest.raises(sqlite3.OperationalError, match="locked"):
+        ToolCallIndex.carry(source.root, apply=True)
+    # Copying uses the strict reader. Restore the source; before_stop removes
+    # indexes on the actual install root after the retained copy has been made.
+    assert ToolCallIndex.carry(source.root, apply=True).changed > 0
 
     def tool_call_index(root, pending, staged, revisions):
         return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
@@ -868,13 +880,13 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
             return {"read": ExternalTranscript.path_in(root).exists()}
 
     monkeypatch.setattr(upgrade_bus, "carry_all", tool_call_index)
-    monkeypatch.setattr(upgrade_bus, "before_stop", lambda *args: [])
-    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "")
+    monkeypatch.setattr(upgrade_bus, "before_stop", unindexed)
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: "HEAD")
     # A rehearsal places the route under its own home, so the route sits under this one.
     monkeypatch.setattr(upgrade_bus, "ROUTE", upgrade_bus.ROUTE.with_name(f"absent-{tmp_path.name}.json"))
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
-    result = install(Installed(tmp_path / "checkout", tmp_path / "home"), comms.root)
+    result = install(Installed(tmp_path / "checkout", tmp_path / "home"), source.root)
     step, = result["steps"]
     assert step["changed"] == step["indexes"] > 0
     assert result["files"].rewritten == 1
