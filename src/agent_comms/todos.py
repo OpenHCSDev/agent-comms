@@ -7,15 +7,15 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import logging
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
@@ -28,24 +28,30 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
 from .command import Command
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
-from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import StandingRule, UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import StandingRule, UndatedStandingRule
-from .coordinator import Coordination
 from .turn_digests import TurnDigestRead, TurnsSince
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
+from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -2466,7 +2472,9 @@ class WheelSpin(StandingRule, declared_name=None):
                assigner: ThreadIncarnation) -> None:
         """Publish through the Goal owner and notify through the messaging owner."""
         order = comms.goals.reassign(self.todo, unit, assigner)
-        comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(self.todo)}")
+        comms.messaging.send(
+            commander, unit.name, f"{self.line()}\n{order.instructions(self.todo)}"
+        )
 
 
 @dataclass(frozen=True)

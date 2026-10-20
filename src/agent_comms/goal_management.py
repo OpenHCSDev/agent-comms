@@ -14,29 +14,49 @@ from typing import TYPE_CHECKING
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
-from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
-                           OrderGoalAction, SentBackOrderGoalAction)
+from .goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    OrderGoalAction,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait, StandbyReview
+from .goal_waits import (
+    GoalInputReview,
+    GoalWait,
+    GoalWaits,
+    NoGoalWait,
+    RecordedGoalWait,
+    StandbyReview,
+)
 from .native_input_owner import GoalLaunchOwner
 from .registration import Registration
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
+    from .registry_document import RegistrySnapshot
+from .goal_presentation import GoalSnapshot, GoalWaitTarget, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
-from .threads import Thread
 from .thread_identity import ThreadIncarnation
+from .threads import Thread
+from .todos import (
+    PendingProblemOrder,
+    SendBackVerdict,
+    StrikeReason,
+    Todo,
+    TodoOperation,
+    TodoStore,
+)
 from .turn_lease import TurnCompletion
-from .todos import PendingProblemOrder, SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -75,14 +95,16 @@ class Goals:
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
-    def reassign(self, todo: Todo, unit: Thread, assigner: ThreadIncarnation) -> PendingProblemOrder:
+    def reassign(
+        self, todo: Todo, unit: Thread, assigner: ThreadIncarnation
+    ) -> PendingProblemOrder:
         """Reissue the order through its Goal and return the published order for notification."""
         order = todo.order.reissued(time.time())
         commander = todo.creator_identity.name
         self.update_goal(unit.name, OrderGoalAction(
             problem=todo.id, expected_revision=todo.revision, order=order,
             request=todo.goal.request(), deadline=todo.deadline, commander=commander,
-            assigner=assigner, traced=todo.order.owner))
+            assigner=assigner, traced=order.owner))
         return order
 
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
