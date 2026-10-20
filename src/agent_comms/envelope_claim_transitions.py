@@ -157,7 +157,7 @@ class ClaimScope(SubclassUnion, ABC, affix=""):
 
 @dataclass(frozen=True)
 class UnrecordedScope(NullMember, ClaimScope):
-    """Bus history written before claims recorded a scope: ``admission`` is null or absent.
+    """Bus history written before claims recorded a scope: the scope key is null or absent.
 
     Nothing ties such a holder to a current input, so it is never live, and it
     consumed no operation.
