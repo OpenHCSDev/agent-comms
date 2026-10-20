@@ -1,6 +1,7 @@
 import pytest
 
 from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_startup import NativeStartupPolicy
 
 from agent_comms.agent_backend import WhenBusy
 from agent_comms.pi_events import NativeRetryEnd
@@ -20,7 +21,7 @@ def tracked_turn(output, terminal):
     turn.output, turn.terminal = output, terminal
     turn.finished = False
     turn.usage, turn.explicit_interrupt = UsageAccount(), False
-    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1, NativeStartupPolicy())
     turn.watchdog.launching(lambda: 0.0, None)
     turn.watchdog.tick()
     return turn
