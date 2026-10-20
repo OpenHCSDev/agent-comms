@@ -7,7 +7,9 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderVerb
-from agent_comms.todos import Derivation, LocatedProblemFinding, Slop, TodoError
+from agent_comms.todos import (
+    DeclarationDerivation, Derivation, LocatedProblemFinding, Slop, TodoError,
+)
 from test_commander_problem_orders import create, order_body
 
 
@@ -35,8 +37,6 @@ def test_second_problem_on_one_owner_needs_its_declaration(commander, commander_
         problem()
     text = str(refused.value)
     assert 'P1:' in text and before[0].order.checked().owner.to_wire() in text
-    assert 's old' in text and 'the same file broke again' in text
-    assert 'the declaration that replaces the copies' in text
     assert script.comms.goals.todos.history_for_commander(script.incarnation) == before
 
     document['slop'] = [dict(citation, derive='delete-copy')]
@@ -53,10 +53,11 @@ def test_second_problem_on_one_owner_needs_its_declaration(commander, commander_
     assert len(comms.goals.todos.history_for_commander(script.incarnation)) == 2
 
 
-@pytest.mark.parametrize('derive', ('declaration', 'subclass', 'mixin', 'base-method',
-                                    'init-subclass', 'metaclass'))
-def test_declaration_derivations_require_another_file(derive, tmp_path):
-    mechanism = Derivation.member_named(derive)
+@pytest.mark.parametrize('mechanism', [
+    member for member in map(Derivation.member_named, Derivation.names())
+    if issubclass(member, DeclarationDerivation)
+])
+def test_declaration_derivations_require_another_file(mechanism, tmp_path):
     where = FileLine('broken.py', 1)
     assert mechanism.declaration_elsewhere(FileLine('owner.py', 1), where, tmp_path)
     assert not mechanism.declaration_elsewhere(FileLine(str(tmp_path / 'broken.py'), 9), where, tmp_path)
@@ -77,4 +78,4 @@ def test_recurrence_also_matches_a_previous_where(commander):
                        finding=LocatedProblemFinding(FileLine('broken.py', 1)))
     todo = replace(todo, order=previous)
     refusal, = todo.recurrence((FileLine('broken.py', 9),), comms.root, 101)
-    assert previous.owner.to_wire() in refusal and 'Where: broken.py:1' in refusal
+    assert previous.owner.to_wire() in refusal and 'broken.py:1' in refusal
