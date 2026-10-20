@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.store_files import _store_lock
 from test_commander_heartbeat import external_commander
 from test_commander_problem_orders import create
 
@@ -27,8 +28,10 @@ def test_owner_acquisition_announces_only_restarts_with_orders(commander, held, 
             replace(comms.registry.require("worker"), process_identity=identity), new_owner=True
         )
     with external_commander(comms, "lead"):
-        owned = comms.owners.acquire_thread("worker", owner_pid=os.getpid())
-        assert comms.registry.require("worker").process_identity == owned.process_identity
+        with _store_lock(comms.root / "wire"):
+            owned = comms.owners.acquire_thread("worker", owner_pid=os.getpid())
+            assert comms.registry.require("worker").process_identity == owned.process_identity
+            assert not [m for m in comms.bus.inbox("worker") if m.sender == "commander-heartbeat"]
         messages = [m for m in comms.bus.inbox("worker") if m.sender == "commander-heartbeat"]
         assert len(messages) == int(held and previous_started)
         if messages:

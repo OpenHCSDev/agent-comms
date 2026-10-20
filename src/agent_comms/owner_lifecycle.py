@@ -35,7 +35,7 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
-from .store_files import _store_lock
+from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -286,10 +286,7 @@ class OwnerLifecycle:
         if previous.process_identity.offline():
             orders = tuple(
                 todo
-                for commander in self.registry.all_threads().values()
-                if commander.process_alive
-                for goal in commander.goal
-                if goal.order.open_requests(goal, self.goals, commander.incarnation)
+                for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
                 for todo in self.goals.todos.held_by(commander.incarnation, owned.name)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
@@ -297,10 +294,16 @@ class OwnerLifecycle:
                 identities = ", ".join(sorted({
                     order.id for todo in orders for order in todo.order.declarations
                 }))
-                CommanderHeartbeat.register(self.registry)
-                self.messaging.send(CommanderHeartbeat.sender, owned.name,
-                    f"Restarted holding {identities}; continue them from your branch")
+                # All start paths borrow the outer lock's existing release lifetime,
+                # including retained handoffs and parent reservation before child acquire.
+                StoreLock.current_release().callback(self._announce_restart, owned.name, identities)
         return owned
+
+    def _announce_restart(self, name: str, identities: str) -> None:
+        """Publish once after the outer physical locks and their borrowed scopes end."""
+        CommanderHeartbeat.register(self.registry)
+        self.messaging.send(CommanderHeartbeat.sender, name,
+            f"Restarted holding {identities}; continue them from your branch")
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,

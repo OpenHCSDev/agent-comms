@@ -11,6 +11,7 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .goal_management import Goals
 from .standing_rules import StandingRule
 from .thread_execution import ExternalThreadExecution
 from .thread_identity import ThreadIncarnation
@@ -64,20 +65,23 @@ class CommanderHeartbeat:
                 )
             )
 
+    @classmethod
+    def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
+        """The live request holders whose current incarnation owns commander work."""
+        return tuple(
+            thread
+            for thread in registry.all_threads().values()
+            if thread.process_alive
+            and any(
+                goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal
+            )
+        )
+
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """Borrow the bus in run_worker; inactive commanders retire their review."""
         with opened_wire() as comms:
             self.register(comms.registry)
-            threads = comms.registry.all_threads()
-            commanders = tuple(
-                thread
-                for thread in threads.values()
-                if thread.process_alive
-                and any(
-                    goal.order.open_requests(goal, comms.goals, thread.incarnation)
-                    for goal in thread.goal
-                )
-            )
+            commanders = self.commanders(comms.registry, comms.goals)
             live = {thread.incarnation for thread in commanders}
             self.reviews = {
                 owner: review for owner, review in self.reviews.items() if owner in live
