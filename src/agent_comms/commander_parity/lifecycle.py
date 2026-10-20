@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
 import json
 import os
 import shlex
-import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -21,6 +21,7 @@ from pydantic import PrivateAttr
 
 from ..change_report import FileLine
 from ..check_root import CheckRoot
+from ..child_process import BoundedRun, ChildResult
 from ..commander.config import CommanderConfig
 from ..commander.order import Commander, OrderFile, hhmm
 from ..commander.request import RequestAddVerb
@@ -181,15 +182,19 @@ class LifecycleRun:
             )
             yield cls(commander, worker.name, decisions, document, root / "application.json")
 
+    @classmethod
+    def invoke(cls, program: str, *arguments: str) -> ChildResult:
+        return cls.invoke_command((sys.executable, "-c", program, *arguments))
+
     @staticmethod
-    def invoke(program: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def invoke_command(command: tuple[str, ...]) -> ChildResult:
         source = str(Path(__file__).resolve().parents[2])
-        return subprocess.run(
-            (sys.executable, "-c", program, *arguments),
-            capture_output=True,
-            text=True,
-            timeout=120,
-            env={**os.environ, "PYTHONPATH": source},
+        return asyncio.run(
+            BoundedRun.run(
+                command,
+                timeout=120,
+                env={**os.environ, "PYTHONPATH": source},
+            )
         )
 
     @property
