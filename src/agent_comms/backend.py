@@ -545,13 +545,6 @@ class NativeSession(MroDispatch, ABC):
         """The native session alone closes its running request."""
         self.finished = True
 
-    def provider_retry_ended(self, event: pi.AutoRetryEnd) -> tuple[events.AgentEvent, ...]:
-        updates = event.outcome.apply(event, self)
-        self.record_retry(event.outcome.result(event.attempt, self.output.redact))
-        if event.outcome.ends_request():
-            self.finish_request()
-        return updates
-
     def record_retry(self, result: ProviderRetryResult) -> None:
         """The provider retry outcome decides whether this turn's failure may run again."""
         self.output.retry_result = result
@@ -591,6 +584,13 @@ class TurnSession(NativeSession):
     """A native input adds its declared tools and constructs its connected command."""
 
     prompt_type = UnwrittenPrompt
+
+    def provider_retry_ended(self, event: pi.AutoRetryEnd) -> tuple[events.AgentEvent, ...]:
+        updates = event.outcome.apply(event, self)
+        self.record_retry(event.outcome.result(event.attempt, self.output.redact))
+        if event.outcome.ends_request():
+            self.finish_request()
+        return updates
 
     def __init__(self, launch, make_command: Callable[..., commands.Prompt], *,
                  tool_mode: NativeToolMode, **options):

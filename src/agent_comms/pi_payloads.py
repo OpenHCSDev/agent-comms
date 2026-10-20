@@ -212,12 +212,12 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
 
         super().apply(event, session)
         session.watchdog.retry_recovery_pending = False
+        session.watchdog.phase = FailedPhase(error=CodelessProviderDiagnosticError(
+            session.output.redact(self.final_error)))
         return (
             *event.exhausted(session),
             session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0,
-                phase=FailedPhase(error=CodelessProviderDiagnosticError(
-                    session.output.redact(self.final_error))),
+                "failed", "provider_retry_exhausted", 0, phase=session.watchdog.phase,
             ),
         )
 
