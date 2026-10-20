@@ -57,6 +57,7 @@ from agent_comms.todos import PlannedInstallDeadline
 import publish_runtime
 from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
+from cutover.runtime_resolution import RuntimeResolution
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -342,7 +343,8 @@ class Install(ABC):
     def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
            installed: Stack, staged: Stack, revisions: Revisions, installer: str,
            spill_dir: Path) -> Install:
-        unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
+        unchanged = current == target and RuntimeResolution.installed().matches(
+            staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, pending, installed, staged, revisions,
                       installer, spill_dir)
@@ -387,7 +389,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
-    lock = installed.lock
     try:
         staged.owners(root, "stop", running)
         with transcripts_held(root):
@@ -399,7 +400,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
-    shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
+    shutil.copy2(RuntimeResolution.record_path(), backup.path / "build.json")
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
