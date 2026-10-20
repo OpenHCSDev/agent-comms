@@ -1579,7 +1579,7 @@ class ContextCliCommand(CliCommand):
     def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
         cursor = None
         while True:
-            page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+            page = ctx.contexts.page(self.thread, ctx.registry, cursor=cursor)
             yield from (resource.value for resource in reversed(page.resources))
             if not page.has_older():
                 return

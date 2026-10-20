@@ -23,7 +23,7 @@ from .tool_result import DeclaredReply
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .presentation import ThreadView
-    from .private_bus_checkpoint import CapturedWireSource
+    from .context_store import CapturedContext
     from .relationships import PeerRelation
     from .threads import Thread
 
@@ -428,7 +428,7 @@ class RecordedSegmentManifest:
                 position: int = 0) -> SegmentManifest:
         prior = (predecessors[self.previous].segments[position]
                  if self.previous is not None and predecessors is not None else None)
-        previous = prior.restore(entries) if prior is not None else None
+        previous = prior.restore(entries, predecessors, position) if prior is not None else None
         original = self.manifest
         if self.previous is not None and previous is None:
             raise ValueError("Recorded segment predecessor is missing")
@@ -1109,25 +1109,35 @@ class ContextManifestChange(CliResult):
 
 
 @dataclass(frozen=True)
-class RecordedContextManifest:
-    """One turn's context identity and references to separately recorded entries."""
+class RecordedContextIdentity:
+    """The request identity shared by storage and restored context records."""
 
     thread: ThreadIncarnation
     turn: ContextTurn
-    segments: tuple[RecordedSegmentManifest, ...]
     counter: str
-    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
-    recording_turn: int = field(default=1, metadata={"wire_omit_default": True})
+    request_id: str | None = field(default=None, kw_only=True, metadata={"wire_omit_default": True})
+    recording_turn: int = field(default=1, kw_only=True, metadata={"wire_omit_default": True})
+
+    def with_segments(self, segments: tuple[RecordedSegmentManifest, ...]) -> RecordedContextManifest:
+        return RecordedContextManifest(self.thread, self.turn, self.counter, segments,
+            request_id=self.request_id, recording_turn=self.recording_turn)
+
+
+@dataclass(frozen=True)
+class RecordedContextManifest(RecordedContextIdentity):
+    """One turn's context identity and references to separately recorded entries."""
+
+    segments: tuple[RecordedSegmentManifest, ...] = field(metadata={"identity_exclude": True})
 
     @classmethod
     def capture(
         cls, manifest: ContextManifest,
-        previous: CapturedWireSource[RecordedContextManifest, ContextManifest] | None = None,
+        previous: CapturedContext | None = None,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         recording_turn = 1
         prior: tuple[RecordedSegmentManifest, ...] = ()
         if previous is not None:
-            previous_record = previous.pointer.decode_bytes(previous.raw, previous.source.root_id)
+            previous_record = previous.recorded
             prior = previous_record.segments
             recording_turn += previous_record.recording_turn
         parts = []
@@ -1138,17 +1148,17 @@ class RecordedContextManifest:
                 if candidate.kind is segment.kind:
                     value = candidate
                     old = prior[position]
-                    offset = previous.pointer.offset
+                    offset = previous.record_id
             parts.append(segment.kind.record_manifest(
                 segment, old, value, offset, recording_turn=recording_turn))
         return (
             cls(
-                manifest.thread,
-                manifest.turn,
-                tuple(part for part, _ in parts),
-                manifest.counter,
-                manifest.request_id,
-                recording_turn,
+                thread=manifest.thread,
+                turn=manifest.turn,
+                segments=tuple(part for part, _ in parts),
+                counter=manifest.counter,
+                request_id=manifest.request_id,
+                recording_turn=recording_turn,
             ),
             tuple(entry for _, group in parts for entry in group),
         )

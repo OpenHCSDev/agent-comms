@@ -21,7 +21,7 @@ from pydantic import BaseModel, JsonValue
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireValue
-from .private_bus_checkpoint import ContextManifestReference
+from .context_store import ContextManifestReference
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
@@ -462,7 +462,7 @@ class RecordedContextRuntimeRequest(ResultRuntimeRequest):
 
     def read_manifest(self, ctx):
         comms = ctx.server.agent._comms
-        manifest = self.record.read(comms.bus.log, ctx.name, comms.registry)
+        manifest = self.record.read(comms.contexts, ctx.name, comms.registry)
         return ContextManifest.for_request((manifest,), self.turn, self.request_id)
 
     async def manifest(self, ctx):
