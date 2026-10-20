@@ -260,7 +260,7 @@
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -580,22 +372,106 @@
+@@ -580,22 +372,107 @@
   * Branching moves the leaf to an earlier entry, allowing new branches without
   * modifying history.
   *
@@ -314,12 +314,13 @@
 +        try { linkSync(temp, lock); }
 +        catch (error) {
 +            if (error.code !== "EEXIST") throw error;
-+            const holderText = claimDead(lock);
-+            if (readFileSync(lock, "utf8") !== holderText) throw refusal;
-+            unlinkSync(lock);
-+            try { linkSync(temp, lock); }
-+            catch (error) {
-+                if (error.code === "EEXIST") throw refusal;
++            try {
++                const holderText = claimDead(lock);
++                if (readFileSync(lock, "utf8") !== holderText) throw refusal;
++                unlinkSync(lock);
++                linkSync(temp, lock);
++            } catch (error) {
++                if (error.code === "EEXIST" || error.code === "ENOENT") throw refusal;
 +                throw error;
 +            }
 +        }

@@ -96,7 +96,7 @@ try {
       outcome.refusals.some(text =>
         text.includes('Native session writer changed') ||
         text.includes('Native session writer lock unavailable'))),
-    'loser refusals must be typed fail-closed denials',
+    `loser refusals must be typed fail-closed denials: ${JSON.stringify(outcomes)}`,
   );
 
   console.log('outcomes', JSON.stringify(outcomes));
