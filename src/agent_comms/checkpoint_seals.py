@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import os
     import sqlite3
 
-    from .private_bus_checkpoint import PrefixWitness
+    from . import private_bus_checkpoint
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
 
@@ -64,9 +64,9 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
         marker: WireMetadata,
         db: sqlite3.Connection,
         path: Path,
-        saved: PrefixWitness,
+        saved: private_bus_checkpoint.PrefixWitness,
         info: os.stat_result,
-    ) -> PrefixWitness:
+    ) -> private_bus_checkpoint.PrefixWitness:
         return saved.index_tail(bus, marker, db, path, info)
 
     @abstractmethod
@@ -75,15 +75,16 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
     @abstractmethod
     def chunk_complete(self, offset: int, size: int, rows: int) -> bool: ...
 
-    def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
+    def check_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
     @abstractmethod
-    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+    def require_rebuilt(self, saved: private_bus_checkpoint.PrefixWitness,
+                        rebuilt: private_bus_checkpoint.PrefixWitness) -> None:
         """Check the rebuilt index matches what this write said it would be."""
 
     @abstractmethod
-    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+    def require_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         """Readers holding the shared lock accept only a final seal; repair needs the exclusive lock."""
 
 
@@ -92,10 +93,10 @@ class FinalSeal(CheckpointSeal):
     witness: PrefixSeal
 
     @classmethod
-    def capture(cls, witness: PrefixWitness, db_path: Path) -> FinalSeal:
+    def capture(cls, witness: private_bus_checkpoint.PrefixWitness, db_path: Path) -> FinalSeal:
         return cls(1, FileRevision.from_stat(db_path.stat()), witness.seal())
 
-    def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
+    def check_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         if self.witness != saved.seal() or self.db_revision != FileRevision.from_stat(db_path.stat()):
             raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
@@ -105,14 +106,14 @@ class FinalSeal(CheckpointSeal):
         marker: WireMetadata,
         db: sqlite3.Connection,
         path: Path,
-        saved: PrefixWitness,
+        saved: private_bus_checkpoint.PrefixWitness,
         info: os.stat_result,
-    ) -> PrefixWitness:
+    ) -> private_bus_checkpoint.PrefixWitness:
         if saved.revision.identity != FileIdentity.from_stat(info):
             self.require_rebuilt(saved, saved)
             copied = FileRevision.from_stat(path.stat())
             if (copied.size, copied.mtime_ns) != (self.db_revision.size, self.db_revision.mtime_ns):
-                raise RelationViolationError("Private bus copied index content revision changed.")
+                return saved.rebuild_from_empty(bus, marker, db, path, info)
             saved = saved.rebind_source(bus, marker, db, info)
         else:
             self.check_final(saved, path)
@@ -126,11 +127,12 @@ class FinalSeal(CheckpointSeal):
     def chunk_complete(self, offset: int, size: int, rows: int) -> bool:
         return size >= 16 * 1024 * 1024 or rows >= 10_000
 
-    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+    def require_rebuilt(self, saved: private_bus_checkpoint.PrefixWitness,
+                        rebuilt: private_bus_checkpoint.PrefixWitness) -> None:
         if self.witness != saved.seal():
             raise RelationViolationError("Private bus checkpoint prefix record differs from its seal.")
 
-    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+    def require_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         self.check_final(saved, db_path)
 
 
@@ -140,7 +142,8 @@ class PendingSeal(CheckpointSeal):
     expected: PrefixSeal
 
     @classmethod
-    def capture(cls, prior: PrefixWitness, expected: PrefixWitness, db_path: Path) -> PendingSeal:
+    def capture(cls, prior: private_bus_checkpoint.PrefixWitness,
+                expected: private_bus_checkpoint.PrefixWitness, db_path: Path) -> PendingSeal:
         return cls(1, FileRevision.from_stat(db_path.stat()), prior.seal(), expected.seal())
 
     def recover(
@@ -149,9 +152,9 @@ class PendingSeal(CheckpointSeal):
         marker: WireMetadata,
         db: sqlite3.Connection,
         path: Path,
-        saved: PrefixWitness,
+        saved: private_bus_checkpoint.PrefixWitness,
         info: os.stat_result,
-    ) -> PrefixWitness:
+    ) -> private_bus_checkpoint.PrefixWitness:
         if (saved.seal() not in (self.prior, self.expected)
                 or not self.expected.revision.holds_cut(
                     FileRevision.from_stat(info), self.expected.revision.size)
@@ -165,7 +168,8 @@ class PendingSeal(CheckpointSeal):
     def chunk_complete(self, offset: int, size: int, rows: int) -> bool:
         return offset == self.expected.revision.size
 
-    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+    def require_rebuilt(self, saved: private_bus_checkpoint.PrefixWitness,
+                        rebuilt: private_bus_checkpoint.PrefixWitness) -> None:
         if (
             saved.seal() not in (self.prior, self.expected)
             or rebuilt.offset != self.expected.revision.size
@@ -173,5 +177,5 @@ class PendingSeal(CheckpointSeal):
         ):
             raise RelationViolationError("Private bus checkpoint pending suffix differs from intent.")
 
-    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+    def require_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         raise CheckpointNeedsRepairError("Private bus checkpoint has an unfinished write.")
