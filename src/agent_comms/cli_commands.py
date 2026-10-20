@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -23,7 +24,13 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
 
-from .active_route import ActiveRoute, replace_unreadable_active_route
+from .active_route import (
+    ActiveRoute,
+    CommsRoute,
+    RouteFile,
+    active_route_path,
+    replace_unreadable_active_route,
+)
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
@@ -37,7 +44,7 @@ from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, S
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
-from .comms import Comms
+from .comms import Comms, client_wire
 from .config_options import (
     ConfigOptions,
     ModelConfigOption,
@@ -46,7 +53,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -58,7 +65,8 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
-from .harness_install import Harness, HarnessInstalled
+from agent_comms.launch_root import LaunchRoot
+from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
@@ -561,13 +569,7 @@ class SubagentsImportedResult(CliResult):
 @dataclass(frozen=True)
 class InstallResult(CliResult):
     config: str
-    harnesses: Mapping[str, HarnessInstalled]
-
-    def to_wire(self) -> object:
-        # Each harness's installation sits beside the config path on the wire.
-        return {"config": self.config,
-                **{name: FieldCodec.encode(installed)
-                   for name, installed in self.harnesses.items()}}
+    registered: Mapping[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -728,6 +730,17 @@ class CliCommand(
         return result.exit_code()
 
     @classmethod
+    def published_launch(cls) -> LaunchRoot:
+        """The root a command reads when no --root is given."""
+        return ActiveRoute.published_launch()
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Open the bus this command reads, then run it; a command that must act before
+        the bus opens overrides this."""
+        with client_wire(route) as comms:
+            return self.run(comms, output)
+
+    @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         return FieldCodec.editor_arguments(cls, values)
 
@@ -886,8 +899,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .errors import RelationViolationError
-
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
@@ -1246,12 +1257,39 @@ class RegisterCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InstallCliCommand(CliCommand):
-    help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
+    help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
+            "harness to use the bus, with the commander skill and tools")
+    checkout: Annotated[Path, PathText] = option("--checkout", default_factory=Path.cwd, parser_default=".")
+    to: str = option("--to", default="origin/main")
+    installer: str = option("--installer", default="claude-code",
+                            help="The unit running this install; the next install's plan names it")
+    rehearse: bool = option("--rehearse", default=False,
+                            help="Carry and read a copy of the bus; change nothing")
+    retire: bool = option("--retire", default=False,
+                          help="Move the bus aside, kept, and install a fresh one in its place")
+    spill_dir: Annotated[Path, PathText] = option(
+        "--spill-dir", default_factory=lambda: Path.home() / ".cache/agent-rehearsal",
+        parser_default=str(Path.home() / ".cache/agent-rehearsal"),
+        help="Parent directory for live backups")
     project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
     repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
     commander: str = option("--commander", default="claude-code")
 
+    @classmethod
+    def published_launch(cls) -> LaunchRoot:
+        """Install runs where no route selects a bus yet: the published bus while its route
+        still selects it, otherwise the default root, where install creates one."""
+        return LaunchRoot.from_path(RouteFile.read(active_route_path()).launch_root())
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """The bus may be unreadable by this runtime, or absent, until the target's own
+        source has carried or created it, so nothing opens it here."""
+        from agent_comms.installer.launch import InstallRun
+
+        return InstallRun.start(self, route.root).launch(output)
+
     def apply(self, ctx: Comms) -> CliResult:
+        """The install child's last step, on the bus it carried or created."""
         from .commander.config import CommanderConfig
 
         home = Path.home()
@@ -1263,7 +1301,7 @@ class InstallCliCommand(CliCommand):
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.install(ctx, self.commander, project)
+            type(harness).declared_name: harness.register(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
 
@@ -1309,8 +1347,6 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> CliResult:
-        import subprocess
-
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
         # Git requires an absolute ceiling. Stop before entering the declared

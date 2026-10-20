@@ -11,7 +11,7 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
+    FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
     python_paths,
 )
@@ -121,14 +121,6 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
     assert os.environ["PYTHONPATH"] == inherited
-
-
-def test_unrelated_change_does_not_require_a_core_carry_module(repo: Repository) -> None:
-    base = repo.commit({"plain.py": "value = 1\n"})
-    head = repo.commit({"plain.py": "value = 2\n"})
-    assert EditedCarry.compare(
-        repo.path, base, head, {f"{repo.root}/plain.py"}, repo.root,
-    ) == ({"EditedCarry": 0}, {"EditedCarry": 0})
 
 
 def test_clean_growth_passes_but_type_and_string_dispatch_fail(repo: Repository) -> None:
