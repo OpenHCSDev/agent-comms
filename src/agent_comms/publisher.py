@@ -245,8 +245,7 @@ class ClaimWrites(PrivateWrites):
                         raise RelationViolationError("Cannot release an unclaimed resource.")
                     release_records.append(ClaimRelease(resource, current.generation))
             release_records.sort(key=lambda release: release.resource)
-            held = tuple(current for resource in requested
-                         if (current := source.claim(resource)) is not None)
+            held = source.claims_for(requested).values()
             superseded = tuple(previous for current in held
                                for previous in current.require_holder(
                                    stored.sender, owner_incarnation, snapshot))

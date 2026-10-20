@@ -18,7 +18,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_errors import IdentityConflict
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .message_reference import MessageReference
 from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
                           ResourcePathText, Sha256Text)
@@ -293,9 +293,12 @@ class ClaimOwner:
     def require_holder(
         self, owner: str, incarnation: str, registry: RegistryProvenance,
     ) -> tuple[ClaimOwner, ...]:
-        """Admit the registry's current holder; return a retired claim's exact preimage."""
-        current = registry.threads.get(owner)
-        if current is None or str(current.created_at) != incarnation:
+        """Check the registry's current holder; return a retired claim's exact prior record."""
+        try:
+            current = registry.require(owner)
+        except UnregisteredThreadError as error:
+            raise ClaimConflict(self) from error
+        if str(current.created_at) != incarnation:
             raise ClaimConflict(self)
         self.require_recorded_holder(owner, incarnation, (self,))
         return (self,) if self.incarnation != incarnation else ()
