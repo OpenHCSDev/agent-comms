@@ -279,28 +279,26 @@ class Stack:
             ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
     def call_step(self, step: Step, root: Path, revisions: Revisions,
-                  method: str, **arguments: bool) -> str:
+                  expression: str) -> str:
         """Run the declaration in its family's source with this stack's interpreter."""
         tree = revisions.tree(step.family.source_revision(step))
         worker = (
-            "import importlib,json,sys; from pathlib import Path; "
-            "from agent_comms.field_codec import FieldCodec; "
-            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
-            "arguments=FieldCodec.decode(dict[str,bool],FieldCodec.parse(sys.argv[5])); "
-            "result=getattr(step,sys.argv[3])(Path(sys.argv[4]),**arguments); "
-            "print(json.dumps(FieldCodec.encode(result)))"
+            "import importlib,json,sys; from pathlib import Path; from dataclasses import asdict; "
+            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); root=Path(sys.argv[3]); "
+            f"print(json.dumps({expression}))"
         )
         output = run(self.python, "-c", worker, f"cutover.{step.name}", step.declaration,
-                     method, root, json.dumps(arguments), cwd=tree,
+                     root, cwd=tree,
                      env=self.environment(tree / "src", tree / "tools"))
         return output.strip().splitlines()[-1]
 
     def backup_files(self, root: Path, pending: tuple[Step, ...],
                      revisions: Revisions) -> tuple[Path, ...]:
         return tuple(sorted({
-            path for step in pending for path in FieldCodec.decode(
-                tuple[Path, ...], FieldCodec.parse(self.call_step(
-                    step, root, revisions, Carry.backup_files.__name__)))
+            Path(path) for step in pending for path in FieldCodec.decode(
+                tuple[str, ...], FieldCodec.parse(self.call_step(
+                    step, root, revisions,
+                    f"[str(path) for path in step.{Carry.backup_files.__name__}(root)]")))
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -364,7 +362,7 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         return TodoColumnCarry.carry_step(
             root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
-    output = stack.call_step(step, root, revisions, operation, apply=True)
+    output = stack.call_step(step, root, revisions, f"asdict(step.{operation}(root,apply=True))")
     return FieldCodec.decode(Carried, FieldCodec.parse(output))
 
 
