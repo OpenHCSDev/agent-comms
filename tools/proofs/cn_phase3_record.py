@@ -7,7 +7,6 @@ session path. All observations below are CLI tool results, not hand-constructed 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -17,7 +16,6 @@ from pathlib import Path
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.progress_claims import MergedClaim
