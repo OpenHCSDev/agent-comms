@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sqlite3
@@ -18,7 +17,6 @@ from agent_comms.context_store import ContextEntry, ContextStore
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import ClaimMessage, ClaimNoticeKind, InfoKind
 from agent_comms.private_bus_checkpoint import (
     _SEED,
     CheckedPrefix,
@@ -244,29 +242,6 @@ class ContextManifests(Carry):
             return Carried(count + 1)
         return cls._rewrite(root)
 
-    @staticmethod
-    def message_bytes(value: dict[str, object], raw: bytes) -> tuple[bytes, int]:
-        # Old claim envelopes were labeled info. Their existing claim object
-        # binds the same seq/id/owner, but today's declaration is ClaimNoticeKind.
-        # Repair only that label, never a claim, body, identity or signed row.
-        kind_key = FieldCodec.record_key(ClaimMessage, "type")
-        claim_key = FieldCodec.record_key(ClaimMessage, "claim_transition")
-        if value.get(kind_key) != InfoKind.declared_name or claim_key not in value:
-            return raw, 0
-        from agent_comms.bus_publication import has_private_wire_fields
-
-        if has_private_wire_fields(value):
-            raise RelationViolationError("Unexpected signed legacy info claim")
-        original = FieldCodec.decode(
-            ClaimMessage, {key: item for key, item in value.items() if key != "id"}
-        )
-        changed = replace(original, type=ClaimNoticeKind).to_wire()
-        if {key: item for key, item in value.items() if key != kind_key} != {
-            key: item for key, item in changed.items() if key != kind_key
-        }:
-            raise RelationViolationError("Legacy claim conversion changed more than its kind label")
-        return (json.dumps(changed, ensure_ascii=False, separators=(",", ":")) + "\n").encode(), 1
-
     @classmethod
     def _rewrite(cls, root: Path) -> Carried:
         """Convert the selected stopped root under Carry's existing wire lock.
@@ -321,7 +296,6 @@ class ContextManifests(Carry):
             output_path = stage / "bus.jsonl"
             old_digest = new_digest = _SEED
             scan = WireScan(marker)
-            claim_labels = 0
             with store.writing() as context_db, output_path.open("w+b") as output, index_db:
                 os.chmod(output_path, 0o600)
                 move = ContextMove(stream, context_db, store)
@@ -334,20 +308,18 @@ class ContextManifests(Carry):
                     if FieldCodec.record_key(ContextEnvelope, "observation") in value:
                         FieldCodec.decode(ContextEnvelope, value).observation.move(move, offset)
                     else:
-                        original_length = len(raw)
-                        raw, changed = cls.message_bytes(value, raw)
-                        claim_labels += changed
+                        # MessageKind owns historical info claims on current main.
+                        # Keep every original message byte, including its kind label.
                         record = scan.read(raw)
                         for delivery in record.deliveries():
                             row = DeliverySources.one(index_db, seq=delivery.message.seq)
-                            if row is None or (row.offset, row.length) != (offset, original_length):
+                            if row is None or (row.offset, row.length) != (offset, len(raw)):
                                 raise RelationViolationError("Original message SQL pointer differs")
                             DeliverySources.update(
                                 index_db,
                                 where="seq=?",
                                 parameters=(row.seq,),
                                 offset=output.tell(),
-                                length=len(raw),
                             )
                         output.write(raw)
                         new_digest = _chain(new_digest, raw)
@@ -398,7 +370,7 @@ class ContextManifests(Carry):
             log.write_metadata_unlocked(marker)
             return Carried(
                 move.count + 1,
-                {"bus_bytes": size, "requests": move.count, "claim_labels_fixed": claim_labels},
+                {"bus_bytes": size, "requests": move.count},
                 (
                     "bus.jsonl",
                     "bus_meta.json",

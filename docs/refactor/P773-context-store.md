@@ -183,3 +183,28 @@ RAM, with warnings only. No full bus copy or build was started: a fresh copy of
 the roughly 15.7 GB bus would cross the 10 GiB free-space floor before allowing
 for conversion output. Full historical conversion needs an already copied source
 and adequate room. Actual Toad history/DM acceptance is still owed.
+
+Rebasing preserves main's P780 MessageKind.decode_message implementation. That
+owner now reads historical info-kind claims without rewriting them, so the
+converter's competing kind-label rewrite and counter have been deleted. All
+message rows are copied byte-for-byte; only their physical delivery offsets and
+the surrounding prefix/index proofs move.
+
+The rejected .artifacts baseline command was mine. Its forbidden destination was
+not created. I also removed the completed 14 MiB source snapshot under the
+checkout's verification directory after finding zero active process users.
+The short baseline results remain in owned scratch. The existing Pi prompt now
+requires verification output and disposable baselines to use only the executing
+thread's scratch directory, never a checkout or another thread's directory.
+
+Final rebased batch: 88 passed, 3 failed. The oversized-row opening case and the
+old active_turn awareness fixture also fail on the main baseline. The additional
+route-index/sidebar revision failure has not been baselined; no production
+revision code was changed by P773. Main's migrated claim settlement tests now
+pass. The three historical info-claim codec tests and both conversion tests pass.
+Targeted type-check output has no ContextStore or converter errors; lint passes
+for both modules and the conversion test. This does not claim a green whole-tree
+type/debt check. AST enumeration covers 407 src modules and 60 tools modules,
+with no parse omissions and no old bus-context API attribute uses in those roots.
+No full copied-bus conversion, public installation or physical Toad journey was
+performed in this continuation.
