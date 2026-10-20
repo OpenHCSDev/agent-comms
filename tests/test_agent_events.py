@@ -19,6 +19,7 @@ from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
 from agent_comms.coordinator import Coordination
 from agent_comms.transcript_updates import TurnTranscriptUpdate
+from agent_comms.turn_lease import NoFinishedTurn
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -226,7 +227,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     effects = []
 
     async def emit(session, event):
-        assert not comms.registry.require("bot").active_turn.executing
+        assert not comms.registry.require("bot").turn_record.executing
         assert "session" not in owner.turns.turn_tasks
         assert isinstance(event, TurnTranscriptUpdate)
         assert not event.state.active.phase.busy
@@ -270,7 +271,7 @@ async def test_stale_settlement_preserves_replacement_turn(
 
     monkeypatch.setattr(owner, "_emit_event", emit)
     await owner.turns.settle_turn("session", lease)
-    assert released == [None]
+    assert released == [NoFinishedTurn()]
     assert comms.registry.require("bot").turn_lease == replacement
     assert observed[0].active.turn_generation == replacement.identity.generation
 
@@ -330,7 +331,7 @@ async def test_cancelled_worker_keeps_original_lease_and_waiter_cleanup(
         deliver.set()
     with pytest.raises(asyncio.CancelledError):
         await pending
-    assert not comms.registry.require("bot").active_turn.executing
+    assert not comms.registry.require("bot").turn_record.executing
     assert comms.registry.require("bot").last_finished_turn_id == "turn"
     assert len(fences) == 1 and fences[0].turn_id == "turn"
     assert len(publications) == int(acquiring)

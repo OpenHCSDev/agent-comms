@@ -92,8 +92,9 @@ def _projection(
     *,
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
-    assert owner.active_turn.executing
-    claimed_generation = owner.active_turn.claimed_generation
+    active = owner.turn_record.read().require_active()
+    assert active.executing
+    claimed_generation = active.claimed_generation
     assert claimed_generation is not None
     return OptionalAwarenessProjection(
         index,

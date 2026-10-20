@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.turn_lease import NoFinishedTurn, NoTurn
+from agent_comms.turn_lease import NoFinishedTurn
 
 import agent_comms.agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
@@ -139,7 +139,7 @@ def test_reply_read_failure_after_terminal_commit_raises_without_releasing(
 ):
     comms, goal = _waiting(tmp_path)
     fence = _finish(comms, "child", "child-turn")
-    assert fence is not None and not comms.registry.require("child").active_turn.executing
+    assert fence is not None and not comms.registry.require("child").turn_record.executing
     original = RecordedGoalWait.has_reply
 
     def unavailable(*_args, **_kwargs):
@@ -148,7 +148,7 @@ def test_reply_read_failure_after_terminal_commit_raises_without_releasing(
     monkeypatch.setattr(RecordedGoalWait, "has_reply", unavailable)
     with pytest.raises(OSError, match="injected optional direct-reply read failure"):
         comms.goals.release_waits_after_terminal_turn(fence)
-    assert not comms.registry.require("child").active_turn.executing
+    assert not comms.registry.require("child").turn_record.executing
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
@@ -351,7 +351,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     _thread(comms, "child", tmp_path)
     comms.agents.begin_turn("child", "work")
     child = comms.registry.require("child")
-    comms.registry.register(replace(child, active_turn=NoTurn()), StoppedThreadStatus())
+    comms.registry.register(child.without_turn(), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review"))
     assert goal is not None
     with pytest.raises(ValueError, match="No declared dependency is working"):
@@ -367,9 +367,9 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     old_fence = _finish(comms, "child", "child-turn")
     new_claim = _begin(comms, "child", "child-turn")
     assert new_claim.identity.generation == old_claim.identity.generation + 1
-    active = comms.registry.require("child").active_turn
+    active = comms.registry.require("child").turn_record.read()
     assert comms.agents.finish_turn(old_claim) == NoFinishedTurn()
-    assert comms.registry.require("child").active_turn == active
+    assert comms.registry.require("child").turn_record.read() == active
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
     assert comms.registry.require("owner").goal.state.active
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
@@ -428,7 +428,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     stale = _finish(another, "child", "child-turn")
     child = another.registry.require("child")
     another.registry.unregister("child")
-    another.registry.register(replace(child, active_turn=NoTurn()), RunningThreadStatus())
+    another.registry.register(child.without_turn(), RunningThreadStatus())
     assert another.goals.release_waits_after_terminal_turn(stale) == ()
     assert another.registry.require("owner").goal.state.active
 
@@ -468,7 +468,7 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
         if not terminal:
             return original_history_page(*args, **kwargs)
         assert terminal == ["settled"]
-        assert not comms.registry.require(child).active_turn.executing
+        assert not comms.registry.require(child).turn_record.executing
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
@@ -479,7 +479,7 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
     assert terminal == ["settled"]
     assert comms.registry.require("owner").goal.state.active
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
-    assert not comms.registry.require(child).active_turn.executing
+    assert not comms.registry.require(child).turn_record.executing
     assert native.provider.posts == len(native.saved_inputs()) == 1
 
 
@@ -547,7 +547,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
     old_task = asyncio.create_task(agent.turns.run_agent_turn(child, child, "Finish work"))
     try:
         await asyncio.wait_for(old_settled.wait(), 20)
-        assert not comms.registry.require(child).active_turn.executing
+        assert not comms.registry.require(child).turn_record.executing
         new_claim = comms.agents.begin_turn(child, "new-child-turn").turn_lease
         new_fence = comms.agents.finish_turn(new_claim)
         release_old.set()
@@ -586,7 +586,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
             )
         if isinstance(event, ae.StreamSettled):
             observed.append("native-settled")
-            assert comms.registry.require(child).active_turn.executing
+            assert comms.registry.require(child).turn_record.executing
             assert comms.registry.require("owner").goal.state.active
             assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
         await real_emit(session_id, event, client, **kwargs)
@@ -600,7 +600,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     assert observed == ["started", "native-settled"]
     assert native.provider.posts == len(native.saved_inputs()) == 1
     assert not agent.inputs.state("owner").pending_turns
-    assert not comms.registry.require(child).active_turn.executing
+    assert not comms.registry.require(child).turn_record.executing
     if reply:
         assert comms.registry.require("owner").goal.state.active
         assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
