@@ -293,6 +293,13 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
 @dataclass(frozen=True)
 class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
     claims: tuple[Annotated[str, ResourcePathText], ...]
+    # The stored bus row carries both sides of a transition; an acquisition's release side is empty.
+    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.releases:
+            raise ClaimTransitionError("An acquisition row releases nothing.")
 
     @property
     def resources(self) -> tuple[str, ...]:
@@ -326,6 +333,15 @@ class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
 @dataclass(frozen=True)
 class ReleasedClaims(RecordMember, ClaimTransition):
     releases: tuple[ClaimRelease, ...]
+    # The stored bus row carries both sides of a transition; a release acquires nothing and mints no generation.
+    claims: tuple[Annotated[str, ResourcePathText], ...] = field(
+        default=(), metadata={"wire_required": True})
+    generation: None = field(default=None, metadata={"wire_required": True})
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.claims:
+            raise ClaimTransitionError("A release row acquires nothing.")
 
     @property
     def resources(self) -> tuple[str, ...]:
