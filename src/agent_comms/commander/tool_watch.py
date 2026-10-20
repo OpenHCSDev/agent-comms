@@ -1,5 +1,8 @@
 """Follow live native sessions and print turn digests for commander judgment."""
 import os, time, glob, collections
+import sys
+
+from agent_comms_hooks.watch import LoopClaim, WatchRecord
 
 from ..native_tool_call import CodingCall
 from ..native_entries import NativeEntry
@@ -61,26 +64,30 @@ def main(a, ctx):
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
-    while True:
-        if time.time() - last_names > 60:
-            names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{ctx.comms.root}/native-sessions/*/*.jsonl')) | set(names):
-            try:
-                st = os.stat(path)
-            except FileNotFoundError:
-                continue
-            if time.time() - st.st_mtime > 900 and path not in offsets:
-                continue
-            start = offsets.get(path, st.st_size)  # new files: start at end; only new calls matter
-            if st.st_size <= start:
-                offsets[path] = st.st_size if st.st_size < start else start
-                continue
-            with open(path, 'rb') as f:
-                f.seek(start); data = f.read(st.st_size - start)
-            cut = data.rfind(b'\n') + 1
-            offsets[path] = start + cut
-            if path not in names and time.time() - last_names > 10:
+    with LoopClaim.for_command(sys.argv).held(
+        WatchRecord(ctx.commander, str(ctx.root), tuple(sys.argv))
+    ):
+        while True:
+            if time.time() - last_names > 60:
                 names.update(thread_names(registry)); last_names = time.time()
-            thread = names.get(path, path.split('/')[-2][:8])
-            follow(ctx, turns, thread, data[:cut])
-        time.sleep(2)
+            for path in set(glob.glob(f'{ctx.comms.root}/native-sessions/*/*.jsonl')) | set(names):
+                try:
+                    st = os.stat(path)
+                except FileNotFoundError:
+                    continue
+                if time.time() - st.st_mtime > 900 and path not in offsets:
+                    continue
+                # New files start at end; only new calls matter.
+                start = offsets.get(path, st.st_size)
+                if st.st_size <= start:
+                    offsets[path] = st.st_size if st.st_size < start else start
+                    continue
+                with open(path, 'rb') as f:
+                    f.seek(start); data = f.read(st.st_size - start)
+                cut = data.rfind(b'\n') + 1
+                offsets[path] = start + cut
+                if path not in names and time.time() - last_names > 10:
+                    names.update(thread_names(registry)); last_names = time.time()
+                thread = names.get(path, path.split('/')[-2][:8])
+                follow(ctx, turns, thread, data[:cut])
+            time.sleep(2)
