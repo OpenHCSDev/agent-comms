@@ -286,7 +286,7 @@ class CommanderContext(CommanderConfig):
 
     def last_activity(self, unit):
         thread = self.comms.registry.require(unit)
-        return thread.execution.last_tool_call(self.comms, thread)
+        return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
 
     def hunts(self):
         return self.comms.goals.todos.hunts_for_commander(self.incarnation)

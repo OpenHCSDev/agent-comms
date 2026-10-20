@@ -185,13 +185,16 @@ class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
-    def _tool_call_times(self) -> Generator[float]:
+    def _tool_call_times(self, since: float | None = None) -> Generator[float]:
         try:
             with closing(self.tail()) as entries:
                 for entry in entries:
+                    timestamp = entry.timestamp.at.timestamp()
+                    if since is not None and timestamp < since:
+                        return
                     if any(message.assistant and message.tool_calls
                            for message in entry.messages):
-                        yield entry.timestamp.at.timestamp()
+                        yield timestamp
         except FileNotFoundError:
             return
 
@@ -202,8 +205,8 @@ class NativeTranscript(TranscriptSource):
             )
 
     def tool_call_between(self, since: float, through: float) -> bool:
-        with closing(self._tool_call_times()) as times:
-            return any(since <= timestamp <= through for timestamp in times)
+        with closing(self._tool_call_times(since)) as times:
+            return any(timestamp <= through for timestamp in times)
 
     @contextmanager
     def reading(self):

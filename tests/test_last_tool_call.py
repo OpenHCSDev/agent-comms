@@ -36,7 +36,7 @@ def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnigh
 
 @pytest.mark.parametrize('execution_name', ('native', 'external'))
 def test_execution_activity_drives_first_call_alarm_and_core_strike(
-        commander, commander_script, execution_name):
+        commander, commander_script, execution_name, monkeypatch):
     from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
     from agent_comms.todos import MissedFirstCallStrike, ObservedFirstCall
     from test_commander_problem_orders import create
@@ -75,6 +75,7 @@ def test_execution_activity_drives_first_call_alarm_and_core_strike(
     assert context.last_activity('worker') == RecordedEventTime(99)
     assert MissedFirstCallStrike.observe(comms.goals, todo, 221, None)
     append(150)
+    append(199, call=False)
     append(250)  # A later call must not erase the call that met the deadline at 220.
     append(300, call=False)
     if execution is NativeThreadExecution:
@@ -85,7 +86,23 @@ def test_execution_activity_drives_first_call_alarm_and_core_strike(
                     {'type': 'toolCall', 'id': 'not-assistant', 'name': 'bash', 'arguments': {}}]}}) + '\n')
             stream.write('{"type":"message"')  # In-flight tail is not a saved tool call.
     assert context.last_activity('worker') == RecordedEventTime(250)
-    assert not execution.tool_call_between(comms.root, worker, 151, 220)
+    source = worker.runtime.history_source(comms.root, worker.incarnation)
+    assert not source.tool_call_between(151, 220)
+    if execution is NativeThreadExecution:
+        from agent_comms.native_entries import NativeEntry
+
+        read = NativeEntry.read
+        decoded = []
+
+        def counted(raw):
+            decoded.append(raw)
+            return read(raw)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(NativeEntry, 'read', counted)
+            assert not source.tool_call_between(200, 220)
+        # User 400, text 300, tool 250, text 199; stop even on an older non-tool row.
+        assert len(decoded) == 4
     assert not MissedFirstCallStrike.observe(comms.goals, todo, 301, None)
     assert context.first_calls((todo,), {'worker': context.last_activity('worker')}) == []
     comms.goals.todos.advance_objective_failures(comms.goals)

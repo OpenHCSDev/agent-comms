@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .recorded_time import EventTime
 from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
-    from .comms import Comms
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .threads import Thread
@@ -65,17 +62,6 @@ class ConversationPreparation(ABC):
 
 class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
-
-    @classmethod
-    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
-        """The registered runtime owns the original history source."""
-        return thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
-
-    @classmethod
-    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
-        return thread.runtime.history_source(root, thread.incarnation).tool_call_between(
-            since, through,
-        )
 
     @classmethod
     def require_native(cls) -> None:
