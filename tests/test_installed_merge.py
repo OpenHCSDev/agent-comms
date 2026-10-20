@@ -1,27 +1,33 @@
 """Merge observation closes the real stored order, without a completion request."""
-from dataclasses import replace
+from dataclasses import fields, replace
+import json
 import subprocess
 
 import pytest
 
 from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import (DoneTodoState, MergedProblemOrder, OperationDelivery,
+from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
                                MergedPullRequest, PullRequests, UnorderedProblemOrder)
 from agent_comms.tools import CommsOrderDoneTool
+from agent_comms.recorded_time import RecordedEventTime
+from cutover.carry_merged_orders import MergedOrders
 from test_commander_problem_orders import working
 from test_order_progress import checkout, commit, deadline_lines, git
 
 
 @pytest.mark.parametrize('delivered', (False, True))
+@pytest.mark.parametrize('legacy_depth', (0, 1, 2))
 def test_installed_merge_closes_pending_or_delivered_order_once(
-        commander, commander_script, checkout, tmp_path, monkeypatch, capsys, delivered):
+        commander, commander_script, checkout, tmp_path, monkeypatch, capsys,
+        delivered, legacy_depth):
     comms, caller = commander
     script, _ = commander_script
     todo, unit = checkout
     if delivered:
         CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
-                          delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
+                          delivery=OperationDelivery(at=RecordedEventTime(500)),
+                          claims=working(comms)).apply(comms, caller)
         todo = comms.goals.todos.get(todo.id)
     original = todo.order
     commit(unit)
@@ -59,10 +65,28 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert closed.state is DoneTodoState and closed.assignment is None
     assert closed.revision == todo.revision + 1 and not closed.pending
     assert isinstance(closed.order, MergedProblemOrder)
-    assert closed.order.sha == sha and closed.order.original == original
+    assert closed.order.sha == sha
+    assert all(getattr(closed.order, item.name) == getattr(original, item.name)
+               for item in fields(CheckedProblemOrder))
     assert closed.order.id == original.id
+    assert "original" not in FieldCodec.encode(closed.order)
     assert closed.strikes == todo.strikes
     assert FieldCodec.decode(type(closed), FieldCodec.encode(closed)) == closed
+
+    if legacy_depth:
+        legacy = {'kind': 'merged', 'original': FieldCodec.encode(original), 'sha': sha}
+        if legacy_depth == 2:
+            closed = replace(closed, order=closed.order.folded('P2', 'Same root cause.'))
+            legacy = {**FieldCodec.encode(closed.order), 'original': legacy}
+        encoded = json.dumps(legacy)
+        with comms.goals.todos.writing() as db:
+            db.execute('UPDATE todo SET "order"=? WHERE id=?', (encoded, todo.id))
+        assert MergedOrders.carry(comms.root, apply=False).changed == 1
+        with comms.goals.todos.writing() as db:
+            assert db.execute('SELECT "order" FROM todo WHERE id=?', (todo.id,)).fetchone()[0] == encoded
+        assert MergedOrders.carry(comms.root, apply=True).changed == 1
+        assert MergedOrders.carry(comms.root, apply=True).changed == 0
+        assert comms.goals.todos.get(todo.id) == closed
 
     def no_child(*args, **kwargs):
         pytest.fail('A repeated closed-order read launched a subprocess')
