@@ -38,6 +38,24 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     assert state.open_inbox() is not inbox
 
 
+def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
+    from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
+    from agent_comms.coordination_tables.attempts import NoPreviousAttempt
+    from agent_comms.todos import NoTodoHolder, TodoError
+
+    holder = NoTodoHolder()
+    assert holder.holder_name() is None and holder.current_assignments() == ()
+    holder.require_trace("first owner", None)
+    with pytest.raises(TodoError, match="no previous holder"):
+        holder.previous_assignment()
+    attempt = NoPreviousAttempt()
+    attempt.require_newer_owner(1)
+    with pytest.raises(StaleFence, match="no authorized attempt"):
+        attempt.require()
+    with pytest.raises(RecoveryBlocked, match="unstarted deferral"):
+        attempt.require_retry(None)
+
+
 async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
     assert NoFinishSignal().waiters(settling=False) == ()
     event = asyncio.Event()
