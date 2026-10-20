@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from ..active_route import resolve_comms_route
 from ..commander.judge import BackVerb, Edit, OkVerb, VerdictVerb
-from ..todos import Todo
+from ..todos import AcceptedVerdict, SendBackVerdict, Todo, ToolCallVerdict
 from ..tools import CommsVerdictTool, TodoChanged
 from ..turn_context import GoalSegment
 from . import ParityComparison
@@ -37,10 +37,13 @@ class VerdictEffect:
     native_calls: int
     native_result_retained: bool
     strike_matches_verdict_event: bool
+    declared_verdict_recorded: bool
+    goal_transition_retained: bool
 
 
 class VerdictCase(ABC):
     changes: ClassVar[int]
+    native_owner: ClassVar[type[ToolCallVerdict]]
 
     @classmethod
     @abstractmethod
@@ -71,6 +74,8 @@ class VerdictCase(ABC):
             worker = run.commander.comms.registry.require(run.worker)
             goal = worker.goal.require()
             history = len(run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id))
+            for path in (Path(worker.session_file), run.decisions, Path(worker.worktree)):
+                path.resolve().relative_to(run.commander.root.resolve())
             package = resolve_comms_route().launch().require_private().validate()
             subprocess.run(
                 (
@@ -106,13 +111,16 @@ class VerdictCase(ABC):
             if len(native) != 1 or native[0][0].operation.tool_call_id != call_id:
                 raise ValueError("The native verdict must judge this one original copied tool call")
             request, result = native[0]
+            transitions = run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)[
+                history:
+            ]
             return VerdictEffect(
                 request.operation.tool_call_id,
                 len(saved.verdicts) - len(before.verdicts),
                 saved.revision - before.revision,
                 saved.strike_count - before.strike_count,
                 after.revision - goal.revision,
-                len(run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)) - history,
+                len(transitions),
                 after.id == goal.id,
                 after.state == goal.state,
                 GoalSegment.capture(worker, after, run.commander.comms.goals).progress,
@@ -124,6 +132,8 @@ class VerdictCase(ABC):
                     and strike.previous == request.operation.previous
                     for strike in saved.strikes[len(before.strikes) :]
                 ),
+                isinstance(request.operation, cls.native_owner),
+                all(entry.before == goal and entry.after == after for entry in transitions),
             )
 
     @classmethod
@@ -135,11 +145,14 @@ class VerdictCase(ABC):
             and effect.goal_state_retained
             and effect.native_result_retained
             and effect.strike_matches_verdict_event
+            and effect.declared_verdict_recorded
+            and effect.goal_transition_retained
         )
 
 
 class AcceptedCase(VerdictCase):
     changes = 0
+    native_owner = AcceptedVerdict
 
     @classmethod
     def replacement(cls, run: LifecycleRun) -> str:
@@ -157,6 +170,7 @@ class AcceptedCase(VerdictCase):
 
 class SendBackCase(VerdictCase):
     changes = 1
+    native_owner = SendBackVerdict
 
     @classmethod
     def replacement(cls, run: LifecycleRun) -> str:
