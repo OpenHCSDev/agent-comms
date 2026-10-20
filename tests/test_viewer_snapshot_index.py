@@ -293,8 +293,9 @@ def test_route_index_write_is_a_sidebar_revision(tmp_path):
     index = BusRouteCounts(comms.bus.log.path)
     index.prepare()
     before = WireRevision.capture(comms.views, expiry_tick=0)
-    with closing(CoordinationStore.writer(index.path)) as writer, writer:
+    with index.writing() as writer:
         writer.execute('CREATE TABLE p730_revision_probe (id INTEGER)')
+        writer.execute('INSERT INTO p730_revision_probe VALUES (1)')
     after = WireRevision.capture(comms.views, expiry_tick=0)
     assert before.bus_log == after.bus_log
     assert after.changed_since(SidebarView(), before)

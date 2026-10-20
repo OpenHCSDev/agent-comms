@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+from contextlib import nullcontext
 from dataclasses import replace
 
 import pytest
@@ -52,11 +53,9 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(metadata)
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-        if extra or not newline:
-            with pytest.raises(RelationViolationError):
-                WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
-        else:
+    # Opening may reject the physical row while preparing its page index.
+    with pytest.raises(RelationViolationError) if extra or not newline else nullcontext():
+        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             # A legal first row must advance even with a one-byte work quantum.
             batch = WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
             assert batch.next_offset == len(raw)
