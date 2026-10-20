@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from itertools import chain
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, TextIO
 from uuid import uuid4
