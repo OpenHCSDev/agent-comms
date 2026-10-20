@@ -24,7 +24,7 @@ from pydantic import Field, TypeAdapter, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from agent_comms.change_report import ChangeReport
+from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
@@ -388,26 +388,6 @@ class SendArguments(argparse.Namespace):
     command: str
 
 
-class SendReport(field_codec.SubclassUnion, affix=""):
-    def send(self, ctx: Comms, request: Send) -> SendResult:
-        return self.emit(partial(ctx.messaging.send, request.sender, request.target,
-                                 request.body, request.type, role=request.role()))
-
-    @abstractmethod
-    def emit(self, send: Callable[..., SendResult]) -> SendResult: ...
-
-
-class MissingReport(field_codec.NullMember, SendReport):
-    def emit(self, send: Callable[..., SendResult]) -> SendResult:
-        return send()
-
-
-@dataclass(frozen=True)
-class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
-    def emit(self, send: Callable[..., SendResult]) -> SendResult:
-        return send(report=self)
-
-
 @dataclass(frozen=True, kw_only=True)
 class Send(Operation):
     help = "Send to a thread (DM), #channel, or #all"
@@ -425,16 +405,19 @@ class Send(Operation):
         builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
     ] = messages.ConversationRole
     report: Annotated[
-        SendReport,
+        ReportEvidence,
         field_codec.Argument(
             flags=("--report",),
             options={"help": "Change report fields as a JSON object", "type": FieldCodec.parse},
         ),
-    ] = MissingReport()
+    ] = NoChangeReport()
 
     async def execute(self, bridge: CliBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
-        await bridge.show_sent(await asyncio.to_thread(request.report.send, bridge.comms, request))
+        await bridge.show_sent(await asyncio.to_thread(
+            bridge.comms.messaging.send, request.sender, request.target, request.body,
+            request.type, role=request.role(), report=request.report,
+        ))
 
 
 class Inbox(Operation[OperationBridge]):

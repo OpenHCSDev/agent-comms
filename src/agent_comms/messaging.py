@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin
-from .change_report import ChangeReport
+from .change_report import NoChangeReport, ReportEvidence
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
@@ -47,7 +47,7 @@ class Messaging:
         *,
         role: MessageRole = ConversationRole(),
         task: TaskAttachment = NoTaskAttachment(),
-        report: ChangeReport | None = None,
+        report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""

@@ -16,7 +16,9 @@ from pydantic import BaseModel
 
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, Token256Text, WireName
+from .field_codec import (
+    FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
+)
 from .package_stamp import STAMP
 
 if TYPE_CHECKING:
@@ -127,11 +129,29 @@ class OwnerResult(OwnerLine):
         return self.result
 
 
+class RpcFailure(SubclassUnion, affix=""):
+    """How a failed request raises again on the client: as its JSON-RPC error, or as text."""
+
+    @abstractmethod
+    def raised(self, error: str) -> Exception: ...
+
+
 @dataclass(frozen=True)
-class OwnerRpcError:
+class OwnerRpcError(RecordMember, RpcFailure):
     code: int
     message: str
     data: object = None
+
+    def raised(self, error: str) -> Exception:
+        return RequestError(self.code, self.message, self.data)
+
+
+@dataclass(frozen=True, slots=True)
+class NoRpcError(NullMember, RpcFailure):
+    """The failure was not a JSON-RPC error; the client raises its text."""
+
+    def raised(self, error: str) -> Exception:
+        return RuntimeError(error)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -139,7 +159,7 @@ class OwnerFailure(OwnerLine):
     """A failed request. A JSON-RPC error raises again as itself on the client."""
 
     error: str
-    rpc_error: Annotated[OwnerRpcError | None, WireName("rpcError")] = None
+    rpc_error: Annotated[RpcFailure, WireName("rpcError")] = NoRpcError()
 
     @classmethod
     def of(cls, error: Exception) -> Self:
@@ -154,9 +174,7 @@ class OwnerFailure(OwnerLine):
         )
 
     def raised(self) -> Exception:
-        if self.rpc_error is None:
-            return RuntimeError(self.error)
-        return RequestError(self.rpc_error.code, self.rpc_error.message, self.rpc_error.data)
+        return self.rpc_error.raised(self.error)
 
     def announced(self, thread: str) -> None:
         raise self.raised()

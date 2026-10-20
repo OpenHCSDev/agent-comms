@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
 
 
-from .change_report import ChangeReport, FileLine
+from .change_report import FileLine, NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
@@ -143,12 +143,6 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
-        if message.report is None:
-            raise ValueError(
-                "A change report requires its report: the branch, each touched fact, "
-                "its one owner and every consumer as file:line, the search command "
-                "showing the declaration is single, and the new-case edit counts."
-            )
         message.report.require_references_exist(worktree)
 
 
@@ -370,8 +364,8 @@ class Message:
         TaskAttachment, WireOmitDefault(), WireOrder(12)
     ] = field(default_factory=NoTaskAttachment)
     report: Annotated[
-        ChangeReport | None, WireOmitDefault(), WireOrder(13)
-    ] = None
+        ReportEvidence, WireOmitDefault(), WireOrder(13)
+    ] = NoChangeReport()
     answers: Annotated[
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()

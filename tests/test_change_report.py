@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -149,7 +150,9 @@ class TestKindDeclarations:
             "seq": 3, "id": "ignored", "from": "a", "to": "b", "ts": 1.0,
             "text": "old handoff", "type": "handoff",
         })
-        assert stored.type is HandoffKind and stored.report is None
+        assert stored.type is HandoffKind
+        with pytest.raises(ValueError):
+            stored.report.require_references_exist(Path())
 
     def test_kind_selector_resolves_once(self):
         assert MessageKind.member_named("change-report") is ChangeReportKind

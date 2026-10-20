@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .field_codec import MalformedRecord, WireValue, boundary_decoder
+from .field_codec import (
+    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue, boundary_decoder,
+)
 
 
 class SourceReference(ABC):
@@ -118,8 +120,15 @@ class ChangedFact:
                 raise ValueError(f"The fact {self.fact!r} requires a nonnegative {name} count.")
 
 
+class ReportEvidence(SubclassUnion, affix=""):
+    """A message's change report, or none; only the change-report kind requires one."""
+
+    @abstractmethod
+    def require_references_exist(self, worktree: Path) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
-class ChangeReport:
+class ChangeReport(RecordMember, ReportEvidence):
     """The declared evidence of a change, verified at its named branch head."""
 
     branch: str
@@ -169,3 +178,15 @@ def _git(worktree: Path, *arguments: str, branch: str) -> str:
             f"Change report branch {branch!r} does not resolve in {worktree}: {detail}"
         )
     return result.stdout.decode(errors="replace").strip()
+
+
+@dataclass(frozen=True, slots=True)
+class NoChangeReport(NullMember, ReportEvidence):
+    """The message carries no change report; only the change-report kind requires one."""
+
+    def require_references_exist(self, worktree: Path) -> None:
+        raise ValueError(
+            "A change report requires its report: the branch, each touched fact, "
+            "its one owner and every consumer as file:line, the search command "
+            "showing the declaration is single, and the new-case edit counts."
+        )

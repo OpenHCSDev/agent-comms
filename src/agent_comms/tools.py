@@ -16,7 +16,7 @@ from pydantic import JsonValue
 
 
 from . import cli as comms_cli
-from .change_report import ChangeReport
+from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
 from .channel_targets import ChannelTarget, CommandTarget
 from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
@@ -1254,9 +1254,9 @@ class CommsSendTool(ToolRequest):
         Type[MessageKind], *tool_field("Message kind", choices=SendableMessageKind.names)
     ] = InfoKind
     report: Annotated[
-        ChangeReport | None,
+        ReportEvidence,
         *tool_field("Change report fields; required for the change-report kind"),
-    ] = None
+    ] = NoChangeReport()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         try:

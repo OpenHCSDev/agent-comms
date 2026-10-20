@@ -340,7 +340,7 @@ class TestSelectedTargetActions:
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
         from agent_comms.thread_identity import TurnIdentity
-        from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
+        from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 
         comms = self.declared(tmp_path)
         # Observe an authentic other process; this check never signals or restarts it.
@@ -377,7 +377,7 @@ class TestSelectedTargetActions:
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path, busy,
-            ActiveTurn('busy', owner.require_process().pid, turn_generation=busy.generation),
+            ActiveTurn('busy', owner.require_process().pid, turn_generation=RecordedGeneration(busy.generation)),
         )
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)

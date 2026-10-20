@@ -12,7 +12,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+from typing import TYPE_CHECKING, ClassVar, Literal, Self, Annotated
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
@@ -23,7 +23,7 @@ from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireValue, WireName
+from .field_codec import FieldCodec, NullMember, WireValue, WireName
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
@@ -234,11 +234,18 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             ClientLine.read(line).answer(ctx.client)
 
 
+@dataclass(frozen=True, slots=True)
+class NoControllerToken(NullMember):
+    """The prompt came from no attached controller; no subscriber answers its dialogs."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
     prompt: list[dict[str, object]]
     meta: dict[str, object] | None = None
-    controller_token: Annotated[str | None, WireName("controllerToken")] = None
+    controller_token: Annotated[str | NoControllerToken, WireName("controllerToken")] = (
+        NoControllerToken()
+    )
 
     @classmethod
     def proxy_payload(

@@ -25,7 +25,7 @@ from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
 from .threads import Thread
-from .turn_lease import ActiveTurn, StoredTurnRecord
+from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 from .wire_metadata import WireMetadata
 
 
@@ -106,8 +106,8 @@ class RegistryEdit:
             turn_id,
             current.require_process().pid,
             routing=routing,
-            claimed_generation=self.document.claims.generations[current.name],
-            turn_generation=identity.generation,
+            claimed_generation=RecordedGeneration(self.document.claims.generations[current.name]),
+            turn_generation=RecordedGeneration(identity.generation),
         )
         leased = replace(
             current,

@@ -7,12 +7,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, ClassVar, Annotated, Self
 
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import NullMember, RecordMember, SubclassUnion, WireName, WireTransient
+from .field_codec import (
+    FieldCodec, NullMember, RecordMember, SubclassUnion, WireName, WireTransient,
+)
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -119,6 +121,93 @@ class NoTurn(NullMember, TurnDeclaration):
         return False
 
 
+class TurnGeneration(SubclassUnion, affix="Generation"):
+    """A registry generation the turn file recorded, or none."""
+
+    @abstractmethod
+    def matches(self, generation: int) -> bool: ...
+
+    @abstractmethod
+    def admits(self, generation: int) -> bool:
+        """The owner at this generation may hold the turn."""
+
+    @abstractmethod
+    def adopted_by(self, claimed: int) -> TurnGeneration:
+        """The claim generation a lease releasing this turn may hold it under."""
+
+    @abstractmethod
+    def fence(
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        record: StoredTurnRecord,
+    ) -> TurnLeaseFence | None: ...
+
+    @abstractmethod
+    def claim_fence(
+        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+    ) -> TurnLeaseFence | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedGeneration(TurnGeneration):
+    value: int
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls(FieldCodec.decode(int, data))
+
+    def to_wire(self) -> int:
+        return self.value
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(int)
+
+    def matches(self, generation: int) -> bool:
+        return self.value == generation
+
+    def admits(self, generation: int) -> bool:
+        return self.value > 0 and self.value == generation
+
+    def adopted_by(self, claimed: int) -> RecordedGeneration:
+        return self
+
+    def fence(
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        record: StoredTurnRecord,
+    ) -> TurnLeaseFence | None:
+        return claimed.claim_fence(TurnIdentity(incarnation, self.value), turn_id, record)
+
+    def claim_fence(
+        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+    ) -> TurnLeaseFence:
+        return TurnLeaseFence(identity, turn_id, self.value, record=record)
+
+
+@dataclass(frozen=True, slots=True)
+class UnrecordedGeneration(NullMember, TurnGeneration):
+    """The turn file carries no registry generation: never leased, or its claim was released."""
+
+    def matches(self, generation: int) -> bool:
+        return False
+
+    def admits(self, generation: int) -> bool:
+        return True
+
+    def adopted_by(self, claimed: int) -> RecordedGeneration:
+        return RecordedGeneration(claimed)
+
+    def fence(
+        self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
+        record: StoredTurnRecord,
+    ) -> None:
+        return None
+
+    def claim_fence(
+        self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
+    ) -> None:
+        return None
+
+
 @dataclass(frozen=True)
 class ActiveTurn(RecordMember, TurnDeclaration):
     id: str
@@ -126,9 +215,9 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
     claimed_generation: Annotated[
-        int | None, WireName("admission_generation")
-    ] = None
-    turn_generation: int | None = None
+        TurnGeneration, WireName("admission_generation")
+    ] = UnrecordedGeneration()
+    turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
     executing = True
 
@@ -140,15 +229,12 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return self
 
     def has_claim(self, claim_scope: int) -> bool:
-        return self.claimed_generation == claim_scope
+        return self.claimed_generation.matches(claim_scope)
 
     def validate_owner(self, process: ProcessState, generation: int) -> None:
         if not process.owns_turn(self):
             raise RelationViolationError("A turn must belong to the registered executor.")
-        if self.turn_generation is not None and (
-            type(self.turn_generation) is not int
-            or self.turn_generation <= 0 or self.turn_generation != generation
-        ):
+        if not self.turn_generation.admits(generation):
             raise RelationViolationError("Active turn generation differs from its owner.")
 
     def require_idle(self) -> None:
@@ -166,24 +252,20 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return TurnId(self.id) == turn_id
 
     def without_claim(self) -> ActiveTurn:
-        return replace(self, claimed_generation=None)
+        return replace(self, claimed_generation=UnrecordedGeneration())
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
             lease.claimed_generation, lease.identity.generation)
 
     def may_release(self, lease: TurnLeaseFence) -> bool:
-        return self.held_by(lease) or (
-            self.claimed_generation is None
-            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
+        adopted = self.claimed_generation.adopted_by(lease.claimed_generation)
+        return replace(self, claimed_generation=adopted).held_by(lease)
 
     def lease(
         self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
     ) -> TurnLeaseFence | None:
-        if self.claimed_generation is None or self.turn_generation is None:
-            return None
-        return TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation),
-                              self.id, self.claimed_generation, record=record)
+        return self.turn_generation.fence(self.claimed_generation, incarnation, self.id, record)
 
     def observed_id(self, finished: str | None) -> str:
         return self.id
@@ -203,15 +285,15 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         """Check that this turn's local process and registered input generation agree."""
         return (
             self.owner_pid == pid
-            and self.claimed_generation == claimed_generation
+            and self.claimed_generation.matches(claimed_generation)
             and claimed_generation > 0
         )
 
     def current(self, claimed_generation: int, turn_generation: int) -> bool:
         """Compare persisted turn witnesses with the current registry authority."""
         return (
-            self.claimed_generation == claimed_generation
-            and self.turn_generation == turn_generation
+            self.claimed_generation.matches(claimed_generation)
+            and self.turn_generation.matches(turn_generation)
             and turn_generation > 0
         )
 

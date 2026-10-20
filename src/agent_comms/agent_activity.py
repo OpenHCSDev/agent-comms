@@ -27,6 +27,8 @@ from .activity import (
     ActivityLog,
     ActivityState,
     DrainDiagnostic,
+    DrainObservation,
+    NoDrainDiagnostic,
     ObservedActivity,
 )
 from .audience_manifest import FrozenRecipient
@@ -219,11 +221,13 @@ class AgentActivity:
         observation time; neither may be cleared by this earlier operation.
         """
         expected = observed.readiness.source_diagnostic()
-        if expected is None or expected.owner != owner:
+        if not expected.recorded_by(owner):
             return False
         return await Coordination.run_worker(partial(self._recover_drain, thread, owner, expected))
 
-    def _recover_drain(self, thread: str, owner: OwnerIdentity, expected: DrainDiagnostic) -> bool:
+    def _recover_drain(
+        self, thread: str, owner: OwnerIdentity, expected: DrainObservation,
+    ) -> bool:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
@@ -233,9 +237,11 @@ class AgentActivity:
             def recover(event: Activity) -> Activity | None:
                 current = self._observed(participant, owner, event)
                 diagnostic = current.readiness.source_diagnostic()
-                if diagnostic != expected or diagnostic.recorded_at != expected.recorded_at:
+                if not diagnostic.same_occurrence(expected):
                     return None
-                return replace(current.source_event(), diagnostic=None, timestamp=time.time())
+                return replace(
+                    current.source_event(), diagnostic=NoDrainDiagnostic(), timestamp=time.time()
+                )
 
             return self.activity.update(participant.name, recover)
 
@@ -247,7 +253,7 @@ class AgentActivity:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().started_at:
+        if not diagnostic.recorded_before(lease.record.read().started_at):
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
 
