@@ -37,9 +37,11 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     comms = prepared(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     source = comms.transcripts.external('cli')
-    for turn, item, text in [('old', 'a', 'older'), ('one', 'b', 'first'),
-                             ('two', 'c', 'other'), ('one', 'd', 'continued')]:
-        source.finish(turn_id=turn, item_id=item, events=(AssistantTranscript(text),))
+    for at, (turn, item, text) in enumerate([
+            ('old', 'a', 'older'), ('one', 'b', 'first'),
+            ('two', 'c', 'other'), ('one', 'd', 'continued')], start=1):
+        source.finish(turn_id=turn, item_id=item,
+                      events=(AssistantTranscript(text, position=item, timestamp=float(at)),))
     answer = endpoint(comms, 'cli', 2)
     assert [turn['turn_id'] for turn in answer['turns']] == ['one', 'two']
     assert [event['text'] for event in answer['turns'][0]['events']] == ['first', 'continued']
@@ -51,17 +53,19 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     source = tmp_path / 'native.jsonl'
     rows = [
         dict(type='session', id='source', version=3),
-        dict(type='message', id='u1', message=dict(role='user', content='old input')),
-        dict(type='message', id='a1', parentId='u1', message=dict(
+        dict(type='message', id='u1', timestamp='2026-10-16T12:00:00Z',
+             message=dict(role='user', content='old input')),
+        dict(type='message', id='a1', parentId='u1', timestamp='2026-10-16T12:00:01Z', message=dict(
             role='assistant', content=[dict(type='text', text='old answer')], stopReason='stop')),
-        dict(type='message', id='u2', parentId='a1', message=dict(role='user', content='read file')),
-        dict(type='message', id='call', parentId='u2', message=dict(
+        dict(type='message', id='u2', parentId='a1', timestamp='2026-10-16T12:00:02Z',
+             message=dict(role='user', content='read file')),
+        dict(type='message', id='call', parentId='u2', timestamp='2026-10-16T12:00:03Z', message=dict(
             role='assistant', content=[dict(type='toolCall', id='read-1', name='read',
                                             arguments=dict(path='x.py'))], stopReason='toolUse')),
-        dict(type='message', id='result', parentId='call', message=dict(
+        dict(type='message', id='result', parentId='call', timestamp='2026-10-16T12:00:04Z', message=dict(
             role='toolResult', toolCallId='read-1', toolName='read', isError=False,
             content=[dict(type='text', text='contents')])),
-        dict(type='message', id='a2', parentId='result', message=dict(
+        dict(type='message', id='a2', parentId='result', timestamp='2026-10-16T12:00:05Z', message=dict(
             role='assistant', content=[dict(type='text', text='done')], stopReason='stop')),
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
@@ -112,7 +116,8 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
                         WatchSource.modified_file(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
                         turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
-                        if any(event == AssistantTranscript('done', timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
+                        if any(event == AssistantTranscript('done', position=event.position,
+                                                                 timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
                                for turn in turns.turns for event in turn.events):
                             break
         finally:
