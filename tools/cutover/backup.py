@@ -133,7 +133,9 @@ class Backup:
         contents = self.capture_files(files)
         if self.route.exists():
             shutil.copy2(self.route, self.path / 'active-route.json')
-        _atomic_write_text(self.path / 'files.json', json.dumps(contents, indent=1), fsync_parent=True)
+        _atomic_write_text(
+            self.path / 'files.json', json.dumps(contents, indent=1), fsync_parent=True,
+        )
         return self
 
     def capture_files(self, files: tuple[Path, ...]) -> dict[str, str]:

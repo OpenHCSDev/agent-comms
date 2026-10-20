@@ -1,7 +1,9 @@
 """Install archives live on the configured disk, with a bounded completed tail."""
 from pathlib import Path
 
-from cutover.backup import Backup
+import pytest
+
+from cutover.backup import Backup, UpgradeRefused
 from upgrade_bus import Stack
 
 
@@ -9,6 +11,9 @@ def test_seven_backups_keep_five_and_current_rollback(tmp_path, monkeypatch):
     stack = Stack(Path(__file__).resolve().parents[1], tmp_path / 'home')
     disk = stack.home / 'mount/hdd'
     disk.mkdir(parents=True)
+    with pytest.raises(UpgradeRefused, match='not mounted'):
+        _ = stack.backup_root
+    assert not (disk / 'agent-comms-upgrade-backups').exists()
     mounted = Path.is_mount
     monkeypatch.setattr(Path, 'is_mount', lambda path: path == disk or mounted(path))
     root = tmp_path / 'wire'
