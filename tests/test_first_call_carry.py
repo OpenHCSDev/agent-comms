@@ -12,24 +12,62 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import CarryChain, CarryLedger
+from cutover.carry import CarryChain, CarryLedger, TodoRows
 from cutover.carry_first_call import FirstCalls
+from cutover.carry_order_run import OrderRuns
+from cutover.carry_hunts import HuntRecords
+from cutover.carry_storage_refusals import StorageRefusals
+from cutover.carry_check_revision import CheckRevisions
+from cutover.carry_todo_open_indexes import TodoOpenIndexes
 from test_todos import order, thread
+
+
+@pytest.mark.parametrize(
+    "step",
+    (
+        FirstCalls,
+        OrderRuns,
+        HuntRecords,
+        StorageRefusals,
+        CheckRevisions,
+        TodoOpenIndexes,
+    ),
+)
+def test_row_step_absence_and_transaction_are_owned_by_todo_rows(tmp_path, monkeypatch, step):
+    assert step.carry.__func__ is TodoRows.carry.__func__
+    monkeypatch.setattr(step, "converted", lambda db: pytest.fail("No store to convert"))
+    result = step.carry(tmp_path, apply=True)
+    assert result.changed == 0 and result.detail == {} and result.rewritten == ()
+    assert not TodoStore.path_in(tmp_path).exists()
 
 
 def test_saved_first_call_keys_are_carried_once_before_strict_order_reads(tmp_path):
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     current = store.create(
-        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the store",
-        creator=lead, owner=lead, generation="one", goal=GoalRef("lead", 1.0, "request"),
-        deadline=RecordedEventTime(1000), order=order(tmp_path),
+        "P1",
+        RepositoryName.from_wire("OpenHCSDev/agent-comms"),
+        "Fix the store",
+        creator=lead,
+        owner=lead,
+        generation="one",
+        goal=GoalRef("lead", 1.0, "request"),
+        deadline=RecordedEventTime(1000),
+        order=order(tmp_path),
     )
-    saved = replace(current, order=current.order.merged("abc123").folded("P2", "same repair"),
-                    prior_orders=(current.order.reissued(20),))
+    saved = replace(
+        current,
+        order=current.order.merged("abc123").folded("P2", "same repair"),
+        prior_orders=(current.order.reissued(20),),
+    )
     with store.writing() as db:
-        Todo.update(db, where="{id} = ?", parameters=(saved.id,),
-                    order=saved.order, prior_orders=saved.prior_orders)
+        Todo.update(
+            db,
+            where="{id} = ?",
+            parameters=(saved.id,),
+            order=saved.order,
+            prior_orders=saved.prior_orders,
+        )
         # A folded order nests a checked declaration; history is a separate column.
         for column, path in (("order", "$.original"), ("prior_orders", "$[0]")):
             db.execute(
@@ -43,13 +81,23 @@ def test_saved_first_call_keys_are_carried_once_before_strict_order_reads(tmp_pa
     assert FirstCalls.carry(tmp_path, apply=False).changed == 2
     with closing(CoordinationStore.read_snapshot(store.path)) as db:
         assert tuple(db.execute('SELECT "order", prior_orders FROM todo').fetchone()) == before
-    declared = next(step for step in CarryChain.at(Path(__file__).parents[1], "HEAD").steps
-                    if step.name == FirstCalls.name())
+    declared = next(
+        step
+        for step in CarryChain.at(Path(__file__).parents[1], "HEAD").steps
+        if step.name == FirstCalls.name()
+    )
     assert declared.declaration == "FirstCalls"
     chain = CarryChain((declared,))
     ledger = CarryLedger(tmp_path)
-    assert ledger.apply(chain, FirstCalls.name(), lambda: FirstCalls.carry(tmp_path, apply=True)).changed == 2
+    assert (
+        ledger.apply(
+            chain, FirstCalls.name(), lambda: FirstCalls.carry(tmp_path, apply=True)
+        ).changed
+        == 2
+    )
     assert store.get(saved.id) == saved
     assert FirstCalls.name() in ledger.applied()
-    assert ledger.apply(chain, FirstCalls.name(), lambda: pytest.fail("Already carried")).changed == 0
+    assert (
+        ledger.apply(chain, FirstCalls.name(), lambda: pytest.fail("Already carried")).changed == 0
+    )
     assert FirstCalls.carry(tmp_path, apply=True).changed == 0
