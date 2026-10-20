@@ -11,6 +11,10 @@ from .carry import Carried, Carry
 
 class CommanderConfigRoot(Carry):
     @classmethod
+    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+        return (CommanderConfig.root_path(root),)
+
+    @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         home = Path.home()
         old = CommanderConfig.path(home)
