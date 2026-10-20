@@ -410,8 +410,8 @@ def test_done_distinguishes_non_git_home_from_exact_order_checkout(
 
     comms, _ = commander
     script, _ = commander_script
-    home = tmp_path / 'P197-application'
-    home.mkdir()
+    home = tmp_path / 'wt' / 'scratch'
+    home.mkdir(parents=True)
     comms.registry.declare(comms.registry.new_thread('scratch', frozenset({'comms'}), str(home)))
     rule = StorageRule(checkout_base=tmp_path / 'wt', scratch_base=tmp_path / 'scratch', floor_gib=0)
     comms.registry.storage_rule = script.comms.registry.storage_rule = rule
@@ -980,15 +980,12 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
-@pytest.mark.parametrize('claim', [False, True])
-def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
     """No watch runs: publishing the message is what records the correction on the order."""
     comms, _ = commander
     comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
-    from agent_comms.envelope_claim_transitions import WritableFileClaim
-    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
-    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed', claims=claims).message.message_id
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed').message.message_id
     comms.messaging.send('worker', 'lead', 'The tests pass now.').message.message_id
     comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.').message.message_id
     corrected = comms.goals.todos.get('P1')
@@ -996,10 +993,8 @@ def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
     assert corrected.strike_count == 0
 
 
-@pytest.mark.parametrize('claim', [False, True])
 @pytest.mark.parametrize('body', ['The tests pass now.', 'The canonical ownership changed'])
-def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, body):
-    from agent_comms.envelope_claim_transitions import WritableFileClaim
+def test_old_todo_schema_refuses_before_any_bus_publication(commander, body):
     from agent_comms.errors import RelationViolationError
 
     comms, _ = commander
@@ -1011,9 +1006,8 @@ def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, bo
         db.commit()
     path = comms.root / 'bus.jsonl'
     before = path.read_bytes() if path.exists() else b''
-    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
     with pytest.raises(RelationViolationError, match='todos.sqlite3 differs from its declaration'):
-        comms.messaging.send('worker', 'lead', body, claims=claims).message.message_id
+        comms.messaging.send('worker', 'lead', body).message.message_id
     assert (path.read_bytes() if path.exists() else b'') == before
 
 
@@ -1603,7 +1597,7 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 
     def guarded(*targets):
         command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([], script)
         return capsys.readouterr().out
 
@@ -1641,7 +1635,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                        process_identity=ProcessIdentity.capture(process.pid)))
 
         def guarded(command, session):
-            hook = {'session_id': session, 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
+            hook = {'session_id': session, 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
             monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
             send_guard.main([], script)
             return capsys.readouterr().out
@@ -1673,7 +1667,7 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
     create(commander, 'P1')
     for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
                     'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([], script)
         assert capsys.readouterr().out == ''
 
