@@ -11,7 +11,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims, WakeClaim, WakeClaims,
 )
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.messages import ClaimMessage, InfoKind, Message
+from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = "a" * 32
 G2 = "b" * 32
@@ -73,14 +73,19 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     decoded = FieldCodec.decode(ClaimTransition, raw)
     assert decoded == claimed
     assert decoded.project(ClaimProjection())[resource].claim_scope == scope
-    message = Message("owner", "peer", "Claim file", InfoKind, seq=8, timestamp=1.0)
+    message = Message("owner", "peer", "Claim file", ClaimNoticeKind, seq=8, timestamp=1.0)
     bound = ClaimMessage.of(message, replace(claimed, message_id=message.message_id))
     assert Message.from_wire(bound.to_wire()) == bound
     key = FieldCodec.record_key(WakeClaims, "claim_scope")
+    invalid = {**raw[key], "version": 99}
+    with pytest.raises(ValueError):
+        FieldCodec.decode(ClaimTransition, {**raw, key: invalid})
     with pytest.raises(ValueError, match="Wake claim_scope version or revision"):
-        FieldCodec.decode(ClaimTransition, {**raw, key: {**raw[key], "version": 99}})
-    with pytest.raises(ValueError, match="Null field"):
+        FieldCodec.decode(WakeClaim, invalid)
+    with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, {**raw, key: None})
+    with pytest.raises(ValueError, match="Null field"):
+        FieldCodec.decode(WakeClaims, {**raw, key: None})
 
 
 def test_existing_physical_worktree_files_and_aliases(tmp_path):
@@ -241,8 +246,10 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(comms, tmp_path):
             FieldCodec.decode(ClaimTransition, claiming)
         releasing = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing["releases"][0]["resource"] = alias
-        with pytest.raises(MalformedRecord, match="canonical absolute"):
+        with pytest.raises(MalformedRecord):
             FieldCodec.decode(ClaimTransition, releasing)
+        with pytest.raises(MalformedRecord, match="canonical absolute"):
+            FieldCodec.decode(ReleasedClaims, releasing)
         assert list(held) == [a] and held[a].owner == "owner" and held.last_seq == 1
     with pytest.raises(ClaimConflict) as loser:
         transition(2, owner="competitor", claims=(a,), generation=G2).apply(held, registry)
