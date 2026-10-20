@@ -108,7 +108,7 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
         final_evidence(store, fence)
         snapshot = store.snapshots.get("exec")
         attempt = snapshot.require_attempt()
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             # Deliberately preserve otherwise-valid retry authority to verify
             # SQL rejects UNKNOWN independently of Python settlement policy.
             AttemptRecord.update(
@@ -131,7 +131,7 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
         )
         if predecessor is UnknownOutcomeAttempt:
             with pytest.raises(sqlite3.IntegrityError, match="previous attempt must be dead"):
-                with store.session.transaction() as db:
+                with store.session.writing() as db:
                     next_attempt.insert(db)
         else:
             # The ordinary failed predecessor still reaches the insert. Roll

@@ -697,7 +697,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(t
             == ()
         )  # A selected pending claim has not accepted model input.
         with (
-            store.session.transaction(),
+            store.session.writing(),
             pytest.raises(IdentityConflict, match="committed snapshot"),
         ):
             read_historical_native_inputs(

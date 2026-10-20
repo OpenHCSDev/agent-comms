@@ -51,7 +51,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
     @classmethod
     def install(cls, store: Coordination) -> None:
         """Explicit upgrade operation; ordinary reads and writes never repair schema."""
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             actual = cls.stored_schema(db)
             if actual:
                 cls.require_schema(actual)
@@ -64,7 +64,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
             MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
             with (
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
-                store.transaction() as db,
+                store.writing() as db,
             ):
                 cls.require_schema(cls.stored_schema(db))
                 # SQLite allocates this attempt's identity. The text is exactly

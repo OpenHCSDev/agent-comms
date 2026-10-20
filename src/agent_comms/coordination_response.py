@@ -163,7 +163,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                     snapshot.publication_evidence, frozen.exact_target
                 ) is not None:
                     continue
-                with store.session.transaction() as db:
+                with store.session.writing() as db:
                     snapshot = store.snapshots.get(current_id)
                     _require_cohort_assignments(store, bus, snapshot, wire_root_id)
                     intent, obligation = snapshot.require_publishing_intent(
@@ -282,7 +282,7 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
 
 def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
-    with store.session.transaction() as db:
+    with store.session.writing() as db:
         exists = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
@@ -495,7 +495,7 @@ def prepare_fenced_response(
         metadata = bus.log.private_marker_unlocked()
         # The acquired canonical bus barrier verifies its sealed prefix, with
         # complete recovery/refusal on source or sidecar revision changes.
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness, exact_target)
             execution = snapshot.execution
             obligation = snapshot.require_wire_response(exact_target)
@@ -595,7 +595,7 @@ def _settle_fenced_response(
             # A durable dispatch barrier BEFORE the external append distinguishes
             # a first attempt from a lost response/crash. If it commits but the
             # process dies before appending, no automatic retry is authorized.
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 _assert_response_schema(db)
                 terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
                 if terminal is not None:
@@ -615,7 +615,7 @@ def _settle_fenced_response(
                     first_dispatch = True
                 elif not prior.matches(wire_root_id, fence, exact_target):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _assert_response_schema(db)
             terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
             if terminal is not None:

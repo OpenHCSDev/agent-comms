@@ -61,7 +61,7 @@ class ExecutionStore:
         *,
         sources: tuple[SelectedSource, ...] = (),
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             assignments = tuple(source.assignment for source in sources)
             return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
 
@@ -77,7 +77,7 @@ class ExecutionStore:
         settled: tuple[WakeAssignment, ...],
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         """Engage exactly the rows witnessed by the original triage proof commit."""
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             assignments = tuple(source.assignment for source in sources)
             if assignments != settled:
                 raise StaleRevision("original claims changed after proved native settlement")
@@ -176,7 +176,7 @@ class ExecutionStore:
     def mark_pending(
         self, execution_id: str, *, expected_revision: int
     ) -> Applied[RecoverySnapshot]:
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             snapshot = self.snapshots.get(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
@@ -203,7 +203,7 @@ class ExecutionStore:
         _bounded_reason(reason_code)
         if not reason_code:
             raise ValueError("unstarted settlement requires a reason")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             before = self.snapshots.get(execution_id)
             execution = before.execution
             if execution.revision != expected_revision:

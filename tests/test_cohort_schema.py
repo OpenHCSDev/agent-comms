@@ -137,7 +137,7 @@ def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
 ) -> None:
     with Coordination(str(tmp_path / "valid.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _seal_two_selected_with_observer(db, reverse_claims=False)
         sealed = store.session._connection.execute("SELECT sealed FROM claim_batch_receipts").fetchone()[0]
         assert sealed == 1
@@ -145,7 +145,7 @@ def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
         install_private_cohort_schema(store)
         with (
             pytest.raises(sqlite3.IntegrityError, match="selected claim order"),
-            store.session.transaction() as db,
+            store.session.writing() as db,
         ):
             _seal_two_selected_with_observer(db, reverse_claims=True)
         count = store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
@@ -181,7 +181,7 @@ def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_p
     path = tmp_path / "coordination.sqlite3"
     with Coordination(str(path)) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _receipt(db, n=0, k=0)
             _seal(db)
         assert (
@@ -199,7 +199,7 @@ def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_p
 def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path: Path) -> None:
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _assignment(db)
             db.execute(
                 (
@@ -212,7 +212,7 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
             )
         with (
             pytest.raises(sqlite3.IntegrityError, match="observer has an existing wake claim"),
-            store.session.transaction() as db,
+            store.session.writing() as db,
         ):
             _receipt(db, n=2, k=1)
             _member(db)
@@ -240,7 +240,7 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
 
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
             _member(db)
@@ -285,7 +285,7 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with pytest.raises(sqlite3.IntegrityError, match="incomplete"):  # noqa: SIM117
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 _assignment(db)
                 _receipt(db, n=2, k=1)
                 _member(db)
@@ -305,7 +305,7 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
         assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
         assert store.session._connection.execute("SELECT COUNT(*) FROM participants").fetchone()[0] == 0
         with pytest.raises(sqlite3.IntegrityError, match="sealed after"):  # noqa: SIM117
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 _receipt(db, n=0, k=0)
                 db.execute("UPDATE claim_batch_receipts SET sealed=1")
                 db.execute(
@@ -335,7 +335,7 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
 def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(tmp_path: Path) -> None:
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
             for assignment_id, lookup in (("missing", "a"), ("claim-a", "b")):
@@ -413,7 +413,7 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
         install_private_cohort_schema(store)
         with (
             pytest.raises(sqlite3.IntegrityError, match="does not match cohort acceptance"),
-            store.session.transaction() as db,
+            store.session.writing() as db,
         ):
             _assignment(db)
             _receipt(db, n=1, k=1, **{field: override})
@@ -432,7 +432,7 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
 def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             _assignment(db)
             _receipt(db, n=1, k=1)
             _member(db)
@@ -440,7 +440,7 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
                 db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
             )
             _seal(db)
-        with pytest.raises(sqlite3.IntegrityError), store.session.transaction() as db:
+        with pytest.raises(sqlite3.IntegrityError), store.session.writing() as db:
             _receipt(db, n=1, k=1, root="b" * 32)
             db.execute(
                 "INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','a')",

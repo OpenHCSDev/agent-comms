@@ -442,7 +442,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
 
         @contextmanager
         def claim_scope():
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 db.execute("UPDATE owner_generations SET generation=2")
                 reader.execute("BEGIN")
                 try:

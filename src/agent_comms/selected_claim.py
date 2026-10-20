@@ -275,7 +275,7 @@ def write_selected_claimed_file(
     with Coordination(str(store.session.path)) as scoped:
         # The same claim boundary holds the write transaction through fsync.
         with _selected_claim_boundary(comms, scoped, claim_scope, owner_name,
-                                      scoped.session.transaction) as (bus, bus_lock, marker, registry, owner):
+                                      scoped.session.writing) as (bus, bus_lock, marker, registry, owner):
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
                 if claimed.claim_scope != claim_scope or source.claim(normalized) != claimed:

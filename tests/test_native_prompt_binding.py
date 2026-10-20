@@ -273,7 +273,7 @@ def journal_without_sql(monkeypatch):
         # A borrowed SQL reader here used to block that writer, while the inverse
         # sidecar/SQL order could keep the reader waiting on the writer's sidecar.
         with Coordination(str(stores[-1]), contention=StoreBusy()) as other:
-            with other.session.transaction():
+            with other.session.writing():
                 journal_checks.append(True)
         return matches(*args, **kwargs)
 

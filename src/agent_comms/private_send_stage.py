@@ -88,7 +88,7 @@ class NativeSendStage(ABC):
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = Id128Text.mint()
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             assert_native_runtime_schema(db)
             owner.require(store, self.recipient_lookup)
             self.reserve_claim(store, db)
@@ -241,7 +241,7 @@ class TriageNativeSend(NativeSendStage):
         The context and the failed claims commit in one transaction; no
         replacement triage input is reserved.
         """
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
             row.commit_context(db, context)
@@ -301,7 +301,7 @@ class TriageNativeSend(NativeSendStage):
         context: NativeContextProof,
         decision: SelectedTriage,
     ) -> tuple[WakeAssignment, ...]:
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
             row.commit_context(db, context, verdict=type(decision))
@@ -340,7 +340,7 @@ class FullNativeSend(NativeSendStage):
     def fail_terminal(self, store, owner, input_id, token_digest, context, failure):
         # Same order as success: record the context under the live attempt,
         # then settle the attempt.
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             store.attempts.require_fence(self.fence)
             row.commit_context(db, context)
@@ -382,7 +382,7 @@ class FullNativeSend(NativeSendStage):
         token_digest: str,
         context: NativeContextProof,
     ) -> None:
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             snapshot, _ = store.attempts.require_fence(self.fence)
             for assignment in self.assignments:

@@ -602,7 +602,7 @@ def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
 
 def install_private_cohort_schema(store: Coordination) -> None:
     """Create current acknowledgement tables on a fresh coordinator; no old-schema repair."""
-    with store.session.transaction() as db:
+    with store.session.writing() as db:
         if store.session.schema_version != COORDINATION_SCHEMA_VERSION:
             raise SchemaVersionError("unsupported coordinator schema")
         if not _cohort_objects(db):

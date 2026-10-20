@@ -100,7 +100,7 @@ class WorkingMemoryAnnotations:
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
         key = self.address(request.span, request.question, request.classifier)
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             if AnnotationRequestsRow.one(db, **key) is not None:
                 raise PreviouslyRequestedAnnotation("Original classifier request already recorded; inspect its disposition")
             now = self.session.now()
@@ -114,7 +114,7 @@ class WorkingMemoryAnnotations:
         if (label.span, label.question, label.classifier) != (
                 original.request.span, original.request.question, original.request.classifier):
             raise ValueError("Classifier label is not an answer to its original disclosed request")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             current = AnnotationRequestsRow.one(db, id=original.id)
             if current != original:
                 raise ValueError("Classifier request disposition changed before publication")
@@ -123,7 +123,7 @@ class WorkingMemoryAnnotations:
                 outcome=CompletedAnnotationOutcome(response.id, response.model, response.usage))
 
     def fail(self, original: AnnotationRequestsRow, outcome):
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             current = AnnotationRequestsRow.one(db, id=original.id)
             if current != original:
                 raise ValueError("Classifier request disposition changed before refusal")
@@ -133,7 +133,7 @@ class WorkingMemoryAnnotations:
         registry.require(author.resolved(registry).name).role.require_user(
             RelationViolationError("A label correction requires the original human sender")
         )
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             key = self.address(original.span, original.question, original.classifier)
             rows = tuple(SpanAnnotationsRow.select(db, **key))
             if original not in (row.label for row in rows):

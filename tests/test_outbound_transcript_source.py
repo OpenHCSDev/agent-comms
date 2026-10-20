@@ -39,7 +39,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
-        with writer.session.transaction():
+        with writer.session.writing():
             with pytest.raises(CoordinationReadUnavailable) as unavailable:
                 NotificationAssignment.read(root, (initial,))
             assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (

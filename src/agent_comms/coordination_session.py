@@ -42,22 +42,8 @@ class CoordinationSession(CoordinationStore):
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
 
-    @contextmanager
-    def transaction(
-        self, connection: sqlite3.Connection | None = None
-    ) -> Iterator[sqlite3.Connection]:
-        """Allow a rollback-journal writer only after existing readers retire.
-
-        ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
-        then makes those readers a fallible dependency of ``COMMIT``.  Every
-        coordinator write instead acquires the exclusive rollback-journal lock
-        before changing state, so contention is handled before writing and
-        a successfully authorized transaction owns its complete commit lifetime.
-        """
-        with super().transaction(self._connection if connection is None else connection) as db:
-            yield db
-
     def _begin_transaction(self, connection: sqlite3.Connection) -> None:
+        """Retire existing rollback-journal readers before changing any state."""
         if connection.in_transaction:
             raise IntegrityViolationError("nested coordinator transaction is not allowed")
         connection.execute("BEGIN EXCLUSIVE")
@@ -67,7 +53,7 @@ class CoordinationSession(CoordinationStore):
         self, boundary: NativeBoundary | None = None
     ) -> Iterator[None]:
         """Standalone settlement owns SQL only, never native file resources."""
-        with self.transaction():
+        with self.writing():
             yield None
 
     def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
@@ -147,7 +133,7 @@ class NativeCoordinationSession(CoordinationSession):
         with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
             if acquired.bus.log.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
-            with self.transaction():
+            with self.writing():
                 yield acquired
 
     def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:

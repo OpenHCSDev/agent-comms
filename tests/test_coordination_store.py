@@ -540,7 +540,7 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
             fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt(),
             reason_code="failed")
         # Populate the original audit table for serialization, not owner-loss proof.
-        with db.session.transaction() as connection:
+        with db.session.writing() as connection:
             RecoveryAudit(execution_id="exec", kind=FailedRecovery, reason_code="failed",
                 sanitized_detail=None, attempt=1, elapsed_ms=0, observed_at_ms=1_000).insert(connection)
         observed = db.snapshots.get("exec")
@@ -638,7 +638,7 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
 def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, fence = started(db)
-        with db.session.transaction() as connection:
+        with db.session.writing() as connection:
             ReplayAssessments.accumulate(
                 connection, "exec", ReplayFact.TOOL_CALL_STARTED
             )
@@ -738,7 +738,7 @@ def test_provider_proof_carries_until_later_attempt_records_output(
             )
         )
         assert second.value.snapshot.replay == proof
-        with db.session.transaction() as connection:
+        with db.session.writing() as connection:
             ReplayAssessments.accumulate(connection, "exec", fact)
         revoked = db.snapshots.get("exec").replay
         assert revoked is not None
@@ -1206,7 +1206,7 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
     with ready(db_path) as db:
         # Direct SQL establishes a v2-valid parked state that the typed layer
         # deliberately does not expose: ordinal 1 cannot start from DEFERRED.
-        with db.session.transaction() as connection:
+        with db.session.writing() as connection:
             connection.execute(
                 (
                     "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
@@ -1322,7 +1322,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             canonical_publication_key("exec", "owner"),
             message.message_id,
         )
-        with db.session.transaction() as connection:
+        with db.session.writing() as connection:
             intent.insert(connection)
             connection.execute(
                 (
@@ -1549,7 +1549,7 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
         with pytest.raises(IdentityConflict):
             db.participants.get("missing")
         assert not db.session._connection.in_transaction
-        with db.session.transaction():
+        with db.session.writing():
             assert db.session._connection.in_transaction
             assert type(db.snapshots.get("exec").execution.lifecycle) is PendingExecution
             assert db.participants.get("owner").committed
