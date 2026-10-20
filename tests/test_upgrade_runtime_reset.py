@@ -7,6 +7,7 @@ from cutover.backup import StoreBackup
 
 def test_reset_archives_uncertain_restart_and_backup_restores_it(tmp_path):
     root = tmp_path / 'bus'
+    root.mkdir()
     queue = RestartQueue.at(root)
     uncertain = queue.directory / 'settled' / 'owner' / 'uncertain.json'
     uncertain.parent.mkdir(parents=True)
