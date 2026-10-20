@@ -209,7 +209,8 @@ class ContextManifests(Carry):
         log = WireLog(root / "bus.jsonl")
         index_path = _path(log.path)
         old_tables: tuple[type[TypedTable], ...] = (
-            ContextEntrySources, RecordedContextManifestSources,
+            ContextEntrySources,
+            RecordedContextManifestSources,
         )
         with ExitStack() as lifetime:
             with closing(_connect(index_path, readonly=True)) as source_db:

@@ -14,20 +14,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    MalformedRecord,
+    NullMember,
+)
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
 from .turn_context import (
     ContextEntryManifest,
     ContextEntryReference,
     ContextManifest,
+    PreviouslyRecordedSegment,
     RecordedContextIdentity,
     RecordedContextManifest,
     RecordedSegmentManifest,
     SegmentManifest,
     SegmentRecording,
     UnrecordedSegment,
-    PreviouslyRecordedSegment,
 )
 
 if TYPE_CHECKING:
@@ -76,7 +81,7 @@ class UnrecordedContextSource(ContextSourceState):
         previous: tuple[CapturedContext, ...],
         limit: int,
     ) -> ContextManifestPage:
-        return ContextManifestPage((), None, None)
+        return ContextManifestPage(())
 
 
 @dataclass(frozen=True)
@@ -124,8 +129,8 @@ class ContextStoreInfo(ContextSourceState, TypedTable):
             rows.append(row)
             size += row.size
         rows.sort(key=lambda row: row.id)
-        older: BeforeContextManifest | None = None
-        newer: AfterContextManifest | None = None
+        older: BeforeContextManifest | LatestContextManifest = LATEST_CONTEXT
+        newer: AfterContextManifest | LatestContextManifest = LATEST_CONTEXT
         if rows:
             older = BeforeContextManifest(self.source, rows[0].id).available(db, owners)
             newer = AfterContextManifest(self.source, rows[-1].id).available(db, owners)
@@ -279,14 +284,12 @@ class CapturedContext(RecordedContextState):
 class ContextManifestCursor(ABC):
     descending: ClassVar[bool] = True
 
-    @staticmethod
-    def for_page(cursor: ContextManifestCursor | None) -> ContextManifestCursor:
-        """Decode the public API's unpositioned cursor once."""
-        match cursor:
-            case None:
-                return LatestContextManifest()
-            case _:
-                return cursor
+    @classmethod
+    def for_page(cls, value: object) -> ContextManifestCursor:
+        """Accept a typed position or decode an unpositioned API request."""
+        if isinstance(value, cls):
+            return value
+        return FieldCodec.decode(LatestContextManifest, value)
 
     @abstractmethod
     def has_position(self) -> bool: ...
@@ -297,7 +300,8 @@ class ContextManifestCursor(ABC):
     ) -> tuple[str, tuple[object, ...]]: ...
 
 
-class LatestContextManifest(ContextManifestCursor):
+@dataclass(frozen=True)
+class LatestContextManifest(NullMember, ContextManifestCursor):
     def has_position(self) -> bool:
         return False
 
@@ -329,7 +333,7 @@ class PositionedContextManifest(ContextManifestCursor):
         self,
         db: sqlite3.Connection,
         owners: tuple[ThreadIncarnation, ...],
-    ) -> Self | None:
+    ) -> Self | LatestContextManifest:
         where, parameters = ContextRequest.owner_filter(owners)
         return (
             self
@@ -338,7 +342,7 @@ class PositionedContextManifest(ContextManifestCursor):
                 where=where + f" AND id {self.comparison} ?",
                 parameters=(*parameters, self.record_id),
             )
-            else None
+            else LATEST_CONTEXT
         )
 
 
@@ -350,6 +354,9 @@ class BeforeContextManifest(PositionedContextManifest):
 class AfterContextManifest(PositionedContextManifest):
     comparison = ">"
     descending = False
+
+
+LATEST_CONTEXT = LatestContextManifest()
 
 
 @dataclass(frozen=True)
@@ -374,14 +381,18 @@ class ContextManifestReference:
 @dataclass(frozen=True)
 class ContextManifestPage:
     resources: tuple[CapturedContext, ...]
-    older: BeforeContextManifest | None
-    newer: AfterContextManifest | None
+    older: BeforeContextManifest | LatestContextManifest = field(
+        default_factory=LatestContextManifest
+    )
+    newer: AfterContextManifest | LatestContextManifest = field(
+        default_factory=LatestContextManifest
+    )
 
     def has_older(self) -> bool:
-        return ContextManifestCursor.for_page(self.older).has_position()
+        return self.older.has_position()
 
     def has_newer(self) -> bool:
-        return ContextManifestCursor.for_page(self.newer).has_position()
+        return self.newer.has_position()
 
     def reference(self, manifest: ContextManifest) -> ContextManifestReference:
         for resource in self.resources:
@@ -468,7 +479,7 @@ class ContextStore(TypedStore):
         name: str,
         registry: Registration,
         *,
-        cursor: ContextManifestCursor | None = None,
+        cursor: ContextManifestCursor = LATEST_CONTEXT,
         previous: tuple[CapturedContext, ...] = (),
         limit: int = max_page_rows,
     ) -> ContextManifestPage:

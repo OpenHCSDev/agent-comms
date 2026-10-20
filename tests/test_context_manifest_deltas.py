@@ -12,7 +12,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import (
-    ContextManifest, JournalProvenance, NativeProvenance, RecordedContextTurn,
+    ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
+    RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
 )
 from test_private_bus_checkpoint import _root
@@ -129,9 +130,10 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
             assert result.value.segments[:2] == expected[turn - 1].segments[:2]
             assert result.value.segments[2].contributors == expected[turn - 1].segments[2].contributors
             recorded = result.recorded
-            assert recorded.segments[0].previous == (None if turn == 1 else rows[0].id)
-            assert recorded.segments[2].previous == (
-                None if turn in (1, 32) else rows[31].id)
+            assert recorded.segments[0].predecessors(row.id) == (
+                () if turn == 1 else (rows[0].id,))
+            assert recorded.segments[2].predecessors(row.id) == (
+                () if turn in (1, 32) else (rows[31].id,))
         decoded = []
         previous_profile = sys.getprofile()
         def observe(frame, event, argument):
@@ -145,7 +147,7 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
         assert len(decoded) == len(set(decoded)) == 3
         last, delta = rows[-1].recorded(db), rows[32].recorded(db)
         with pytest.raises(ValueError, match='predecessor'):
-            replace(last.segments[2], previous=rows[32].id).restore(
+            replace(last.segments[2], previous=RecordedContextPredecessor(rows[32].id)).restore(
                 {}, {rows[32].id: delta}, position=2)
 
 

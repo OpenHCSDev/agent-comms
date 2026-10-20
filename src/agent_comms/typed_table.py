@@ -673,7 +673,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def require(cls, db: sqlite3.Connection, **key: object) -> Self:
         """Read one required row at the same boundary that decodes its fields."""
-        rows = cls.select(db, **key)
+        condition, parameters = cls._condition("1", (), key)
+        rows = cls.select(db, where=condition, parameters=parameters, row_type=cls)
         if len(rows) != 1:
             raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return rows[0]

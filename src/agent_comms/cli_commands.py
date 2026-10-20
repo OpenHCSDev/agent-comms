@@ -43,6 +43,7 @@ from .config_options import (
     ModelConfigOption,
     ThinkingLevelConfigOption,
 )
+from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .exporting import (
@@ -1577,7 +1578,7 @@ class ContextCliCommand(CliCommand):
         return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
 
     def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
-        cursor = None
+        cursor: ContextManifestCursor = LATEST_CONTEXT
         while True:
             page = ctx.contexts.page(self.thread, ctx.registry, cursor=cursor)
             yield from (resource.value for resource in reversed(page.resources))
