@@ -1629,7 +1629,8 @@ class RestartCliCommand(CliCommand):
         normalize=FieldCodec.encode,
     )
     agent_args: NoLaunchChange | ArgumentsLaunchChange = option(
-        "--agent-args", type=lambda text: ArgumentsLaunchChange(tuple(shlex.split(text))), choices=None,
+        "--agent-args", type=lambda text: ArgumentsLaunchChange(tuple(shlex.split(text))),
+        choices=None,
         default_factory=NoLaunchChange, parser_default_factory=NoLaunchChange,
         normalize=FieldCodec.encode,
     )
