@@ -2191,7 +2191,8 @@ class StallStrike(StrikeTodo):
     @classmethod
     def make(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Self:
         return cls(todo.revision, actor, todo.held(),
-                   f"{todo.holder} stopped making progress on {todo.id}; Core struck the order.", at)
+                   f"{todo.holder} stopped making progress on {todo.id}; "
+                   "Core struck the order.", at)
 
     @classmethod
     def ensure(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Todo:

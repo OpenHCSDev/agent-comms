@@ -22,8 +22,10 @@ from agent_comms import coordinator
 from agent_comms.thread_identity import StallWatcherIncarnation
 from agent_comms.todos import (BlockedTodoState, ChangeTodoState, CorrectCheckTodo,
                               MissedDeadlineStrike, MissedFirstCallStrike,
-                              ReleaseTodo, StallStrike, StrikeReason, StrikeTodo, TodoConflict)
+                              ReleaseTodo, StallStrike, StrikeReason, TodoConflict)
 from agent_comms.storage_rules import StorageRule
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import CommsStandingRulesTool
 from test_commander_problem_orders import create
 from test_order_progress import checkout, commit, git
 from test_standing_rules import working
@@ -83,7 +85,8 @@ def test_flat_wheel_strikes_before_selecting_a_successor_on_a_copied_registry(
     if spare:
         working(comms, 'spare', 3.0)
     [rule] = standing.FlatWheelSpin.violations(comms, 'lead')
-    rule.enforce(comms, 'lead')
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller('lead'))
+    assert rule.line() in read.broken
     result = comms.goals.todos.get('P1')
     assert [type(strike) for strike in result.strikes] == [StallStrike]
     assert result.strikes[0].previous == todo.held()
