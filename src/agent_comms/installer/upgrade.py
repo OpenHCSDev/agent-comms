@@ -115,6 +115,39 @@ def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
 
 
 @dataclass(frozen=True)
+class OwnerStart(ABC):
+    """What starting one stopped owner did. A unit that cannot start is reported by name;
+    the runtime and bus it would run on are installed either way."""
+
+    name: str
+
+    @staticmethod
+    def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
+        try:
+            stack.cli(root, "start", "--name", name)
+        except UpgradeRefused as error:
+            return RefusedStart(name, str(error))
+        return StartedOwner(name)
+
+    @abstractmethod
+    def report(self) -> dict[str, object]: ...
+
+
+@dataclass(frozen=True)
+class StartedOwner(OwnerStart):
+    def report(self) -> dict[str, object]:
+        return {"name": self.name, "started": True}
+
+
+@dataclass(frozen=True)
+class RefusedStart(OwnerStart):
+    error: str
+
+    def report(self) -> dict[str, object]:
+        return {"name": self.name, "started": False, "error": self.error}
+
+
+@dataclass(frozen=True)
 class Stack:
     """One built installation and the source checkout containing its install tools."""
 
@@ -254,6 +287,12 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().threads(snapsh
         """Run the captured owner set together and join every request before proceeding."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
             list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
+
+    def start(self, root: Path, names: list[str]) -> list[dict[str, object]]:
+        """Start the captured owner set together; each owner's outcome is its own."""
+        with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
+            return [start.report() for start in
+                    pool.map(lambda name: OwnerStart.attempt(self, root, name), names)]
 
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
@@ -536,9 +575,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
                 spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         maintenance.clear(held)
-        installed.owners(root, "start", running)
+        started = installed.start(root, running)
         print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
-              f"maintenance cleared and {running} restarted", file=sys.stderr)
+              f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
@@ -550,11 +589,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
-        try:
-            staged.owners(root, "start", running)
-        except BaseException:
-            staged.owners(root, "stop", running)
-            raise
     except BaseException as error:
         print(f"install: install failed ({type(error).__name__}: {error}); "
               "restoring original installation", file=sys.stderr)
@@ -573,12 +607,15 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
             installed.publish()
         maintenance.clear(restored_hold)
-        installed.owners(root, "start", running)
+        started = installed.start(root, running)
         print(f"install: restored after failure ({type(error).__name__}: {error}); "
-              f"original runtime selected and {running} restarted; "
+              f"original runtime selected; owners: {started}; "
               f"backup: {backup.description}",
               file=sys.stderr)
         raise
-    return {"stopped_and_started": running, **passed, "services": services,
+    # Installed: the carries ran and the runtime is published. Starting the owners it
+    # stopped is reported per owner and never rolls the install back.
+    started = staged.start(root, running)
+    return {"stopped": running, "started": started, **passed, "services": services,
             "restore_space": {"needed": restore.needed, **asdict(restore)},
             **backup.report()}
