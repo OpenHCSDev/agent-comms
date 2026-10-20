@@ -2920,6 +2920,16 @@ class TodoStore(TypedStore):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
+    @contextmanager
+    def writer_connection(
+        self, *, check_same_thread: bool = True
+    ) -> Iterator[sqlite3.Connection]:
+        with (
+            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            super().writer_connection(check_same_thread=check_same_thread) as connection,
+        ):
+            yield connection
+
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
         recorded = HuntRecord(uuid4().hex, commander, hunt)

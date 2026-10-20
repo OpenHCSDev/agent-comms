@@ -6,24 +6,34 @@ The frontend supplies a context owning its readers; it enters only after drain.
 from __future__ import annotations
 
 import argparse
-from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext, redirect_stdout
-from dataclasses import dataclass, field
-from abc import abstractmethod
-import hashlib
 import fcntl
-from io import StringIO
-from importlib.metadata import distribution
+import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from abc import abstractmethod
+from contextlib import (
+    AbstractContextManager,
+    ExitStack,
+    contextmanager,
+    nullcontext,
+    redirect_stdout,
+)
+from dataclasses import dataclass, field
+from importlib.metadata import distribution
+from io import StringIO
+from pathlib import Path
 from typing import Annotated
 
-from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
-from agent_comms.comms import wire
+from agent_comms.active_route import (
+    acquire_exclusive_route_lock,
+    active_route_path,
+    read_active_route,
+)
 from agent_comms.cli_commands import StatusCliCommand
-from agent_comms.field_codec import FieldCodec, PathText, SubclassUnion, NullMember, RecordMember
+from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec, NullMember, PathText, RecordMember, SubclassUnion
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
@@ -33,8 +43,9 @@ from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, 
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.threads import Thread
 from agent_comms.store_files import _atomic_write_text, _store_lock
-from .cutover.carry import PendingConversion, PreparedCarries
-from .cutover.backup import StoreBackup
+
+from cutover.backup import StoreBackup
+from cutover.carry import PendingConversion, PreparedCarries
 
 
 class PublicationIntent(SubclassUnion, affix=''):
@@ -135,8 +146,7 @@ class RuntimePublication:
             raise ValueError('Publication requires the selected active root')
         comms = wire(route)
         barrier = comms.owners.maintenance
-        operator = MaintenanceOperator('runtime-publication:' + hashlib.sha256(
-            os.fsencode(self.runtime.resolve())).hexdigest())
+        operator = MaintenanceOperator.current()
         intent_path = root / 'runtime-publication.json'
         with _store_lock(root / 'runtime-publication'):
             previous = LaunchRuntime.current_pointer().resolve(strict=True)
@@ -197,13 +207,14 @@ class RuntimePublication:
             os.close(descriptor)
 
     def publish_links(self) -> None:
-        """Move declarations and the pointer, without killing unrelated processes."""
+        """Refresh the declared installation, including an already-current runtime."""
         current = LaunchRuntime.current_pointer()
-        if self.published():
-            raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
+        selected = self.runtime.resolve(strict=True)
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
-        replace_link(current, self.runtime)
+        replace_link(current, selected)
+        for harness in Harness.present(Path.home()):
+            harness.configure()
 
 
 @dataclass(frozen=True)
@@ -237,10 +248,9 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
                                      stopped.handoff, self.maintenance_hold,
                                      self.carries.checkout)
         result = subprocess.run([
-            self.runtime / 'bin/python', '-I', '-B', '-c',
-            'import sys; sys.path.insert(0, sys.argv.pop(1)); '
-            'from tools.publish_runtime import main; main()',
-            str(request.checkout), '--complete-stopped',
+            self.runtime / 'bin/python', '-E', '-s', '-B',
+            str(request.checkout / Path(__file__).parent.name / Path(__file__).name),
+            '--complete-stopped',
             str(stopped.wire_descriptor), str(self.route_descriptor),
         ], input=json.dumps(FieldCodec.encode(request)), text=True, stdout=subprocess.PIPE,
             pass_fds=(stopped.wire_descriptor, self.route_descriptor), check=True)
@@ -269,8 +279,7 @@ class StoppedPublication:
             if StatusCliCommand().run(comms, output):
                 raise RuntimeError('Converted bus status failed: ' + output.getvalue())
             print('Converted bus status: ' + output.getvalue().strip(), flush=True)
-            if not publication.published():
-                publication.publish_links()
+            publication.publish_links()
         stopped = StoppedOwnerBatch.accept(comms.owners, wire_descriptor, self.handoff)
         comms.owners.maintenance.clear_stopped(self.maintenance_hold, wire_descriptor)
         fcntl.flock(route_descriptor, fcntl.LOCK_UN)
@@ -281,6 +290,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--check', action='store_true')
+    actions.add_argument('--refresh', action='store_true',
+                         help='Refresh this installed runtime\'s declared launchers and harness config')
     actions.add_argument('--complete-stopped', type=int, nargs=2, metavar=('WIRE_FD', 'ROUTE_FD'))
     options = parser.parse_args()
     if options.complete_stopped is not None:
@@ -290,6 +301,9 @@ def main() -> None:
         print(json.dumps(FieldCodec.encode(result)))
         return
     publication = RuntimePublication.installed()
+    if options.refresh:
+        publication.publish_links()
+        return
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')

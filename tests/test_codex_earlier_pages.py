@@ -165,7 +165,7 @@ def test_stopped_carry_preserves_external_items(tmp_path):
     from agent_comms.external_transcript import ExternalTranscript, NoEarlierPage
     from agent_comms.field_codec import FieldCodec
     from agent_comms.transcript_events import AssistantTranscript
-    from tools.cutover.carry_external_pages import ExternalPages
+    from cutover.carry_external_pages import ExternalPages
 
     root = tmp_path / 'root'
     root.mkdir()

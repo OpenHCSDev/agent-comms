@@ -306,7 +306,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     async with TestClient(TestServer(connector.application())) as reader:
         headers = {"Authorization": f"Bearer {await approved_token(reader, store)}"}
         barrier = MaintenanceBarrier(copied_root / "registry.json")
-        held = barrier.begin(MaintenanceOperator("connector-refusal-proof"))
+        held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
         with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path), ExitStack() as locks:

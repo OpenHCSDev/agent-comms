@@ -13,7 +13,7 @@ from agent_comms.coordination_errors import ParticipantNotRegistered
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperatorField
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
@@ -304,7 +304,7 @@ def test_each_thread_role_member_owns_its_role_behaviour(
 
     barrier = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
     role.require_maintenance_open(barrier, True)
-    barrier.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
+    barrier.begin(MaintenanceOperator.current())
     role.require_maintenance_open(barrier, False)
     if executes:
         with pytest.raises(RelationViolationError, match="under maintenance"):

@@ -559,8 +559,7 @@ class NoConversion(PreparedCarries):
             # No data or route changes: existing readers can keep their shared lock.
             with comms.route.hold_client_route():
                 print('Acquired shared route lock for unchanged-format switch', flush=True)
-                if not publication.published():
-                    publication.publish_links()
+                publication.publish_links()
             publication.release_if_safe(self, comms.owners.maintenance, hold)
             # Existing exact-incarnation queue owns idle admission and settlement.
             for original in OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):

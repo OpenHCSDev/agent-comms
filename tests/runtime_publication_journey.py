@@ -20,8 +20,8 @@ from agent_comms.comms import Comms
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import ReadyPhase
 from agent_comms.runtime import socket_path
-from tools.publish_runtime import RuntimePublication
-from tools.cutover.carry import CarryChain, CarryLedger
+from publish_runtime import RuntimePublication
+from cutover.carry import CarryChain, CarryLedger
 
 
 def main():
@@ -75,14 +75,14 @@ print(c.owners.start('publication-copy').pid,flush=True)
     try:
         # Kill only the isolated publisher while it is waiting, then re-enter
         # against the real maintenance witness it left behind.
-        waiting = subprocess.Popen([target / 'bin/python', '-I', '-c', '''
+        waiting = subprocess.Popen([target / 'bin/python', '-E', '-s', '-c', '''
 import sys
 from pathlib import Path
-from tools.publish_runtime import RuntimePublication
+from publish_runtime import RuntimePublication
 from agent_comms.comms import Comms
 root=Path(sys.argv[2]);c=Comms(root)
 RuntimePublication(Path(sys.argv[3]),{}).publish(root,checkout=Path(sys.argv[1]))
-''', str(source), str(root), str(target)], env=dict(os.environ))
+''', str(source), str(root), str(target)], env=dict(os.environ), cwd=source / 'tools')
         deadline = time.monotonic() + 10
         while not comms.owners.maintenance.read().turn_pending:
             assert waiting.poll() is None and time.monotonic() < deadline

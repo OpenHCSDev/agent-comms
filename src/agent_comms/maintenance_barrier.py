@@ -15,13 +15,14 @@ import stat
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal, Self
 
+from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
@@ -71,6 +72,10 @@ class GrantedSends:
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     new_sends = running_sends = HeldSends
+
+    @classmethod
+    def holder_dead(cls, state: MaintenanceState) -> bool:
+        return not state.operator.alive()
 
     @classmethod
     def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
@@ -124,6 +129,10 @@ class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
 
     @classmethod
+    def holder_dead(cls, state: MaintenanceState) -> bool:
+        return False
+
+    @classmethod
     def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
                  operator: MaintenanceOperator) -> MaintenanceState:
         return barrier.begin(operator)
@@ -141,6 +150,10 @@ class ReadyPhase(MaintenancePhase):
         drained()
 
 
+class DeadHolderReleasedPhase(ReadyPhase):
+    """The stored operator is the dead incarnation whose hold this record released."""
+
+
 # The holding operation hands its nonce to its own child processes through this variable.
 HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
 
@@ -155,6 +168,12 @@ class MaintenanceStatus:
     def turn_pending(self) -> bool:
         return self.phase.new_sends.pending()
 
+    def observed(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
+        return self
+
+    async def observed_async(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
+        return self
+
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
 
@@ -163,31 +182,19 @@ class MaintenanceStatus:
         self.require_open()
 
 
-@dataclass(frozen=True)
-class MaintenanceOperator:
-    value: str
-
-    def __post_init__(self) -> None:
-        if not self.value or len(self.value) > 128:
-            raise ValueError('Maintenance operator must have bounded identity')
-
-
-class MaintenanceOperatorText(TextRepresentation[MaintenanceOperator]):
-    @classmethod
-    def from_text(cls, value: str) -> MaintenanceOperator:
-        return MaintenanceOperator(value)
+@dataclass(frozen=True, eq=False)
+class MaintenanceOperator(ProcessIdentity, declared_name=None):
+    """A hold belongs to this exact process, using the existing identity codec."""
 
     @classmethod
-    def encode(cls, value: MaintenanceOperator) -> str:
-        return value.value
-
-
-MaintenanceOperatorField = Annotated[MaintenanceOperator, MaintenanceOperatorText]
+    def current(cls) -> Self:
+        identity = ProcessIdentity.capture(os.getpid())
+        return cls(identity.pid, identity.start_time)
 
 
 @dataclass(frozen=True, kw_only=True)
 class MaintenanceMarker:
-    version: Literal[1]
+    version: Literal[2]
     root: str
     generation: int
 
@@ -198,13 +205,23 @@ class MaintenanceMarker:
 
 @dataclass(frozen=True, kw_only=True)
 class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
-    operator: MaintenanceOperatorField
+    operator: MaintenanceOperator
     nonce: str
     phase: type[MaintenancePhase]
 
     def __post_init__(self):
         super().__post_init__()
         Id128Text.decode(self.nonce)
+
+    def observed(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
+        if self.phase.holder_dead(self):
+            return barrier.release_dead(self)
+        return self
+
+    async def observed_async(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
+        if self.phase.holder_dead(self):
+            return await barrier.release_dead_async(self)
+        return self
 
     def require_marker(self, marker: MaintenanceMarker, root: Path) -> MaintenanceState:
         if (
@@ -293,7 +310,7 @@ class MaintenanceBarrier(MaintenanceIngress):
                 os.close(descriptor)
         return value
 
-    def current_unlocked(self) -> MaintenanceStatus:
+    def _current_unlocked(self) -> MaintenanceStatus:
         """Check the phase under the registry lock OR the wire lock.
 
         Clients may read it before taking locks only to refuse work, never to
@@ -309,6 +326,32 @@ class MaintenanceBarrier(MaintenanceIngress):
         if marker is None or state is None:
             raise RelationViolationError("Maintenance witness incomplete; new turns held")
         return state.require_marker(marker, self.registry_path.parent)
+
+    def current_unlocked(self) -> MaintenanceStatus:
+        return self._current_unlocked().observed(self)
+
+    def _release_dead_unlocked(self, expected: MaintenanceState) -> MaintenanceStatus:
+        current = self._current_unlocked()
+        if current != expected:
+            return current
+        self._write_unlocked(replace(
+            expected, generation=expected.generation + 1, nonce=Id128Text.mint(),
+            phase=DeadHolderReleasedPhase,
+        ))
+        raise MaintenanceHeldError(
+            f"Maintenance released dead holder pid={expected.operator.pid} "
+            f"start_time={expected.operator.start_time}; retry the input"
+        )
+
+    def release_dead(self, expected: MaintenanceState) -> MaintenanceStatus:
+        # Registry acquisition already serializes every maintenance write. It is
+        # reentrant for a registry borrower and never upgrades a shared wire OFD.
+        with _store_lock(self.registry_path):
+            return self._release_dead_unlocked(expected)
+
+    async def release_dead_async(self, expected: MaintenanceState) -> MaintenanceStatus:
+        async with _async_store_lock(self.registry_path):
+            return self._release_dead_unlocked(expected)
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
@@ -333,9 +376,8 @@ class MaintenanceBarrier(MaintenanceIngress):
         """Hold new turns before fleet drain; an uncertain write stays closed."""
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             current = self.current_unlocked()
-            if current.phase is not ReadyPhase:
-                raise RelationViolationError('Maintenance already active or uncertain')
-            hold = MaintenanceState(version=1, root=str(self.registry_path.parent.resolve()),
+            current.require_open()
+            hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
                                     nonce=Id128Text.mint(), phase=DrainingPhase)
             self._write_unlocked(hold)
@@ -405,4 +447,4 @@ class MaintenanceBarrier(MaintenanceIngress):
         pipe drain or a native response.
         """
         async with _async_store_lock(self.wire_path, mode=SharedLock()):
-            yield self.current_unlocked()
+            yield await self._current_unlocked().observed_async(self)

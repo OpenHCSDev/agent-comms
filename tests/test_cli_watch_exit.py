@@ -164,7 +164,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
     from cutover.carry import STEPS, CarryChain, CarryLedger
     from test_bus_route_counts_locking import _case
     from test_carry import REPO, CheckoutStack, Repository
-    from tools.upgrade_bus import Revisions, carry_all
+    from upgrade_bus import Revisions, carry_all
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
     comms = _case(tmp_path / 'wire', monkeypatch)
@@ -192,7 +192,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
         try:
             assert await asyncio.wait_for(arrived.get(), 20) == 'first'
             maintenance = MaintenanceBarrier(comms.registry.store.path)
-            held = maintenance.begin(MaintenanceOperator('upgrade-bus'))
+            held = maintenance.begin(MaintenanceOperator.current())
             assert await asyncio.wait_for(children[0].wait(), 20) is not None
             (tmp_path / 'checkout/src').mkdir(parents=True)
             repo = Repository(tmp_path / 'checkout')
@@ -230,7 +230,7 @@ async def test_a_bridge_started_during_a_drain_waits_and_then_receives(tmp_path,
     comms.registry.declare(replace(recipient, execution=ExternalThreadExecution))
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     maintenance = MaintenanceBarrier(comms.registry.store.path)
-    held = maintenance.begin(MaintenanceOperator('upgrade-bus'))
+    held = maintenance.begin(MaintenanceOperator.current())
     arrived: asyncio.Queue[str] = asyncio.Queue()
     children = []
     start = AttachedChild.start

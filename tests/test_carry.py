@@ -41,7 +41,7 @@ from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
-from tools.upgrade_bus import (
+from upgrade_bus import (
     Revisions,
     Stack,
     before_stop,
@@ -503,7 +503,7 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
 def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, tmp_path, monkeypatch):
     from threading import Barrier
 
-    import tools.upgrade_bus as upgrade_bus
+    import upgrade_bus
     from agent_comms.maintenance_barrier import ReadyPhase
 
     names = [f"worker-{number}" for number in range(19)]
@@ -582,7 +582,7 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path)
 
 
 def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(tmp_path, monkeypatch):
-    import tools.upgrade_bus as upgrade_bus
+    import upgrade_bus
 
     commands = []
 
@@ -609,7 +609,7 @@ def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(
 
 
 def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
-    import tools.upgrade_bus as upgrade_bus
+    import upgrade_bus
     from agent_comms.maintenance_barrier import ReadyPhase
 
     datum = comms.root / "kept.txt"
@@ -686,12 +686,12 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
 
 
 def rehearsed(stack: Stack, root: Path) -> dict:
-    from tools.upgrade_bus import rehearse
+    from upgrade_bus import rehearse
     return rehearse(root, (), stack, None)
 
 
 def installed_live(stack: Stack, root: Path) -> dict:
-    from tools.upgrade_bus import live
+    from upgrade_bus import live
     return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker")
 
 
@@ -699,7 +699,7 @@ def installed_live(stack: Stack, root: Path) -> dict:
 def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path, monkeypatch, install):
     """The d88a12185 rehearsal: ToolCallIndex's BEGIN IMMEDIATE timed out against the
     installer's own transcript hold, which then stayed up across every carry."""
-    import tools.upgrade_bus as upgrade_bus
+    import upgrade_bus
     from cutover.carry_tool_call_index import ToolCallIndex
 
     unit = comms.registry.declare(comms.registry.new_thread(
@@ -752,7 +752,7 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
     output.enter(ToolRunningPhase("before the drain"))
     with transcript.writing():
         pass
-    MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator("drain-test"))
+    MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator.current())
     before = bus_files(comms.root)
     monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
     with transcripts_held(comms.root):
