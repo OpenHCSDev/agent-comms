@@ -1428,6 +1428,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def checked(self) -> CheckedProblemOrder:
         return self
 
+    def require_wording(self) -> None:
+        """Check fresh order prose, never reinterpret stored history or shell commands."""
+        for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
+            DirectiveText.require(text)
+
     id: str
     owner: FileLine
     check: OrderCheck
@@ -1580,11 +1585,6 @@ class PendingProblemOrder(CheckedProblemOrder):
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
-
-    def require_wording(self) -> None:
-        """Check fresh order prose, never reinterpret stored history or shell commands."""
-        for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
-            DirectiveText.require(text)
 
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
