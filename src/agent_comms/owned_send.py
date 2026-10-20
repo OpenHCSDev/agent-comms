@@ -200,9 +200,9 @@ class OwnedSend(CodingToolOwner):
                 turn_id=self.turn.value, owner_claimed_generation=self.claim_scope,
                 operation_id=slot)
             with self.comms.bus.log.checked_read() as source:
-                existing = source.claim(canonical)
-                if existing is not None and existing.held_by(owner.name, str(owner.created_at), scope):
-                    return existing
+                for existing in source.claims_for((canonical,)).values():
+                    if existing.held_by(owner.name, str(owner.created_at), scope):
+                        return existing
             committed = self.comms.bus.publisher.publish_claim_envelope(
                 ClaimNoticeKind.claimed(owner),
                 worktree=Path(self.thread.worktree),
