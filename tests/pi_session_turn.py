@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import aclosing, contextmanager
 from pathlib import Path
 from dataclasses import replace
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, TurnDelivery, TurnInbox
 from agent_comms.comms import Comms
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.pi_native_backend import PiNativeBackend
@@ -37,7 +39,8 @@ def native_backend(agent_bin, agent_args, root):
         comms.messaging.initialize_private_initial_protocol()
     if 'native-fixture' not in comms.registry.snapshot().threads:
         comms.registry.declare(comms.registry.new_thread(
-            'native-fixture', frozenset(), str(root), backend=PiNativeBackend))
+            'native-fixture', frozenset(), str(root), backend=PiNativeBackend,
+            process_identity=ProcessIdentity.capture(os.getpid())))
     return PiNativeBackend(agent_bin, NativeArguments.parse(agent_args), comms, observe)
 
 

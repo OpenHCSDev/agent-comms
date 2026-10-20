@@ -9,7 +9,7 @@ from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_payloads import PiUsage, TextDelta, ThinkingDelta
 from agent_comms.pi_events import MessageUpdate, DurablePiEvent, IgnoredDurableEvent, ToolExecutionStart
 from agent_comms.pi_commands import GetState, SetThinkingLevel
-from agent_comms.pi_vocabulary import ThinkingLevel
+from agent_comms.pi_vocabulary import LowThinkingLevel, OffThinkingLevel
 from agent_comms.pi_durable_backend import (
     DurableDatabase, PiDurableBackend, TaskFailed,
     Inspect, Watch, Unwatch,
@@ -33,7 +33,7 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
                 await host.request(SetThinkingLevel(level='low'))
                 changed = await asyncio.wait_for(turn.next_event(), 5)
                 assert type(changed) is IgnoredDurableEvent
-                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'low'
+                assert (await host.request(GetState())).thinking_level is LowThinkingLevel
                 for event in (
                     MessageUpdate(usage=PiUsage(), assistant_message_event=TextDelta('visible')),
                     MessageUpdate(usage=PiUsage(), assistant_message_event=ThinkingDelta('reasoning')),
@@ -56,7 +56,7 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
                 await host.request(SetThinkingLevel(level='off'))
                 changed = await asyncio.wait_for(next_turn.next_event(), 5)
                 assert type(changed) is IgnoredDurableEvent
-                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'off'
+                assert (await host.request(GetState())).thinking_level is OffThinkingLevel
                 await host.request(Unwatch())
         finally:
             await host.shutdown()

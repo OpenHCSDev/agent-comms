@@ -336,7 +336,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             assert not forwarding.pending and not forwarding.accepted
             assert agent.inputs.state(session).inbox is None
             assert session not in agent.turns.turn_tasks
-            assert not comms.registry.require(session).active_turn.phase.busy
+            assert not comms.registry.require(session).turn_record.read().phase.busy
             assert native.session.read_bytes().startswith(saved)
             history = Path(comms.registry.require(session).session_file)
             rows = map(json.loads, history.read_text().splitlines())

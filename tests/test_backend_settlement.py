@@ -8,7 +8,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.pi_counts import PiCount
 from pi_session_turn import backend_events, native_backend
 
@@ -73,7 +73,7 @@ for line in sys.stdin:
             threading.Thread(target=finish, daemon=True).start()
 """)
     stub.chmod(0o755)
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     finish_event = asyncio.Event()
     persistent = native_backend(str(stub), [], tmp_path)
     starts = []
