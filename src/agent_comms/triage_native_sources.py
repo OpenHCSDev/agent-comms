@@ -13,8 +13,12 @@ from .typed_table import Column, TypedTable
 
 
 @dataclass(frozen=True)
-class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"):
-    input_id: typing.Annotated[str, Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))]
+class TriageNativeSources(
+    NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"
+):
+    input_id: typing.Annotated[
+        str, Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))
+    ]
     assignment_ids: tuple[str, ...]
 
     without_rowid = True
@@ -29,8 +33,7 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
         from .native_input_record import TriageNativeExecution
 
         guards = {
-            f"{cls.declared_name}_{operation.lower()}_guard":
-            f" BEFORE {operation} "
+            f"{cls.declared_name}_{operation.lower()}_guard": f" BEFORE {operation} "
             f"ON {cls.declared_name} BEGIN SELECT RAISE(ABORT,'native source membership is frozen'); END"
             for operation in ("UPDATE", "DELETE")
         }
@@ -51,4 +54,3 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
             "BEGIN SELECT RAISE(ABORT,'triage source is absent, belongs to another owner or was reserved'); END"
         )
         return guards
-

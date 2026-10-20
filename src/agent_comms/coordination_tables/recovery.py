@@ -87,16 +87,21 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
     execution_id: typing.Annotated[str, field_codec.SnapshotExclude(True)]
     kind: typing.Annotated[type[RecoveryCondition], Column(check="kind IN ({recovery_names})")]
     reason_code: typing.Annotated[str, Column(check="length(reason_code) BETWEEN 1 AND 64")]
-    sanitized_detail: typing.Annotated[str | None, Column(
-                check=(
-                    "sanitized_detail IS NULL OR length(sanitized_detail)<="
-                    f"{MAX_SANITIZED_DETAIL_CHARS}"
-                )
-            )]
+    sanitized_detail: typing.Annotated[
+        str | None,
+        Column(
+            check=(
+                "sanitized_detail IS NULL OR length(sanitized_detail)<="
+                f"{MAX_SANITIZED_DETAIL_CHARS}"
+            )
+        ),
+    ]
     attempt: typing.Annotated[int, Column(check="attempt>0")]
     elapsed_ms: typing.Annotated[int, Column(check="elapsed_ms>=0")]
     observed_at_ms: typing.Annotated[int, Column(check="observed_at_ms>=0")]
-    audit_id: typing.Annotated[int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude(True)] = dataclass_field(default=None)
+    audit_id: typing.Annotated[
+        int | None, Column(primary_key=True, auto_increment=True), field_codec.SnapshotExclude(True)
+    ] = dataclass_field(default=None)
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod

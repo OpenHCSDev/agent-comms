@@ -45,12 +45,12 @@ class UndeliveredInput(InputDelivery):
         return ()
 
 
-
 class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     """The original reservation owns this source through every disposition."""
 
-    def require_ingress(self, comms: Comms, snapshot: RegistrySnapshot,
-                        claim_scope: ClaimedIdentity, controller) -> None:
+    def require_ingress(
+        self, comms: Comms, snapshot: RegistrySnapshot, claim_scope: ClaimedIdentity, controller
+    ) -> None:
         pass
 
     def retained_fact(self, source: StoredInput):
@@ -76,6 +76,7 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
     """Original identity and author coordinate, independent of disposition."""
+
     key: str
     origin: InputOrigin
 
@@ -110,7 +111,9 @@ class WireInputOrigin(InputOrigin):
         return DeliveredInput(self.reference) if self.root_id == root_id else UndeliveredInput()
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
-        raise RelationViolationError("Wire input provenance belongs to its original routed producer")
+        raise RelationViolationError(
+            "Wire input provenance belongs to its original routed producer"
+        )
 
 
 @dataclass(frozen=True)
@@ -123,7 +126,7 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName('admission')]
+    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName("admission")]
     project: str
     goal: GoalCheckpoint
 
@@ -140,8 +143,13 @@ class HumanInputOrigin(InputOrigin):
             root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
             root_id = Id128Text.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
-            return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
-                       claim_scope, owner.worktree, owner.goal.captured)
+            return cls(
+                root_id,
+                HumanOrigin(user.name, user.created_at, user.worktree),
+                claim_scope,
+                owner.worktree,
+                owner.goal.captured,
+            )
 
     @property
     def reply_target(self) -> str:
@@ -170,12 +178,13 @@ class HumanInputOrigin(InputOrigin):
         return self
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
-        return (self.claim_scope.incarnation.resolved(snapshot) == owner.incarnation
-                and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
+        return self.claim_scope.incarnation.resolved(snapshot) == owner.incarnation and (
+            self.project,
+            self.goal,
+        ) == (owner.worktree, owner.goal.captured)
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""
         authorized = self.claim_scope.incarnation.require_recorded()
         original = incarnation.require_recorded()
-        return (recorded_name == authorized.name
-                and authorized.created_at == original.created_at)
+        return recorded_name == authorized.name and authorized.created_at == original.created_at

@@ -202,14 +202,40 @@ class RestartEnvironment(EnvironmentRecord):
     stay in /proc and are read only from the exact selected process at execution.
     """
 
-    home: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("HOME")] = field(default=None)
-    path: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PATH"), field_codec.RuntimeScope(True)] = field(default=None)
-    pythonpath: typing.Annotated[ImportPath, field_codec.WireOmitDefault(True), field_codec.WireName("PYTHONPATH"), field_codec.RuntimeScope(True)] = field(default_factory=NoImportPath)
-    virtual_env: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("VIRTUAL_ENV"), field_codec.RuntimeScope(True)] = field(default=None)
-    config: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("XDG_CONFIG_HOME")] = field(default=None)
+    home: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("HOME")
+    ] = field(default=None)
+    path: typing.Annotated[
+        str | None,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("PATH"),
+        field_codec.RuntimeScope(True),
+    ] = field(default=None)
+    pythonpath: typing.Annotated[
+        ImportPath,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("PYTHONPATH"),
+        field_codec.RuntimeScope(True),
+    ] = field(default_factory=NoImportPath)
+    virtual_env: typing.Annotated[
+        str | None,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("VIRTUAL_ENV"),
+        field_codec.RuntimeScope(True),
+    ] = field(default=None)
+    config: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("XDG_CONFIG_HOME")
+    ] = field(default=None)
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
-    native_config: Annotated[Path, PathText, field_codec.WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"), field_codec.NativeScope(True)] = field(default=default_agent_directory)
-    agent_directory: Annotated[Path, PathText, field_codec.WireName("PI_CODING_AGENT_DIR"), field_codec.NativeScope(True)] = field(default=default_agent_directory)
+    native_config: Annotated[
+        Path,
+        PathText,
+        field_codec.WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"),
+        field_codec.NativeScope(True),
+    ] = field(default=default_agent_directory)
+    agent_directory: Annotated[
+        Path, PathText, field_codec.WireName("PI_CODING_AGENT_DIR"), field_codec.NativeScope(True)
+    ] = field(default=default_agent_directory)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
@@ -306,11 +332,29 @@ class ThreadLaunch(EnvironmentRecord):
 
     name: typing.Annotated[str, field_codec.WireName("AGENT_COMMS_THREAD")]
     worktree: typing.Annotated[str, field_codec.WireName("PI_WORKTREE")]
-    tags: Annotated[frozenset[str], TagListText, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_TAGS")] = field(default=frozenset())
-    parent: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_PARENT_ID")] = field(default=None)
-    task: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_TASK")] = field(default=None)
-    managed: Annotated[bool, FlagText, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_MANAGED")] = field(default=False)
-    startup_input: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("AGENT_COMMS_STARTUP_INPUT_KEY")] = field(default=None)
+    tags: Annotated[
+        frozenset[str],
+        TagListText,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("AGENT_COMMS_TAGS"),
+    ] = field(default=frozenset())
+    parent: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_PARENT_ID")
+    ] = field(default=None)
+    task: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("PI_TASK")
+    ] = field(default=None)
+    managed: Annotated[
+        bool,
+        FlagText,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("AGENT_COMMS_MANAGED"),
+    ] = field(default=False)
+    startup_input: typing.Annotated[
+        str | None,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("AGENT_COMMS_STARTUP_INPUT_KEY"),
+    ] = field(default=None)
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:

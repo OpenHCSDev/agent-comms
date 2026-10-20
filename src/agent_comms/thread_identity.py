@@ -119,9 +119,14 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
         canonical = self.resolved(snapshot)
-        return (canonical, *(canonical.renamed(alias)
-                             for alias, name in snapshot.aliases.items()
-                             if name == canonical.name))
+        return (
+            canonical,
+            *(
+                canonical.renamed(alias)
+                for alias, name in snapshot.aliases.items()
+                if name == canonical.name
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -259,13 +264,18 @@ class ThreadProvenance:
     created_at: typing.Annotated[float, field_codec.WireRequired(True)]
     session_file: str | None = None
     title: str | None = None
-    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True)] = field(default_factory=AgentBackend.for_new_threads)
+    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True)] = field(
+        default_factory=AgentBackend.for_new_threads
+    )
 
     @cached_property
     def runtime(self) -> RuntimeLocation:
         """The codec decoded both stored fields; their record owns this binding."""
-        return (self.backend.unstarted_type(self.backend) if self.session_file is None
-                else self.backend.location_type(self.session_file))
+        return (
+            self.backend.unstarted_type(self.backend)
+            if self.session_file is None
+            else self.backend.location_type(self.session_file)
+        )
 
     @property
     def display_title(self) -> str:
@@ -366,7 +376,10 @@ class ClaimedIdentity:
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
-        return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
+        return (
+            self.incarnation == previous.incarnation
+            and self.claimed_generation >= previous.claimed_generation
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,13 +402,19 @@ class TurnFence:
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
-        return replace(self, identity=replace(
-            self.identity, incarnation=replace(self.identity.incarnation, name=name)
-        ))
+        return replace(
+            self,
+            identity=replace(
+                self.identity, incarnation=replace(self.identity.incarnation, name=name)
+            ),
+        )
 
     def can_attest(self, claim_scope: int) -> bool:
-        return (self.identity.generation > 0 and self.claimed_generation > 0
-                and self.claimed_generation == claim_scope)
+        return (
+            self.identity.generation > 0
+            and self.claimed_generation > 0
+            and self.claimed_generation == claim_scope
+        )
 
     def __eq__(self, other: object) -> bool:
         """Lease and finished observations share the same turn identity."""
@@ -487,8 +506,12 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
     @classmethod
     @abstractmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         """Only a human recipient's display records a read."""
 
@@ -549,8 +572,12 @@ class AgentThreadRole(ThreadRole):
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return ()
 
@@ -616,8 +643,12 @@ class UserThreadRole(ThreadRole):
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 
@@ -640,5 +671,3 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def user_task_facts(cls, message: Message) -> Iterable[object]:
         return message.task.user_task_facts(message)
-
-

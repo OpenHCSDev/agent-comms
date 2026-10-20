@@ -98,8 +98,10 @@ class OwnerRestartSelection:
             raise RelationViolationError("Selected source owner interpreter is unavailable")
         platform.require(process)
         return cls(
-            snapshot.owner_identity(owner.name), process,
-            snapshot.claimed_generations[owner.name], interpreter,
+            snapshot.owner_identity(owner.name),
+            process,
+            snapshot.claimed_generations[owner.name],
+            interpreter,
         )
 
     @classmethod
@@ -145,6 +147,7 @@ class OwnerStartResult(CliResult, ToolResult):
 
 class OwnerRelease(ABC):
     """An exact release or its absence; neither grants permission to replay."""
+
     @abstractmethod
     def current(self, snapshot, expected, claim_scope) -> bool: ...
     @abstractmethod
@@ -172,7 +175,10 @@ class ReleasedOwner(ThreadIncarnationRecord):
         return self.process_identity.require(f"Thread {self.name!r} has no released process")
 
     def matches(self, expected: Thread) -> bool:
-        return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
+        return (
+            self.incarnation() == expected.incarnation
+            and self.process_identity == expected.process_identity
+        )
 
 
 @dataclass(frozen=True)
@@ -188,10 +194,14 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
     def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
         if self.before != claim_scope or not self.matches(expected):
             return False
-        if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
+        if not self.incarnation().current(snapshot) or not self.matches(
+            snapshot.require(self.name)
+        ):
             return False
-        return self.after == snapshot.claimed_generations[self.name] and snapshot.status(self.name).stopped
-
+        return (
+            self.after == snapshot.claimed_generations[self.name]
+            and snapshot.status(self.name).stopped
+        )
 
     def require_native_loss(self, snapshot, source) -> None:
         """A recorded release confirms only its exact dead process and input generation.
@@ -228,7 +238,9 @@ class OwnerReleaseStore(ThreadOwnedState, TypedStore):
     def record(self, thread: Thread, before: int, after: int) -> None:
         thread.turn_record.read().require_idle()
         with self.writing() as db:
-            OwnerReleaseEvidence(thread.name, thread.created_at, thread.process_identity, before, after).upsert(db)
+            OwnerReleaseEvidence(
+                thread.name, thread.created_at, thread.process_identity, before, after
+            ).upsert(db)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         with self.writing() as db:
@@ -249,8 +261,14 @@ class OwnerLifecycle:
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus,
-                 goals: Goals, messaging: Messaging):
+    def __init__(
+        self,
+        root: Path,
+        registry: Registration,
+        bus: MessageBus,
+        goals: Goals,
+        messaging: Messaging,
+    ):
         self.root = root
         self.registry = registry
         self.bus = bus
@@ -298,9 +316,9 @@ class OwnerLifecycle:
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
             if orders:
-                identities = ", ".join(sorted({
-                    order.id for todo in orders for order in todo.order.declarations
-                }))
+                identities = ", ".join(
+                    sorted({order.id for todo in orders for order in todo.order.declarations})
+                )
                 # All start paths borrow the outer lock's existing release lifetime,
                 # including retained handoffs and parent reservation before child acquire.
                 StoreLock.current_release().callback(self._announce_restart, owned.name, identities)
@@ -309,15 +327,23 @@ class OwnerLifecycle:
     def _announce_restart(self, name: str, identities: str) -> None:
         """Publish once after the outer physical locks and their borrowed scopes end."""
         CommanderHeartbeat.register(self.registry)
-        self.messaging.send(CommanderHeartbeat.sender, name,
-            f"Restarted holding {identities}; continue them from your branch")
+        self.messaging.send(
+            CommanderHeartbeat.sender,
+            name,
+            f"Restarted holding {identities}; continue them from your branch",
+        )
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
+        self,
+        name: str,
+        *,
+        agent_bin: str = NativeArguments.default_binary,
         agent_args: Sequence[str] | None = None,
     ) -> Thread:
-        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
-              _store_lock(self._wire_lock_path)):
+        with (
+            self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
+            _store_lock(self._wire_lock_path),
+        ):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
@@ -328,15 +354,18 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args,
-                                                 launch_runtime=LaunchRuntime.running())
+                else self._launch_owner_unlocked(
+                    thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running()
+                )
             )
 
     def start(
         self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
     ) -> OwnerStartResult:
-        with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
-              _store_lock(self._wire_lock_path)):
+        with (
+            self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
+            _store_lock(self._wire_lock_path),
+        ):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
@@ -350,7 +379,9 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
+                thread,
+                NativeArguments.configured_binary(agent_bin),
+                agent_args,
                 launch_runtime=LaunchRuntime.running(),
             )
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
@@ -369,7 +400,9 @@ class OwnerLifecycle:
         """Choose this runtime's reviewed native entrypoint for a private handoff."""
         return self.launch_authority.restart_entrypoint(source_binary, runtime)
 
-    def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
+    def restart_environment(
+        self, environment: Mapping[str, str], runtime: LaunchRuntime
+    ) -> dict[str, str]:
         """Project the launch authority into the target runtime policy."""
         result = runtime.environment(environment)
         # The source owner's root is this launch's; the target derives the rest.
@@ -395,9 +428,11 @@ class OwnerLifecycle:
         from .owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
+            tuple(names) if names is not None else None,
+            agent_bin,
             tuple(agent_args) if agent_args is not None else None,
-            expected, runtime,
+            expected,
+            runtime,
         )
         return cutover.restart(self, request)
 
@@ -409,9 +444,13 @@ class OwnerLifecycle:
 
     def _stop_processes(self, owners: Sequence[tuple[Thread, int]]) -> None:
         """Retire every owner's process together, each signalled under its own guard."""
-        stops = tuple((ObservedProcess(thread.require_process()),
-                       partial(self._signal_guard, thread, generation))
-                      for thread, generation in owners)
+        stops = tuple(
+            (
+                ObservedProcess(thread.require_process()),
+                partial(self._signal_guard, thread, generation),
+            )
+            for thread, generation in owners
+        )
         try:
             SynchronousProcess.stop_together(stops)
         except ProcessLookupError:
@@ -430,10 +469,7 @@ class OwnerLifecycle:
                 thread.process_identity.allows_inactive_stop()
             ):
                 return None
-            if (
-                snapshot.status(thread.name).active
-                and thread.process_identity.runs_here()
-            ):
+            if snapshot.status(thread.name).active and thread.process_identity.runs_here():
                 if ThreadLaunch.called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,
@@ -445,8 +481,11 @@ class OwnerLifecycle:
             return thread, snapshot.claimed_generations[thread.name]
 
     def stop(self, *names: str) -> None:
-        owners = tuple(owner for name in dict.fromkeys(names)
-                       if (owner := self._stop_selection(name)) is not None)
+        owners = tuple(
+            owner
+            for name in dict.fromkeys(names)
+            if (owner := self._stop_selection(name)) is not None
+        )
         # A process may already be dead. It still needs the exact release
         # acknowledgement before the execution owner can settle its attempted input.
         self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
@@ -500,8 +539,12 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
-                 *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
+                (
+                    str(launch_runtime.interpreter),
+                    "-m",
+                    "agent_comms.worker",
+                    *LaunchRoot.from_path(self.launch_authority.child_root).arguments(),
+                ),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
@@ -553,4 +596,6 @@ class OwnerLifecycle:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        self.releases.record(after.threads[thread.name], before, after.claimed_generations[thread.name])
+        self.releases.record(
+            after.threads[thread.name], before, after.claimed_generations[thread.name]
+        )

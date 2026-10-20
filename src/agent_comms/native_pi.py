@@ -157,11 +157,15 @@ class NativePiOperationFailed(NativePiUnavailable):
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     from .active_route import ActiveRoute, resolve_comms_route
+
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
-        package, tuple(sys.argv[1:]), Path.cwd(), environment,
+        package,
+        tuple(sys.argv[1:]),
+        Path.cwd(),
+        environment,
         RestartEnvironment.inherit(environment),
         LaunchRuntime.running(),
     )
@@ -172,15 +176,24 @@ def main() -> int:
 @dataclass(frozen=True, slots=True)
 class NativeContextRecord(NativeInputCommit):
     """Native context facts extend the original committed input declaration."""
-    request_generation: typing.Annotated[int, field_codec.WireName("requestGeneration"), Column(
-                primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
-            )]
-    llm_context_digest: typing.Annotated[str, field_codec.WireName("llmContextDigest"), Column(
-                check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
-            )]
+
+    request_generation: typing.Annotated[
+        int,
+        field_codec.WireName("requestGeneration"),
+        Column(primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"),
+    ]
+    llm_context_digest: typing.Annotated[
+        str,
+        field_codec.WireName("llmContextDigest"),
+        Column(check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"),
+    ]
     # The native writer stamps the moment this context was committed for a
     # model request: the time the input was shown to the model.
-    committed_at_ms: typing.Annotated[int, field_codec.WireName("committedAtMs"), Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991")]
+    committed_at_ms: typing.Annotated[
+        int,
+        field_codec.WireName("committedAtMs"),
+        Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+    ]
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -190,8 +203,9 @@ class NativeContextRecord(NativeInputCommit):
         read must independently corroborate the same complete located record.
         """
         emitted = FieldCodec.encode(context_event)
-        record = FieldCodec.decode(cls, {key: emitted[key]
-                                         for _, key in FieldCodec.record_fields(cls)})
+        record = FieldCodec.decode(
+            cls, {key: emitted[key] for _, key in FieldCodec.record_fields(cls)}
+        )
         if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
             raise NativePiUnavailable("Native Pi context names another original input")
         if record.input_commit != input_event.input_commit:
@@ -254,8 +268,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return {
             "objects": cls.schema_objects(),
             "columns": [
-                {"name": plan.name, "wire": plan.key}
-                for plan in FieldCodec.field_plans(cls)
+                {"name": plan.name, "wire": plan.key} for plan in FieldCodec.field_plans(cls)
             ],
             "insert": cls.insertion_statement(),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
@@ -277,9 +290,11 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         path = NativeSessionFiles(Path(session_file)).input_proof
         with ExitStack() as ownership:
             try:
-                held = ownership.enter_context(closing(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
-                ))
+                held = ownership.enter_context(
+                    closing(
+                        os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+                    )
+                )
                 before = os.fstat(held.fileno())
                 NativeSessionFileRole.require(before)
                 db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
@@ -320,7 +335,11 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return next(iter(rows), None)
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, entry: NativeEntry, *,
+        self,
+        session_file: Path,
+        header: SessionEntry,
+        entry: NativeEntry,
+        *,
         session_entry_start: int,
     ) -> NativeContextProof:
         if self.session_id != header.id or self.session_entry_id != entry.id:
@@ -342,15 +361,24 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
         """
         if self.input_id != input_id:
             return False
-        return self.read_evidence(
-            self.session_file, input_id,
-            request_generation=self.request_generation, evidence=evidence,
-            session_entry_start=self.session_entry_start,
-        ) == self
+        return (
+            self.read_evidence(
+                self.session_file,
+                input_id,
+                request_generation=self.request_generation,
+                evidence=evidence,
+                session_entry_start=self.session_entry_start,
+            )
+            == self
+        )
 
     @classmethod
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
+        cls,
+        session_file: Path,
+        input_id: str,
+        *,
+        request_generation: int | None = None,
         evidence: NativeEvidenceRead | None = None,
         session_entry_start: int,
     ) -> NativeContextProof:
@@ -364,17 +392,26 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
             if row is None:
                 raise NativePiUnavailable("The input has no assembled-context proof")
-            location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
-                                           session_entry_start=session_entry_start)
+            location = NativeInputLocation(
+                input_id,
+                row.session_id,
+                row.session_entry_id,
+                session_entry_start=session_entry_start,
+            )
             entry = evidence.read_input(location)
-            return row.corroborate(session_file, evidence.header(), entry,
-                                   session_entry_start=session_entry_start)
+            return row.corroborate(
+                session_file, evidence.header(), entry, session_entry_start=session_entry_start
+            )
+
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
     def __init__(
-        self, detail: str, context: NativeContextProof, model: SelectedModel,
+        self,
+        detail: str,
+        context: NativeContextProof,
+        model: SelectedModel,
         failure: TurnFailure,
     ):
         super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
@@ -391,9 +428,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
             detail,
             flags=re.IGNORECASE,
         )
-        self.public_message = (
-            f"{model.qualified}: {match.group(1) if match else 'request failed'}."
-        )
+        self.public_message = f"{model.qualified}: {match.group(1) if match else 'request failed'}."
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,7 +459,12 @@ class NativePiRpcLaunch:
 
     @classmethod
     def bootstrap(
-        cls, package: VerifiedNativePackage, arguments, cwd, environment, configuration: RestartEnvironment,
+        cls,
+        package: VerifiedNativePackage,
+        arguments,
+        cwd,
+        environment,
+        configuration: RestartEnvironment,
         runtime: LaunchRuntime,
     ):
         """Encode the held launch configuration at the native process boundary."""
@@ -438,18 +478,32 @@ class NativePiRpcLaunch:
         env.update(configuration.encode_native())
         argv = (
             *package.node("agent-comms-project-bootstrap.mjs"),
-            *arguments, "--append-system-prompt", str(instructions),
+            *arguments,
+            "--append-system-prompt",
+            str(instructions),
         )
         return argv, env
 
     @classmethod
     def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
         argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
-        return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
+        return cls(
+            argv,
+            cwd,
+            env,
+            session,
+            package,
+            root=root,
+            configuration=configuration,
+            runtime=runtime,
+        )
 
     @classmethod
     def _command_selection(
-        cls, command: str, runtime: LaunchRuntime, package: VerifiedNativePackage,
+        cls,
+        command: str,
+        runtime: LaunchRuntime,
+        package: VerifiedNativePackage,
     ):
         """Decode the original launcher selection without acquiring its package.
 
@@ -471,7 +525,10 @@ class NativePiRpcLaunch:
 
     @classmethod
     def package_for_command(
-        cls, command: str, runtime: LaunchRuntime, root: Path | str | None = None,
+        cls,
+        command: str,
+        runtime: LaunchRuntime,
+        root: Path | str | None = None,
     ) -> VerifiedNativePackage:
         """Acquire the original reviewed artifact before any new native execution.
 
@@ -485,7 +542,12 @@ class NativePiRpcLaunch:
 
     @classmethod
     def catalog(
-        cls, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, worktree: Path,
+        cls,
+        command: str,
+        arguments: tuple[str, ...],
+        *,
+        package: VerifiedNativePackage,
+        worktree: Path,
         root: Path | str | None = None,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
@@ -505,8 +567,15 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
-            "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime, cwd)
+        return cls._managed(
+            package,
+            (*arguments, "--no-extensions", "--no-skills", "--no-context-files", "--no-session"),
+            cwd,
+            None,
+            SelectedSession(cwd),
+            runtime,
+            cwd,
+        )
 
     @classmethod
     def managed(
@@ -550,12 +619,20 @@ class NativePiRpcLaunch:
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(
+            package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root
+        )
 
     def retained_managed(
-        self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
+        self,
+        command: str,
+        arguments: tuple[str, ...],
+        *,
+        worktree: Path,
+        root: Path,
         directory: Path,
-        environment: dict[str, str] | None, session_file: str | None,
+        environment: dict[str, str] | None,
+        session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
@@ -567,9 +644,15 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if (saved, directory) != (self.session.path, self.session.directory):
             return None
-        return self._managed(self.package,
+        return self._managed(
+            self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
-            worktree, environment, self.session, self.runtime, root)
+            worktree,
+            environment,
+            self.session,
+            self.runtime,
+            root,
+        )
 
     @classmethod
     def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
@@ -621,7 +704,9 @@ class NativePiRpcLaunch:
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
+        return cls._build(
+            package, tuple(arguments), worktree, env, session, configuration, runtime, root
+        )
 
 
 def _read_private_file(path: Path):
@@ -825,8 +910,8 @@ class PrivateEvidenceRead:
         """Seek to a recorded boundary after checking the original source revision."""
         FieldCodec.decode(int, offset)
         size, revision = self._capture_append()
-        if not 0 < offset < size or os.pread(self.stream.fileno(), 1, offset - 1) != b'\n':
-            raise NativePiUnavailable('Native input byte offset is not a complete source boundary')
+        if not 0 < offset < size or os.pread(self.stream.fileno(), 1, offset - 1) != b"\n":
+            raise NativePiUnavailable("Native input byte offset is not a complete source boundary")
         self._commit_snapshot(size, revision)
         self.decoded_through = offset
 
@@ -891,7 +976,9 @@ def _private_session_dir(directory: Path) -> None:
     try:
         TrustedAncestorRole.require_path(directory)
     except ValueError as error:
-        raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
+        raise NativePiUnavailable(
+            f"Native Pi session directory has unsafe ancestor: {error}"
+        ) from error
     if PrivateDirectoryRole.violation(directory.lstat()) is not None:
         raise NativePiUnavailable("Native Pi session directory must be owner-only")
 
@@ -964,13 +1051,15 @@ def _verify_context(
     session_id: str,
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,
-    *, evidence: NativeEvidenceRead | None = None,
+    *,
+    evidence: NativeEvidenceRead | None = None,
 ) -> NativeContextProof:
     from .native_entries import NativeInputEvidenceRead
 
     try:
-        emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(
-            session_file, session_entry_start=input_event.session_entry_start)
+        emitted = NativeContextRecord.from_events(
+            input_id, session_id, input_event, context_event
+        ).at(session_file, session_entry_start=input_event.session_entry_start)
     except MalformedRecord as error:
         raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:

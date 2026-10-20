@@ -68,7 +68,9 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
         object.__setattr__(self, "name", name)
         if self.parent is not None:
             object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
-        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
+        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(
+            ThreadSort
+        ):
             raise ValueError("Channel ordering must be a declared ThreadSort.")
         if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
             raise ValueError("Channel presentation flags must be boolean.")
@@ -130,7 +132,9 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
         return ()
 
     @abstractmethod
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
+    def membership_changes(
+        self, before: frozenset[str], after: frozenset[str]
+    ) -> tuple[MembershipChange, ...]: ...
 
     def pending_count(self, counts: dict[str, int]) -> int:
         return sum(self.history_scope().target_values(counts))
@@ -192,7 +196,9 @@ class MembershipChannel:
     def read_only(self) -> bool:
         return False
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+    def membership_changes(
+        self, before: frozenset[str], after: frozenset[str]
+    ) -> tuple[MembershipChange, ...]:
         previous, current = self.matches(before), self.matches(after)
         if previous == current:
             return ()
@@ -275,7 +281,9 @@ class ReadOnlyChannel(NonRoutableChannel):
     def read_only(self) -> bool:
         return True
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+    def membership_changes(
+        self, before: frozenset[str], after: frozenset[str]
+    ) -> tuple[MembershipChange, ...]:
         return ()
 
 

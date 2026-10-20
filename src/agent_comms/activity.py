@@ -55,8 +55,9 @@ class ThreadOutput(ABC):
     def activity_thread(self) -> str: ...
 
     def enter(self, phase: TurnPhase) -> None:
-        self.agents.set_activity(self.activity_thread, phase.activity_state,
-                                 " ".join(phase.activity_detail.split()))
+        self.agents.set_activity(
+            self.activity_thread, phase.activity_state, " ".join(phase.activity_detail.split())
+        )
 
 
 class ActivityState(Enum):
@@ -196,6 +197,7 @@ class DiagnosticDrainReadiness(DrainReadiness):
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
+
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)
@@ -210,12 +212,14 @@ class ActivityData:
     thread: str
     state: ActivityState
     detail: str = ""
-    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireRequired(True)] = field(default_factory=time.time)
+    timestamp: typing.Annotated[
+        float, field_codec.WireName("ts"), field_codec.WireRequired(True)
+    ] = field(default_factory=time.time)
 
     @classmethod
     def format_detail(cls, detail: str) -> str:
         """Bound new status text; stored records still use strict construction."""
-        return detail if len(detail) <= cls.detail_limit else detail[:cls.detail_limit - 1] + "…"
+        return detail if len(detail) <= cls.detail_limit else detail[: cls.detail_limit - 1] + "…"
 
     def with_status(self, state: ActivityState, detail: str) -> Self:
         """Project current status without changing this activity's provenance."""
@@ -241,7 +245,9 @@ class ActivityData:
 class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
-    diagnostic: typing.Annotated[DrainDiagnostic | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    diagnostic: typing.Annotated[DrainDiagnostic | None, field_codec.WireOmitDefault(True)] = field(
+        default=None
+    )
 
     @classmethod
     def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:
@@ -273,13 +279,19 @@ class ObservedActivity(ActivityData):
 
     @classmethod
     def acquire(cls, event: Activity, owner: OwnerIdentity) -> ObservedActivity:
-        return cls(event.thread, event.state, event.detail, event.timestamp,
-                   readiness=DrainReadiness.acquire(event.diagnostic, owner))
+        return cls(
+            event.thread,
+            event.state,
+            event.detail,
+            event.timestamp,
+            readiness=DrainReadiness.acquire(event.diagnostic, owner),
+        )
 
     def source_event(self) -> Activity:
         """Write through the original event boundary; never persist a second state."""
-        return Activity(self.thread, self.state, self.detail, self.timestamp,
-                        self.readiness.source_diagnostic())
+        return Activity(
+            self.thread, self.state, self.detail, self.timestamp, self.readiness.source_diagnostic()
+        )
 
     def presentation(self, title: str) -> ThreadPresentation:
         """An acquired activity can also be presented independently of a thread view."""
@@ -292,6 +304,7 @@ class ActivitySnapshot:
 
     checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
     latest: Mapping[str, Activity] = field(default_factory=dict)
+
 
 @dataclass(slots=True)
 class ActivityReadState:
@@ -365,9 +378,9 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
         the log unchanged; an append cannot overtake its own comparison.
         """
         with self._writing() as snapshot:
-            event = transition(self._observed(
-                thread, snapshot.latest, active=True, now=time.time()
-            ))
+            event = transition(
+                self._observed(thread, snapshot.latest, active=True, now=time.time())
+            )
             if event is None:
                 return False
             _append_jsonl(self._path, FieldCodec.encode(event))
@@ -377,17 +390,14 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
         """Latest activity for one thread; idle when stale or unknown."""
         return self._observed(thread, self._read_snapshot().latest, active=active, now=time.time())
 
-    def _observed(self, thread: str, events: Mapping[str, Activity], *,
-                  active: bool, now: float) -> Activity:
+    def _observed(
+        self, thread: str, events: Mapping[str, Activity], *, active: bool, now: float
+    ) -> Activity:
         if thread not in events:
             # Reading an absent event must never mint an actual-event timestamp.
             return Activity.absent(thread)
         latest = events[thread]
-        if (
-            latest.diagnostic is None
-            and not active
-            and now - latest.timestamp > self._stale_after
-        ):
+        if latest.diagnostic is None and not active and now - latest.timestamp > self._stale_after:
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
@@ -396,13 +406,15 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
         latest = self._read_snapshot().latest
         return self._current_for(latest, latest, active)
 
-    def current_for(self, threads: Iterable[str], *,
-                    active: frozenset[str] = frozenset()) -> dict[str, Activity]:
+    def current_for(
+        self, threads: Iterable[str], *, active: frozenset[str] = frozenset()
+    ) -> dict[str, Activity]:
         """Latest activity for the selected thread names, including absent ones."""
         return self._current_for(threads, self._read_snapshot().latest, active)
 
-    def _current_for(self, threads: Iterable[str], events: Mapping[str, Activity],
-                     active: frozenset[str]) -> dict[str, Activity]:
+    def _current_for(
+        self, threads: Iterable[str], events: Mapping[str, Activity], active: frozenset[str]
+    ) -> dict[str, Activity]:
         now = time.time()
         return {
             thread: self._observed(thread, events, active=thread in active, now=now)
@@ -421,7 +433,9 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
                     revision = FileRevision.from_stat(os.fstat(stream.fileno()))
                     if started_from.checkpoint.current_at(revision):
                         return started_from
-                    checkpoint = started_from.checkpoint.prepare(self.checkpoint).validated(revision, stream)
+                    checkpoint = started_from.checkpoint.prepare(self.checkpoint).validated(
+                        revision, stream
+                    )
                     complete = {}
                     offset = checkpoint.restore_into(complete)
                     latest = complete
@@ -434,14 +448,12 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
                         if line := raw.strip():
                             try:
                                 record = json.loads(line)
-                            except (json.JSONDecodeError, UnicodeDecodeError):
+                            except json.JSONDecodeError, UnicodeDecodeError:
                                 if not terminated:
                                     break
                                 raise
                             if not isinstance(record, Mapping):
-                                raise ValueError(
-                                    f"JSONL record in {self._path} must be an object."
-                                )
+                                raise ValueError(f"JSONL record in {self._path} must be an object.")
                             event = Activity.from_wire(record)
                             if terminated:
                                 event.fold_into(complete)
@@ -477,7 +489,9 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
     def rename_thread(self, old_name: str, new_name: str) -> None:
         with self._writing():
             events = (Activity.from_wire(record) for record in _jsonl_records(self._path))
-            renamed = (replace(event, thread=new_name) if event.thread == old_name else event
-                       for event in events)
+            renamed = (
+                replace(event, thread=new_name) if event.thread == old_name else event
+                for event in events
+            )
             text = "".join(f"{json.dumps(FieldCodec.encode(event))}\n" for event in renamed)
             _atomic_write_text(self._path, text)

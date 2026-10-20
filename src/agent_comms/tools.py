@@ -253,22 +253,34 @@ class VisibleCollaborator:
 @dataclass(frozen=True)
 class CollaborationList(ToolResult):
     """Goal-derived collaborators and unresolved mentions appear only when present."""
+
     collaborations: tuple[Collaboration, ...]
-    visible_collaborators: typing.Annotated[tuple[VisibleCollaborator, ...], field_codec.WireOmitDefault()] = dataclasses.field(default=())
-    unresolved_goal_mentions: typing.Annotated[tuple[GoalMentionDiagnostic, ...], field_codec.WireOmitDefault()] = dataclasses.field(default=())
+    visible_collaborators: typing.Annotated[
+        tuple[VisibleCollaborator, ...], field_codec.WireOmitDefault()
+    ] = dataclasses.field(default=())
+    unresolved_goal_mentions: typing.Annotated[
+        tuple[GoalMentionDiagnostic, ...], field_codec.WireOmitDefault()
+    ] = dataclasses.field(default=())
 
 
 @dataclass(frozen=True)
 class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
+
     id: str
     message: SentTranscript
     correction: CorrectionResult
-    agent_comms_kind: typing.Annotated[Literal["published_message"], field_codec.WireName("agentCommsKind")] = field(default="published_message")
+    agent_comms_kind: typing.Annotated[
+        Literal["published_message"], field_codec.WireName("agentCommsKind")
+    ] = field(default="published_message")
 
     @classmethod
     def from_send(cls, result: SendResult) -> MessagePublished:
-        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
+        return cls(
+            result.message.message_id,
+            SentTranscript.from_message(result.message),
+            result.correction,
+        )
 
 
 @dataclass(frozen=True)
@@ -281,11 +293,14 @@ class TaskPublished(ToolResult):
 @dataclass(frozen=True)
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
+
     messages: tuple[Message, ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
-    standby_review: typing.Annotated[StandbyReview | None, field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    standby_review: typing.Annotated[StandbyReview | None, field_codec.WireOmitDefault()] = (
+        dataclasses.field(default=None)
+    )
 
 
 @dataclass(frozen=True)
@@ -323,7 +338,8 @@ def tool_field(
     choices=None,
 ) -> tuple[field_codec.FieldDirective, ...]:
     directives: list[field_codec.FieldDirective] = [
-        field_codec.Description(description), field_codec.DefaultNonNull(),
+        field_codec.Description(description),
+        field_codec.DefaultNonNull(),
     ]
     if wire_name is not None:
         directives.append(field_codec.WireName(wire_name))
@@ -339,8 +355,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     description: ClassVar[str]
-    bus_effect: ClassVar[str] = ("Changes the bus. Tristan has authorized claude-ai "
-                                 "to call this without asking him.")
+    bus_effect: ClassVar[str] = (
+        "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
+    )
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
@@ -374,8 +391,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     def cli_command(self, caller: ToolCaller) -> InvokeCliCommand:
         """Project this declaration into Core's existing external tool command."""
-        return InvokeCliCommand(caller=caller.acting_name(''),
-                                tool=self.declared_name, arguments=self.arguments)
+        return InvokeCliCommand(
+            caller=caller.acting_name(""), tool=self.declared_name, arguments=self.arguments
+        )
 
     @classmethod
     def invoke(
@@ -385,7 +403,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
+            request = FieldCodec.decode(
+                cls, {**arguments, cls.family_discriminator: cls.declared_name}
+            )
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
@@ -417,7 +437,9 @@ class ReadTool:
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadReadTool(ReadTool, ToolRequest):
-    thread: typing.Annotated[str, *tool_field("Thread to read; omit to read your own")] = dataclasses.field(default="")
+    thread: typing.Annotated[str, *tool_field("Thread to read; omit to read your own")] = (
+        dataclasses.field(default="")
+    )
 
 
 class ThreadToolRequest(ToolRequest[ThreadCaller]):
@@ -470,10 +492,17 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         "Optionally change its thinking level and provider service tier too. Applies "
         "from that thread's next turn."
     )
-    thread: typing.Annotated[str | None, *tool_field("Thread to change (defaults to the executing thread)", binding=SubjectBinding)] = dataclasses.field(default=None)
+    thread: typing.Annotated[
+        str | None,
+        *tool_field("Thread to change (defaults to the executing thread)", binding=SubjectBinding),
+    ] = dataclasses.field(default=None)
     model: typing.Annotated[str, *tool_field("Provider/model identifier")]
-    thinking_level: typing.Annotated[str, *tool_field("Optional Pi thinking level", choices=ThinkingLevel.names)] = dataclasses.field(default="")
-    service_tier: typing.Annotated[ServiceTier | None, *tool_field("Optional provider request service tier")] = dataclasses.field(default=None)
+    thinking_level: typing.Annotated[
+        str, *tool_field("Optional Pi thinking level", choices=ThinkingLevel.names)
+    ] = dataclasses.field(default="")
+    service_tier: typing.Annotated[
+        ServiceTier | None, *tool_field("Optional provider request service tier")
+    ] = dataclasses.field(default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ModelChanged:
         """Change this thread's model or another thread's model for future turns."""
@@ -514,15 +543,28 @@ class CommsTagsTool(ToolRequest):
         "List, create, rename, or delete tags. Renaming/deleting updates thread "
         "assignments and channel filters. Uncovered tags automatically have a channel."
     )
-    action: typing.Annotated[TagAction, *tool_field("Operation")] = dataclasses.field(default=TagAction.LIST)
+    action: typing.Annotated[TagAction, *tool_field("Operation")] = dataclasses.field(
+        default=TagAction.LIST
+    )
     name: typing.Annotated[str, *tool_field("Tag name")] = dataclasses.field(default="")
-    new_name: typing.Annotated[str, *tool_field("Replacement tag for rename")] = dataclasses.field(default="")
-    disposition: typing.Annotated[TagDisposition, *tool_field("Tagged-thread operation")] = dataclasses.field(default_factory=KeepThreadsTagDisposition)
-    confirmed: typing.Annotated[bool, *tool_field("Confirm thread archiving or deletion")] = dataclasses.field(default=False)
+    new_name: typing.Annotated[str, *tool_field("Replacement tag for rename")] = dataclasses.field(
+        default=""
+    )
+    disposition: typing.Annotated[TagDisposition, *tool_field("Tagged-thread operation")] = (
+        dataclasses.field(default_factory=KeepThreadsTagDisposition)
+    )
+    confirmed: typing.Annotated[bool, *tool_field("Confirm thread archiving or deletion")] = (
+        dataclasses.field(default=False)
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TagList:
-        tags = self.action.apply(comms.channels, self.name, self.new_name,
-                                disposition=self.disposition, confirmed=self.confirmed)
+        tags = self.action.apply(
+            comms.channels,
+            self.name,
+            self.new_name,
+            disposition=self.disposition,
+            confirmed=self.confirmed,
+        )
         return TagList(tuple(sorted(tags)))
 
 
@@ -534,9 +576,15 @@ class CommsThreadTagsTool(ToolRequest):
         "membership and routing update immediately without restarting or creating an "
         "executor."
     )
-    thread: typing.Annotated[str, *tool_field("Thread name or alias")] = dataclasses.field(default="")
-    add: typing.Annotated[str, *tool_field("Comma-separated tags to add")] = dataclasses.field(default="")
-    remove: typing.Annotated[str, *tool_field("Comma-separated tags to remove")] = dataclasses.field(default="")
+    thread: typing.Annotated[str, *tool_field("Thread name or alias")] = dataclasses.field(
+        default=""
+    )
+    add: typing.Annotated[str, *tool_field("Comma-separated tags to add")] = dataclasses.field(
+        default=""
+    )
+    remove: typing.Annotated[str, *tool_field("Comma-separated tags to remove")] = (
+        dataclasses.field(default="")
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTags:
         thread = comms.channels.update_tags(
@@ -554,8 +602,9 @@ class CommsChannelsTool(ReadTool, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
         catalog = comms.channels.catalog.read()
-        return ChannelListing(comms.views.channel_views(), tuple(catalog.saved_views.values()),
-                              catalog.list_order)
+        return ChannelListing(
+            comms.views.channel_views(), tuple(catalog.saved_views.values()), catalog.list_order
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -588,7 +637,8 @@ class CommsSetViewTool(ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SavedView:
         return comms.channels.set_saved_view(
-            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags))))
+            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags)))
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -627,7 +677,10 @@ class CommsSetProjectTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProjectSet:
         result = comms.threads.set_project(caller.name, self.path)
         return ProjectSet(
-            result.thread, result.previous, result.current, result.changed,
+            result.thread,
+            result.previous,
+            result.current,
+            result.changed,
             (
                 (
                     "Project saved. End this turn now; the runtime automatically resumes this same "
@@ -651,7 +704,8 @@ class CommsSetGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalSet:
         return GoalSet(
             comms.goals.update_goal(caller.name, SetGoalAction(text=self.text)),
-            "Persistent goal activated. Work toward it and report progress with comms_goal.")
+            "Persistent goal activated. Work toward it and report progress with comms_goal.",
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -668,12 +722,28 @@ class CommsGoalTool(ThreadToolRequest):
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
     goal_id: typing.Annotated[str, *tool_field("Goal identity provided in the turn context")]
-    status: typing.Annotated[type[TransitionGoalAction], *tool_field("Goal state", choices=GoalAction.model_choices)]
-    progress: typing.Annotated[str, *tool_field("Progress summary; blocked requires a nonempty explicit reason")]
-    wait_for: typing.Annotated[tuple[str, ...] | None, *tool_field("Explicit thread names or @names; required for standby")] = dataclasses.field(default=None)
-    reviewed_inputs: typing.Annotated[tuple[str, ...] | None, *tool_field("Exact unresolved inputId keys inspected and handled for this goal; standby only")] = dataclasses.field(default=None)
-    claims: typing.Annotated[tuple[ProgressClaim, ...], *tool_field("Merged, installed or working claims, each with the artifact Core verifies; "
-        "a completed report needs at least one")] = dataclasses.field(default=())
+    status: typing.Annotated[
+        type[TransitionGoalAction], *tool_field("Goal state", choices=GoalAction.model_choices)
+    ]
+    progress: typing.Annotated[
+        str, *tool_field("Progress summary; blocked requires a nonempty explicit reason")
+    ]
+    wait_for: typing.Annotated[
+        tuple[str, ...] | None, *tool_field("Explicit thread names or @names; required for standby")
+    ] = dataclasses.field(default=None)
+    reviewed_inputs: typing.Annotated[
+        tuple[str, ...] | None,
+        *tool_field(
+            "Exact unresolved inputId keys inspected and handled for this goal; standby only"
+        ),
+    ] = dataclasses.field(default=None)
+    claims: typing.Annotated[
+        tuple[ProgressClaim, ...],
+        *tool_field(
+            "Merged, installed or working claims, each with the artifact Core verifies; "
+            "a completed report needs at least one"
+        ),
+    ] = dataclasses.field(default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
@@ -682,9 +752,14 @@ class CommsGoalTool(ThreadToolRequest):
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
-            **{key: value for key, value in (
-                ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
-            ) if value},
+            **{
+                key: value
+                for key, value in (
+                    ("wait_for", self.wait_for),
+                    ("reviewed_inputs", self.reviewed_inputs),
+                )
+                if value
+            },
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
@@ -749,7 +824,9 @@ class CommsEditGoalTool(ThreadToolRequest):
 class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
-    goal_id: typing.Annotated[str, *tool_field("Optional goal ID; omit for this thread's full history")] = dataclasses.field(default="")
+    goal_id: typing.Annotated[
+        str, *tool_field("Optional goal ID; omit for this thread's full history")
+    ] = dataclasses.field(default="")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
         requested = self.goal_id.strip()
@@ -760,14 +837,19 @@ class CommsGoalHistoryTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoTool(ThreadToolRequest):
     label = "Change problem"
-    description = "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
+    description = (
+        "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
+    )
     problem: typing.Annotated[str, *tool_field("Problem ID")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
-        return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.name))
+        return self.result(
+            comms.goals.change_problem(
+                self.problem, self.operation_for(todo, actor, comms), caller.name
+            )
+        )
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -779,7 +861,9 @@ class CommsTodoTool(ThreadToolRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
-    operation: typing.Annotated[TodoOperation, *tool_field("Typed assignment, strike, release or state command")]
+    operation: typing.Annotated[
+        TodoOperation, *tool_field("Typed assignment, strike, release or state command")
+    ]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         return self.operation
@@ -788,26 +872,39 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
 @dataclass(frozen=True, kw_only=True)
 class CommsVerdictTool(CommsChangeProblemTool):
     label = "Judge order tool call"
-    description = ("Record the commander's verdict on one tool call the holder made for its "
-                   "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
-                   "the holder and revises its Goal in the same write.")
-    operation: typing.Annotated[ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")]
+    description = (
+        "Record the commander's verdict on one tool call the holder made for its "
+        "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
+        "the holder and revises its Goal in the same write."
+    )
+    operation: typing.Annotated[
+        ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
+    ]
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
-    description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
+    description = (
+        "Read original edit calls since each open order, excluding that order's recorded verdicts."
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
-            comms, caller.subject(self.thread)) for edit in read.read()))
+        return UnjudgedEdits(
+            tuple(
+                edit
+                for read in OrderEditsRead.for_commander(comms, caller.subject(self.thread))
+                for edit in read.read()
+            )
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    description = (
+        "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Load:
         return Load.of(comms, caller.subject(self.thread))
@@ -816,8 +913,10 @@ class CommsCommanderLoadTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsFireTool(ThreadToolRequest):
     label = "Fire unit"
-    description = ("Release every open problem the unit holds in one operation, recording one "
-                   "plain reason on each; only their commander may invoke this tool.")
+    description = (
+        "Release every open problem the unit holds in one operation, recording one "
+        "plain reason on each; only their commander may invoke this tool."
+    )
     unit: typing.Annotated[str, *tool_field("Unit thread to fire")]
     reason: typing.Annotated[StrikeReason, *tool_field("What the unit did, plainly")]
 
@@ -828,16 +927,19 @@ class CommsFireTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsCorrectWordingTool(ThreadToolRequest):
     label = "Correct unit wording"
-    description = ("Answer a unit's jargon with a correction naming its open orders; the unit's "
-                   "strikes stay as they are. Only its commander may invoke this tool.")
+    description = (
+        "Answer a unit's jargon with a correction naming its open orders; the unit's "
+        "strikes stay as they are. Only its commander may invoke this tool."
+    )
     unit: typing.Annotated[str, *tool_field("Unit thread whose message used jargon")]
     message_id: typing.Annotated[str, *tool_field("The unit's message")]
     text: typing.Annotated[str, *tool_field("The unit's message text")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
-        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
-                  if todo.holder == self.unit]
+        orders = [
+            todo.id for todo in comms.goals.todos.for_commander(actor) if todo.holder == self.unit
+        ]
         if not orders:
             raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
@@ -845,9 +947,11 @@ class CommsCorrectWordingTool(ThreadToolRequest):
                 f"Message {self.message_id} is plain; there is nothing to correct."
             )
         result = comms.messaging.send(
-            caller.name, self.unit,
+            caller.name,
+            self.unit,
             f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
-            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.")
+            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.",
+        )
         return MessagePublished.from_send(result)
 
 
@@ -860,30 +964,39 @@ class CommsTodoListTool(ThreadReadTool):
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(listed), comms.registry.storage_rule
-        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.holder})
+        return TodoList(
+            listed,
+            {todo.id: OrderProgress.read(todo, storage, pulls) for todo in listed if todo.holder},
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsStandingRulesTool(ThreadToolRequest):
     label = "Read broken standing rules"
-    description = ("Every standing rule the commander breaks now, one line each, derived on read; "
-                   "Core first does what each broken rule does itself.")
-    after: typing.Annotated[float, *tool_field("Only rules broken since this time; 0 lists every one")] = dataclasses.field(default=0.0)
+    description = (
+        "Every standing rule the commander breaks now, one line each, derived on read; "
+        "Core first does what each broken rule does itself."
+    )
+    after: typing.Annotated[
+        float, *tool_field("Only rules broken since this time; 0 lists every one")
+    ] = dataclasses.field(default=0.0)
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
         broken = StandingRule.broken(comms, caller.name)
         for rule in broken:
             rule.enforce(comms, caller.name)
         return StandingRulesRead(
-            tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
+            tuple(rule.line() for rule in broken if rule.broke_after(self.after))
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsRuleReviewTool(ThreadToolRequest):
     label = "Record rule review"
     description = "Record the rules a review drew, or one drawn rule's answer; replies what is due."
-    entry: typing.Annotated[RuleReviewEntry, *tool_field("A drawn review, or the answer to drawn rule n")]
+    entry: typing.Annotated[
+        RuleReviewEntry, *tool_field("A drawn review, or the answer to drawn rule n")
+    ]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
         RuleReviews(comms.root).write(caller.name, self.entry)
@@ -894,13 +1007,18 @@ class CommsRuleReviewTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
-    description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
-    order: typing.Annotated[OrderGoalAction, *tool_field("Problem, request, expected_revision, deadline, commander")]
+    description = (
+        "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
+    )
+    order: typing.Annotated[
+        OrderGoalAction, *tool_field("Problem, request, expected_revision, deadline, commander")
+    ]
     owner: typing.Annotated[str, *tool_field("Assignee thread")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
-        goal = comms.goals.update_goal(self.owner, self.order.bound_to(
-            comms.registry.require(caller.name).incarnation))
+        goal = comms.goals.update_goal(
+            self.owner, self.order.bound_to(comms.registry.require(caller.name).incarnation)
+        )
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 
@@ -908,7 +1026,9 @@ class CommsOrderTool(ThreadToolRequest):
 class CommsTodoCreateTool(CommsOrderTool):
     label = "Create problem"
     description = "Create a problem with its owner, checked order and deadline in one command."
-    order: typing.Annotated[CreateProblemGoalAction, *tool_field("Typed problem creation and order")]
+    order: typing.Annotated[
+        CreateProblemGoalAction, *tool_field("Typed problem creation and order")
+    ]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -916,9 +1036,17 @@ class CommsOrderDoneTool(CommsTodoTool):
     label = "Check delivered order"
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
     order_id: typing.Annotated[str, *tool_field("Exact open order ID")]
-    delivery: typing.Annotated[OrderDelivery, *tool_field("A clean commit delivery or an operation verified by the order's check")]
-    claims: typing.Annotated[tuple[ProgressClaim, ...], *tool_field("Merged, installed or working claims, each with the artifact Core verifies in the order's "
-        "checkout; at least one")]
+    delivery: typing.Annotated[
+        OrderDelivery,
+        *tool_field("A clean commit delivery or an operation verified by the order's check"),
+    ]
+    claims: typing.Annotated[
+        tuple[ProgressClaim, ...],
+        *tool_field(
+            "Merged, installed or working claims, each with the artifact Core verifies in the order's "
+            "checkout; at least one"
+        ),
+    ]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         ProgressClaim.require_claimed(self.claims, "delivered")
@@ -929,10 +1057,14 @@ class CommsOrderDoneTool(CommsTodoTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderCheckTool(CommsTodoTool):
     label = "Correct order check"
-    description = ("Replace the check of an open order, recording the old check, the new one and "
-                   "why; only its commander may invoke this tool, and the order keeps its deadline "
-                   "and strikes.")
-    check: typing.Annotated[OrderCheck, *tool_field("The corrected check: directory, command and expected result")]
+    description = (
+        "Replace the check of an open order, recording the old check, the new one and "
+        "why; only its commander may invoke this tool, and the order keeps its deadline "
+        "and strikes."
+    )
+    check: typing.Annotated[
+        OrderCheck, *tool_field("The corrected check: directory, command and expected result")
+    ]
     why: typing.Annotated[str, *tool_field("Why the recorded check was wrong")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -942,8 +1074,10 @@ class CommsOrderCheckTool(CommsTodoTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderServeTool(CommsTodoTool):
     label = "Name order phase"
-    description = ("Name the plan phase an open order serves; only its commander may invoke this "
-                   "tool, and the order keeps its id, deadline and strikes.")
+    description = (
+        "Name the plan phase an open order serves; only its commander may invoke this "
+        "tool, and the order keeps its id, deadline and strikes."
+    )
     serves: typing.Annotated[type[OrderPhase], *tool_field("The plan phase the order serves")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -953,8 +1087,12 @@ class CommsOrderServeTool(CommsTodoTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsProblemCloseTool(CommsTodoTool):
     label = "Close installed problem"
-    description = "Record installed application evidence and close only a problem with no open order."
-    works: typing.Annotated[str, *tool_field("What worked in the app, quoting the order's application run")]
+    description = (
+        "Record installed application evidence and close only a problem with no open order."
+    )
+    works: typing.Annotated[
+        str, *tool_field("What worked in the app, quoting the order's application run")
+    ]
     artifact: typing.Annotated[str, *tool_field("Existing verification artifact file")]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -968,7 +1106,9 @@ class CommsProblemCloseTool(CommsTodoTool):
 class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    last: typing.Annotated[int, *tool_field("Number of newest turns")] = dataclasses.field(default=LastTurns.count)
+    last: typing.Annotated[int, *tool_field("Number of newest turns")] = dataclasses.field(
+        default=LastTurns.count
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
@@ -977,9 +1117,11 @@ class CommsTurnsTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderStoryTool(ReadTool, ToolRequest):
     label = "Order story"
-    description = ("Read a saved order's dated facts from its Todo, oldest first. "
-                   "Send-back and its implied strike share one reason. "
-                   "Overwritten order bodies cannot be reconstructed.")
+    description = (
+        "Read a saved order's dated facts from its Todo, oldest first. "
+        "Send-back and its implied strike share one reason. "
+        "Overwritten order bodies cannot be reconstructed."
+    )
     order_id: typing.Annotated[str, *tool_field("Immutable order ID")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderStory:
@@ -990,8 +1132,9 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = ("Read one story line for every pending order of this commander, "
-                   "including linked problems.")
+    description = (
+        "Read one story line for every pending order of this commander, including linked problems."
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
@@ -1002,8 +1145,10 @@ class CommsFleetStoryTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderWorkTool(ReadTool, ToolRequest):
     label = "Order work"
-    description = ("Read every tool call the problem's assignee made since its order, newest "
-                   "first, from the unit's own turn records.")
+    description = (
+        "Read every tool call the problem's assignee made since its order, newest "
+        "first, from the unit's own turn records."
+    )
     problem: typing.Annotated[str, *tool_field("Problem ID")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
@@ -1020,7 +1165,9 @@ class CommsThreadsTool(ReadTool, ToolRequest):
         "List agent threads with status and pending counts, plus this caller's "
         "recent sent-message delivery outcomes."
     )
-    active_only: typing.Annotated[bool, *tool_field("Exclude stopped threads")] = dataclasses.field(default=False)
+    active_only: typing.Annotated[bool, *tool_field("Exclude stopped threads")] = dataclasses.field(
+        default=False
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadListing:
         threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
@@ -1035,13 +1182,18 @@ class CommsWorkBranchesTool(ReadTool, ToolRequest):
         "open issue and the threads that have it checked out. Work on a problem must be on "
         "main or on a linked branch; unlinked_only lists the branches breaking that rule."
     )
-    checkout: typing.Annotated[str, *tool_field("Path of a checkout of the repository (its worktrees name owners)")]
-    unlinked_only: typing.Annotated[bool, *tool_field("List only branches with no open PR or issue")] = dataclasses.field(default=True)
+    checkout: typing.Annotated[
+        str, *tool_field("Path of a checkout of the repository (its worktrees name owners)")
+    ]
+    unlinked_only: typing.Annotated[
+        bool, *tool_field("List only branches with no open PR or issue")
+    ] = dataclasses.field(default=True)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> WorkBranchList:
         branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
-        return WorkBranchList(tuple(
-            branch for branch in branches if not (self.unlinked_only and branch.linked)))
+        return WorkBranchList(
+            tuple(branch for branch in branches if not (self.unlinked_only and branch.linked))
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1055,11 +1207,14 @@ class CommsCollaborationTool(ThreadToolRequest):
     )
     action: typing.Annotated[type[RelationshipEdit], *tool_field("Relationship change")]
     peer: typing.Annotated[str, *tool_field("Collaborating agent thread name or alias")]
-    note: typing.Annotated[str, *tool_field("Short description of ongoing work")] = dataclasses.field(default="")
+    note: typing.Annotated[str, *tool_field("Short description of ongoing work")] = (
+        dataclasses.field(default="")
+    )
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> CollaborationEdited:
         return CollaborationEdited(
-            comms.relationships.edit(caller.name, self.action, self.peer, self.note))
+            comms.relationships.edit(caller.name, self.action, self.peer, self.note)
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1072,11 +1227,16 @@ class CommsCollaborationsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CollaborationList:
         contacts = comms.relationships.contacts(caller.subject(self.thread))
-        visible = tuple(
-            VisibleCollaborator(entry.target, entry.available, entry.sources, entry.detail,
-                                entry.goal_contacts)
-            for entry in contacts.visible
-        ) if any(entry.goal_contacts for entry in contacts.visible) else ()
+        visible = (
+            tuple(
+                VisibleCollaborator(
+                    entry.target, entry.available, entry.sources, entry.detail, entry.goal_contacts
+                )
+                for entry in contacts.visible
+            )
+            if any(entry.goal_contacts for entry in contacts.visible)
+            else ()
+        )
         return CollaborationList(contacts.explicit, visible, contacts.diagnostics)
 
 
@@ -1099,14 +1259,20 @@ class SendRefusalsRead(ToolResult):
 class CommsSendRefusalsTool(ReadTool, ToolRequest):
     label = "Comms Send Refusals"
     description = "Read original refused-send outcomes; reading records no new outcome."
-    sender: typing.Annotated[str, *tool_field("Sender to filter; empty reads all senders")] = dataclasses.field(default="")
-    target: typing.Annotated[str, *tool_field("Target to filter; empty reads all targets")] = dataclasses.field(default="")
-    limit: typing.Annotated[int, *tool_field("Maximum recent refusals, between 1 and 200")] = dataclasses.field(default=50)
+    sender: typing.Annotated[str, *tool_field("Sender to filter; empty reads all senders")] = (
+        dataclasses.field(default="")
+    )
+    target: typing.Annotated[str, *tool_field("Target to filter; empty reads all targets")] = (
+        dataclasses.field(default="")
+    )
+    limit: typing.Annotated[int, *tool_field("Maximum recent refusals, between 1 and 200")] = (
+        dataclasses.field(default=50)
+    )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SendRefusalsRead:
-        return SendRefusalsRead(SendRefusal.recent(
-            comms.root, sender=self.sender, target=self.target, limit=self.limit
-        ))
+        return SendRefusalsRead(
+            SendRefusal.recent(comms.root, sender=self.sender, target=self.target, limit=self.limit)
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1120,19 +1286,29 @@ class CommsSendTool(ToolRequest):
     sender: typing.Annotated[str, *tool_field("Sender thread name", wire_name="from")]
     target: typing.Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: typing.Annotated[str, *tool_field("Message text")]
-    audience: typing.Annotated[tuple[str, ...], *tool_field("Threads a channel message is for; no other member is woken")] = dataclasses.field(default=())
-    type: typing.Annotated[Type[MessageKind], *tool_field("Message kind", choices=SendableMessageKind.names)] = dataclasses.field(default=InfoKind)
-    report: typing.Annotated[ChangeReport | None, *tool_field("Change report fields; required for the change-report kind")] = dataclasses.field(default=None)
+    audience: typing.Annotated[
+        tuple[str, ...], *tool_field("Threads a channel message is for; no other member is woken")
+    ] = dataclasses.field(default=())
+    type: typing.Annotated[
+        Type[MessageKind], *tool_field("Message kind", choices=SendableMessageKind.names)
+    ] = dataclasses.field(default=InfoKind)
+    report: typing.Annotated[
+        ChangeReport | None,
+        *tool_field("Change report fields; required for the change-report kind"),
+    ] = dataclasses.field(default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         try:
             caller.require_directive(comms, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            result = comms.messaging.send(
+                self.sender, self.target, body, self.type, report=self.report
+            )
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
-            threading.Thread(target=SendRefusal.record,
-                             args=(comms.root, self.sender, self.target, error)).start()
+            threading.Thread(
+                target=SendRefusal.record, args=(comms.root, self.sender, self.target, error)
+            ).start()
             raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
@@ -1141,9 +1317,16 @@ class CommsSendTool(ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsAuthoredTaskTool(ThreadToolRequest):
     """One original authorized publication path for authored task declarations."""
-    target: typing.Annotated[str, *tool_field("Thread or channel receiving the original declaration", wire_name="to")]
-    scope: typing.Annotated[TaskScopeSelection, *tool_field("Current project/goal or explicit scope")] = dataclasses.field(default=CurrentTaskScopeSelection())
-    change: typing.Annotated[TaskChange, *tool_field("Original declaration or correction naming its original reference")] = dataclasses.field(default=OriginalTaskChange())
+
+    target: typing.Annotated[
+        str, *tool_field("Thread or channel receiving the original declaration", wire_name="to")
+    ]
+    scope: typing.Annotated[
+        TaskScopeSelection, *tool_field("Current project/goal or explicit scope")
+    ] = dataclasses.field(default=CurrentTaskScopeSelection())
+    change: typing.Annotated[
+        TaskChange, *tool_field("Original declaration or correction naming its original reference")
+    ] = dataclasses.field(default=OriginalTaskChange())
 
     @abstractmethod
     def declaration(self, owner): ...
@@ -1155,8 +1338,12 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
         owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
         result = comms.messaging.send(
-            owner.name, self.target, self.original_body(declaration),
-            role=NoticeRole(), task=declaration)
+            owner.name,
+            self.target,
+            self.original_body(declaration),
+            role=NoticeRole(),
+            task=declaration,
+        )
         return TaskPublished(result.message.reference, result.message.task, result.correction)
 
 
@@ -1167,13 +1354,17 @@ class CommsDecisionTool(CommsAuthoredTaskTool):
         "Record a chosen alternative and valid rejected alternatives on its original "
         "wire message. Author and source turn come from your authorized execution. "
         "Defaults to current project/goal revision or current turn; corrections name "
-        "the original reference and grant no execution.")
+        "the original reference and grant no execution."
+    )
     chosen: typing.Annotated[str, *tool_field("Chosen alternative, preserving exact wording")]
-    rejected: typing.Annotated[tuple[str, ...], *tool_field("Nonempty unique valid rejected alternatives")]
+    rejected: typing.Annotated[
+        tuple[str, ...], *tool_field("Nonempty unique valid rejected alternatives")
+    ]
 
     def declaration(self, owner):
-        return Decision.from_claim(owner, self.scope, self.change,
-                                       chosen=self.chosen, rejected=self.rejected)
+        return Decision.from_claim(
+            owner, self.scope, self.change, chosen=self.chosen, rejected=self.rejected
+        )
 
     def original_body(self, declaration):
         return declaration.text
@@ -1187,8 +1378,11 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
         "is retained verbatim. This records your authorized authorship, not inferred "
         "human authority. Defaults to current project/goal revision or current turn. "
         "Corrections name the original constraint reference; no execution or replay "
-        "is authorized.")
-    text: typing.Annotated[str, *tool_field("Exact authored restriction, never a paraphrase of another source")]
+        "is authorized."
+    )
+    text: typing.Annotated[
+        str, *tool_field("Exact authored restriction, never a paraphrase of another source")
+    ]
 
     def declaration(self, owner):
         return Constraint.from_claim(owner, self.scope, self.change)
@@ -1206,9 +1400,12 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
         "Explicitly record whether a described subtask is completed or unfinished. "
         "This is not assistant-turn termination or goal completion. Original author, "
         "turn, scope and correction reference use the existing authorized task owner. "
-        "A completed observation may permit optional compaction when enabled.")
+        "A completed observation may permit optional compaction when enabled."
+    )
     text: typing.Annotated[str, *tool_field("Exact description of the observed subtask")]
-    completed: typing.Annotated[bool, *tool_field("Your explicit observation: completed or unfinished")]
+    completed: typing.Annotated[
+        bool, *tool_field("Your explicit observation: completed or unfinished")
+    ]
 
     def declaration(self, owner):
         if not self.text.strip():
@@ -1222,25 +1419,36 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 @dataclass(frozen=True)
 class StandbyRequest:
     goal_id: typing.Annotated[str, *tool_field("Current goal for scoped standby review")]
-    wait_for: typing.Annotated[tuple[str, ...], *tool_field("Declared dependencies for standby review")]
+    wait_for: typing.Annotated[
+        tuple[str, ...], *tool_field("Declared dependencies for standby review")
+    ]
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsHistoryTool(ReadTool, ToolRequest):
     label = "Conversation history"
-    description = ("Read one bounded, newest-first channel or DM history page. "
-                   "Pass before for older messages. Does not acknowledge messages.")
+    description = (
+        "Read one bounded, newest-first channel or DM history page. "
+        "Pass before for older messages. Does not acknowledge messages."
+    )
     peer: typing.Annotated[str, *tool_field("Channel name or other participant's thread name")]
-    participant: typing.Annotated[str, *tool_field("Participant reading the conversation; omit to use the caller")] = dataclasses.field(default="")
-    limit: typing.Annotated[int, *tool_field("Maximum messages in this page")] = dataclasses.field(default=20)
-    before: typing.Annotated[PageCursor | None, *tool_field("Exclusive older-page cursor from the previous result")] = dataclasses.field(default=None)
+    participant: typing.Annotated[
+        str, *tool_field("Participant reading the conversation; omit to use the caller")
+    ] = dataclasses.field(default="")
+    limit: typing.Annotated[int, *tool_field("Maximum messages in this page")] = dataclasses.field(
+        default=20
+    )
+    before: typing.Annotated[
+        PageCursor | None, *tool_field("Exclusive older-page cursor from the previous result")
+    ] = dataclasses.field(default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HistoryPageResult:
         target = CommandTarget.named(self.peer)
         return HistoryCliCommand(
             target=target.canonical_name(lambda name: comms.registry.require(name).name),
             me=caller.subject(self.participant),
-            limit=self.limit, before=self.before,
+            limit=self.limit,
+            before=self.before,
         ).apply(comms)
 
 
@@ -1258,10 +1466,18 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: typing.Annotated[str, *tool_field("Thread name")]
-    target: typing.Annotated[str, *tool_field("Channel or peer conversation")] = dataclasses.field(default=ANY_CHANNEL.name)
-    ack: typing.Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = dataclasses.field(default=True)
-    limit: typing.Annotated[int, *tool_field("Maximum messages in this page; must be positive")] = dataclasses.field(default=100)
-    standby: typing.Annotated[StandbyRequest | None, *tool_field("Goal and dependencies to review")] = dataclasses.field(default=None)
+    target: typing.Annotated[str, *tool_field("Channel or peer conversation")] = dataclasses.field(
+        default=ANY_CHANNEL.name
+    )
+    ack: typing.Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
+        dataclasses.field(default=True)
+    )
+    limit: typing.Annotated[int, *tool_field("Maximum messages in this page; must be positive")] = (
+        dataclasses.field(default=100)
+    )
+    standby: typing.Annotated[
+        StandbyRequest | None, *tool_field("Goal and dependencies to review")
+    ] = dataclasses.field(default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
@@ -1274,7 +1490,9 @@ class CommsInboxTool(ToolRequest):
             else None
         )
         page = comms.bus.inbox_at(
-            thread, comms.registry.snapshot(), CommandTarget.named(target),
+            thread,
+            comms.registry.snapshot(),
+            CommandTarget.named(target),
             bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
         )
         messages = page.page.messages
@@ -1282,8 +1500,11 @@ class CommsInboxTool(ToolRequest):
         references = tuple(message.reference for message in messages)
         acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
         return InboxPageRead(
-            messages, acknowledged, page.remaining + len(messages) - acknowledged,
-            unresolved, standby_review=review,
+            messages,
+            acknowledged,
+            page.remaining + len(messages) - acknowledged,
+            unresolved,
+            standby_review=review,
         )
 
 
@@ -1296,15 +1517,24 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
     action_order = 10
     name: typing.Annotated[str, *tool_field("Child thread name")]
     parent: typing.Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
-    task: typing.Annotated[str, *tool_field("Optional task for the child")] = dataclasses.field(default="")
-    tags: typing.Annotated[str | None, *tool_field("Comma-separated tags; omitted inherits parent tags")] = dataclasses.field(default=None)
+    task: typing.Annotated[str, *tool_field("Optional task for the child")] = dataclasses.field(
+        default=""
+    )
+    tags: typing.Annotated[
+        str | None, *tool_field("Comma-separated tags; omitted inherits parent tags")
+    ] = dataclasses.field(default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
         parent = comms.registry.require(self.parent)
-        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
-                              project=parent.worktree, model=parent.model,
-                              thinking_level=parent.thinking_level,
-                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
+        return ForkCliCommand(
+            name=self.name,
+            parent=parent.name,
+            task=self.task,
+            project=parent.worktree,
+            model=parent.model,
+            thinking_level=parent.thinking_level,
+            tags=_tag_set(self.tags) if self.tags is not None else None,
+        ).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1352,8 +1582,12 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
-                            launch_runtime=LaunchRuntime.running()))
+            enqueue_restart(
+                comms,
+                OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
+                launch_runtime=LaunchRuntime.running(),
+            )
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1392,7 +1626,9 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
-    name: typing.Annotated[str | None, field_codec.Argument(flags=("--name",), options={'help': "Calling thread"})] = dataclasses.field(default=None)
+    name: typing.Annotated[
+        str | None, field_codec.Argument(flags=("--name",), options={"help": "Calling thread"})
+    ] = dataclasses.field(default=None)
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
@@ -1402,20 +1638,45 @@ class ToolsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand, declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: typing.Annotated[str | None, field_codec.Argument(flags=("--from",), options={'help': "Calling thread; omit for tools that need no thread"})] = dataclasses.field(default=None)
+    caller: typing.Annotated[
+        str | None,
+        field_codec.Argument(
+            flags=("--from",),
+            options={"help": "Calling thread; omit for tools that need no thread"},
+        ),
+    ] = dataclasses.field(default=None)
     tool: typing.Annotated[str, field_codec.Argument(flags=("--tool",))]
-    arguments: typing.Annotated[dict[str, object], field_codec.Argument(flags=("--arguments",), default=field_codec.GivenArgumentDefault("{}"), options={'help': "Tool arguments as a JSON object"})] = dataclasses.field(default_factory=dict)
+    arguments: typing.Annotated[
+        dict[str, object],
+        field_codec.Argument(
+            flags=("--arguments",),
+            default=field_codec.GivenArgumentDefault("{}"),
+            options={"help": "Tool arguments as a JSON object"},
+        ),
+    ] = dataclasses.field(default_factory=dict)
 
     def argv(self, root: Path) -> tuple[str, ...]:
         """The CLI boundary owns its module, grammar and argument serialization."""
         caller = ToolCaller.from_actor(self.caller)
-        return (sys.executable, '-m', comms_cli.__name__, '--root', str(root),
-                self.declared_name, '--from', caller.acting_name(''), '--tool', self.tool,
-                '--arguments', json.dumps(self.arguments))
+        return (
+            sys.executable,
+            "-m",
+            comms_cli.__name__,
+            "--root",
+            str(root),
+            self.declared_name,
+            "--from",
+            caller.acting_name(""),
+            "--tool",
+            self.tool,
+            "--arguments",
+            json.dumps(self.arguments),
+        )
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
-        return invoke_tool(ctx, self.tool, self.arguments,
-                           caller=ToolCaller.from_actor(self.caller))
+        return invoke_tool(
+            ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller)
+        )
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """The tool protocol's own reply, the one every adapter receives, not a CLI result."""

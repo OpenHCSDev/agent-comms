@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from .turn_lease import TurnLeaseFence
 
 
-
 class InputAlreadyCleared(RelationViolationError):
     """A positively cleared input cannot acquire another native write."""
 
@@ -112,9 +111,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def context_provenance(self) -> InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
 
-    def bind(
-        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
-    ) -> InputTransition:
+    def bind(self, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> InputTransition:
         self.require_not_cleared()
         return UnchangedInput(self)
 
@@ -166,28 +163,41 @@ class UnresolvedInput:
     text: str
     input_id: typing.Annotated[str, field_codec.WireName("inputId")]
     status: str
-    reviewed_for_goals: typing.Annotated[tuple[str, ...], field_codec.WireName("reviewedForGoals"), field_codec.WireOmitDefault(True)] = field(default=())
+    reviewed_for_goals: typing.Annotated[
+        tuple[str, ...], field_codec.WireName("reviewedForGoals"), field_codec.WireOmitDefault(True)
+    ] = field(default=())
 
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
         return UnresolvedInput(
-            sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.public_id, status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)))
+            sequence=row.sequence,
+            target=row.target,
+            text=row.source_text,
+            input_id=row.public_id,
+            status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
+        )
 
 
 @dataclass(frozen=True)
 class HistoricalInput(UnresolvedInput):
     """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
 
-    notice_dismissed: typing.Annotated[bool, field_codec.WireName("noticeDismissed")] = field(kw_only=True)
+    notice_dismissed: typing.Annotated[bool, field_codec.WireName("noticeDismissed")] = field(
+        kw_only=True
+    )
 
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
         return HistoricalInput(
-            sequence=row.sequence, target=row.target, text=row.source_text,
-            input_id=row.public_id, status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
+            sequence=row.sequence,
+            target=row.target,
+            text=row.source_text,
+            input_id=row.public_id,
+            status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
+            notice_dismissed=notice_dismissed,
+        )
 
 
 @dataclass(frozen=True)
@@ -204,15 +214,22 @@ class StoredInput(InputAttempt):
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
+
     key: str
     sequence: int | None
     owner: str
-    claim_scope: typing.Annotated[int, field_codec.WireName('admission')]
+    claim_scope: typing.Annotated[int, field_codec.WireName("admission")]
     target: str
     source_text: str
-    origin: typing.Annotated[InputOrigin, field_codec.WireOmitDefault(True)] = field(default_factory=UnattributedInputOrigin, kw_only=True)
-    notice_dismissed: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(default=False, kw_only=True)
-    goal_reviews: typing.Annotated[dict[str, GoalInputDecision], field_codec.WireOmitDefault(True)] = field(default_factory=dict, kw_only=True)
+    origin: typing.Annotated[InputOrigin, field_codec.WireOmitDefault(True)] = field(
+        default_factory=UnattributedInputOrigin, kw_only=True
+    )
+    notice_dismissed: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(
+        default=False, kw_only=True
+    )
+    goal_reviews: typing.Annotated[
+        dict[str, GoalInputDecision], field_codec.WireOmitDefault(True)
+    ] = field(default_factory=dict, kw_only=True)
 
     def __post_init__(self) -> None:
         try:
@@ -291,14 +308,17 @@ class ReservedInput(RecoverableUnboundInput):
             and self.digest.matches(text)
         )
 
-    def bind(
-        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
-    ) -> InputTransition:
+    def bind(self, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> InputTransition:
         if self.claim_scope != claim_scope:
             return UnchangedInput(self)
-        return MovedInput(self._transition(
-            BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)
-        ))
+        return MovedInput(
+            self._transition(
+                BoundUnknownInput,
+                turn_id=turn_id,
+                native_id=native_id,
+                sent_digest=TextDigest.of(text),
+            )
+        )
 
     def finish_unbound(self) -> InputTransition:
         return MovedInput(self._transition(NotSentInput))
@@ -311,9 +331,13 @@ class ReservedInput(RecoverableUnboundInput):
 class SentInput(StoredInput):
     has_native_binding = True
     turn_id: typing.Annotated[str, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
-    native_id: typing.Annotated[str, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
+    native_id: typing.Annotated[
+        str, field_codec.PublicExclude(True), field_codec.WireRequired(True)
+    ]
     # The native session owns the sent text; this row only proves which text it was.
-    sent_digest: typing.Annotated[TextDigest, field_codec.PublicExclude(True), field_codec.WireRequired(True)]
+    sent_digest: typing.Annotated[
+        TextDigest, field_codec.PublicExclude(True), field_codec.WireRequired(True)
+    ]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -326,7 +350,9 @@ class SentInput(StoredInput):
             raise ValueError("Invalid native input attempt") from error
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
-        return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
+        return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(
+            text
+        )
 
 
 class BoundUnknownInput(SentInput):
@@ -389,14 +415,14 @@ class StartedInput(SentInput):
         and native ancestry; this acknowledgement never invents their missing proof.
         """
         return self.matches_lease(lease, snapshot) and self.matches_native(
-            turn_id=lease.turn_id, native_id=native_id, text=sent_text)
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text
+        )
+
 
 class NotSentInput(RecoverableUnboundInput):
     unresolved = True
     public_status = "not_sent"
-    cancellation_feedback = (
-        "Not sent — cancellation completed before native delivery."
-    )
+    cancellation_feedback = "Not sent — cancellation completed before native delivery."
 
 
 class MissingInput(InputAttempt):

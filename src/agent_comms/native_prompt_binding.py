@@ -39,6 +39,7 @@ from .typed_table import Column, TypedRow, TypedTable
 if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
 
+
 def binding_store_path(store: Coordination) -> Path:
     """Sidecar store beside the private coordination database."""
     return PromptBinding.path_in(store.session.path.parent).absolute()
@@ -47,13 +48,15 @@ def binding_store_path(store: Coordination) -> Path:
 @dataclass(frozen=True, slots=True)
 class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
+
     @classmethod
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
 
-    input_id: typing.Annotated[str, Column(
-                primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
-            )]
+    input_id: typing.Annotated[
+        str,
+        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
+    ]
     stage: type[NativeInputExecution]
     execution_id: str | None
     attempt_ordinal: int | None
@@ -73,7 +76,9 @@ class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchem
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
         except MalformedRecord as error:
-            raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
+            raise IdentityConflict(
+                "Prompt binding execution columns conflict with their stage"
+            ) from error
 
     without_rowid = True
     checks = (
@@ -215,9 +220,14 @@ def expected_prompt_bindings(
         yield {}
         return
     with sidecar_connection(path, PromptBinding, blocking=blocking, read_only=True) as db:
-        yield {row.input_id: row for row in PromptBinding.select(
-            db, where=f"input_id IN ({','.join('?' for _ in input_ids)})", parameters=input_ids,
-        )}
+        yield {
+            row.input_id: row
+            for row in PromptBinding.select(
+                db,
+                where=f"input_id IN ({','.join('?' for _ in input_ids)})",
+                parameters=input_ids,
+            )
+        }
 
 
 def expected_prompt_matches_journal(

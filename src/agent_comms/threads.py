@@ -54,41 +54,78 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
+
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
+
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
+
 
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
     name: str = field(kw_only=False)
-    tags: typing.Annotated[frozenset[str], field_codec.RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
+    tags: typing.Annotated[frozenset[str], field_codec.RegistrationPolicy(InheritEmpty)] = field(
+        kw_only=False
+    )
     worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None, kw_only=True)
-    model: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None)
-    thinking_level: typing.Annotated[ThinkingLevelField, field_codec.RegistrationPolicy(InheritThinkingLevel)] = field(default=NoThinkingOverride)
-    service_tier: typing.Annotated[ServiceTier, field_codec.RegistrationPolicy(InheritPrevious)] = field(default=ServiceTier.PRIORITY, kw_only=True)
-    goal: typing.Annotated[GoalDeclaration, field_codec.RegistrationPolicy(GoalDeclaration)] = field(default_factory=NoGoal)
-    created_at: typing.Annotated[float, field_codec.WireRequired(True)] = field(default_factory=_thread_creation_time, kw_only=True)
+    session_file: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = (
+        field(default=None, kw_only=True)
+    )
+    model: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(
+        default=None
+    )
+    thinking_level: typing.Annotated[
+        ThinkingLevelField, field_codec.RegistrationPolicy(InheritThinkingLevel)
+    ] = field(default=NoThinkingOverride)
+    service_tier: typing.Annotated[ServiceTier, field_codec.RegistrationPolicy(InheritPrevious)] = (
+        field(default=ServiceTier.PRIORITY, kw_only=True)
+    )
+    goal: typing.Annotated[GoalDeclaration, field_codec.RegistrationPolicy(GoalDeclaration)] = (
+        field(default_factory=NoGoal)
+    )
+    created_at: typing.Annotated[float, field_codec.WireRequired(True)] = field(
+        default_factory=_thread_creation_time, kw_only=True
+    )
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    storage_roots: typing.Annotated[StorageRoots, field_codec.RegistrationPolicy(InheritPrevious)] = field(kw_only=True)
+    storage_roots: typing.Annotated[
+        StorageRoots, field_codec.RegistrationPolicy(InheritPrevious)
+    ] = field(kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
-    earlier_projects: typing.Annotated[tuple[StoragePath, ...], field_codec.RegistrationPolicy(InheritPrevious), field_codec.WireOmitDefault(True)] = field(default=(), kw_only=True)
-    auto_title_pending: typing.Annotated[bool, field_codec.RegistrationPolicy(InheritPrevious)] = field(default=False)
+    earlier_projects: typing.Annotated[
+        tuple[StoragePath, ...],
+        field_codec.RegistrationPolicy(InheritPrevious),
+        field_codec.WireOmitDefault(True),
+    ] = field(default=(), kw_only=True)
+    auto_title_pending: typing.Annotated[bool, field_codec.RegistrationPolicy(InheritPrevious)] = (
+        field(default=False)
+    )
     # The project changed during a turn, and no turn has started in it yet.
     # The next turn start clears this; an idle owner starts that turn itself.
-    project_resume_due: typing.Annotated[bool, field_codec.RegistrationPolicy(InheritPrevious), field_codec.WireOmitDefault(True)] = field(default=False)
-    title: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(default=None, kw_only=True)
-    role: typing.Annotated[type[ThreadRole], field_codec.RegistrationPolicy(InheritPrevious)] = field(default=AgentThreadRole)
-    execution: typing.Annotated[type[ThreadExecution], field_codec.WireOmitDefault(True)] = field(default=NativeThreadExecution, kw_only=True)
-    backend: typing.Annotated[type[AgentBackend], field_codec.WireOmitDefault(True), field_codec.RegistrationPolicy(InheritPrevious)] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
+    project_resume_due: typing.Annotated[
+        bool, field_codec.RegistrationPolicy(InheritPrevious), field_codec.WireOmitDefault(True)
+    ] = field(default=False)
+    title: typing.Annotated[str | None, field_codec.RegistrationPolicy(InheritMissing)] = field(
+        default=None, kw_only=True
+    )
+    role: typing.Annotated[type[ThreadRole], field_codec.RegistrationPolicy(InheritPrevious)] = (
+        field(default=AgentThreadRole)
+    )
+    execution: typing.Annotated[type[ThreadExecution], field_codec.WireOmitDefault(True)] = field(
+        default=NativeThreadExecution, kw_only=True
+    )
+    backend: typing.Annotated[
+        type[AgentBackend],
+        field_codec.WireOmitDefault(True),
+        field_codec.RegistrationPolicy(InheritPrevious),
+    ] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -105,7 +142,9 @@ class Thread(ThreadProvenance):
 
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
-        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(
+            self
+        )
 
     @property
     def project_path(self) -> Path:
@@ -122,17 +161,22 @@ class Thread(ThreadProvenance):
         earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
-            self, worktree=project,
-            earlier_projects=tuple(dict.fromkeys(
-                path for path in (*self.earlier_projects, earlier) if path != current
-            )),
+            self,
+            worktree=project,
+            earlier_projects=tuple(
+                dict.fromkeys(path for path in (*self.earlier_projects, earlier) if path != current)
+            ),
             project_resume_due=self.project_resume_due or self.executing,
         )
 
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.executing and not self.goal.accepts_following_handoff()
+        return (
+            self.project_resume_due
+            and not self.executing
+            and not self.goal.accepts_following_handoff()
+        )
 
     @property
     def turn_state(self) -> TurnState:
@@ -164,7 +208,9 @@ class Thread(ThreadProvenance):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / "comms-catalog.json"
         catalog = ThreadToolCatalogResult(
-            tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
+            tuple(NativeRequestTools.catalog()),
+            self.service_tier,
+            launch.arguments(),
         )
         _atomic_write_text(path, json.dumps(catalog.to_wire(), separators=(",", ":")))
         return (*arguments.argv, "--comms-catalog", str(path))
@@ -205,18 +251,22 @@ class Thread(ThreadProvenance):
             raise ValueError("Thread model cannot be empty.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
-        changed = any((
-            self.incarnation != original.incarnation,
-            self.worktree != original.worktree,
-            self.model != original.model,
-            self.thinking_level != original.thinking_level,
-            self.service_tier != original.service_tier,
-        ))
+        changed = any(
+            (
+                self.incarnation != original.incarnation,
+                self.worktree != original.worktree,
+                self.model != original.model,
+                self.thinking_level != original.thinking_level,
+                self.service_tier != original.service_tier,
+            )
+        )
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None,
+        self,
+        *,
+        model: str | None = None,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
@@ -232,7 +282,10 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingChoice],
+        self,
+        *,
+        model: str | None,
+        thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
@@ -282,7 +335,9 @@ class Thread(ThreadProvenance):
 
     def wake_context(self, goals: Goals) -> dict[str, object]:
         return {
-            "name": self.name, "title": self.title, "tags": sorted(self.tags),
+            "name": self.name,
+            "title": self.title,
+            "tags": sorted(self.tags),
             "original_assignment": self.task,
             "current_goal": self.goal.wake_context(goals, self.incarnation),
         }
@@ -299,9 +354,19 @@ class Thread(ThreadProvenance):
         Something read from the running agent under one record still describes the
         other only when this holds. Titles, tags, goals and turns do not change it.
         """
+
         def launch(thread: Thread):
-            return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
-                    thread.worktree, thread.execution, thread.model, thread.thinking_level)
+            return (
+                thread.incarnation,
+                thread.process_identity,
+                thread.role,
+                thread.runtime,
+                thread.worktree,
+                thread.execution,
+                thread.model,
+                thread.thinking_level,
+            )
+
         return launch(self) == launch(other)
 
     def without_turn(self) -> Thread:
@@ -318,17 +383,23 @@ class Thread(ThreadProvenance):
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result, turn_generation=previous.turn_generation,
+                result,
+                turn_generation=previous.turn_generation,
                 last_finished_turn_id=(
                     previous.last_finished_turn_id
-                    if self.turn_record == previous.turn_record else None
+                    if self.turn_record == previous.turn_record
+                    else None
                 ),
             )
         return result
 
     def for_claim(self, name: str) -> Thread:
         """Assign an allocated name without turning a generated clock into caller identity."""
-        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
+        created = (
+            _GeneratedCreationTime(self.created_at)
+            if self._generated_created_at
+            else self.created_at
+        )
         return replace(self, name=name, created_at=created)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
@@ -341,9 +412,7 @@ class Thread(ThreadProvenance):
         inherited = {}
         if previous is not None:
             inherited = {
-                plan.name: policy.choose(
-                    getattr(self, plan.name), getattr(previous, plan.name)
-                )
+                plan.name: policy.choose(getattr(self, plan.name), getattr(previous, plan.name))
                 for plan in FieldCodec.field_plans(type(self))
                 if (policy := plan.setting(field_codec.RegistrationPolicy, None)) is not None
             }
@@ -382,8 +451,13 @@ class Thread(ThreadProvenance):
             return False
         lease = self.turn_lease
         if lease is not None:
-            return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
-        return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
+            return (
+                self.has_authored_turn(identity, turn)
+                or identity.generation == lease.identity.generation - 1
+            )
+        return (
+            identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
+        )
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
@@ -411,6 +485,7 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
+
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""

@@ -27,21 +27,44 @@ class RequestProgress(PiPayload):
     transport: str = ""
     attempt: int = 0
     status: int | None = None
-    response_id: typing.Annotated[str | None, field_codec.WireName("responseId")] = field(default=None)
+    response_id: typing.Annotated[str | None, field_codec.WireName("responseId")] = field(
+        default=None
+    )
     callback: str = ""
     # External request observations are optional at other stages and in original
     # records. Absence is unavailable evidence, never a registry/catalog lookup.
     model: typing.Annotated[PiModel | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    estimated_input_tokens: typing.Annotated[int | None, field_codec.WireName("estimatedInputTokens"), field_codec.WireOmitDefault(True)] = field(default=None)
-    available_tokens: typing.Annotated[int | None, field_codec.WireName("availableTokens"), field_codec.WireOmitDefault(True)] = field(default=None)
-    output_token_field: typing.Annotated[str | None, field_codec.WireName("outputTokenField"), field_codec.WireOmitDefault(True)] = field(default=None)
-    requested_output_tokens: typing.Annotated[int | None, field_codec.WireName("requestedOutputTokens"), field_codec.WireOmitDefault(True)] = field(default=None)
-    allowed_output_tokens: typing.Annotated[int | None, field_codec.WireName("admittedOutputTokens"), field_codec.WireOmitDefault(True)] = field(default=None)
-    minimum_output_tokens: typing.Annotated[int | None, field_codec.WireName("minimumOutputTokens"), field_codec.WireOmitDefault(True)] = field(default=None)
+    estimated_input_tokens: typing.Annotated[
+        int | None, field_codec.WireName("estimatedInputTokens"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
+    available_tokens: typing.Annotated[
+        int | None, field_codec.WireName("availableTokens"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
+    output_token_field: typing.Annotated[
+        str | None, field_codec.WireName("outputTokenField"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
+    requested_output_tokens: typing.Annotated[
+        int | None, field_codec.WireName("requestedOutputTokens"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
+    allowed_output_tokens: typing.Annotated[
+        int | None, field_codec.WireName("admittedOutputTokens"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
+    minimum_output_tokens: typing.Annotated[
+        int | None, field_codec.WireName("minimumOutputTokens"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
 
     def __post_init__(self) -> None:
-        if min(self.started_at_ms, self.observed_at_ms, self.elapsed_ms,
-               self.callback_ms, self.callback_count, self.callback_max_ms) < 0:
+        if (
+            min(
+                self.started_at_ms,
+                self.observed_at_ms,
+                self.elapsed_ms,
+                self.callback_ms,
+                self.callback_count,
+                self.callback_max_ms,
+            )
+            < 0
+        ):
             raise ValueError("Invalid native request measurement")
         if not self.monotonic_ns.isdecimal():
             raise ValueError("Invalid native monotonic observation")

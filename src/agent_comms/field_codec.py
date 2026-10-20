@@ -43,6 +43,8 @@ from .sealed import Sealed
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
+    from .registration_inheritance import RegistrationInheritance
+
 T = TypeVar("T")
 
 
@@ -108,11 +110,11 @@ class FieldDirective:
         return cast(tuple[Self, ...], cls._index(annotation).get(cls, ()))
 
     @classmethod
-    def find(cls, annotation: object) -> Self | None:
+    def single(cls, annotation: object) -> tuple[Self, ...]:
         matches = cls.on(annotation)
         if len(matches) > 1:
             raise TypeError(f"A field declares {cls.__name__} more than once")
-        return cast(Self, matches[0]) if matches else None
+        return matches
 
 
 @dataclass(frozen=True, eq=False)
@@ -121,8 +123,9 @@ class ValueDirective[V](FieldDirective):
 
     @classmethod
     def read[D](cls, annotation: object, default: D) -> V | D:
-        directive = cls.find(annotation)
-        return default if directive is None else directive.value
+        for directive in cls.single(annotation):
+            return directive.value
+        return default
 
 
 @dataclass(frozen=True)
@@ -276,7 +279,7 @@ class TargetBound(FlagDirective):
     pass
 
 
-class RegistrationPolicy(ValueDirective[type]):
+class RegistrationPolicy(ValueDirective[type["RegistrationInheritance"]]):
     pass
 
 
@@ -344,18 +347,39 @@ class FactoryArgumentDefault(ArgumentDefault):
         options["default"] = self.factory()
 
 
+class ArgumentGroup:
+    """Ungrouped arguments belong directly to their parser."""
+
+    def owner(
+        self, parser: argparse.ArgumentParser, groups: dict[str, argparse._MutuallyExclusiveGroup]
+    ) -> argparse._ActionsContainer:
+        return parser
+
+
+@dataclass(frozen=True)
+class NamedArgumentGroup(ArgumentGroup):
+    name: str
+
+    def owner(
+        self, parser: argparse.ArgumentParser, groups: dict[str, argparse._MutuallyExclusiveGroup]
+    ) -> argparse._ActionsContainer:
+        if self.name not in groups:
+            groups[self.name] = parser.add_mutually_exclusive_group(required=True)
+        return groups[self.name]
+
+
 @dataclass(frozen=True, eq=False)
 class Argument(FieldDirective):
     """The CLI's argument declaration, including its external argparse options."""
 
     flags: tuple[str, ...] = ()
-    group: str | None = None
+    group: ArgumentGroup = field(default_factory=ArgumentGroup)
     default: ArgumentDefault = field(default_factory=InferredArgumentDefault)
     options: Mapping[str, object] = field(default_factory=dict)
 
     @classmethod
     def declared(cls, annotation: object) -> Argument:
-        return cls.find(annotation) or cls()
+        return next(iter(cls.single(annotation)), cls())
 
     def description(self, name: str) -> str:
         return FieldCodec.decode(str, self.options.get("help", name.replace("_", " ").capitalize()))
@@ -366,11 +390,7 @@ class Argument(FieldDirective):
         groups: dict[str, argparse._MutuallyExclusiveGroup],
         plan: FieldPlan,
     ) -> None:
-        owner: argparse._ActionsContainer = parser
-        if self.group is not None:
-            if self.group not in groups:
-                groups[self.group] = parser.add_mutually_exclusive_group(required=True)
-            owner = groups[self.group]
+        owner = self.group.owner(parser, groups)
         # argparse actions own an extensible keyword protocol, not a closed Core record.
         options: dict[str, Any] = {
             **({} if "action" in self.options else plan.value.argument_options()),
@@ -391,7 +411,7 @@ class FieldPlan:
 
     declared: Field
     annotation: object
-    directive: ClassVar[type[ValueDirective] | None] = None
+    directives: ClassVar[tuple[type[ValueDirective], ...]] = ()
     records: ClassVar[bool] = True
     _plans: ClassVar[list[type[FieldPlan]]] = []
 
@@ -401,7 +421,7 @@ class FieldPlan:
 
     @classmethod
     def claims(cls, declared: Field, annotation: object) -> bool:
-        return cls.directive is not None and bool(cls.directive.read(annotation, False))
+        return any(directive.read(annotation, False) for directive in cls.directives)
 
     @property
     def name(self) -> str:
@@ -417,8 +437,9 @@ class FieldPlan:
 
     @property
     def reject_null(self) -> bool:
-        policy = NullPolicy.find(self.annotation)
-        return policy.rejects_null(self.declared) if policy is not None else False
+        return any(
+            policy.rejects_null(self.declared) for policy in NullPolicy.single(self.annotation)
+        )
 
     @property
     def choices(self) -> Callable[[], Iterable[str]] | None:
@@ -426,9 +447,7 @@ class FieldPlan:
 
     @cached_property
     def value(self) -> ValueDecoder[object]:
-        declared, representation = FieldCodec._representation(self.annotation)
-        annotation = declared if representation is None else Annotated[declared, representation]
-        return compile_decoder(annotation)
+        return compile_decoder(self.annotation)
 
     @property
     def constructor_required(self) -> bool:
@@ -478,9 +497,9 @@ class FieldPlan:
             members = tuple(item for item in get_args(base) if item is not type(None))
             annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
         schema = FieldCodec.value_schema(annotation)
-        if (description := Description.find(annotation)) is not None:
+        for description in Description.single(annotation):
             schema["description"] = description.value
-        if (choices := WireChoices.find(annotation)) is not None:
+        for choices in WireChoices.single(annotation):
             schema["enum"] = list(choices.value())
         if declared.default is not MISSING and declared.default is not None:
             schema["default"] = FieldCodec.encode(declared.default, annotation)
@@ -557,14 +576,14 @@ class DeclaredFieldPlan(FieldPlan):
 class TransientFieldPlan(DeclaredFieldPlan):
     """A process-local field never enters a record or compiles a wire decoder."""
 
-    directive = WireTransient
+    directives = (WireTransient,)
     records = False
 
 
 class MissingNoneFieldPlan(DeclaredFieldPlan):
     """Wire absence is None, independently of the constructor's default factory."""
 
-    directive = WireAbsentNone
+    directives = (WireAbsentNone,)
 
     def omitted(self, value: object) -> bool:
         return value is None or super().omitted(value)
@@ -576,7 +595,7 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
 class ContextFieldPlan(DeclaredFieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
 
-    directive = WireContext
+    directives = (WireContext,)
 
     def contribute(self, fields: list[FieldPlan]) -> tuple[str, ...]:
         return ()
@@ -602,7 +621,7 @@ class ContextFieldPlan(DeclaredFieldPlan):
 class BoundFieldPlan(DeclaredFieldPlan):
     """A nested record receives its context from declared sibling fields."""
 
-    directive = WireBind
+    directives = (WireBind,)
 
     def decoded_bound(
         self, data: dict[str, object], context: Mapping[str, object]
@@ -614,7 +633,7 @@ class BoundFieldPlan(DeclaredFieldPlan):
 class InlineFieldPlan(DeclaredFieldPlan):
     """An InlineRecord type's or WireInline field's keys, written beside its parent's."""
 
-    directive = WireInline
+    directives = (WireInline,)
 
     @cached_property
     def inlined(self) -> type:
@@ -1483,10 +1502,13 @@ class FieldCodec(Sealed):
         declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
         if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
             raise TypeError("Wire field names must be nonempty strings.")
-        entries = tuple(plan for _, plan in sorted(
-            enumerate(declared),
-            key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
-        ))
+        entries = tuple(
+            plan
+            for _, plan in sorted(
+                enumerate(declared),
+                key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
+            )
+        )
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
         wire_fields, required_keys, init_required_keys = [], [], []
         for entry in entries:

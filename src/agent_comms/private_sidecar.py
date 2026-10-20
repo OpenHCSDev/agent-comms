@@ -388,5 +388,7 @@ def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
 def native_request_digest(text: str, *, streaming_behavior: str | None = None) -> str:
     """sha256 over the pinned native request envelope, not the bare text."""
     return hashlib.sha256(
-        ("pi-input-request-v1\n" + encode_request(text, streaming_behavior=streaming_behavior)).encode("utf-8")
+        (
+            "pi-input-request-v1\n" + encode_request(text, streaming_behavior=streaming_behavior)
+        ).encode("utf-8")
     ).hexdigest()

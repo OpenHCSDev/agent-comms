@@ -56,7 +56,9 @@ class ImportedMessage(ABC):
         cap = min(limits.per_message, limits.characters)
         if len(self.body) <= cap:
             return self
-        return replace(self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True)
+        return replace(
+            self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True
+        )
 
     def remember(self, buffer: ImportBuffer) -> None:
         """Only a request is the source session's latest request."""
@@ -69,7 +71,11 @@ class ImportedInput(ImportedMessage):
     """Text the source session's model received: tool calls, results and context."""
 
     def pi_message(self, timestamp: int) -> dict[str, object]:
-        return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
+        return {
+            "role": "user",
+            "content": [{"type": "text", "text": self.body}],
+            "timestamp": timestamp,
+        }
 
 
 class ImportedRequest(ImportedInput):
@@ -83,8 +89,13 @@ class ImportedReply(ImportedMessage):
     def pi_message(self, timestamp: int) -> dict[str, object]:
         zero = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
         return {
-            "role": "assistant", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp,
-            "api": "openai-responses", "provider": "imported", "model": "historical-context", "stopReason": "stop",
+            "role": "assistant",
+            "content": [{"type": "text", "text": self.body}],
+            "timestamp": timestamp,
+            "api": "openai-responses",
+            "provider": "imported",
+            "model": "historical-context",
+            "stopReason": "stop",
             "usage": {**zero, "totalTokens": 0, "cost": {**zero, "total": 0}},
         }
 
@@ -119,7 +130,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
-    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
+    def edit_calls(
+        self, thread: str, problem: str, since: float
+    ) -> tuple[tool_declaration.EditCall, ...]:
         return ()
 
     def before(self, at: float) -> bool:
@@ -134,8 +147,12 @@ class TranscriptCoverage:
 
     @property
     def sequences(self) -> frozenset[int]:
-        return frozenset(source.seq for event in self.events
-                         for source in event.incoming_sources if source.seq > 0)
+        return frozenset(
+            source.seq
+            for event in self.events
+            for source in event.incoming_sources
+            if source.seq > 0
+        )
 
     @property
     def native_inputs(self) -> frozenset[str]:
@@ -149,7 +166,6 @@ class RecordedTranscript(TranscriptEvent):
 
 
 class TextTranscript(TranscriptEvent):
-
     def as_context(self) -> ContextTranscript:
         return ContextTranscript(self.text, timestamp=self.timestamp, position=self.position)
 
@@ -305,18 +321,26 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
-        return {"type": "content", "content": {
-            "type": "resource", "resource": {
-                "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
-                "mimeType": SENT_MESSAGE_MIME,
-                "text": json.dumps(FieldCodec.encode(self)),
+        return {
+            "type": "content",
+            "content": {
+                "type": "resource",
+                "resource": {
+                    "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
+                    "mimeType": SENT_MESSAGE_MIME,
+                    "text": json.dumps(FieldCodec.encode(self)),
+                },
             },
-        }}
+        }
 
     @classmethod
     def from_message(cls, message):
-        return cls(message.body, timestamp=message.timestamp, source=message.reference,
-                   routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
+        return cls(
+            message.body,
+            timestamp=message.timestamp,
+            source=message.reference,
+            routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))),
+        )
 
     def matches(self, message: Message) -> bool:
         return self == type(self).from_message(message)
@@ -361,14 +385,21 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
-    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
+    def edit_calls(
+        self, thread: str, problem: str, since: float
+    ) -> tuple[tool_declaration.EditCall, ...]:
         if self.before(since) or self.tool is None:
             return ()
         return self.tool.edit_calls(
-            self.tool_call_id, EventTime.capture(self.timestamp), thread, problem)
+            self.tool_call_id, EventTime.capture(self.timestamp), thread, problem
+        )
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
-    tool: typing.Annotated[tool_declaration.ToolDeclaration | None, field_codec.WireOmitDefault(True), field_codec.WireBind({"call_id": "tool_call_id"})] = field(default=None)
+    tool: typing.Annotated[
+        tool_declaration.ToolDeclaration | None,
+        field_codec.WireOmitDefault(True),
+        field_codec.WireBind({"call_id": "tool_call_id"}),
+    ] = field(default=None)
 
     @property
     def title(self) -> str:
@@ -378,13 +409,17 @@ class ToolStartTranscript(ToolTranscript):
         """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
             digest = tool_declaration.ToolDeclaration.call_digest(
-                self.tool_name, self.tool, self.raw_input)
+                self.tool_name, self.tool, self.raw_input
+            )
             calls[self.tool_call_id] = OrderCall(
-                self.tool_call_id, self.tool_name, digest, RunningCallState)
+                self.tool_call_id, self.tool_name, digest, RunningCallState
+            )
 
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
-        ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
-                      + json.dumps(self.raw_input, ensure_ascii=False)).import_to(accept)
+        ImportedInput(
+            f"[Historical tool call: {self.tool_name}]\n"
+            + json.dumps(self.raw_input, ensure_ascii=False)
+        ).import_to(accept)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -407,7 +442,8 @@ class ToolEndTranscript(ToolTranscript):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         if self.tool_call_id in calls:
             calls[self.tool_call_id] = replace(
-                calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
+                calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState
+            )
 
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         outcome = "" if self.ok else ", failed"
@@ -416,7 +452,9 @@ class ToolEndTranscript(ToolTranscript):
     text: str = ""
     ok: bool = True
     diff: typing.Annotated[ToolDiff | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    sent_message: typing.Annotated[SentTranscript | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    sent_message: typing.Annotated[SentTranscript | None, field_codec.WireOmitDefault(True)] = (
+        field(default=None)
+    )
 
 
 class CallState(DeclaredFamily, affix="CallState"):

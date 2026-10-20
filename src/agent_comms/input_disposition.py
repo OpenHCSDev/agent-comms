@@ -44,9 +44,15 @@ class DeliveryOverview(ToolResult):
 
     inputs: tuple[UnresolvedInput, ...]
     historical_count: typing.Annotated[int, field_codec.WireName("historicalCount")]
-    dismissed_historical_count: typing.Annotated[int, field_codec.WireName("dismissedHistoricalCount")]
-    historical_inputs: typing.Annotated[tuple[HistoricalInput, ...], field_codec.WireName("historicalInputs")]
-    current_scope: typing.Annotated[Literal["owner_queue", "unobserved"], field_codec.WireName("currentScope")]
+    dismissed_historical_count: typing.Annotated[
+        int, field_codec.WireName("dismissedHistoricalCount")
+    ]
+    historical_inputs: typing.Annotated[
+        tuple[HistoricalInput, ...], field_codec.WireName("historicalInputs")
+    ]
+    current_scope: typing.Annotated[
+        Literal["owner_queue", "unobserved"], field_codec.WireName("currentScope")
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +88,9 @@ class InputDocument:
     def transition(self, keys: tuple[str, ...], change) -> InputDocument:
         """Each original state decides its successor; unchanged rows stay intact."""
         successors = {
-            name: row for key in keys for name, row in change(self.lookup(key)).successors(key).items()
+            name: row
+            for key in keys
+            for name, row in change(self.lookup(key)).successors(key).items()
         }
         return replace(self, rows={**self.rows, **successors}) if successors else self
 
@@ -90,8 +98,12 @@ class InputDocument:
         return self.transition(keys, lambda row: row.finish_unbound())
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        native_id: str,
+        sent_text: str,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> tuple[StartedInput, ...]:
         """Original rows for one actual native user, including grouped inputs.
 
@@ -99,8 +111,11 @@ class InputDocument:
         Look up that producer's exact native ID/text rather than choosing the
         initial turn input, a public event or the first matching row.
         """
-        return tuple(row for row in self.rows.values()
-                     if row.started_for_native(lease, native_id, sent_text, snapshot=snapshot))
+        return tuple(
+            row
+            for row in self.rows.values()
+            if row.started_for_native(lease, native_id, sent_text, snapshot=snapshot)
+        )
 
     def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""
@@ -119,7 +134,6 @@ class InputDocument:
                 key=lambda row: row.order,
             )
         )
-
 
     def answered_by(self, lease, source, snapshot, target: str) -> tuple[MessageReference, ...]:
         """The bus messages the lease's turn took in that a message to target answers."""
@@ -158,19 +172,29 @@ class InputDocument:
                 dismissed += int(row.notice_dismissed)
                 historical_count += int(not row.notice_dismissed)
                 if include_history:
-                    historical.append(
-                        HistoricalInput.notice(row, row.notice_dismissed))
+                    historical.append(HistoricalInput.notice(row, row.notice_dismissed))
             else:
                 current.append(UnresolvedInput.of(row))
-        return DeliveryOverview(tuple(current), historical_count, dismissed, tuple(historical),
-                                "owner_queue" if awaiting_keys is not None else "unobserved")
+        return DeliveryOverview(
+            tuple(current),
+            historical_count,
+            dismissed,
+            tuple(historical),
+            "owner_queue" if awaiting_keys is not None else "unobserved",
+        )
 
 
 def _unresolved_kinds() -> str:
     """The unresolved members' stored names, derived from their declarations."""
-    return "(" + ", ".join(
-        sql_literal(member) for member in InputAttempt.members_with(StoredInput) if member.unresolved
-    ) + ")"
+    return (
+        "("
+        + ", ".join(
+            sql_literal(member)
+            for member in InputAttempt.members_with(StoredInput)
+            if member.unresolved
+        )
+        + ")"
+    )
 
 
 @dataclass(frozen=True)
@@ -179,10 +203,18 @@ class InputDispositionRow(TypedTable):
 
     key: typing.Annotated[str, Column(primary_key=True)]
     attempt: StoredInput
-    owner: typing.Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(init=False, default=None, compare=False, repr=False)
-    turn_id: typing.Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = field(init=False, default=None, compare=False, repr=False)
-    sequence: typing.Annotated[int | None, Column(generated="json_extract(attempt,'$.sequence')")] = field(init=False, default=None, compare=False, repr=False)
-    unresolved: typing.Annotated[bool, Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")] = field(init=False, default=None, compare=False, repr=False)
+    owner: typing.Annotated[str, Column(generated="json_extract(attempt,'$.owner')")] = field(
+        init=False, default=None, compare=False, repr=False
+    )
+    turn_id: typing.Annotated[str | None, Column(generated="json_extract(attempt,'$.turn_id')")] = (
+        field(init=False, default=None, compare=False, repr=False)
+    )
+    sequence: typing.Annotated[
+        int | None, Column(generated="json_extract(attempt,'$.sequence')")
+    ] = field(init=False, default=None, compare=False, repr=False)
+    unresolved: typing.Annotated[
+        bool, Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")
+    ] = field(init=False, default=None, compare=False, repr=False)
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),
@@ -205,8 +237,14 @@ class InputDispositions(TypedStore):
 
     @staticmethod
     def _document(connection: sqlite3.Connection, where: str, parameters: tuple) -> InputDocument:
-        return InputDocument({row.key: row.attempt for row in InputDispositionRow.select(
-            connection, where=where, parameters=parameters)})
+        return InputDocument(
+            {
+                row.key: row.attempt
+                for row in InputDispositionRow.select(
+                    connection, where=where, parameters=parameters
+                )
+            }
+        )
 
     def _select(self, where: str, parameters: tuple = ()) -> InputDocument:
         with self.snapshot() as connection:
@@ -235,25 +273,34 @@ class InputDispositions(TypedStore):
     def in_turn(self, turn_id: str) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
 
-
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
         return message.role.response_policy(message).disposition_key(message, owner)
 
     def record(
-        self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(), ownership: ExitStack | None = None,
+        self,
+        key: str,
+        *,
+        seq: int | None,
+        owner: str,
+        claim_scope: int,
+        target: str,
+        text: str,
+        origin: InputOrigin = UnattributedInputOrigin(),
+        ownership: ExitStack | None = None,
     ) -> bool:
         """Register supplied reservation rollback before publishing acceptance."""
-        row = ReservedInput(key, seq, owner, claim_scope, target, text,
-                            origin=origin)
+        row = ReservedInput(key, seq, owner, claim_scope, target, text, origin=origin)
         document = self.record_originals(row, ownership=ownership)
         return document.rows[key] is row
 
     def record_originals(
-        self, *originals: ReservedInput, ownership: ExitStack | None = None,
+        self,
+        *originals: ReservedInput,
+        ownership: ExitStack | None = None,
     ) -> InputDocument:
         """Publish one original cohort; return its exact captured document."""
+
         def reserve(original: InputDocument) -> InputDocument:
             changed = original.record(*originals)
             if changed is not original and ownership is not None:
@@ -266,7 +313,13 @@ class InputDispositions(TypedStore):
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
-        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, ownership: ExitStack,
+        self,
+        owner: str,
+        turn: TurnId,
+        claim_scope: int,
+        text: str,
+        *,
+        ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch
@@ -277,7 +330,9 @@ class InputDispositions(TypedStore):
         return SingleInputBatch(document.originals((row.key,)))
 
     def reserve_originals(
-        self, *originals: ReservedInput, ownership: ExitStack,
+        self,
+        *originals: ReservedInput,
+        ownership: ExitStack,
     ) -> InputDocument:
         """Require fresh originals, retaining the exact publication and rollback."""
         document = self.record_originals(*originals, ownership=ownership)
@@ -314,7 +369,13 @@ class InputDispositions(TypedStore):
         )
 
     def bind_turn_input(
-        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str,
+        self,
+        keys: tuple[str, ...],
+        *,
+        claim_scope: int,
+        turn_id: str,
+        native_id: str,
+        text: str,
         already_bound: bool,
     ) -> bool:
         """Bind a turn's unresolved inputs to the native input carrying them.
@@ -324,13 +385,17 @@ class InputDispositions(TypedStore):
         document = self.read(keys)
         for row in document.rows.values():
             row.require_not_cleared()
-        if any(not document.lookup(key).unresolved
-               or not document.lookup(key).matches_claim(claim_scope) for key in keys):
+        if any(
+            not document.lookup(key).unresolved
+            or not document.lookup(key).matches_claim(claim_scope)
+            for key in keys
+        ):
             return False
         if already_bound:
-            return all(document.lookup(key).matches_native(
-                native_id=native_id, turn_id=turn_id, text=text
-            ) for key in keys)
+            return all(
+                document.lookup(key).matches_native(native_id=native_id, turn_id=turn_id, text=text)
+                for key in keys
+            )
         return self.bind_originals(
             keys, claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
@@ -345,9 +410,14 @@ class InputDispositions(TypedStore):
             nonlocal bound
             if not keys or len(set(keys)) != len(keys):
                 return document
-            successors = {name: row for key in keys for name, row in document.lookup(key).bind(
-                claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
-            ).successors(key).items()}
+            successors = {
+                name: row
+                for key in keys
+                for name, row in document.lookup(key)
+                .bind(claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text)
+                .successors(key)
+                .items()
+            }
             if successors.keys() != set(keys):
                 return document
             bound = True
@@ -413,4 +483,5 @@ class InputDispositions(TypedStore):
 
         where, parameters = _members("owner", sorted(owners))
         return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(
-            owners, awaiting_keys=awaiting_keys)
+            owners, awaiting_keys=awaiting_keys
+        )

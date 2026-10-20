@@ -69,14 +69,17 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
-    wire_root_id: typing.Annotated[str, Column(
-                primary_key=True,
-                check=(
-                    "\n"
-                    "                length(wire_root_id) = 32 AND wire_root_id NOT G"
-                    "LOB '*[^0-9a-f]*'"
-                ),
-            )]
+    wire_root_id: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            check=(
+                "\n"
+                "                length(wire_root_id) = 32 AND wire_root_id NOT G"
+                "LOB '*[^0-9a-f]*'"
+            ),
+        ),
+    ]
     wire_seq: typing.Annotated[int, Column(primary_key=True, check="wire_seq > 0")]
     message_id: typing.Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
     exact_target: typing.Annotated[str, Column(check="length(exact_target) BETWEEN 1 AND 256")]
@@ -86,7 +89,9 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
     member_count: typing.Annotated[int, Column(check="member_count BETWEEN 0 AND 4096")]
     claim_count: typing.Annotated[int, Column(check="claim_count BETWEEN 0 AND member_count")]
     manifest_codec: typing.Annotated[str, Column(check="length(manifest_codec) BETWEEN 1 AND 256")]
-    resolver_version: typing.Annotated[str, Column(check="length(resolver_version) BETWEEN 1 AND 256")]
+    resolver_version: typing.Annotated[
+        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+    ]
     policy_version: typing.Annotated[str, Column(check="length(policy_version) BETWEEN 1 AND 256")]
     accepted_at_ms: typing.Annotated[int, Column(check="accepted_at_ms >= 0")]
     sealed: bool = field(default=False)
@@ -97,7 +102,9 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
         from .wake_candidate_index import ProjectionUnavailableError
 
         if not self.sealed or self.message_id != assignment.message_id:
-            raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
+            raise ProjectionUnavailableError(
+                "selected source acknowledgement is unsealed or changed"
+            )
 
     @classmethod
     def trigger_bodies(cls):
@@ -227,7 +234,9 @@ class ClaimBatchMembers(CohortTable, TypedTable):
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"),
+                ClaimBatchAcknowledgements,
+                ("wire_root_id", "wire_seq"),
             ),
         )
 
@@ -282,7 +291,9 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
     wire_seq: typing.Annotated[int, Column(primary_key=True)]
     ordinal: typing.Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
     recipient_lookup: str
-    canonical_thread: typing.Annotated[str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")]
+    canonical_thread: typing.Annotated[
+        str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
+    ]
     kind: Literal["selected", "unmentioned_observer"]
     claim_id: str | None
     checks = (
@@ -328,7 +339,9 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"),
+                ClaimBatchAcknowledgements,
+                ("wire_root_id", "wire_seq"),
             ),
         )
 
@@ -415,7 +428,9 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     wire_root_id: str
     wire_seq: typing.Annotated[int, Column(check="wire_seq > 0")]
     recipient_lookup: str
-    canonical_thread: typing.Annotated[str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")]
+    canonical_thread: typing.Annotated[
+        str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
+    ]
     owner_generation: typing.Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
@@ -432,18 +447,24 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     def captured_owner(self) -> OwnerGenerations:
         """The original acceptance's owner observation, not a current lease."""
         return OwnerGenerations(
-            owner_lookup=self.recipient_lookup, owner_thread=self.canonical_thread,
+            owner_lookup=self.recipient_lookup,
+            owner_thread=self.canonical_thread,
             generation=self.owner_generation,
         )
 
-    def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
+    def require_selection(
+        self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements
+    ) -> None:
         """Verify this immutable acceptance capture against its original claim."""
         from .wake_candidate_index import ProjectionUnavailableError
 
         expected = type(self)(
-            claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
-            wire_seq=assignment.wire_seq, recipient_lookup=assignment.recipient_lookup,
-            canonical_thread=assignment.recipient, owner_generation=self.owner_generation,
+            claim_id=assignment.assignment_id,
+            wire_root_id=acknowledgement.wire_root_id,
+            wire_seq=assignment.wire_seq,
+            recipient_lookup=assignment.recipient_lookup,
+            canonical_thread=assignment.recipient,
+            owner_generation=self.owner_generation,
         )
         if self != expected:
             raise ProjectionUnavailableError("selected source generation provenance changed")
@@ -456,17 +477,20 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
         if execution.origin is not ExecutionOrigin.WIRE:
             raise ProjectionUnavailableError("open obligation has no wire origin")
         original_owner = OwnerGenerations(
-            owner_lookup=execution.owner_lookup, owner_thread=execution.owner_thread,
+            owner_lookup=execution.owner_lookup,
+            owner_thread=execution.owner_thread,
             generation=self.owner_generation,
         )
         original_link = type(link)(
-            execution_id=obligation.execution_id, assignment_id=self.claim_id,
+            execution_id=obligation.execution_id,
+            assignment_id=self.claim_id,
             ordinal=link.ordinal,
         )
         if self.captured_owner != original_owner or link != original_link:
             raise ProjectionUnavailableError("open obligation has no exact owner provenance")
         if (self.claim_id, assignment.lifecycle.exact_target) != (
-            assignment.assignment_id, obligation.exact_target
+            assignment.assignment_id,
+            obligation.exact_target,
         ):
             raise ProjectionUnavailableError("open obligation has no exact owner provenance")
 
@@ -537,15 +561,21 @@ def _digest(schema: dict[str, str]) -> str:
 
 
 def _cohort_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(db.execute(
-        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-        "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"))
+    return SQLiteSchemaObject.read(
+        db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
+            "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"
+        )
+    )
 
 
 def _awareness_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(db.execute(
-        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-        "AND name LIKE 'awareness_%'"))
+    return SQLiteSchemaObject.read(
+        db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
+            "AND name LIKE 'awareness_%'"
+        )
+    )
 
 
 def assert_cohort_schema(db: sqlite3.Connection) -> None:
@@ -567,9 +597,9 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     schema = _schema(AwarenessTable)
     meta = AwarenessSchemaMeta.one(db, singleton=1)
-    if SQLiteSchemaObject.differences(_awareness_objects(db), schema) or meta != AwarenessSchemaMeta(
-        singleton=1, version=2, ddl_digest=_digest(schema)
-    ):
+    if SQLiteSchemaObject.differences(
+        _awareness_objects(db), schema
+    ) or meta != AwarenessSchemaMeta(singleton=1, version=2, ddl_digest=_digest(schema)):
         raise SchemaVersionError("optional awareness generation schema is unavailable")
 
 

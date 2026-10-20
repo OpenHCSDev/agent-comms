@@ -92,11 +92,18 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     tail_digest: str
     last_seq: typing.Annotated[int, Column(check="last_seq>=0")]
 
-
     @classmethod
     def initial(cls, root_id: str, revision: FileRevision) -> CandidateCheckpoint:
-        return cls(singleton=1, version=3, root_id=root_id, device=revision.identity.device,
-                   inode=revision.identity.inode, byte_offset=0, tail_digest="", last_seq=0)
+        return cls(
+            singleton=1,
+            version=3,
+            root_id=root_id,
+            device=revision.identity.device,
+            inode=revision.identity.inode,
+            byte_offset=0,
+            tail_digest="",
+            last_seq=0,
+        )
 
     @classmethod
     def current(cls, db: sqlite3.Connection) -> CheckpointState:
@@ -110,7 +117,9 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
         return PrefixSource(self.root_id, self.device, self.inode)
 
     def require_source(self, source: WireSnapshot, root_id: str) -> CheckpointState:
-        if self.source_identity != PrefixSource(root_id, source.revision.identity.device, source.revision.identity.inode):
+        if self.source_identity != PrefixSource(
+            root_id, source.revision.identity.device, source.revision.identity.inode
+        ):
             return OutdatedCheckpoint()
         if self.byte_offset > source.boundary:
             return OutdatedCheckpoint()
@@ -205,14 +214,16 @@ class _ReplayBatch:
 
 
 class IndexStart(ABC):
-    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
-                   root_id: str) -> IndexStart:
+    def for_source(
+        self, checkpoint: CheckpointState, source: WireSnapshot, root_id: str
+    ) -> IndexStart:
         """Strict resume and explicit rebuild retain their selected policy."""
         return self
 
     @abstractmethod
-    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
-              root_id: str) -> CandidateCheckpoint: ...
+    def start(
+        self, checkpoint: CheckpointState, source: WireSnapshot, root_id: str
+    ) -> CandidateCheckpoint: ...
 
     def prepare_rows(self, db: sqlite3.Connection) -> None:
         """Resuming and first builds preserve already committed rows."""
@@ -223,12 +234,14 @@ class IndexStart(ABC):
 
 
 class ResumeIndex(IndexStart):
-    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
-                   root_id: str) -> IndexStart:
+    def for_source(
+        self, checkpoint: CheckpointState, source: WireSnapshot, root_id: str
+    ) -> IndexStart:
         return checkpoint.require_source(source, root_id).start()
 
-    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
-              root_id: str) -> CandidateCheckpoint:
+    def start(
+        self, checkpoint: CheckpointState, source: WireSnapshot, root_id: str
+    ) -> CandidateCheckpoint:
         return checkpoint.require_source(source, root_id).checkpoint(source, root_id)
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
@@ -236,8 +249,9 @@ class ResumeIndex(IndexStart):
 
 
 class RebuildIndex(IndexStart):
-    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
-              root_id: str) -> CandidateCheckpoint:
+    def start(
+        self, checkpoint: CheckpointState, source: WireSnapshot, root_id: str
+    ) -> CandidateCheckpoint:
         return CandidateCheckpoint.initial(root_id, source.revision)
 
     def prepare_rows(self, db: sqlite3.Connection) -> None:
@@ -324,7 +338,9 @@ class WakeCandidateIndex(TypedStore):
         return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)
 
     @classmethod
-    def _replay_prefix(cls, source: WireSnapshot, offset: int, last_seq: int, *, max_rows: int, max_bytes: int) -> _ReplayBatch:
+    def _replay_prefix(
+        cls, source: WireSnapshot, offset: int, last_seq: int, *, max_rows: int, max_bytes: int
+    ) -> _ReplayBatch:
         rows, response_keys = [], []
         through = offset
         started = time.monotonic()
@@ -368,12 +384,16 @@ class WakeCandidateIndex(TypedStore):
             if CandidateResponseKey.one(db, publication_key=row.publication_key) is not None:
                 raise ProjectionUnavailableError("duplicate private response publication key")
             row.insert(db)
-        replace(checkpoint, byte_offset=batch.next_offset,
-                tail_digest=tail, last_seq=batch.last_seq).upsert(db)
+        replace(
+            checkpoint, byte_offset=batch.next_offset, tail_digest=tail, last_seq=batch.last_seq
+        ).upsert(db)
 
     def maintain(
-        self, *, start: IndexStart = ResumeIndex(),
-        max_rows: int = batch_rows, max_bytes: int = batch_bytes,
+        self,
+        *,
+        start: IndexStart = ResumeIndex(),
+        max_rows: int = batch_rows,
+        max_bytes: int = batch_bytes,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
@@ -387,8 +407,11 @@ class WakeCandidateIndex(TypedStore):
                 start = start.for_source(recorded, source, root_id)
                 checkpoint = start.start(recorded, source, root_id)
                 batch = self._replay_prefix(
-                    source, checkpoint.byte_offset, checkpoint.last_seq,
-                    max_rows=max_rows, max_bytes=max_bytes,
+                    source,
+                    checkpoint.byte_offset,
+                    checkpoint.last_seq,
+                    max_rows=max_rows,
+                    max_bytes=max_bytes,
                 )
                 with self.writing() as db:
                     current = CandidateCheckpoint.current(db)
@@ -399,7 +422,9 @@ class WakeCandidateIndex(TypedStore):
                 # Another writer's committed row owns progress. Close the SQL
                 # connection before validating its source; never replay a batch.
                 advanced = ResumeIndex().start(
-                    current, source, root_id,
+                    current,
+                    source,
+                    root_id,
                 )
                 return advanced.byte_offset >= source.boundary
         except (
@@ -426,7 +451,6 @@ class WakeCandidateIndex(TypedStore):
         No hint proves that its claimed source prefix actually committed.
         """
         return CommittedAppendHint.capture(root_id, through_bytes)
-
 
     def _verified_checkpoint(self, root_id: str) -> CheckpointState:
         return self._captured_checkpoint(root_id).refreshed(self, root_id)
@@ -471,9 +495,7 @@ class WakeCandidateIndex(TypedStore):
             return CandidateCatchUp(prior_bytes, True, False)
         # The saved row, not file existence, decides initialization inside
         # maintain's serialized transaction; concurrent first builds can resume.
-        more_source_bytes = not self.maintain(
-            start=start, max_rows=max_rows, max_bytes=max_bytes
-        )
+        more_source_bytes = not self.maintain(start=start, max_rows=max_rows, max_bytes=max_bytes)
         checkpoint = self._verified_checkpoint(hint.root_id)
         if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
             # The checkpoint row owns the byte position: a batch that consumed
@@ -484,9 +506,7 @@ class WakeCandidateIndex(TypedStore):
                 "candidate batch consumed no source bytes while source bytes remain"
             )
         if checkpoint.byte_offset < hint.through_bytes and not more_source_bytes:
-            raise ProjectionUnavailableError(
-                "candidate notification exceeds verified source bytes"
-            )
+            raise ProjectionUnavailableError("candidate notification exceeds verified source bytes")
         return CandidateCatchUp(
             checkpoint.byte_offset, checkpoint.byte_offset >= hint.through_bytes, more_source_bytes
         )
@@ -505,15 +525,24 @@ class WakeCandidateIndex(TypedStore):
         Root and high-water must come from the caller's trusted snapshot, never
         agent/model arguments. Returning a page does not attest current state.
         """
-        request = CandidateQuery.capture(root_id=root_id, recipient_lookup=recipient_lookup,
-                     after_seq=after_seq, required_through_seq=required_through_seq,
-                     limit=limit)
+        request = CandidateQuery.capture(
+            root_id=root_id,
+            recipient_lookup=recipient_lookup,
+            after_seq=after_seq,
+            required_through_seq=required_through_seq,
+            limit=limit,
+        )
         try:
             self._verified_checkpoint(root_id).require_fresh(request)
-            with (self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source,
-                  self.snapshot() as db):
-                checkpoint = (CandidateCheckpoint.current(db)
-                              .require_source(source, request.root_id).require_fresh(request))
+            with (
+                self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source,
+                self.snapshot() as db,
+            ):
+                checkpoint = (
+                    CandidateCheckpoint.current(db)
+                    .require_source(source, request.root_id)
+                    .require_fresh(request)
+                )
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '
@@ -525,7 +554,7 @@ class WakeCandidateIndex(TypedStore):
                 )
                 return CandidatePage(
                     checkpoint.last_seq,
-                    tuple(data[:request.limit]),
+                    tuple(data[: request.limit]),
                     len(data) > request.limit,
                 )
         except (OSError, sqlite3.DatabaseError, MalformedRecord) as error:

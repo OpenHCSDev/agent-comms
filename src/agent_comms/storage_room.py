@@ -76,8 +76,9 @@ class WaitingRoomPhase(RoomPhase):
     waiting = True
 
     def project(self, activity, work):
-        return activity.with_status(ActivityState.WAITING_FOR_ROOM,
-                                    ', '.join(kind.declared_name for kind in work))
+        return activity.with_status(
+            ActivityState.WAITING_FOR_ROOM, ", ".join(kind.declared_name for kind in work)
+        )
 
 
 @dataclass(frozen=True)
@@ -128,12 +129,16 @@ class RoomLedger(TypedStore):
         with self.snapshot() as db:
             claims = RoomClaim.select(db, root=str(root))
         # A waiting sibling call must stay visible beside a running one.
-        return {claim.unit.name: claim for claim in sorted(claims, key=lambda row: row.phase.waiting)
-                if claim.unit in wanted and claim.process.alive()}
+        return {
+            claim.unit.name: claim
+            for claim in sorted(claims, key=lambda row: row.phase.waiting)
+            if claim.unit in wanted and claim.process.alive()
+        }
 
 
 class WorkMeasurement:
     """One run's sampled process-tree RSS/HWM and peak free-disk delta."""
+
     sample_seconds = 0.05
 
     def __init__(self, rule, process):
@@ -149,14 +154,18 @@ class WorkMeasurement:
             return 0
         tree = {self.process.pid}
         rows = {}
-        for directory in self.rule.proc.glob('[0-9]*'):
+        for directory in self.rule.proc.glob("[0-9]*"):
             try:
-                values = {line.partition(':')[0]: line.partition(':')[2].split()
-                          for line in (directory / 'status').read_text().splitlines()}
-                rows[int(directory.name)] = (int(values['PPid'][0]),
-                    max(int(values.get('VmRSS', ['0'])[0]),
-                        int(values.get('VmHWM', ['0'])[0])) * 1024)
-            except (FileNotFoundError, ProcessLookupError):
+                values = {
+                    line.partition(":")[0]: line.partition(":")[2].split()
+                    for line in (directory / "status").read_text().splitlines()
+                }
+                rows[int(directory.name)] = (
+                    int(values["PPid"][0]),
+                    max(int(values.get("VmRSS", ["0"])[0]), int(values.get("VmHWM", ["0"])[0]))
+                    * 1024,
+                )
+            except FileNotFoundError, ProcessLookupError:
                 continue
         pending = set(rows) - tree
         while children := {pid for pid in pending if rows[pid][0] in tree}:
@@ -166,8 +175,9 @@ class WorkMeasurement:
 
     def observe(self):
         while True:
-            self.peak = self.peak.peak(RoomNeed(self.resident(),
-                max(0, self.disk_before - self.rule.free_room().disk)))
+            self.peak = self.peak.peak(
+                RoomNeed(self.resident(), max(0, self.disk_before - self.rule.free_room().disk))
+            )
             if self.done.wait(self.sample_seconds):
                 break
 
@@ -226,6 +236,7 @@ class MeasuredRoomReservation(RoomReservation):
 
 class RoomAllocation:
     """StorageRule's admission and measurement behavior, shared by all callers."""
+
     work_kinds: ClassVar[type[RoomWork]] = RoomWork
     # A release wakes through inotify. The timed OS refresh also observes room
     # freed by jobs outside Core, which cannot notify this ledger.
@@ -233,7 +244,7 @@ class RoomAllocation:
 
     @property
     def room_ledger(self):
-        return RoomLedger(self.volume / '.cache' / 'agent-comms')
+        return RoomLedger(self.volume / ".cache" / "agent-comms")
 
     def free_room(self):
         return RoomNeed(self.memory_available_bytes(), int(self.free_gib() * 2**30))
@@ -251,7 +262,7 @@ class RoomAllocation:
                 RoomClaim.delete(db, ticket=stale)
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is None:
-                raise RuntimeError('Room waiter disappeared')
+                raise RuntimeError("Room waiter disappeared")
             held = RoomNeed()
             for other in RoomClaim.select(db):
                 held += other.phase.held
@@ -269,8 +280,9 @@ class RoomAllocation:
                     need += peak.need
                 if not (need + self.room_floor() + held).fits(free):
                     return False
-            RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
-                             phase=HoldingRoomPhase(need))
+            RoomClaim.update(
+                db, where="{ticket}=?", parameters=(ticket,), phase=HoldingRoomPhase(need)
+            )
             return True
 
     async def wait_for_room(self, work, thread, root, *, process=None):
@@ -279,17 +291,24 @@ class RoomAllocation:
         ledger = self.room_ledger
         await asyncio.to_thread(ledger.root.mkdir, parents=True, exist_ok=True)
         ticket = uuid4().hex
-        claim = RoomClaim(ticket, str(root), thread.incarnation,
-                          process, work, WaitingRoomPhase(), time.time())
+        claim = RoomClaim(
+            ticket, str(root), thread.incarnation, process, work, WaitingRoomPhase(), time.time()
+        )
         admitted = False
         try:
+
             def enqueue():
                 with ledger.writing() as db:
                     claim.insert(db)
+
             await asyncio.to_thread(enqueue)
-            source = ModifiedWatchSource(ledger.root, frozenset(
-                os.fsencode(path.name) for path in ledger.source_paths(ledger.root)))
-            async for _ in WireWatch.observations(source, refresh_seconds=self.room_refresh_seconds):
+            source = ModifiedWatchSource(
+                ledger.root,
+                frozenset(os.fsencode(path.name) for path in ledger.source_paths(ledger.root)),
+            )
+            async for _ in WireWatch.observations(
+                source, refresh_seconds=self.room_refresh_seconds
+            ):
                 if await asyncio.to_thread(self._admit, ticket):
                     measurement = WorkMeasurement(self, process)
                     admitted = True

@@ -48,8 +48,7 @@ class SessionSnapshot:
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return bool(
-            response.success
-            and response.data.conflicts_attestation(session.native.attestation)
+            response.success and response.data.conflicts_attestation(session.native.attestation)
         ) or super().invalidates_identity(response, session)
 
 
@@ -67,7 +66,9 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: typing.Annotated[str | None, field_codec.WireAbsentNone(True)] = field(default_factory=lambda: uuid4().hex)
+    id: typing.Annotated[str | None, field_codec.WireAbsentNone(True)] = field(
+        default_factory=lambda: uuid4().hex
+    )
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -84,13 +85,16 @@ class PiCommand(DeclaredFamily):
             channel.pending.discard(type(self), self.id)
             future.cancel()
 
-    async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
+    async def exchange(
+        self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None
+    ):
         from .pi_events import Response
+
         async with self.pending_response(channel, writer) as future:
             while not future.done():
                 event = await channel.receive(strict=strict, max_bytes=max_bytes)
                 if event is None:
-                    raise EOFError('Pi RPC ended before the requested response')
+                    raise EOFError("Pi RPC ended before the requested response")
                 if isinstance(event, Response):
                     channel.correlate(event)
                 else:
@@ -120,9 +124,7 @@ class PiCommand(DeclaredFamily):
             return UnknownCommand
 
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         return ()
 
 
@@ -137,17 +139,29 @@ class UnknownCommand(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
-    input_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputId")] = field(default=None)
-    message: typing.Annotated[str, field_codec.WireOmitDefault(True), field_codec.WireName("message")] = field(default=None)
-    images: typing.Annotated[tuple[ImageInput, ...] | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    context_contributions: typing.Annotated[tuple[InputContributionCoordinates, ...], field_codec.WireOmitDefault(True), field_codec.WireName("contextContributions")] = field(default=())
+    input_id: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputId")
+    ] = field(default=None)
+    message: typing.Annotated[
+        str, field_codec.WireOmitDefault(True), field_codec.WireName("message")
+    ] = field(default=None)
+    images: typing.Annotated[tuple[ImageInput, ...] | None, field_codec.WireOmitDefault(True)] = (
+        field(default=None)
+    )
+    context_contributions: typing.Annotated[
+        tuple[InputContributionCoordinates, ...],
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("contextContributions"),
+    ] = field(default=())
     owner_tools: typing.Annotated[OwnerToolConnection, field_codec.WireName("ownerTools")]
-    streaming_behavior: typing.Annotated[Literal[None, "steer", "followUp"], field_codec.WireOmitDefault(True), field_codec.WireName("streamingBehavior")] = field(default=None)
+    streaming_behavior: typing.Annotated[
+        Literal[None, "steer", "followUp"],
+        field_codec.WireOmitDefault(True),
+        field_codec.WireName("streamingBehavior"),
+    ] = field(default=None)
 
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         if response.id == session.command.id:
             session.watchdog.progress()
             if response.success:
@@ -175,9 +189,7 @@ class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         if response.success:
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
@@ -192,9 +204,7 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
 
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         if response.success:
             context = response.data.require_payload().context_usage
             if context is not None:
@@ -214,8 +224,13 @@ class CatalogQuery(NativeQuery):
 
     @asynccontextmanager
     async def catalog(
-        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage,
-        worktree: Path | None = None, root: Path | str | None = None,
+        self,
+        agent_bin: str,
+        arguments: Sequence[str],
+        *,
+        package: VerifiedNativePackage,
+        worktree: Path | None = None,
+        root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -244,12 +259,19 @@ class CatalogQuery(NativeQuery):
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(
-        self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
-        *, package: VerifiedNativePackage,
+        self,
+        agent_bin: str,
+        arguments: Sequence[str],
+        root: Path | str | None = None,
+        *,
+        package: VerifiedNativePackage,
     ) -> PiResponseData:
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments, root=root, package=package) as (channel, writer):
+        async with self.catalog(agent_bin, arguments, root=root, package=package) as (
+            channel,
+            writer,
+        ):
             response = await self.exchange(channel, writer)
             if response.success is True:
                 return response.data.require_payload()
@@ -274,13 +296,13 @@ class Abort(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         if response.success is False:
             yield events.Error(text=str(response.error or "Send now was refused"))
 
-    input_ids: typing.Annotated[list[str] | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputIds")] = field(default=None)
+    input_ids: typing.Annotated[
+        list[str] | None, field_codec.WireOmitDefault(True), field_codec.WireName("inputIds")
+    ] = field(default=None)
 
 
 class SettingCommand(CatalogQuery):
@@ -293,7 +315,12 @@ class SettingCommand(CatalogQuery):
     error_message: ClassVar[str]
 
     async def configure(
-        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage, worktree: Path,
+        self,
+        agent_bin: str,
+        arguments: Sequence[str],
+        *,
+        package: VerifiedNativePackage,
+        worktree: Path,
         root: Path | str | None = None,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
@@ -314,9 +341,7 @@ class SettingCommand(CatalogQuery):
             return state.data.require_payload()
 
     @classmethod
-    def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> Iterable[events.AgentEvent]:
+    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
             ok=bool(response.success),
@@ -330,13 +355,15 @@ class SetModel(SettingCommand):
     def from_name(cls, model: str | None):
         if model is None:
             return cls()
-        provider, model_id = model.split('/', 1)
+        provider, model_id = model.split("/", 1)
         return cls(provider=provider, model_id=model_id)
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
     provider: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    model_id: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("modelId")] = field(default=None)
+    model_id: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("modelId")
+    ] = field(default=None)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -367,13 +394,19 @@ class Compact(NativeQuery):
 
     response_payload = CompactionData
     writes_session = True
-    custom_instructions: typing.Annotated[str | None, field_codec.WireOmitDefault(True), field_codec.WireName("customInstructions")] = field(default=None)
+    custom_instructions: typing.Annotated[
+        str | None, field_codec.WireOmitDefault(True), field_codec.WireName("customInstructions")
+    ] = field(default=None)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiResponse(PiCommand):
-    cancelled: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    confirmed: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(default=None)
+    cancelled: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(
+        default=None
+    )
+    confirmed: typing.Annotated[bool | None, field_codec.WireOmitDefault(True)] = field(
+        default=None
+    )
     value: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
 
 
@@ -414,5 +447,9 @@ class AgentCommsInspectContextSegment(NativeQuery):
 
     @classmethod
     def for_manifest(cls, expected: SegmentManifest):
-        return cls(identity=expected.sources.native_identity(), entries=expected.sources.journal_entries(),
-                   expected=expected, parts=expected.requested_parts())
+        return cls(
+            identity=expected.sources.native_identity(),
+            entries=expected.sources.journal_entries(),
+            expected=expected,
+            parts=expected.requested_parts(),
+        )

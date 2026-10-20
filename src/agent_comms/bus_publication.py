@@ -93,7 +93,9 @@ class CommittedDelivery(MessageWireRecord):
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
-    acknowledgement: typing.Annotated[KeyedResponseAcknowledgement | None, field_codec.WireName('receipt')] = field(default=None)
+    acknowledgement: typing.Annotated[
+        KeyedResponseAcknowledgement | None, field_codec.WireName("receipt")
+    ] = field(default=None)
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
@@ -107,8 +109,7 @@ class CommittedDelivery(MessageWireRecord):
     def compaction_messages_for(self, recipient_lookup):
         addressed = self.audience.includes_lookup(recipient_lookup)
         authored = (
-            self.audience.sender_lookup == recipient_lookup
-            and self.message.retains_authored_task
+            self.audience.sender_lookup == recipient_lookup and self.message.retains_authored_task
         )
         return self.messages() if addressed or authored else ()
 
@@ -168,7 +169,10 @@ class CommittedDelivery(MessageWireRecord):
 
     @classmethod
     def proved(
-        cls, wire_root_id: str, message: Message, policy: DeliveryPolicy,
+        cls,
+        wire_root_id: str,
+        message: Message,
+        policy: DeliveryPolicy,
         decisions: tuple[RecipientDecision, ...],
         acknowledgement: KeyedResponseAcknowledgement | None,
     ) -> CommittedDelivery:
@@ -192,15 +196,21 @@ class CommittedDelivery(MessageWireRecord):
     def require_claim(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
-                        claimed_after_seq: int):
+    def checkpoint_rows(
+        self, offset: int, length: int, previous_sequence: int, claimed_after_seq: int
+    ):
         from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
         yield from super().checkpoint_rows(offset, length, previous_sequence, claimed_after_seq)
         if self.acknowledgement is not None:
             yield ResponseKeys(self.acknowledgement.publication_key)
-        yield DeliverySources(self.message.seq, self.message.message_id,
-                              self.audience.sender_lookup, offset=offset, length=length)
+        yield DeliverySources(
+            self.message.seq,
+            self.message.message_id,
+            self.audience.sender_lookup,
+            offset=offset,
+            length=length,
+        )
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
         for answered in self.message.answers:

@@ -15,10 +15,13 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True, kw_only=True)
 class Participants(CoordinatorTable, TypedTable):
-    participant_lookup: typing.Annotated[str, Column(
-                primary_key=True,
-                check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
-            )]
+    participant_lookup: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
+        ),
+    ]
     display_name: typing.Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
     committed: bool
 

@@ -94,7 +94,9 @@ class OwnerUpdate(OwnerLine):
     """An ACP session update; its metadata is presented again for the attached session."""
 
     update: dict[str, object]
-    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(default_factory=dict)
+    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def of(cls, update: BaseModel) -> Self:
@@ -139,7 +141,9 @@ class OwnerFailure(OwnerLine):
     """A failed request. A JSON-RPC error raises again as itself on the client."""
 
     error: str
-    rpc_error: typing.Annotated[OwnerRpcError | None, field_codec.WireName("rpcError")] = field(default=None)
+    rpc_error: typing.Annotated[OwnerRpcError | None, field_codec.WireName("rpcError")] = field(
+        default=None
+    )
 
     @classmethod
     def of(cls, error: Exception) -> Self:
@@ -222,9 +226,11 @@ class IncompatibleOwner(DeclaredFamily, affix="Owner"):
         return {"reason": self.line(), self.FAILURE: FieldCodec.encode(self)}
 
     def line(self) -> str:
-        return (f"The {self.thread} owner runs {self.owner_core()}, not this app's Core "
-                f"{CORE_COMMIT[:9]}. Its history is shown read-only; sending opens after "
-                f"the owner restarts while idle.")
+        return (
+            f"The {self.thread} owner runs {self.owner_core()}, not this app's Core "
+            f"{CORE_COMMIT[:9]}. Its history is shown read-only; sending opens after "
+            f"the owner restarts while idle."
+        )
 
     async def request(self, action: str, **_: object) -> dict:
         """The history-only attachment refuses every owner request with this owner's line."""

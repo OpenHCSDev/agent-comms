@@ -39,6 +39,7 @@ class TranscriptProjection:
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
+
     id: str | None = None
     parent_id: typing.Annotated[str | None, field_codec.WireName("parentId")] = field(default=None)
     timestamp: Annotated[RecordedTimestamp, TimestampText]
@@ -53,7 +54,9 @@ class RecordedEntry(PiPayload):
 
     def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
         return {
-            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "type": "message",
+            "id": uuid4().hex[:16],
+            "parentId": self.child_parent,
             "timestamp": timestamp.isoformat(),
             "message": message.pi_message(int(timestamp.timestamp() * 1000)),
         }
@@ -78,7 +81,11 @@ class RecordedEntry(PiPayload):
         return self._events(context, self.timestamp.at.timestamp())
 
     def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
-        return [event for message in self.messages for event in message.transcript_events(context, timestamp)]
+        return [
+            event
+            for message in self.messages
+            for event in message.transcript_events(context, timestamp)
+        ]
 
     @property
     def original_id(self):
@@ -187,6 +194,7 @@ class ImportedSessionWriter:
         def append(message: ImportedMessage) -> None:
             at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
             self.append(message, datetime.fromtimestamp(at, UTC))
+
         event.import_to(append)
 
 
@@ -197,10 +205,12 @@ class NativeEvidenceState(ABC):
     def read(self, reader: NativeEvidenceRead) -> SessionEntry: ...
 
     def observe_inputs(
-        self, reader: NativeEvidenceRead, inputs: tuple[NativeInputLocation, ...],
+        self,
+        reader: NativeEvidenceRead,
+        inputs: tuple[NativeInputLocation, ...],
     ) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         if not inputs:
-            raise MalformedRecord('Native input evidence requires a committed byte offset')
+            raise MalformedRecord("Native input evidence requires a committed byte offset")
         minimum = min(item.session_entry_start for item in inputs)
         reader.header()
         reader.source.start_at(minimum)
@@ -230,7 +240,9 @@ class InputNativeEvidence(HeaderNativeEvidence):
     minimum: int
 
     def observe_inputs(
-        self, reader: NativeEvidenceRead, inputs: tuple[NativeInputLocation, ...],
+        self,
+        reader: NativeEvidenceRead,
+        inputs: tuple[NativeInputLocation, ...],
     ) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         if any(item.session_entry_start < self.minimum for item in inputs):
             reader._forget()
@@ -313,7 +325,8 @@ class NativeEvidenceRead:
             return self.inputs[input_id]
         except KeyError as missing:
             raise NativeInputUncommitted(
-                "The specified input was never durably committed") from missing
+                "The specified input was never durably committed"
+            ) from missing
 
     def tracked(self, input_id: str) -> MessageEntry:
         """The observed entry that holds this tracked input."""
@@ -325,12 +338,13 @@ class NativeEvidenceRead:
             if user := entry.tracked_user:
                 if user.input_id in self.inputs:
                     raise MalformedRecord(
-                        "ambiguous tracked user input: one input ID on two entries")
+                        "ambiguous tracked user input: one input ID on two entries"
+                    )
                 self.inputs[user.input_id] = position
 
     def _accept_header(self, entries: tuple[NativeEntry, ...]) -> SessionEntry:
         if not entries or not isinstance(entries[0], SessionEntry):
-            raise MalformedRecord('Native Pi session header is invalid')
+            raise MalformedRecord("Native Pi session header is invalid")
         entries[0].require_header()
         return entries[0]
 
@@ -342,7 +356,7 @@ class NativeEvidenceRead:
             return self.state.read(self)
         except MalformedRecord as error:
             self.close()
-            raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
+            raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
 
     def observe(self):
         """Read the full history."""
@@ -366,7 +380,7 @@ class NativeEvidenceRead:
         except NativeInputUncommitted as uncommitted:
             return uncommitted.stop_reason
         last = entries[start]
-        for entry in entries[start + 1:]:
+        for entry in entries[start + 1 :]:
             if entry.input_boundary:
                 break
             if entry.parent_id != last.id:
@@ -460,9 +474,9 @@ class NativeEvidenceScope(ExitStack):
     def observe_inputs(self, contexts: tuple[NativeContextProof, ...]) -> None:
         """Read each source from its first required input before checking any input."""
         for path in {context.session_file for context in contexts}:
-            self.for_source(path).observe(*(
-                context for context in contexts if context.session_file == path
-            ))
+            self.for_source(path).observe(
+                *(context for context in contexts if context.session_file == path)
+            )
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
@@ -492,7 +506,9 @@ class SessionEntry(NativeEntry):
 
     version: int | None = None
     cwd: typing.Annotated[str | None, field_codec.WireOmitDefault(True)] = field(default=None)
-    parent_session: typing.Annotated[str | None, field_codec.WireName("parentSession"), field_codec.WireOmitDefault(True)] = field(default=None)
+    parent_session: typing.Annotated[
+        str | None, field_codec.WireName("parentSession"), field_codec.WireOmitDefault(True)
+    ] = field(default=None)
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -571,14 +587,27 @@ class CompactionEntry(NativeEntry):
 
     def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
         text = self.summary.strip()
-        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position, timestamp=timestamp)] if text else []
+        return (
+            [
+                NoticeTranscript(
+                    f"## Context compacted\n\n{text}",
+                    position=context.position,
+                    timestamp=timestamp,
+                )
+            ]
+            if text
+            else []
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
+
     id: int = field()
-    messages: typing.Annotated[tuple[PiMessage, ...], field_codec.WireName('model')] = field(default=())
+    messages: typing.Annotated[tuple[PiMessage, ...], field_codec.WireName("model")] = field(
+        default=()
+    )
 
 
 class CustomEntry(NativeEntry):
@@ -586,7 +615,11 @@ class CustomEntry(NativeEntry):
 
     @classmethod
     def wire_variant(cls, value):
-        return ImportedMetadataEntry if value.get("customType") == "agent-comms-import" else UnknownEntry
+        return (
+            ImportedMetadataEntry
+            if value.get("customType") == "agent-comms-import"
+            else UnknownEntry
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

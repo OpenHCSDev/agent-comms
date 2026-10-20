@@ -106,7 +106,9 @@ def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignm
 def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
-    row = ClaimBatchAcknowledgements.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
+    row = ClaimBatchAcknowledgements.one(
+        db, wire_root_id=initial.wire_root_id, wire_seq=message.seq
+    )
     if row is None or not row.sealed:
         raise IdentityConflict("cohort acknowledgement is absent or unsealed")
     expected_count = sum(len(decision.claim_decisions()) for decision in initial.decisions)
@@ -247,7 +249,9 @@ def accept_delivery_cohort(
             raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
         assert_cohort_schema(db)
-        acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
+        acknowledgement = ClaimBatchAcknowledgements.one(
+            db, wire_root_id=wire_root_id, wire_seq=wire_seq
+        )
         if acknowledgement is not None:
             return AlreadyApplied(_claim_record(db, initial))
         if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
@@ -324,7 +328,11 @@ def next_sealed_assignment(
 
 
 def pending_sealed_assignments(
-    store: Coordination, recipient_lookup: str, owner_name: str, *, after_seq: int = 0,
+    store: Coordination,
+    recipient_lookup: str,
+    owner_name: str,
+    *,
+    after_seq: int = 0,
 ) -> tuple[WakeAssignment, ...]:
     """Read acknowledged pending work once, excluding messages arriving afterward.
 
@@ -337,18 +345,26 @@ def pending_sealed_assignments(
     with store.session.read():
         while True:
             selected = sealed_cohort_assignments(
-                store, recipient_lookup, after_seq=cursor, limit=100,
+                store,
+                recipient_lookup,
+                after_seq=cursor,
+                limit=100,
                 state_capability=PendingNotification,
             )
-            pending.extend(assignment for assignment in selected
-                           if assignment.recipient == owner_name)
+            pending.extend(
+                assignment for assignment in selected if assignment.recipient == owner_name
+            )
             if len(selected) < 100:
                 return tuple(pending)
             cursor = selected[-1].wire_seq
 
 
 def sealed_cohort_assignments(
-    store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100,
+    store: Coordination,
+    recipient_lookup: str,
+    *,
+    after_seq: int = 0,
+    limit: int = 100,
     state_capability: type = AssignmentState,
 ) -> tuple[WakeAssignment, ...]:
     """Bounded acknowledgement-backed projection. Never pages unbound singleton claims."""

@@ -86,8 +86,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         cls, thread: str, controller_token: str | None, parameters: dict[str, object]
     ) -> dict[str, object]:
         # The owner decodes once; proxies preserve the owner's error envelope.
-        return {"action": FieldCodec.encode(cls), "thread": thread,
-                **FieldCodec.encode(parameters)}
+        return {"action": FieldCodec.encode(cls), "thread": thread, **FieldCodec.encode(parameters)}
 
     def require_owner(self, entry):
         owner = entry.thread
@@ -98,9 +97,14 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
     ) -> RuntimeRequestContext:
-        entry = (await Coordination.run_worker(partial(
-            server.agent._comms.registry.entry, self.thread,
-        ))).entry
+        entry = (
+            await Coordination.run_worker(
+                partial(
+                    server.agent._comms.registry.entry,
+                    self.thread,
+                )
+            )
+        ).entry
         owner = self.require_owner(entry)
         session_id = server.agent.sessions.require_owned_session(entry)
         return RuntimeRequestContext(server, reader, client, session_id, owner.name)
@@ -179,6 +183,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
     This command grants no input or tool execution. A retained native process
     must still observe its original registry lease before each project check.
     """
+
     binding: LiveThreadOwnerBinding
 
     @classmethod
@@ -206,9 +211,14 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         return super().require_owner(entry)
 
     async def result(self, ctx):
-        entry = (await Coordination.run_worker(partial(
-            ctx.server.agent._comms.registry.entry, ctx.name,
-        ))).entry
+        entry = (
+            await Coordination.run_worker(
+                partial(
+                    ctx.server.agent._comms.registry.entry,
+                    ctx.name,
+                )
+            )
+        ).entry
         current = self.require_original(entry)
         return ProjectReply(current.worktree)
 
@@ -243,7 +253,9 @@ class SubscribeRuntimeRequest(RuntimeRequest):
 class PromptRuntimeRequest(ResultRuntimeRequest):
     prompt: list[dict[str, object]]
     meta: dict[str, object] | None = None
-    controller_token: typing.Annotated[str | None, field_codec.WireName("controllerToken")] = field(default=None)
+    controller_token: typing.Annotated[str | None, field_codec.WireName("controllerToken")] = field(
+        default=None
+    )
 
     @classmethod
     def proxy_payload(
@@ -306,19 +318,26 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
     async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
-        return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
-            ctx.name,
-            include_history=self.include_history,
-            awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
-        ))
+        return await Coordination.run_worker(
+            partial(
+                ctx.server.agent._comms.goals.input_delivery,
+                ctx.name,
+                include_history=self.include_history,
+                awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
+            )
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
-        result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
-            ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
-        ))
+        result = await Coordination.run_worker(
+            partial(
+                ctx.server.agent._comms.goals.dismiss_historical_inputs,
+                ctx.name,
+                awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
+            )
+        )
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
         return result
 
@@ -328,9 +347,13 @@ class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalHistoryReply:
-        history = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
-        ))
+        history = await Coordination.run_worker(
+            partial(
+                ctx.server.agent._comms.goals.goal_history,
+                ctx.name,
+                goal_id=self.goal_id,
+            )
+        )
         return GoalHistoryReply(tuple(row.recorded() for row in history))
 
 
@@ -340,13 +363,20 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
 
     async def result(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
         from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
+
         await self.change(ctx)
-        snapshot = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
-        ))
-        turn = await Coordination.run_worker(partial(
-            ctx.server.agent.turns.turn_state, ctx.session_id,
-        ))
+        snapshot = await Coordination.run_worker(
+            partial(
+                ctx.server.agent._comms.goals.goal_snapshot,
+                ctx.name,
+            )
+        )
+        turn = await Coordination.run_worker(
+            partial(
+                ctx.server.agent.turns.turn_state,
+                ctx.session_id,
+            )
+        )
         return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
 
 
@@ -427,10 +457,15 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
 
     async def result(self, ctx):
         context = await self.inspect(ctx)
-        text = await Coordination.run_worker(partial(
-            context.public_source_text, ctx.server.agent._comms,
-            self.observation, self.segment, self.source,
-        ))
+        text = await Coordination.run_worker(
+            partial(
+                context.public_source_text,
+                ctx.server.agent._comms,
+                self.observation,
+                self.segment,
+                self.source,
+            )
+        )
         return text
 
 
@@ -457,8 +492,9 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
 
     def read_source(self, ctx):
         context = self.read_context(ctx)
-        return context.public_source_text(ctx.server.agent._comms, self.owner,
-                                        self.segment, self.manifest, self.source)
+        return context.public_source_text(
+            ctx.server.agent._comms, self.owner, self.segment, self.manifest, self.source
+        )
 
     async def result(self, ctx):
         return await Coordination.run_worker(partial(self.read_source, ctx))
@@ -486,9 +522,14 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 
     async def result(self, ctx):
         manifest = await self.manifest(ctx)
-        text = await Coordination.run_worker(partial(
-            manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
-        ))
+        text = await Coordination.run_worker(
+            partial(
+                manifest.public_source_text,
+                ctx.server.agent._comms,
+                self.segment,
+                self.source,
+            )
+        )
         return text
 
 
@@ -520,9 +561,14 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
         from .working_memory_annotations import WorkingMemoryAnnotations
 
         segment = await self.selected_segment(ctx)
-        labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
-            ctx.server.agent._comms.root / "coordination.sqlite3",
-            segment, self.classifier))
+        labels = await Coordination.run_worker(
+            partial(
+                WorkingMemoryAnnotations.for_segment,
+                ctx.server.agent._comms.root / "coordination.sqlite3",
+                segment,
+                self.classifier,
+            )
+        )
         return AnnotationsReply(labels)
 
 
@@ -539,5 +585,6 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
         if not segment.contains_span(self.label.span):
             raise ValueError("Correction belongs to another original context source")
         request = CorrectAnnotationCliCommand(
-            label=self.label, answer=self.answer, worktree=self.worktree)
+            label=self.label, answer=self.answer, worktree=self.worktree
+        )
         return await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))

@@ -65,7 +65,9 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: typing.Annotated[int, field_codec.WireName('admission'), Column(record_key=True, check="{claim_scope}>0")]
+    claim_scope: typing.Annotated[
+        int, field_codec.WireName("admission"), Column(record_key=True, check="{claim_scope}>0")
+    ]
     turn_generation: typing.Annotated[int, Column(check="turn_generation>0")]
     goal_revision: typing.Annotated[int, Column(check="goal_revision>=0")]
     turn_id: typing.Annotated[str, Column(unique=True, check="length(turn_id)=32")]
@@ -98,7 +100,9 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
 
     @property
     def turn(self) -> TurnFence:
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_scope)
+        return TurnFence(
+            TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_scope
+        )
 
     def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
         if claim_scope is None:
@@ -141,9 +145,17 @@ class FailedTurnObservation:
         # observation. The evidence is built from already-trusted values, so a
         # construction error is a defect and raises.
         evidence = FailedTurnEvidence(
-            reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.created_at, owner.worktree, claim_scope,
-            lease.identity.generation, goal.revision, turn_id, reason,
+            reservation.attempt_id,
+            reservation.goal_id,
+            reservation.generation,
+            owner.name,
+            owner.created_at,
+            owner.worktree,
+            claim_scope,
+            lease.identity.generation,
+            goal.revision,
+            turn_id,
+            reason,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:
             return None
@@ -166,7 +178,10 @@ def record_observation(
     Savepoint errors which cannot be rolled back still escape to the store's
     normal StorageUncertainError path. They never yield a successful execution.
     """
-    if observation.reservation != reservation or observation.evidence.identity != reservation.identity:
+    if (
+        observation.reservation != reservation
+        or observation.evidence.identity != reservation.identity
+    ):
         return
     conn.execute("SAVEPOINT passive_observation")
     try:
@@ -233,8 +248,9 @@ class FailedTurnProjection:
         return cls(state, explanation)
 
     @classmethod
-    def read_for_goal(cls, path: Path, owner: Thread, owner_status: ThreadStatus,
-                      claim_scope: int, goal: Goal) -> FailedTurnProjection:
+    def read_for_goal(
+        cls, path: Path, owner: Thread, owner_status: ThreadStatus, claim_scope: int, goal: Goal
+    ) -> FailedTurnProjection:
         if not owner.process_identity.allows_goal_observation(owner_status):
             return cls("unavailable", "owner_or_goal_changed")
         try:

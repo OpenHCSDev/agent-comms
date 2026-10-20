@@ -84,7 +84,10 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     @classmethod
     def claimed(cls, owner: Thread) -> Message:
         return Message(
-            owner.name, owner.name, "Claimed", cls,
+            owner.name,
+            owner.name,
+            "Claimed",
+            cls,
         )
 
 
@@ -121,13 +124,15 @@ class HandoffKind(SendableMessageKind):
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
         claims = [
-            claim for claim in cls.CLAIMS
+            claim
+            for claim in cls.CLAIMS
             if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
         ]
         if not claims or FileLine.scan(message.body) or cls.COMMANDS.search(message.body):
             return
         raise ValueError(
-            "Handoff message claims " + ", ".join(claims)
+            "Handoff message claims "
+            + ", ".join(claims)
             + " without a file:line reference or a command in backticks as evidence."
         )
 
@@ -168,7 +173,11 @@ class NoMembershipChange(NullMember):
 class MessageRoleWire:
     """The unchanged external fields, decoded once into a message role."""
 
-    change: typing.Annotated[MembershipChange | NoMembershipChange, field_codec.WireName("membership"), field_codec.WireOmitDefault(True)] = field(default_factory=NoMembershipChange)
+    change: typing.Annotated[
+        MembershipChange | NoMembershipChange,
+        field_codec.WireName("membership"),
+        field_codec.WireOmitDefault(True),
+    ] = field(default_factory=NoMembershipChange)
     notice: typing.Annotated[bool, field_codec.WireOmitDefault(True)] = field(default=False)
 
     def role(self):
@@ -238,8 +247,11 @@ class ConversationRole(SendableRole):
         return HistoricalConversationRole()
 
     def response_policy(self, message):
-        return (CommandTarget.named(message.target).response_policy(message)
-                if message.type.conversation_message else InformationalPolicy.instance())
+        return (
+            CommandTarget.named(message.target).response_policy(message)
+            if message.type.conversation_message
+            else InformationalPolicy.instance()
+        )
 
     def notification_references(self, message):
         return (message.reference,) if message.type.conversation_message else ()
@@ -322,7 +334,8 @@ class HistoricalNoticeRole(HistoricalRole, NoticeRole, declared_name=None):
 
 
 class HistoricalMembershipConversationRole(
-    HistoricalRole, MembershipConversationRole, declared_name=None):
+    HistoricalRole, MembershipConversationRole, declared_name=None
+):
     pass
 
 
@@ -342,14 +355,33 @@ class Message:
     target: typing.Annotated[str, field_codec.WireName("to"), field_codec.WireOrder(3)]
     body: typing.Annotated[str, field_codec.WireName("text"), field_codec.WireOrder(6)]
     type: typing.Annotated[builtins.type[MessageKind], field_codec.WireOrder(5)]
-    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireOrder(4)] = field(default_factory=time.time)
-    seq: typing.Annotated[int, field_codec.WireOrder(0), field_codec.PublicationExclude(True)] = field(default=0)
-    sender_role: typing.Annotated[Type[ThreadRole], field_codec.WireOrder(7), field_codec.PublicationExclude(True)] = field(default=AgentThreadRole)
-    role: typing.Annotated[MessageRole, field_codec.WireOrder(8)] = field(default_factory=ConversationRole)
-    mentions: typing.Annotated[tuple[ThreadMention, ...], field_codec.WireOmitDefault(True), field_codec.WireOrder(10), field_codec.PublicationExclude(True)] = field(default=())
-    task: typing.Annotated[TaskAttachment, field_codec.WireOmitDefault(True), field_codec.WireOrder(12)] = field(default_factory=NoTaskAttachment)
-    report: typing.Annotated[ChangeReport | None, field_codec.WireOmitDefault(True), field_codec.WireOrder(13)] = field(default=None)
-    answers: typing.Annotated[tuple[MessageReference, ...], field_codec.WireOmitDefault(True), field_codec.WireOrder(14)] = field(default=())
+    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireOrder(4)] = (
+        field(default_factory=time.time)
+    )
+    seq: typing.Annotated[int, field_codec.WireOrder(0), field_codec.PublicationExclude(True)] = (
+        field(default=0)
+    )
+    sender_role: typing.Annotated[
+        Type[ThreadRole], field_codec.WireOrder(7), field_codec.PublicationExclude(True)
+    ] = field(default=AgentThreadRole)
+    role: typing.Annotated[MessageRole, field_codec.WireOrder(8)] = field(
+        default_factory=ConversationRole
+    )
+    mentions: typing.Annotated[
+        tuple[ThreadMention, ...],
+        field_codec.WireOmitDefault(True),
+        field_codec.WireOrder(10),
+        field_codec.PublicationExclude(True),
+    ] = field(default=())
+    task: typing.Annotated[
+        TaskAttachment, field_codec.WireOmitDefault(True), field_codec.WireOrder(12)
+    ] = field(default_factory=NoTaskAttachment)
+    report: typing.Annotated[
+        ChangeReport | None, field_codec.WireOmitDefault(True), field_codec.WireOrder(13)
+    ] = field(default=None)
+    answers: typing.Annotated[
+        tuple[MessageReference, ...], field_codec.WireOmitDefault(True), field_codec.WireOrder(14)
+    ] = field(default=())
 
     @property
     def text_size(self) -> int:
@@ -463,7 +495,7 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
+        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, "type")])
         return kind.decode_message({"ts": 0.0, **public})
 
     @classmethod
@@ -515,27 +547,35 @@ class Message:
 @dataclass(frozen=True, kw_only=True)
 class ClaimMessage(Message):
     """An original claim envelope, distinct from a fresh conversation message."""
+
     claim_transition: typing.Annotated[ClaimTransition, field_codec.WireOrder(11)]
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
-                   claim_transition=transition)
+        return cls(
+            **{item.name: getattr(message, item.name) for item in fields(Message)},
+            claim_transition=transition,
+        )
 
     def __post_init__(self) -> None:
         super().__post_init__()
         transition = self.claim_transition
-        if (transition.owner != self.sender or transition.seq != self.seq
-                or transition.message_id != self.message_id):
-            raise RelationViolationError('Claim transition does not bind this message.')
+        if (
+            transition.owner != self.sender
+            or transition.seq != self.seq
+            or transition.message_id != self.message_id
+        ):
+            raise RelationViolationError("Claim transition does not bind this message.")
 
     @property
     def history_snapshot(self) -> Message:
         """A copied history keeps the envelope's display facts and drops its claim."""
-        return Message(**{
-            **{item.name: getattr(self, item.name) for item in fields(Message)},
-            "type": ClaimHistoryKind,
-        })
+        return Message(
+            **{
+                **{item.name: getattr(self, item.name) for item in fields(Message)},
+                "type": ClaimHistoryKind,
+            }
+        )
 
     def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
         return (table(self.claim_transition),)
@@ -545,6 +585,7 @@ class ClaimMessage(Message):
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
+
         yield from super().retained_task_facts()
         yield ClaimTaskFact(self)
 

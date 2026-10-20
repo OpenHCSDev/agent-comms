@@ -57,7 +57,9 @@ class AgentRuntimeInfo(RuntimeInfo):
     model: str | None = None
     context_used: PiCount = field(default_factory=UnreportedCount)
     context_size: PiCount = field(default_factory=UnreportedCount)
-    timestamp: typing.Annotated[float, field_codec.WireName("ts"), field_codec.WireRequired(True)] = field(kw_only=True)
+    timestamp: typing.Annotated[
+        float, field_codec.WireName("ts"), field_codec.WireRequired(True)
+    ] = field(kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.decode(float, self.timestamp)
@@ -120,7 +122,13 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocume
         names = {thread.name for thread in threads}
         self.update(
             lambda document: (
-                RuntimeInfoDocument({name: value for name, value in document.observations.items() if name not in names})
+                RuntimeInfoDocument(
+                    {
+                        name: value
+                        for name, value in document.observations.items()
+                        if name not in names
+                    }
+                )
                 if names & document.observations.keys()
                 else document
             )
@@ -131,9 +139,11 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[RuntimeInfoDocume
             values = document.observations
             if old_name not in values or old_name == new_name:
                 return document
-            return RuntimeInfoDocument({
-                **{name: value for name, value in values.items() if name != old_name},
-                new_name: replace(values[old_name], thread=new_name),
-            })
+            return RuntimeInfoDocument(
+                {
+                    **{name: value for name, value in values.items() if name != old_name},
+                    new_name: replace(values[old_name], thread=new_name),
+                }
+            )
 
         self.update(rename)

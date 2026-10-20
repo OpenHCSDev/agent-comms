@@ -56,7 +56,6 @@ class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="Historical
     expected_prompt_digest: str | None = None
     expected_prompt_equality_established: bool = False
 
-
     @abstractmethod
     def proves_triage_source(self, evidence) -> bool: ...
 
@@ -171,10 +170,13 @@ def read_historical_native_inputs(
                 # The immutable SQL row is already present from the live event;
                 # this check only corroborates its message-bearing context facts.
                 corroborated = recorded.corroborates_input(
-                    row.input_id, evidence=source_reads.for_source(session_file),
+                    row.input_id,
+                    evidence=source_reads.for_source(session_file),
                 )
             except (OSError, ValueError) as error:
-                raise IdentityConflict("historical native context evidence is unavailable") from error
+                raise IdentityConflict(
+                    "historical native context evidence is unavailable"
+                ) from error
             if not corroborated:
                 raise IdentityConflict("historical native context differs from live-recorded proof")
             original_session.require_context(recorded)
@@ -203,7 +205,9 @@ def read_historical_native_inputs(
                     owner_generation=row.owner_generation,
                     context=recorded,
                     native_reference=row.reference,
-                    expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
+                    expected_prompt_digest=binding.expected_prompt_digest
+                    if binding is not None
+                    else None,
                     expected_prompt_equality_established=equality,
                 )
             )

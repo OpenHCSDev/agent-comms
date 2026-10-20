@@ -67,7 +67,9 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: typing.Annotated[str | None, Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")] = dataclass_field(init=False, default=None, compare=False)
+    required_active: typing.Annotated[
+        str | None, Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")
+    ] = dataclass_field(init=False, default=None, compare=False)
 
     checks = ("(execution_id IS NULL) = (attempt_ordinal IS NULL)",)
 
@@ -131,24 +133,30 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             )
         )
 
-    execution_id: typing.Annotated[str, Column(
-                primary_key=True,
-                check=(
-                    "\n"
-                    "        length(execution_id) BETWEEN 1 AND 256 AND instr(executi"
-                    "on_id, ':') = 0\n"
-                    "    "
-                ),
-            )]
+    execution_id: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            check=(
+                "\n"
+                "        length(execution_id) BETWEEN 1 AND 256 AND instr(executi"
+                "on_id, ':') = 0\n"
+                "    "
+            ),
+        ),
+    ]
     origin: ExecutionOrigin
     lifecycle: typing.Annotated[ExecutionState, field_codec.SnapshotExclude(True)]
     owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_lookup: str
     revision: typing.Annotated[int, Column(check="revision > 0")]
     max_attempts: typing.Annotated[int, Column(check="max_attempts > 0")]
-    reason_code: typing.Annotated[str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")]
+    reason_code: typing.Annotated[
+        str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+    ]
     created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
     updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
+
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
         return type(self.lifecycle)
@@ -173,53 +181,93 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.kind')",
-                check="status IN\n      ({execution_names})",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    current_attempt_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.ordinal')",
-                check=(
-                    "\n"
-                    "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
-                    "al BETWEEN 1 AND max_attempts\n"
-                    "    "
-                ),
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    required_attempt_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated=(
-                    "CASE\n"
-                    "        WHEN status = 'active' THEN 'active'\n"
-                    "        WHEN status = 'completed' THEN 'succeeded'\n"
-                    "    END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
-    active_execution_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN status = 'active' THEN execution_id END")] = dataclass_field(init=False, default=None, compare=False)
-    active_attempt_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END")] = dataclass_field(init=False, default=None, compare=False)
-    wire_execution_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN origin = 'wire' THEN execution_id END")] = dataclass_field(init=False, default=None, compare=False)
-    wire_claim_ordinal: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN origin = 'wire' THEN 0 END")] = dataclass_field(init=False, default=None, compare=False)
-    claim_status_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated=(
-                    "CASE\n"
-                    "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
-                    "'\n"
-                    "        ELSE status END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "              THEN execution_id END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
-    deferred_replay_required: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "              THEN 1 END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
+    status: typing.Annotated[
+        str,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.kind')",
+            check="status IN\n      ({execution_names})",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    current_attempt_ordinal: typing.Annotated[
+        int | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.ordinal')",
+            check=(
+                "\n"
+                "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
+                "al BETWEEN 1 AND max_attempts\n"
+                "    "
+            ),
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    required_attempt_kind: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated=(
+                "CASE\n"
+                "        WHEN status = 'active' THEN 'active'\n"
+                "        WHEN status = 'completed' THEN 'succeeded'\n"
+                "    END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    active_execution_id: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    active_attempt_ordinal: typing.Annotated[
+        int | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    wire_execution_id: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    wire_claim_ordinal: typing.Annotated[
+        int | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    claim_status_kind: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated=(
+                "CASE\n"
+                "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
+                "'\n"
+                "        ELSE status END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    deferred_replay_id: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated=(
+                "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                " NULL\n"
+                "              THEN execution_id END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    deferred_replay_required: typing.Annotated[
+        int | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated=(
+                "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                " NULL\n"
+                "              THEN 1 END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"

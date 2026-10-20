@@ -42,9 +42,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         from agent_comms.audience_manifest import FrozenRecipient
         from agent_comms.coordination_errors import IdentityConflict
 
-        if self.recipient_identity != FrozenRecipient(
-            owner.incarnation.lookup, owner.name
-        ):
+        if self.recipient_identity != FrozenRecipient(owner.incarnation.lookup, owner.name):
             raise IdentityConflict("wake frame does not match a committed recipient")
         self.require_committed_source(initial)
 
@@ -107,7 +105,11 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             engagement.execution_id,
         )
 
-    assignment_id: typing.Annotated[str, field_codec.WireName("claim_id"), Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256")]
+    assignment_id: typing.Annotated[
+        str,
+        field_codec.WireName("claim_id"),
+        Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+    ]
     recipient: typing.Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: str
     wire_seq: typing.Annotated[int, Column(check="wire_seq > 0")]
@@ -117,8 +119,12 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     accepted_at_ms: typing.Annotated[int, Column(check="accepted_at_ms >= 0")]
     updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
     revision: typing.Annotated[int, Column(check="revision > 0")] = dataclass_field(default=1)
-    resolver_version: typing.Annotated[str, Column(check="length(resolver_version) BETWEEN 1 AND 256")] = dataclass_field(default=RESOLVER_VERSION)
-    policy_version: typing.Annotated[str, Column(check="length(policy_version) BETWEEN 1 AND 256")] = dataclass_field(default=POLICY_VERSION)
+    resolver_version: typing.Annotated[
+        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+    ] = dataclass_field(default=RESOLVER_VERSION)
+    policy_version: typing.Annotated[
+        str, Column(check="length(policy_version) BETWEEN 1 AND 256")
+    ] = dataclass_field(default=POLICY_VERSION)
 
     @projected(view="snapshot", name="disposition")
     def snapshot_disposition(self):
@@ -165,23 +171,47 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.decision.exact_target')",
-                check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    wake_mode: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})")] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    triage_verdict: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated="({assignment_verdict})",
-                check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    disposition: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.kind')",
-                check="disposition IN ({assignment_names})",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    execution_id: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.decision.execution_id')",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    claim_status_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END")] = dataclass_field(init=False, default=None, compare=False)
+    exact_target: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.decision.exact_target')",
+            check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    wake_mode: typing.Annotated[
+        str,
+        field_codec.SnapshotExclude(True),
+        Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    triage_verdict: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="({assignment_verdict})",
+            check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    disposition: typing.Annotated[
+        str,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.kind')",
+            check="disposition IN ({assignment_names})",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    execution_id: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.decision.execution_id')",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    claim_status_kind: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
     indexes = (Index(("execution_id",), unique=False, where=None),)
@@ -196,8 +226,10 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
             ForeignKey(
-                ("execution_id", "exact_target"), ResponseObligation,
-                ("execution_id", "exact_target"), deferred=True,
+                ("execution_id", "exact_target"),
+                ResponseObligation,
+                ("execution_id", "exact_target"),
+                deferred=True,
             ),
             ForeignKey(
                 ("execution_id", "assignment_id"),

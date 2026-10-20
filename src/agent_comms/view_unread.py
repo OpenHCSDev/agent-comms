@@ -53,10 +53,12 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
     def for_sources(
         cls, database: sqlite3.Connection, sources: Sequence[str]
     ) -> dict[str, ReplyIndex]:
-        rows = cls.read(database.execute(
-            f"SELECT * FROM {cls.declared_name} WHERE source IN (SELECT value FROM json_each(?))",
-            (json.dumps(tuple(sources)),),
-        ))
+        rows = cls.read(
+            database.execute(
+                f"SELECT * FROM {cls.declared_name} WHERE source IN (SELECT value FROM json_each(?))",
+                (json.dumps(tuple(sources)),),
+            )
+        )
         indexes = {source: cls(source=source) for source in sources}
         indexes.update((row.source, row) for row in rows)
         return indexes
@@ -103,6 +105,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
 @dataclass(frozen=True)
 class ReplyRead:
     """The captured source and viewer mark authorized for one worker read."""
+
     index: ReplyIndex
     revision: FileRevision
     seen: int
@@ -124,13 +127,15 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
     @classmethod
     def after(cls, database: sqlite3.Connection, ends: Mapping[str, int]) -> dict[str, int]:
         """Count replies after each mark within the index owner's admitted records."""
-        rows = _ReplyCount.read(database.execute(
-            f'''SELECT displayed.key AS source,
+        rows = _ReplyCount.read(
+            database.execute(
+                f"""SELECT displayed.key AS source,
                 (SELECT count(*) FROM {cls.declared_name}
                  WHERE source=displayed.key AND end>displayed.value) AS total
-                FROM json_each(?) AS displayed''',
-            (json.dumps(ends),),
-        ))
+                FROM json_each(?) AS displayed""",
+                (json.dumps(ends),),
+            )
+        )
         return {row.source: row.total for row in rows}
 
 
@@ -266,19 +271,23 @@ class ReplyPreparation:
         pass
 
     def finished(
-        self, state: TranscriptReadState, database: sqlite3.Connection,
+        self,
+        state: TranscriptReadState,
+        database: sqlite3.Connection,
         wanted: Collection[str],
     ) -> ReplyPreparation:
         return self
 
     def started(
-        self, state: TranscriptReadState,
+        self,
+        state: TranscriptReadState,
         needed: dict[str, ReplyRead],
     ) -> ReplyPreparation:
         return self
 
     def watch(
-        self, previous: frozenset[Future[ReplyIndexResult]],
+        self,
+        previous: frozenset[Future[ReplyIndexResult]],
         on_done: Callable[[Future[ReplyIndexResult]], None],
     ) -> frozenset[Future[ReplyIndexResult]]:
         return frozenset()
@@ -288,7 +297,8 @@ class IdleReplyPreparation(ReplyPreparation):
     """No authorized source reads and no worker-completion subscription."""
 
     def started(
-        self, state: TranscriptReadState,
+        self,
+        state: TranscriptReadState,
         needed: dict[str, ReplyRead],
     ) -> ReplyPreparation:
         if not needed or not state._cleanup.alive:
@@ -339,7 +349,9 @@ class NativeReplyPreparation(ReplyPreparation):
                 reader.future.cancel()
 
     def finished(
-        self, state: TranscriptReadState, database: sqlite3.Connection,
+        self,
+        state: TranscriptReadState,
+        database: sqlite3.Connection,
         wanted: Collection[str],
     ) -> ReplyPreparation:
         self.retain(wanted)
@@ -354,14 +366,15 @@ class NativeReplyPreparation(ReplyPreparation):
                     database.execute("BEGIN IMMEDIATE")
                     for source in completed:
                         self.readers[source].commit(database)
-        except (BlockingIOError, CoordinationReadUnavailable):
+        except BlockingIOError, CoordinationReadUnavailable:
             return self
         for source in completed:
             del self.readers[source]
         return self if self.readers else state._idle
 
     def watch(
-        self, previous: frozenset[Future[ReplyIndexResult]],
+        self,
+        previous: frozenset[Future[ReplyIndexResult]],
         on_done: Callable[[Future[ReplyIndexResult]], None],
     ) -> frozenset[Future[ReplyIndexResult]]:
         current = frozenset(reader.future for reader in self.readers.values())
@@ -385,12 +398,18 @@ class TranscriptReadKeys:
         return cls(thread.incarnation, thread.runtime, {}, {}).refresh({})
 
     def refresh(self, observed: Mapping[str, FileRevision | None]) -> TranscriptReadKeys:
-        paths = {key: self.paths[key] if key in self.paths else Path(key).absolute()
-                 for key in self.runtime.read_keys()}
-        return replace(self, paths=paths, revisions={
-            key: observed[key] if key in observed else FileRevision.capture(path)
-            for key, path in paths.items()
-        })
+        paths = {
+            key: self.paths[key] if key in self.paths else Path(key).absolute()
+            for key in self.runtime.read_keys()
+        }
+        return replace(
+            self,
+            paths=paths,
+            revisions={
+                key: observed[key] if key in observed else FileRevision.capture(path)
+                for key, path in paths.items()
+            },
+        )
 
 
 class TranscriptReadState(ThreadOwnedState):
@@ -438,9 +457,11 @@ class TranscriptReadState(ThreadOwnedState):
         """The source reads currently owned by this state."""
         return self._preparation
 
-    def watch(self, previous: frozenset[Future[ReplyIndexResult]],
-              on_done: Callable[[Future[ReplyIndexResult]], None]
-              ) -> frozenset[Future[ReplyIndexResult]]:
+    def watch(
+        self,
+        previous: frozenset[Future[ReplyIndexResult]],
+        on_done: Callable[[Future[ReplyIndexResult]], None],
+    ) -> frozenset[Future[ReplyIndexResult]]:
         """Subscribe against one stable preparation while other readers may finish."""
         with self._lock:
             return self._preparation.watch(previous, on_done)
@@ -481,7 +502,7 @@ class TranscriptReadState(ThreadOwnedState):
                     elif version.user_version != _INDEX_VERSION:
                         raise ValueError("Reply index requires the quiet runtime reset")
                     connection.commit()
-            except (sqlite3.DatabaseError, ValueError):
+            except sqlite3.DatabaseError, ValueError:
                 connection.close()
                 raise
             self._connection = self._database_resources.enter_context(closing(connection))
@@ -540,15 +561,21 @@ class TranscriptReadState(ThreadOwnedState):
             current = {}
             for thread in snapshot.visible_threads(RosterVisibility(stopped=True, archived=True)):
                 prior = self._thread_keys.get(thread.name)
-                keys = (prior if prior is not None and prior.matches(thread)
-                        else TranscriptReadKeys.capture(thread))
+                keys = (
+                    prior
+                    if prior is not None and prior.matches(thread)
+                    else TranscriptReadKeys.capture(thread)
+                )
                 rebuild |= prior is None or prior.revisions.keys() != keys.revisions.keys()
                 current[thread.name] = keys
             rebuild |= bool(self._thread_keys.keys() - current.keys())
             self._thread_keys = current
             self._key_snapshot = snapshot
-        names = (self._thread_keys.keys() if invalid else
-                 {name for path in changed for name in self._path_threads.get(path, ())})
+        names = (
+            self._thread_keys.keys()
+            if invalid
+            else {name for path in changed for name in self._path_threads.get(path, ())}
+        )
         # A queued event can belong to a source removed by this registry revision.
         for name in names & self._thread_keys.keys():
             keys = self._thread_keys[name]
@@ -570,17 +597,23 @@ class TranscriptReadState(ThreadOwnedState):
             if not sources:
                 self._preparation.cancel()
                 self._preparation = self._idle
-            self._source_watch = self._source_resources.enter_context(closing(
-                NativeFileWatch.open(*sources)
-            ))
+            self._source_watch = self._source_resources.enter_context(
+                closing(NativeFileWatch.open(*sources))
+            )
             # Cover a write between the first capture and installing its watch.
             for name, keys in tuple(self._thread_keys.items()):
                 observed = {key: FileRevision.capture(path) for key, path in keys.paths.items()}
                 if observed != keys.revisions:
                     self._thread_keys[name] = keys.refresh(observed)
 
-    def counts(self, viewer: str, *, registry: RegistrySnapshot, document: ReadDocument,
-               visibility: RosterVisibility) -> TranscriptUnread:
+    def counts(
+        self,
+        viewer: str,
+        *,
+        registry: RegistrySnapshot,
+        document: ReadDocument,
+        visibility: RosterVisibility,
+    ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
             raise CoordinationReadUnavailable("Transcript counts are being read")
@@ -588,8 +621,11 @@ class TranscriptReadState(ThreadOwnedState):
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
             self._refresh_keys(registry)
-            keys = {name: keys for name, keys in self._thread_keys.items()
-                    if registry.status(name).in_view(visibility)}
+            keys = {
+                name: keys
+                for name, keys in self._thread_keys.items()
+                if registry.status(name).in_view(visibility)
+            }
             try:
                 return self._counts_locked(viewer, document, keys)
             except sqlite3.DatabaseError as error:
@@ -600,10 +636,14 @@ class TranscriptReadState(ThreadOwnedState):
         finally:
             self._lock.release()
 
-    def _counts_locked(self, viewer: str, document: ReadDocument,
-                       threads: Mapping[str, TranscriptReadKeys]) -> TranscriptUnread:
-        revisions = {source: revision for keys in threads.values()
-                     for source, revision in keys.revisions.items()}
+    def _counts_locked(
+        self, viewer: str, document: ReadDocument, threads: Mapping[str, TranscriptReadKeys]
+    ) -> TranscriptUnread:
+        revisions = {
+            source: revision
+            for keys in threads.values()
+            for source, revision in keys.revisions.items()
+        }
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in threads})
         per_file: dict[str, FileReplyCount] = {}

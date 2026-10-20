@@ -46,8 +46,10 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     @classmethod
     def configure_connection(cls, connection) -> None:
         connection.create_function(
-            cls.validator_function, sum(item.init for item in fields(cls)),
-            cls.validate_sql, deterministic=True,
+            cls.validator_function,
+            sum(item.init for item in fields(cls)),
+            cls.validate_sql,
+            deterministic=True,
         )
 
     def matches_request(self, execution_id: str, message: Message) -> bool:
@@ -61,33 +63,46 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if acknowledgement.message_id != self.expected_message_id:
             raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
-    execution_id: typing.Annotated[str, Column(
-                primary_key=True,
-                storage=ExactStorage,
-                check="""typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1 AND 256
+    execution_id: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check="""typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1 AND 256
              AND instr(execution_id, ':' ) = 0""",
-            )]
-    exact_target: typing.Annotated[str, Column(
-                primary_key=True, storage=ExactStorage,
-                check="""
+        ),
+    ]
+    exact_target: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check="""
       typeof(exact_target) = 'text' AND length(exact_target) BETWEEN 1 AND 256""",
-            )]
+        ),
+    ]
     message: typing.Annotated[Message, Column(check="json_valid(message)")]
-    publication_key: typing.Annotated[str, Column(
-                storage=ExactStorage,
-                unique=True,
-                check="""
+    publication_key: typing.Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check="""
       typeof(publication_key) = 'text' AND length(publication_key) BETWEEN 1 AND 256
     """,
-            )]
-    expected_message_id: typing.Annotated[str, Column(
-                storage=ExactStorage,
-                unique=True,
-                check="""
+        ),
+    ]
+    expected_message_id: typing.Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check="""
       typeof(expected_message_id) = 'text' AND length(expected_message_id) BETWEEN 1 AND
       256
     """,
-            )]
+        ),
+    ]
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
@@ -102,7 +117,9 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: typing.Annotated[int | None, Column(generated="1")] = dataclass_field(init=False, compare=False)
+    obligation_intent_required: typing.Annotated[int | None, Column(generated="1")] = (
+        dataclass_field(init=False, compare=False)
+    )
 
     @classmethod
     def references(cls):
@@ -161,13 +178,16 @@ END"""
     def validate_sql(cls, *values: object) -> int:
         """SQLite positional input follows the declared columns; decode and validate once."""
         try:
-            FieldCodec.construct(cls, {
-                item.name: item.decode(value)
-                for item, value in zip(
-                    (item for item in cls._fields() if item.init), values, strict=True
-                )
-            })
-        except (MalformedRecord, CoordinationError):
+            FieldCodec.construct(
+                cls,
+                {
+                    item.name: item.decode(value)
+                    for item, value in zip(
+                        (item for item in cls._fields() if item.init), values, strict=True
+                    )
+                },
+            )
+        except MalformedRecord, CoordinationError:
             return 0  # The trigger refuses an invalid envelope; other errors are defects.
         return 1
 
@@ -178,33 +198,48 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    execution_id: typing.Annotated[str, Column(
-                primary_key=True,
-                storage=ExactStorage,
-                check=(
-                    "typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1"
-                    " AND 256\n"
-                    "             AND instr(execution_id, ':') = 0"
-                ),
-            )]
-    exact_target: typing.Annotated[str, Column(primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256")]
+    execution_id: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check=(
+                "typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1"
+                " AND 256\n"
+                "             AND instr(execution_id, ':') = 0"
+            ),
+        ),
+    ]
+    exact_target: typing.Annotated[
+        str,
+        Column(
+            primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256"
+        ),
+    ]
     seq: typing.Annotated[int, Column(unique=True, check="seq > 0")]
-    message_id: typing.Annotated[str, Column(
-                storage=ExactStorage,
-                unique=True,
-                check=(
-                    "\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"
-                ),
-            )]
+    message_id: typing.Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check=("\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"),
+        ),
+    ]
     received_at_ms: typing.Annotated[int, Column(check="received_at_ms >= 0")]
-    obligation_receipt_required: typing.Annotated[int | None, Column(generated="1")] = dataclass_field(init=False, compare=False)
+    obligation_publication_required: typing.Annotated[
+        int | None, field_codec.WireName("obligation_receipt_required"), Column(generated="1")
+    ] = dataclass_field(init=False, compare=False)
 
     @classmethod
     def references(cls):
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("execution_id", "exact_target"), PublicationIntents, ("execution_id", "exact_target")),
+            ForeignKey(
+                ("execution_id", "exact_target"),
+                PublicationIntents,
+                ("execution_id", "exact_target"),
+            ),
             ForeignKey(
                 ("execution_id", "exact_target", "obligation_receipt_required"),
                 ResponseObligation,

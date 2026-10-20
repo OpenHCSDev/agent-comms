@@ -177,7 +177,9 @@ class UnrecordedScope(NullMember, ClaimScope):
 class RecordedScope(ClaimScope, declared_name=None):
     """Every acquisition published today records the input generation and operation it serves."""
 
-    owner_claimed_generation: typing.Annotated[int, field_codec.WireName("owner_admission_generation")]
+    owner_claimed_generation: typing.Annotated[
+        int, field_codec.WireName("owner_admission_generation")
+    ]
     operation_id: Annotated[str, Id128Text]
     turn_id: str
 
@@ -288,7 +290,9 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
-    expired: typing.Annotated[tuple[Annotated[str, ResourcePathText], ...], field_codec.WireOmitDefault(True)] = field(default=(), kw_only=True)
+    expired: typing.Annotated[
+        tuple[Annotated[str, ResourcePathText], ...], field_codec.WireOmitDefault(True)
+    ] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
@@ -324,8 +328,9 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     ) -> dict[str, ClaimOwner]:
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")
-        remaining = {resource: owner for resource, owner in previous.items()
-                     if resource not in self.expired}
+        remaining = {
+            resource: owner for resource, owner in previous.items() if resource not in self.expired
+        }
         for release in releases:
             current = remaining.get(release.resource)
             if current is None:
@@ -344,7 +349,9 @@ class Acquisition(ClaimTransition, declared_name=None):
 
     claims: tuple[Annotated[str, ResourcePathText], ...] = field(kw_only=True)
     # The stored bus row carries both sides of a transition; an acquisition's release side is empty.
-    releases: typing.Annotated[tuple[ClaimRelease, ...], field_codec.WireRequired(True)] = field(default=(), kw_only=True)
+    releases: typing.Annotated[tuple[ClaimRelease, ...], field_codec.WireRequired(True)] = field(
+        default=(), kw_only=True
+    )
     generation: Annotated[str, Id128Text] = field(kw_only=True)
     claim_scope: ClassVar[ClaimScope]
 
@@ -401,7 +408,9 @@ class UnscopedClaims(RecordMember, Acquisition):
 class ReleasedClaims(RecordMember, ClaimTransition):
     releases: tuple[ClaimRelease, ...]
     # The stored bus row carries both sides of a transition; a release acquires nothing and mints no generation.
-    claims: typing.Annotated[tuple[Annotated[str, ResourcePathText], ...], field_codec.WireRequired(True)] = field(default=())
+    claims: typing.Annotated[
+        tuple[Annotated[str, ResourcePathText], ...], field_codec.WireRequired(True)
+    ] = field(default=())
     generation: typing.Annotated[None, field_codec.WireRequired(True)] = field(default=None)
 
     def __post_init__(self) -> None:
@@ -455,7 +464,6 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         )
 
 
-
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
     """Immutable sorted claim table plus the last processed envelope sequence."""
@@ -475,9 +483,10 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def live_in(self, registry: RegistrySnapshot) -> ClaimProjection:
         """Keep only claims whose recorded owner still holds its registry generation."""
-        return ClaimProjection(self.last_seq, {
-            resource: owner for resource, owner in self.items() if owner.live(registry)
-        })
+        return ClaimProjection(
+            self.last_seq,
+            {resource: owner for resource, owner in self.items() if owner.live(registry)},
+        )
 
     def __getitem__(self, key: str) -> ClaimOwner:
         return self._claims[key]

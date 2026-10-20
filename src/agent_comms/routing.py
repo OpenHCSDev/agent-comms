@@ -33,9 +33,7 @@ class MessageRoute:
     @property
     def incoming_scope(self) -> str:
         return (
-            ", ".join(
-                CommandTarget.named(target).incoming_scope for target in self.targets
-            )
+            ", ".join(CommandTarget.named(target).incoming_scope for target in self.targets)
             or "direct message"
         )
 
@@ -52,7 +50,9 @@ class MessageRoute:
 class TurnRouting:
     requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
-    publications: typing.Annotated[tuple[MessageReference, ...], field_codec.WireOmitDefault(True)] = field(default=())
+    publications: typing.Annotated[
+        tuple[MessageReference, ...], field_codec.WireOmitDefault(True)
+    ] = field(default=())
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -65,8 +65,11 @@ class TurnRouting:
         return bool(self.requests or published)
 
     def annotation_ids(self, reader, checkpoint, runtime, through: int):
-        return (reader.annotation_ids(checkpoint.offset, through)
-                if self.requests and runtime.read_key == checkpoint.session_file else ())
+        return (
+            reader.annotation_ids(checkpoint.offset, through)
+            if self.requests and runtime.read_key == checkpoint.session_file
+            else ()
+        )
 
     def require_publications(self, originals, owner_lookup: str) -> None:
         """Only committed originals addressed by this reply intent can be joined."""
@@ -131,7 +134,10 @@ class ScheduledTurn:
         """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.role.response_policy(pending[0].origin).separate_turn:
+        if (
+            pending[0].origin
+            and pending[0].origin.role.response_policy(pending[0].origin).separate_turn
+        ):
             return pending[:1], pending[1:]
         boundary = next(
             (
@@ -159,7 +165,6 @@ class DeliveryMessage:
 
         verified = WireRecord.from_wire(record, root_id)
         yield from verified.delivery_messages()
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +214,7 @@ class DeliveryScope(MessageDisplayScope):
         The unstamped format matches before a birth is required. An index must
         probe for an assigned stamp; starting input requires a verified stamp.
         """
+
         def missing() -> tuple[str, ...]:
             on_unrecorded()
             return ()

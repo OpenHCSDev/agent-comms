@@ -86,7 +86,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     @classmethod
     def source_membership_sql(cls) -> str:
         return " UNION ALL ".join(
-            member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
+            member.source_membership_sql()
+            for member in NativeInputExecution.members_with(NativeInputExecution)
         )
 
     def __post_init__(self):
@@ -126,8 +127,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .native_pi import NativeContextRecord
 
         self.reference.require_recorded()
-        values = {item.name: getattr(self, item.name)
-                  for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
+        values = {
+            item.name: getattr(self, item.name)
+            for item, _wire in FieldCodec.record_fields(NativeContextRecord)
+        }
         return FieldCodec.construct(NativeContextRecord, values).at(
             self.require_session_identity().path,
             session_entry_start=self.session_entry_start.offset,
@@ -138,7 +141,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
         except MalformedRecord as error:
-            raise IdentityConflict("Native input execution columns conflict with their stage") from error
+            raise IdentityConflict(
+                "Native input execution columns conflict with their stage"
+            ) from error
 
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
@@ -149,7 +154,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         original user entry; a precommit authorized row still owns its stage.
         """
         rows = cls.select(
-            db, where="input_id=? AND session_file=? AND session_id=?",
+            db,
+            where="input_id=? AND session_file=? AND session_id=?",
             parameters=(user.input_id, str(reader.path), session_id),
         )
         for row in rows:
@@ -213,26 +219,53 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             return ()
         return self.execution.published_replies(db, owner_lookup)
 
-    input_id: typing.Annotated[str, Column(
-                primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
-            )]
-    stage: typing.Annotated[type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))]
+    input_id: typing.Annotated[
+        str,
+        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
+    ]
+    stage: typing.Annotated[
+        type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))
+    ]
     execution_id: typing.Annotated[str | None, Column(references=(ExecutionRecord, "execution_id"))]
     attempt_ordinal: int | None
     owner_lookup: typing.Annotated[str, Column(references=(Participants, "participant_lookup"))]
     owner_thread: str
     owner_generation: typing.Annotated[int, Column(check="owner_generation>0")]
     owner_token_digest: typing.Annotated[str, Column(check="length(owner_token_digest)=64")]
-    sent_owner_claimed_generation: typing.Annotated[NativeClaimEpoch, field_codec.WireName('sent_owner_admission_generation'), Column(record_key=True, check="{sent_owner_claimed_generation}>0",
-                                 storage=IntegerStorage, nullable=True)] = field(default_factory=UnrecordedNativeClaim)
+    sent_owner_claimed_generation: typing.Annotated[
+        NativeClaimEpoch,
+        field_codec.WireName("sent_owner_admission_generation"),
+        Column(
+            record_key=True,
+            check="{sent_owner_claimed_generation}>0",
+            storage=IntegerStorage,
+            nullable=True,
+        ),
+    ] = field(default_factory=UnrecordedNativeClaim)
     session_id: str | None = None
     session_file: str | None = None
-    session_entry_id: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(default=None)
-    session_entry_start: typing.Annotated[NativeInputPosition, NativeInputLocation.position_column, field_codec.NativeContext(RecordedNativePosition)] = field(default_factory=UnrecordedNativePosition)
-    request_generation: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(default=None)
-    llm_context_digest: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(default=None)
-    committed_at_ms: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(default=None)
-    verdict: Annotated[type[SelectedTriage] | None, RecordedTriageText, Column(check=RecordedTriageText.sql_constraint("verdict"))] = field(default=None)
+    session_entry_id: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(
+        default=None
+    )
+    session_entry_start: typing.Annotated[
+        NativeInputPosition,
+        NativeInputLocation.position_column,
+        field_codec.NativeContext(RecordedNativePosition),
+    ] = field(default_factory=UnrecordedNativePosition)
+    request_generation: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(
+        default=None
+    )
+    llm_context_digest: typing.Annotated[str | None, field_codec.NativeContext(str)] = field(
+        default=None
+    )
+    committed_at_ms: typing.Annotated[int | None, field_codec.NativeContext(int)] = field(
+        default=None
+    )
+    verdict: Annotated[
+        type[SelectedTriage] | None,
+        RecordedTriageText,
+        Column(check=RecordedTriageText.sql_constraint("verdict")),
+    ] = field(default=None)
 
     without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
@@ -315,24 +348,48 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     def context_anchor(self) -> str | None:
         return self.session_id
 
-    wire_root_id: typing.Annotated[str, Column(
-                primary_key=True,
-                check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
-            )]
-    recipient_lookup: typing.Annotated[str, Column(primary_key=True, references=(Participants, "participant_lookup"))]
+    wire_root_id: typing.Annotated[
+        str,
+        Column(
+            primary_key=True,
+            check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
+        ),
+    ]
+    recipient_lookup: typing.Annotated[
+        str, Column(primary_key=True, references=(Participants, "participant_lookup"))
+    ]
     owner_thread: typing.Annotated[str, Column(check="owner_thread<>''")]
     owner_generation: typing.Annotated[int, Column(primary_key=True, check="owner_generation>0")]
-    owner_claimed_generation: typing.Annotated[int, field_codec.WireName('owner_admission_generation'), Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0")]
+    owner_claimed_generation: typing.Annotated[
+        int,
+        field_codec.WireName("owner_admission_generation"),
+        Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
+    ]
+
     @property
     def owner_identity(self):
         from .coordination_tables.participants import OwnerGenerations
 
-        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
+        return OwnerGenerations(
+            owner_lookup=self.recipient_lookup,
+            owner_thread=self.owner_thread,
+            generation=self.owner_generation,
+        )
 
     covered_seq: typing.Annotated[int, Column(check="covered_seq>=0")]
-    injected_seq: typing.Annotated[int, Column(check="injected_seq>=0 AND injected_seq<=covered_seq")]
-    input_id: typing.Annotated[str | None, Column(references=(NativeRuntimeInput, "input_id")), field_codec.NativeContext(str)]
-    stage: typing.Annotated[type[NativeInputExecution] | None, Column(check=NativeInputExecution.sql_constraint("stage")), field_codec.NativeContext(type[NativeInputExecution])]
+    injected_seq: typing.Annotated[
+        int, Column(check="injected_seq>=0 AND injected_seq<=covered_seq")
+    ]
+    input_id: typing.Annotated[
+        str | None,
+        Column(references=(NativeRuntimeInput, "input_id")),
+        field_codec.NativeContext(str),
+    ]
+    stage: typing.Annotated[
+        type[NativeInputExecution] | None,
+        Column(check=NativeInputExecution.sql_constraint("stage")),
+        field_codec.NativeContext(type[NativeInputExecution]),
+    ]
     session_id: typing.Annotated[str | None, field_codec.NativeContext(str)]
     request_generation: typing.Annotated[int | None, field_codec.NativeContext(int)]
 

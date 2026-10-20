@@ -88,7 +88,9 @@ class CapturedWireSource[OriginalSource, Value = OriginalSource]:
 @dataclass(frozen=True)
 class PrefixWitness(PrefixSeal):
     # The high-water is a derived page fact, not a persistent seal field.
-    latest_source_seq: typing.Annotated[int, field_codec.SealExclude(True)] = field(default=0, compare=False)
+    latest_source_seq: typing.Annotated[int, field_codec.SealExclude(True)] = field(
+        default=0, compare=False
+    )
 
     @property
     def device(self) -> int:
@@ -116,7 +118,9 @@ class PrefixWitness(PrefixSeal):
         if _tail(stream, self.offset) != self.tail:
             raise RelationViolationError("Private bus checkpoint prefix tail changed.")
         if self.through_seq > marker.last_seq:
-            raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
+            raise RelationViolationError(
+                "Private bus checkpoint exceeds the durable sequence marker."
+            )
 
     def require_current_revision(self, info: os.stat_result) -> None:
         """Shared readers name relocation without adopting a new source."""
@@ -137,12 +141,15 @@ class PrefixWitness(PrefixSeal):
                 digest = _chain(digest, raw)
             if stream.tell() != self.offset or digest.hex() != self.digest:
                 raise RelationViolationError("Private bus checked prefix changed.")
-            if (FileRevision.from_file(stream) != revision
-                    or FileRevision.from_stat(bus.path.stat()) != revision):
+            if (
+                FileRevision.from_file(stream) != revision
+                or FileRevision.from_stat(bus.path.stat()) != revision
+            ):
                 raise RelationViolationError("Private bus changed during prefix validation.")
 
-    def rebind_source(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                      info: os.stat_result) -> PrefixWitness:
+    def rebind_source(
+        self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, info: os.stat_result
+    ) -> PrefixWitness:
         """Publish the unchanged prefix's new revision under the exclusive bus lock."""
         self.require_prefix(bus, info)
         rebound = replace(self, revision=replace(FileRevision.from_stat(info), size=self.offset))
@@ -151,11 +158,22 @@ class PrefixWitness(PrefixSeal):
     @classmethod
     def empty(cls, root_id: str, info: os.stat_result) -> PrefixWitness:
         """The proved zero-byte cut from which the existing indexer can start."""
-        return cls(root_id, replace(FileRevision.from_stat(info), size=0), 0,
-                   _SEED.hex(), hashlib.sha256(b"").hexdigest())
+        return cls(
+            root_id,
+            replace(FileRevision.from_stat(info), size=0),
+            0,
+            _SEED.hex(),
+            hashlib.sha256(b"").hexdigest(),
+        )
 
-    def rebuild_from_empty(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                           path: Path, info: os.stat_result) -> PrefixWitness:
+    def rebuild_from_empty(
+        self,
+        bus: WireLog,
+        marker: WireMetadata,
+        db: sqlite3.Connection,
+        path: Path,
+        info: os.stat_result,
+    ) -> PrefixWitness:
         """Prove the saved prefix, then replay through the existing tail indexer."""
         self.require_prefix(bus, info)
         empty = PrefixWitness.empty(self.root_id, info)
@@ -165,8 +183,14 @@ class PrefixWitness(PrefixSeal):
                 table.delete(db)
             return empty.index_tail(bus, marker, db, path, info)
 
-    def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                   path: Path, info: os.stat_result) -> PrefixWitness:
+    def index_tail(
+        self,
+        bus: WireLog,
+        marker: WireMetadata,
+        db: sqlite3.Connection,
+        path: Path,
+        info: os.stat_result,
+    ) -> PrefixWitness:
         """Continue the proved cut, committing bounded chunks without a prefix rescan."""
         saved = self
         digest = bytes.fromhex(saved.digest)
@@ -176,14 +200,21 @@ class PrefixWitness(PrefixSeal):
         end = marker.seal.recovery_end(info)
         revision = FileRevision.from_stat(info)
         with bus.path.open("rb") as stream:
+
             def commit(cut: int) -> None:
                 nonlocal saved, additions, size
-                if (FileRevision.from_file(stream) != revision
-                        or FileRevision.from_stat(bus.path.stat()) != revision):
+                if (
+                    FileRevision.from_file(stream) != revision
+                    or FileRevision.from_stat(bus.path.stat()) != revision
+                ):
                     raise RelationViolationError("Private bus changed during tail recovery.")
                 expected = replace(
-                    saved, revision=replace(revision, size=cut), through_seq=last_seq,
-                    digest=digest.hex(), tail=_tail(stream, cut))
+                    saved,
+                    revision=replace(revision, size=cut),
+                    through_seq=last_seq,
+                    digest=digest.hex(),
+                    tail=_tail(stream, cut),
+                )
                 saved = CheckedPrefix.commit_tail(bus, marker, db, saved, expected, additions)
                 additions, size = [], 0
 
@@ -200,8 +231,11 @@ class PrefixWitness(PrefixSeal):
                     commit(cut)
 
             for _ in bus.verified_records_unlocked(
-                marker, on_row=collect, offset=saved.offset,
-                previous_sequence=saved.through_seq, end=end,
+                marker,
+                on_row=collect,
+                offset=saved.offset,
+                previous_sequence=saved.through_seq,
+                end=end,
             ):
                 pass
             if additions or saved.revision != replace(revision, size=end):
@@ -212,8 +246,9 @@ class PrefixWitness(PrefixSeal):
                 bus.write_metadata_unlocked(marker)
         return marker.seal.recover(bus, marker, db, path, saved, info)
 
-    def require_append(self, marker: WireMetadata, info: os.stat_result,
-                       offset: int, sequence: int) -> None:
+    def require_append(
+        self, marker: WireMetadata, info: os.stat_result, offset: int, sequence: int
+    ) -> None:
         if self.source_identity != PrefixSource(marker.root_id, info.st_dev, info.st_ino):
             raise RelationViolationError("Private bus checkpoint append lost its source fence.")
         if offset != self.offset or sequence < self.through_seq:
@@ -283,7 +318,9 @@ class CheckedRead:
             prior.require_current_on(bus)
             if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
-            with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
+            with tempfile.TemporaryDirectory(
+                prefix=".checkpoint-carry-", dir=bus.path.parent
+            ) as stage:
                 staged = Path(stage) / bus.path.name
                 fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
                 digest = _SEED
@@ -348,7 +385,9 @@ class CheckedRead:
         return ClaimCommits.operation_used(self.connection, operation_id)
 
     def prepare_claim[Change: ClaimTransition](
-        self, transition: Change, registry: RegistrySnapshot,
+        self,
+        transition: Change,
+        registry: RegistrySnapshot,
     ) -> Change:
         self.require_open_prefix()
         return ClaimCommits.prepare(self.connection, transition, registry)
@@ -358,7 +397,9 @@ class CheckedRead:
         self.require_open_prefix()
         return ResourceClaims.all_claims(self.connection)
 
-    def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
+    def capture_sources(
+        self, rows: tuple[WireSourcePointer[OriginalSource], ...]
+    ) -> Iterator[OriginalSource]:
         """Copy selected row bytes without keeping the lock or database open to decode them.
 
         The iterator holds only row locations, copied bytes and the checked bus
@@ -368,7 +409,9 @@ class CheckedRead:
         return (resource.value for resource in self.capture_resources(rows))
 
     def capture_resources(
-        self, rows: tuple[WireSourcePointer[OriginalSource], ...], *,
+        self,
+        rows: tuple[WireSourcePointer[OriginalSource], ...],
+        *,
         previous: tuple[CapturedWireSource[OriginalSource], ...] = (),
     ) -> Iterator[CapturedWireSource[OriginalSource]]:
         """Check selected rows again and decode only those whose bytes changed.
@@ -389,8 +432,9 @@ class CheckedRead:
                 if prior is not None and prior.raw == raw:
                     yield prior
                 else:
-                    yield CapturedWireSource(source, row, raw,
-                                             row.decode_bytes(raw, source.root_id))
+                    yield CapturedWireSource(
+                        source, row, raw, row.decode_bytes(raw, source.root_id)
+                    )
 
         return decoded()
 
@@ -399,7 +443,8 @@ class CheckedRead:
         marks = ",".join("?" for _ in references)
         self.require_current()
         rows = DeliverySources.select(
-            self.connection, where=f"seq IN ({marks})",
+            self.connection,
+            where=f"seq IN ({marks})",
             parameters=tuple(ref.seq for ref in references),
         )
         by_sequence = {row.seq: row for row in rows}
@@ -419,12 +464,14 @@ class CheckedRead:
         """
         marks = ",".join("?" for _ in references)
         self.require_current()
-        rows = DeliverySources.read(self.connection.execute(
-            f"SELECT w.* FROM {DeliverySources.declared_name} w "
-            f"JOIN {Replies.declared_name} r ON r.seq=w.seq "
-            f"WHERE r.answered_seq IN ({marks}) ORDER BY w.seq",
-            tuple(reference.seq for reference in references),
-        ))
+        rows = DeliverySources.read(
+            self.connection.execute(
+                f"SELECT w.* FROM {DeliverySources.declared_name} w "
+                f"JOIN {Replies.declared_name} r ON r.seq=w.seq "
+                f"WHERE r.answered_seq IN ({marks}) ORDER BY w.seq",
+                tuple(reference.seq for reference in references),
+            )
+        )
         return self.capture_sources(tuple(rows))
 
     def delivery(self, seq: int) -> CommittedDelivery:
@@ -433,7 +480,7 @@ class CheckedRead:
         row = DeliverySources.one(self.connection, seq=seq)
         if row is None:
             raise RelationViolationError("No committed initial sideband for this wire sequence.")
-        original, = self.capture_sources((row,))
+        (original,) = self.capture_sources((row,))
         self.require_current()
         return original
 
@@ -459,7 +506,11 @@ class CheckedRead:
         return tuple(rows)
 
     def addressed_page(
-        self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
+        self,
+        bus: WireLog,
+        request: AddressedPage,
+        *,
+        prefix: PrefixWitness | None = None,
     ):
         """Read a limited page of a recipient's messages from the checked index.
 
@@ -472,23 +523,30 @@ class CheckedRead:
         window = witness if prefix is None else prefix
         witness.require_read_window(window)
         try:
-            rows = DeliverySources.read(db.execute(
-                f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
-                f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-                "WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?",
-                (request.lookup, request.after_seq, window.through_seq, request.limit + 1),
-            ))
-            last = DeliverySources.read(db.execute(
-                f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"))
+            rows = DeliverySources.read(
+                db.execute(
+                    f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
+                    f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
+                    "WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?",
+                    (request.lookup, request.after_seq, window.through_seq, request.limit + 1),
+                )
+            )
+            last = DeliverySources.read(
+                db.execute(
+                    f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"
+                )
+            )
             latest = last[0].seq if last else 0
             if not 0 <= latest <= witness.through_seq:
                 raise RelationViolationError("checked initial high-water is invalid.")
-            captured = self.capture_sources(tuple(rows[:request.limit]))
+            captured = self.capture_sources(tuple(rows[: request.limit]))
             self.require_current_on(bus)
 
             def decoded():
                 for original in captured:
-                    if not any(r.recipient_lookup == request.lookup for r in original.audience.recipients):
+                    if not any(
+                        r.recipient_lookup == request.lookup for r in original.audience.recipients
+                    ):
                         raise RelationViolationError("checked initial lookup differs from bus row.")
                     yield original
 
@@ -499,14 +557,16 @@ class CheckedRead:
     def conversation_frontier(self, lookup: str) -> int:
         """Latest original sender/recipient sequence without reconstructing a delivery."""
         self.require_current()
-        rows = SqlValue.for_annotation(int).read(self.connection.execute(
-            f"SELECT coalesce(max(seq), 0) FROM ("
-            f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
-            "WHERE sender_lookup=? UNION ALL "
-            f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
-            ")",
-            (lookup, lookup),
-        ))
+        rows = SqlValue.for_annotation(int).read(
+            self.connection.execute(
+                f"SELECT coalesce(max(seq), 0) FROM ("
+                f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
+                "WHERE sender_lookup=? UNION ALL "
+                f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
+                ")",
+                (lookup, lookup),
+            )
+        )
         return rows[0]
 
     def conversation_sources(
@@ -551,9 +611,12 @@ class CheckedRead:
         def decoded():
             for original in captured:
                 if original.audience.sender_lookup != lookup and not any(
-                    recipient.recipient_lookup == lookup for recipient in original.audience.recipients
+                    recipient.recipient_lookup == lookup
+                    for recipient in original.audience.recipients
                 ):
-                    raise RelationViolationError("Conversation index differs from frozen membership.")
+                    raise RelationViolationError(
+                        "Conversation index differs from frozen membership."
+                    )
                 yield original
 
         return decoded()
@@ -568,7 +631,11 @@ class CheckedRead:
         """
         lookup = incarnation.lookup
         originals = self.conversation_sources(
-            lookup, "1", (), limit=-1, ascending=True,
+            lookup,
+            "1",
+            (),
+            limit=-1,
+            ascending=True,
         )
         return (
             fact
@@ -582,10 +649,10 @@ class CheckedRead:
         requested = tuple(dict.fromkeys(references))
         rows = []
         for start in range(0, len(requested), 200):
-            batch = requested[start:start + 200]
-            where = "(session_id,session_file,entry_id) IN (" + ",".join(
-                "(?,?,?)" for _ in batch
-            ) + ")"
+            batch = requested[start : start + 200]
+            where = (
+                "(session_id,session_file,entry_id) IN (" + ",".join("(?,?,?)" for _ in batch) + ")"
+            )
             parameters = tuple(
                 value
                 for reference in batch
@@ -595,9 +662,9 @@ class CheckedRead:
                     reference.entry_id,
                 )
             )
-            rows.extend(ContextEntrySources.select(
-                self.connection, where=where, parameters=parameters
-            ))
+            rows.extend(
+                ContextEntrySources.select(self.connection, where=where, parameters=parameters)
+            )
         return tuple(rows)
 
     def context_entry_references(self, references):
@@ -616,15 +683,17 @@ class CheckedRead:
         if previous is not None and previous.source != self.witness.source_identity:
             raise RelationViolationError("Context predecessor belongs to another source")
         recorded, entries = RecordedContextManifest.capture(manifest, previous)
-        known = self.context_entry_references(
-            tuple(entry.reference for entry in entries)
-        )
+        known = self.context_entry_references(tuple(entry.reference for entry in entries))
         new_entries = tuple(entry for entry in entries if entry.reference not in known)
         records = (
             (AuthoredObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
-            if new_entries else ()
+            if new_entries
+            else ()
         )
-        return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
+        return (
+            *records,
+            AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)),
+        )
 
     @boundary_decoder
     def keyed_message(self, intent: PublicationIntents) -> Message | None:
@@ -646,7 +715,6 @@ class CheckedRead:
         raise RelationViolationError("checked response key has no original source row.")
 
 
-
 class CheckpointTable:
     """Source-derived rows bound by the canonical writer's durable seal."""
 
@@ -665,8 +733,16 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """
 
     transition: ClaimTransition
-    seq: typing.Annotated[int | None, Column(unique=True, generated="json_extract(transition,'$.seq')")] = field(default=None, init=False, compare=False)
-    operation_id: typing.Annotated[str | None, Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')")] = field(default=None, init=False, compare=False)
+    seq: typing.Annotated[
+        int | None, Column(unique=True, generated="json_extract(transition,'$.seq')")
+    ] = field(default=None, init=False, compare=False)
+    operation_id: typing.Annotated[
+        str | None,
+        Column(
+            unique=True,
+            generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')",
+        ),
+    ] = field(default=None, init=False, compare=False)
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:
@@ -679,15 +755,22 @@ class ClaimCommits(CheckpointTable, TypedTable):
 
     @classmethod
     def prepare[Change: ClaimTransition](
-        cls, db: sqlite3.Connection, transition: Change, registry: RegistrySnapshot,
+        cls,
+        db: sqlite3.Connection,
+        transition: Change,
+        registry: RegistrySnapshot,
     ) -> Change:
         previous = ResourceClaims.all_claims(db)
         projected = transition.apply(previous, registry)
         transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
-        return replace(transition, expired=tuple(
-            resource for resource in previous
-            if resource not in projected and resource not in transition.resources
-        ))
+        return replace(
+            transition,
+            expired=tuple(
+                resource
+                for resource in previous
+                if resource not in projected and resource not in transition.resources
+            ),
+        )
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Apply this original in the caller's existing prefix transaction."""
@@ -715,15 +798,18 @@ class ResourceClaims(CheckpointTable, TypedTable):
 
     resource: typing.Annotated[str, Column(primary_key=True)]
     claim_seq: int
+
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("claim_seq",), ClaimCommits, ("seq",),
-                           deferred=True, on_delete="CASCADE"),)
+        return (
+            ForeignKey(("claim_seq",), ClaimCommits, ("seq",), deferred=True, on_delete="CASCADE"),
+        )
 
     @classmethod
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         originals = ClaimCommits.select(
-            db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
+            db,
+            where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
             parameters=(resource,),
         )
         return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
@@ -746,7 +832,9 @@ class ResourceClaims(CheckpointTable, TypedTable):
             marks = ",".join("?" for _ in sequences)
             originals = ClaimCommits.select(db, where=f'"seq" IN ({marks})', parameters=sequences)
             transitions = {row.transition.seq: row.transition for row in originals}
-            owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
+            owners = {
+                row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current
+            }
         return ClaimProjection(ClaimCommits.latest_sequence(db), owners)
 
 
@@ -786,8 +874,11 @@ class PublicMessages(CheckpointTable, TypedTable):
     sender: str
     message_id: str
     gap: ClassVar[str] = "seq != previous_seq + 1"
-    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap),
-               Index(("message_id", "seq")))
+    indexes = (
+        Index(("sender", "message_id")),
+        Index(("seq",), where=gap),
+        Index(("message_id", "seq")),
+    )
 
     @classmethod
     @boundary_decoder
@@ -797,10 +888,12 @@ class PublicMessages(CheckpointTable, TypedTable):
         """Resolve public identities, including imported history without delivery rows."""
         source.require_current()
         opened = public.checked(source)
-        rows = cls.read(source.connection.execute(
-            f"SELECT * FROM {cls.declared_name} "
-            "WHERE message_id=? ORDER BY seq DESC LIMIT 1", (message_id,),
-        ))
+        rows = cls.read(
+            source.connection.execute(
+                f"SELECT * FROM {cls.declared_name} WHERE message_id=? ORDER BY seq DESC LIMIT 1",
+                (message_id,),
+            )
+        )
         if not rows:
             source.require_current()
             return None
@@ -810,11 +903,11 @@ class PublicMessages(CheckpointTable, TypedTable):
             original = delivery.delivery(source.stream, source.witness.root_id)
             source.require_current()
             return original.message
-        message = cast(Message, opened.messages_for_references((
-            MessageReference(row.seq, row.message_id),))[0])
+        message = cast(
+            Message, opened.messages_for_references((MessageReference(row.seq, row.message_id),))[0]
+        )
         if message.sender != row.sender:
-            raise RelationViolationError(
-                "Checked public message sender differs from its original.")
+            raise RelationViolationError("Checked public message sender differs from its original.")
         source.require_current()
         return message
 
@@ -822,8 +915,7 @@ class PublicMessages(CheckpointTable, TypedTable):
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
         if cls.exists(db, where=cls.gap):
             raise HumanClaimBlockedError(
-                "Private bus sequence gap has UNKNOWN outcome; "
-                "human send blocked, do not retry."
+                "Private bus sequence gap has UNKNOWN outcome; human send blocked, do not retry."
             )
 
     @classmethod
@@ -842,9 +934,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
     indexes = (Index(("sender_lookup", "seq")), Index(("message_id", "seq")))
 
     @classmethod
-    def by_message_id(
-        cls, source: CheckedRead, message_id: str
-    ) -> Iterator[CommittedDelivery]:
+    def by_message_id(cls, source: CheckedRead, message_id: str) -> Iterator[CommittedDelivery]:
         """Read each original delivery by its declared message-ID index."""
         source.require_current()
         cursor = source.connection.execute(
@@ -926,6 +1016,7 @@ class ContextManifestCursor(ABC):
 
     source: PrefixSource
     offset: int
+
     @property
     @abstractmethod
     def comparison(self) -> str: ...
@@ -935,9 +1026,12 @@ class ContextManifestCursor(ABC):
     def descending(self) -> bool: ...
 
     def available(self, connection, owners):
-        exists = RecordedContextManifestSources.exists(connection,
-            where='thread IN (' + ','.join('?' for _ in owners) + ') '
-            f'AND offset {self.comparison} ?', parameters=(*owners, self.offset))
+        exists = RecordedContextManifestSources.exists(
+            connection,
+            where="thread IN (" + ",".join("?" for _ in owners) + ") "
+            f"AND offset {self.comparison} ?",
+            parameters=(*owners, self.offset),
+        )
         return self if exists else None
 
 
@@ -959,8 +1053,9 @@ class ContextManifestReference:
     offset: int
 
     def read(self, log, name, registry):
-        page = RecordedContextManifestSources.for_owner(log, name, registry,
-            cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
+        page = RecordedContextManifestSources.for_owner(
+            log, name, registry, cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1
+        )
         if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
             raise MalformedRecord("Recorded context reference is absent from this owner")
         return page.resources[0].value
@@ -998,43 +1093,54 @@ class RecordedContextManifestSources(
 
     @classmethod
     def latest(
-        cls, log: WireLog, thread: ThreadIncarnation,
+        cls,
+        log: WireLog,
+        thread: ThreadIncarnation,
     ) -> CapturedWireSource[RecordedContextManifest, ContextManifest] | None:
         with log.checked_read() as source:
             prefix = source.witness
-            rows = cls.select(source.connection, thread=thread, order_by=("offset",),
-                              descending=True, limit=1)
+            rows = cls.select(
+                source.connection, thread=thread, order_by=("offset",), descending=True, limit=1
+            )
             captured = tuple((row, row.read_bytes(source.stream)) for row in rows)
         resolved = cls.resolve(log, captured, prefix)
         return next(iter(resolved.values()), None)
 
     @classmethod
     def resolve(
-        cls, log: WireLog, captured: tuple[tuple[RecordedContextManifestSources, bytes], ...],
+        cls,
+        log: WireLog,
+        captured: tuple[tuple[RecordedContextManifestSources, bytes], ...],
         prefix: PrefixWitness,
-    ) -> dict[RecordedContextManifestSources, CapturedWireSource[
-        RecordedContextManifest, ContextManifest]]:
+    ) -> dict[
+        RecordedContextManifestSources, CapturedWireSource[RecordedContextManifest, ContextManifest]
+    ]:
         """Resolve only referenced predecessors and entries, decoding outside locks."""
-        recorded = {row.offset: row.decode_bytes(value, prefix.root_id)
-                    for row, value in captured}
-        dependencies = {(predecessor, position)
-                        for row, _ in captured
-                        for position, segment in enumerate(recorded[row.offset].segments)
-                        for predecessor in segment.predecessors(row.offset)}
+        recorded = {row.offset: row.decode_bytes(value, prefix.root_id) for row, value in captured}
+        dependencies = {
+            (predecessor, position)
+            for row, _ in captured
+            for position, segment in enumerate(recorded[row.offset].segments)
+            for predecessor in segment.predecessors(row.offset)
+        }
         references = {offset for offset, _ in dependencies} - recorded.keys()
         if references:
             with log.checked_read() as source:
                 source.witness.require_read_window(prefix)
-                captured_prior = tuple((row, row.read_bytes(source.stream))
-                                       for offset in references
-                                       for row in cls.select(source.connection, offset=offset))
+                captured_prior = tuple(
+                    (row, row.read_bytes(source.stream))
+                    for offset in references
+                    for row in cls.select(source.connection, offset=offset)
+                )
             if {row.offset for row, _ in captured_prior} != references:
                 raise RelationViolationError("Recorded context predecessors are incomplete")
             for row, value in captured_prior:
                 if row.offset + row.length > prefix.offset:
                     raise RelationViolationError("Context predecessor exceeds its captured prefix")
                 recorded[row.offset] = row.decode_bytes(value, prefix.root_id)
-        segments = tuple(segment for row, _ in captured for segment in recorded[row.offset].segments)
+        segments = tuple(
+            segment for row, _ in captured for segment in recorded[row.offset].segments
+        )
         segments += tuple(recorded[offset].segments[position] for offset, position in dependencies)
         references = {reference for segment in segments for reference in segment.entries}
         entries: dict[ContextEntryReference, SegmentManifest] = {}
@@ -1055,17 +1161,26 @@ class RecordedContextManifestSources(
                 raise RelationViolationError("Recorded context entries are incomplete")
         for row, _ in captured:
             manifest = recorded[row.offset]
-            if any(recorded[predecessor].thread != manifest.thread
-                   for segment in manifest.segments
-                   for predecessor in segment.predecessors(row.offset)):
+            if any(
+                recorded[predecessor].thread != manifest.thread
+                for segment in manifest.segments
+                for predecessor in segment.predecessors(row.offset)
+            ):
                 raise RelationViolationError("Context predecessor belongs to another owner")
-        return {row: CapturedWireSource(prefix.source_identity, row, value,
-                                       recorded[row.offset].restore(entries, recorded))
-                for row, value in captured}
+        return {
+            row: CapturedWireSource(
+                prefix.source_identity, row, value, recorded[row.offset].restore(entries, recorded)
+            )
+            for row, value in captured
+        }
 
     @classmethod
     def for_owner(
-        cls, log: WireLog, name: str, registry: Registration, *,
+        cls,
+        log: WireLog,
+        name: str,
+        registry: Registration,
+        *,
         cursor: ContextManifestCursor | None = None,
         previous: tuple[CapturedWireSource[RecordedContextManifest, ContextManifest], ...] = (),
         limit: int | None = None,
@@ -1087,8 +1202,10 @@ class RecordedContextManifestSources(
             snapshot = registry.snapshot()
             incarnation = snapshot.require(name).incarnation
             storage = SqlStorage.for_type(ThreadIncarnation)
-            owners = tuple(storage.to_sql(FieldCodec.encode(recorded))
-                           for recorded in incarnation.recorded_names(snapshot))
+            owners = tuple(
+                storage.to_sql(FieldCodec.encode(recorded))
+                for recorded in incarnation.recorded_names(snapshot)
+            )
             where = "thread IN (" + ",".join("?" for _ in owners) + ")"
             parameters = owners
             prefix = source.witness
@@ -1098,11 +1215,13 @@ class RecordedContextManifestSources(
                 where += f" AND offset {cursor.comparison} ?"
                 parameters += (cursor.offset,)
             descending = cursor is None or cursor.descending
-            candidates = cls.iterate(source.connection.execute(
-                f'SELECT * FROM "{cls.declared_name}" WHERE {where} '
-                f'ORDER BY offset {"DESC" if descending else "ASC"} LIMIT ?',
-                (*parameters, limit),
-            ))
+            candidates = cls.iterate(
+                source.connection.execute(
+                    f'SELECT * FROM "{cls.declared_name}" WHERE {where} '
+                    f"ORDER BY offset {'DESC' if descending else 'ASC'} LIMIT ?",
+                    (*parameters, limit),
+                )
+            )
             rows, size = [], 0
             for row in candidates:
                 # A complete first request always makes progress, even when
@@ -1116,23 +1235,26 @@ class RecordedContextManifestSources(
             older = newer = None
             if rows:
                 older = BeforeContextManifest(prefix.source_identity, rows[0].offset).available(
-                    source.connection, owners)
+                    source.connection, owners
+                )
                 newer = AfterContextManifest(prefix.source_identity, rows[-1].offset).available(
-                    source.connection, owners)
+                    source.connection, owners
+                )
             # The saved check covers the bus bytes read so far; moving an archive
             # replaces the file. Rows from the same unchanged file can be reused,
             # so a refresh needs to read only newly recorded turns.
-            retained = {item.pointer: item for item in previous
-                        if item.source == prefix.source_identity}
-            captured = tuple((row, row.read_bytes(source.stream)) for row in rows
-                             if row not in retained)
+            retained = {
+                item.pointer: item for item in previous if item.source == prefix.source_identity
+            }
+            captured = tuple(
+                (row, row.read_bytes(source.stream)) for row in rows if row not in retained
+            )
 
         resources = {row: retained[row] for row in rows if row in retained}
         changed = cls.resolve(log, captured, prefix)
         for row, resource in changed.items():
             if resource.value.thread.resolved(snapshot) != incarnation:
-                raise RelationViolationError(
-                    "Context source differs from recorded owner.")
+                raise RelationViolationError("Context source differs from recorded owner.")
             resources[row] = resource
         return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
 
@@ -1142,7 +1264,9 @@ class RecordedContextManifestSources(
         record = WireRecord.from_wire(json.loads(raw), root_id)
         manifests = record.recorded_context_manifests()
         if len(manifests) != 1 or manifests[0].thread != self.thread:
-            raise RelationViolationError("Recorded context pointer differs from original observation")
+            raise RelationViolationError(
+                "Recorded context pointer differs from original observation"
+            )
         return manifests[0]
 
 
@@ -1153,8 +1277,13 @@ class Addressed(CheckpointTable, TypedTable):
 
     @classmethod
     def observed_after(
-        cls, bus: WireLog, revision: FileRevision, source: FileRevision,
-        marker_revision: FileRevision, lookup: str, after_seq: int,
+        cls,
+        bus: WireLog,
+        revision: FileRevision,
+        source: FileRevision,
+        marker_revision: FileRevision,
+        lookup: str,
+        after_seq: int,
     ) -> tuple[WireMetadata, bool]:
         """Read one recipient's indexed aggregate only at the captured revision.
 
@@ -1233,24 +1362,32 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = _index_row(db, offset, raw, record, through_seq,
-                                                 marker.claimed_after_seq)
+                        through_seq = _index_row(
+                            db, offset, raw, record, through_seq, marker.claimed_after_seq
+                        )
 
                     with db:
                         for _ in bus.verified_records_unlocked(marker, on_row=collect):
                             pass
                         if through_seq != marker.last_seq:
-                            raise RelationViolationError("Private bus has an unsettled publication sequence.")
-                        if (
-                            FileRevision.from_stat(os.fstat(stream.fileno()))
-                            != FileRevision.from_stat(info)
-                            or FileRevision.from_stat(bus.path.stat())
-                            != FileRevision.from_stat(info)
-                        ):
-                            raise RelationViolationError("Private bus changed during checkpoint installation.")
+                            raise RelationViolationError(
+                                "Private bus has an unsettled publication sequence."
+                            )
+                        if FileRevision.from_stat(
+                            os.fstat(stream.fileno())
+                        ) != FileRevision.from_stat(info) or FileRevision.from_stat(
+                            bus.path.stat()
+                        ) != FileRevision.from_stat(info):
+                            raise RelationViolationError(
+                                "Private bus changed during checkpoint installation."
+                            )
                         cls.capture(
-                            marker.root_id, FileRevision.from_stat(info), through_seq,
-                            digest, _tail(stream, info.st_size)).insert(db)
+                            marker.root_id,
+                            FileRevision.from_stat(info),
+                            through_seq,
+                            digest,
+                            _tail(stream, info.st_size),
+                        ).insert(db)
             _directory_sync(staged)
             with closing(_connect(staged, readonly=True)) as db:
                 witness = _saved(db)
@@ -1284,9 +1421,12 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         Only the writer changes which rows are indexed. A read-only archive
         keeps the same saved check and the index file it names.
         """
-        actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
-        ))
+        actual = SQLiteSchemaObject.read(
+            db.execute(
+                "SELECT name,sql FROM sqlite_master WHERE name=?",
+                (FieldCodec.encode(cls),),
+            )
+        )
         if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
             raise RelationViolationError("Private bus checked prefix record schema is unavailable.")
         try:
@@ -1321,14 +1461,30 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
     @classmethod
     def from_witness(cls, witness: PrefixWitness) -> CheckedPrefix:
         revision = witness.revision
-        return cls(1, 2, witness.root_id, revision.identity.device, revision.identity.inode,
-                   witness.offset, witness.through_seq, witness.digest, witness.tail,
-                   revision.mtime_ns, revision.ctime_ns)
+        return cls(
+            1,
+            2,
+            witness.root_id,
+            revision.identity.device,
+            revision.identity.inode,
+            witness.offset,
+            witness.through_seq,
+            witness.digest,
+            witness.tail,
+            revision.mtime_ns,
+            revision.ctime_ns,
+        )
 
     @classmethod
-    def commit_tail(cls, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                    prior: PrefixWitness, expected: PrefixWitness,
-                    additions: list[tuple[int, bytes, WireRecord]]) -> PrefixWitness:
+    def commit_tail(
+        cls,
+        bus: WireLog,
+        marker: WireMetadata,
+        db: sqlite3.Connection,
+        prior: PrefixWitness,
+        expected: PrefixWitness,
+        additions: list[tuple[int, bytes, WireRecord]],
+    ) -> PrefixWitness:
         """Commit one chunk through the same intent as an ordinary append."""
         path = _path(bus.path)
         marker.seal.require_rebuilt(prior, expected)
@@ -1337,8 +1493,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         with db:
             sequence = prior.through_seq
             for offset, raw, record in additions:
-                sequence = _index_row(db, offset, raw, record, sequence,
-                                      marker.claimed_after_seq)
+                sequence = _index_row(db, offset, raw, record, sequence, marker.claimed_after_seq)
             if sequence != expected.through_seq:
                 raise RelationViolationError("Indexed tail differs from its sealed sequence.")
             cls.from_witness(expected).upsert(db)
@@ -1403,8 +1558,14 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     return CheckedPrefix.read_witness(db)
 
 
-def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
-               record: WireRecord, previous_sequence: int, claimed_after_seq: int) -> int:
+def _index_row(
+    db: sqlite3.Connection,
+    offset: int,
+    raw: bytes,
+    record: WireRecord,
+    previous_sequence: int,
+    claimed_after_seq: int,
+) -> int:
     sequence = record.sequence_after(previous_sequence)
     for row in record.checkpoint_rows(offset, len(raw), previous_sequence, claimed_after_seq):
         row.insert(db)
@@ -1473,12 +1634,14 @@ class WritableCheckpoint:
     def open_for_repair(self) -> sqlite3.Connection:
         return _connect(self.path)
 
-    def check_final(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                    stream: BinaryIO) -> PrefixWitness:
+    def check_final(
+        self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, stream: BinaryIO
+    ) -> PrefixWitness:
         return _check_final_checkpoint_read_only(bus, marker, db, stream, self.path)
 
-    def verify_with_repair(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                           stream: BinaryIO) -> PrefixWitness:
+    def verify_with_repair(
+        self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection, stream: BinaryIO
+    ) -> PrefixWitness:
         return _verify_open_checkpoint_unlocked(bus, marker, db, stream, self.path)
 
 
@@ -1495,8 +1658,9 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
 
 
 @contextmanager
-def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *,
-                                       mode: LockMode = ExclusiveLock()):
+def opened_private_checkpoint_unlocked(
+    bus: WireLog, marker: WireMetadata, *, mode: LockMode = ExclusiveLock()
+):
     """Keep only this canonical lock's verified source/index resources open.
 
     Under the shared bus lock other readers run concurrently, so the check is
@@ -1554,7 +1718,6 @@ def append_private_bus_checkpoint_unlocked(
             _tail(stream, info.st_size),
         )
         return CheckedPrefix.commit_tail(bus, marker, db, saved, expected, [(offset, raw, record)])
-
 
 
 def addressed_source_pointers_unlocked(

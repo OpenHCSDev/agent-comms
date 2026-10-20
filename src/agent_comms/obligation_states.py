@@ -28,11 +28,11 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     def successors(cls) -> tuple[type[ResponseState], ...]: ...
 
     @property
-    def receipt_message_id(self) -> str | None:
+    def published_message_id(self) -> str | None:
         return None
 
     @property
-    def receipt_seq(self) -> int | None:
+    def publication_seq(self) -> int | None:
         return None
 
     @classmethod
@@ -97,6 +97,7 @@ class PublishingResponse(ResponseState):
     def successors(cls):
         return PublishedResponse, FailedResponse
 
+
 class DeferredResponse(ResponseState):
     retryable = True
     deferred = True
@@ -123,11 +124,11 @@ class PublishedResponse(ResponseState):
             raise ValueError("receipt_seq must be positive")
 
     @property
-    def receipt_message_id(self):
+    def published_message_id(self):
         return self.message_id
 
     @property
-    def receipt_seq(self):
+    def publication_seq(self):
         return self.seq
 
     def validate_acknowledgement(self, acknowledgement) -> None:

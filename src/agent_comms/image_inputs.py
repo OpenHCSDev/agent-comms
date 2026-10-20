@@ -20,7 +20,9 @@ MAX_PROMPT_IMAGES = 8
 class ImageInput:
     data: str
     mime_type: typing.Annotated[str, field_codec.WireName("mimeType")]
-    type: typing.Annotated[Literal["image"], field_codec.WireRequired(True)] = field(default="image", kw_only=True)
+    type: typing.Annotated[Literal["image"], field_codec.WireRequired(True)] = field(
+        default="image", kw_only=True
+    )
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:

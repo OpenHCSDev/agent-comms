@@ -54,9 +54,11 @@ class BusPageSource(PageIndexTable, TypedTable):
     singleton: typing.Annotated[Literal[1], Column(primary_key=True)] = field(default=1)
 
     def covers(self, snapshot: WireSnapshot) -> bool:
-        return (snapshot.same_file(self.revision.identity)
-                and snapshot.complete_prefix.boundary <= self.revision.size
-                and snapshot.fingerprint(self.revision.size) == self.tail)
+        return (
+            snapshot.same_file(self.revision.identity)
+            and snapshot.complete_prefix.boundary <= self.revision.size
+            and snapshot.fingerprint(self.revision.size) == self.tail
+        )
 
 
 @dataclass(frozen=True)
@@ -68,7 +70,10 @@ class BusPageRow(PageIndexTable, TypedTable):
     timestamp: float
     human: bool
     mentions: tuple[str, ...]
-    indexes = (Index(("target", "seq")), Index(("offset",)),)
+    indexes = (
+        Index(("target", "seq")),
+        Index(("offset",)),
+    )
 
     def record(self, stream: BinaryIO, *, max_bytes: int | None = None) -> tuple[Mapping, int]:
         stream.seek(self.offset)
@@ -92,7 +97,9 @@ class BusPageRow(PageIndexTable, TypedTable):
 @dataclass(frozen=True)
 class BusPageMetrics(TypedRow):
     last: typing.Annotated[float, Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")]
-    human: typing.Annotated[float, Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")]
+    human: typing.Annotated[
+        float, Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")
+    ]
 
 
 @dataclass(frozen=True)
@@ -116,8 +123,9 @@ class BusPageIndex(TypedStore):
     @cached_property
     def connection(self):
         with ExitStack() as resources:
-            db = resources.enter_context(self._attached(
-                lambda: closing(CoordinationStore.read_snapshot(self.path))))
+            db = resources.enter_context(
+                self._attached(lambda: closing(CoordinationStore.read_snapshot(self.path)))
+            )
             if actual := self._schema(db):
                 self.require_schema(actual)
             db.execute("ROLLBACK")
@@ -127,8 +135,9 @@ class BusPageIndex(TypedStore):
     def _open_writer(self, *, check_same_thread: bool = True):
         """Keep disposable-schema repair inside the store's WAL attachment boundary."""
         with ExitStack() as opening:
-            db = opening.enter_context(closing(super()._open_writer(
-                check_same_thread=check_same_thread)))
+            db = opening.enter_context(
+                closing(super()._open_writer(check_same_thread=check_same_thread))
+            )
             try:
                 self.require_schema(self._schema(db))
             except StaleBusPageIndexError:
@@ -187,7 +196,7 @@ class BusPageIndex(TypedStore):
         # SQLite can checkpoint on writer close, instead of leaving a cold
         # read-only attachment to reconstruct the entire WAL on every query.
         self._resources.close()
-        self.__dict__.pop('connection', None)
+        self.__dict__.pop("connection", None)
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:
@@ -206,16 +215,26 @@ class BusPageIndex(TypedStore):
                     BusPageRow.delete(db)
                 last_rows = BusPageRow.select(db, order_by=("seq",), descending=True, limit=1)
                 last_sequence = last_rows[0].seq if last_rows else None
-                for record, row_offset, _ in opened.rows(offset, min(size, offset + self.batch_bytes)):
+                for record, row_offset, _ in opened.rows(
+                    offset, min(size, offset + self.batch_bytes)
+                ):
                     for message in opened.messages(record):
                         if last_sequence is not None and message.seq <= last_sequence:
                             raise RelationViolationError("Wire sequences are not increasing.")
-                        BusPageRow(message.seq, row_offset, message.sender, message.target,
-                                   message.timestamp, message.sender_role.page_human_sender(),
-                                   tuple(mention.thread for mention in message.mentions)).insert(db)
+                        BusPageRow(
+                            message.seq,
+                            row_offset,
+                            message.sender,
+                            message.target,
+                            message.timestamp,
+                            message.sender_role.page_human_sender(),
+                            tuple(mention.thread for mention in message.mentions),
+                        ).insert(db)
                         last_sequence = message.seq
                 through = opened.position
-                BusPageSource(replace(revision, size=through), opened.fingerprint(through)).upsert(db)
+                BusPageSource(replace(revision, size=through), opened.fingerprint(through)).upsert(
+                    db
+                )
         return True
 
     def invalidate(self) -> None:
@@ -230,7 +249,8 @@ class BusPageIndex(TypedStore):
         upper: int | None,
         descending: bool,
         predicate: tuple[str, tuple],
-        before_offset: int | None = None, after_offset: int | None = None,
+        before_offset: int | None = None,
+        after_offset: int | None = None,
     ) -> Generator[BusPageRow]:
         condition, bindings = predicate
         clauses: list[str] = [f"({condition})"]
@@ -238,20 +258,40 @@ class BusPageIndex(TypedStore):
         if after_offset is not None:
             clauses.append("offset >= ?")
             params.append(after_offset)
-        yield from self._offsets(clauses, params, lower=lower, upper=upper,
-                                 descending=descending, before_offset=before_offset)
+        yield from self._offsets(
+            clauses,
+            params,
+            lower=lower,
+            upper=upper,
+            descending=descending,
+            before_offset=before_offset,
+        )
 
     def sequence_offsets(
-        self, sequences: frozenset[int], *, before_offset: int,
+        self,
+        sequences: frozenset[int],
+        *,
+        before_offset: int,
     ) -> Iterator[BusPageRow]:
         """Exactly the named sequences' rows, ascending."""
-        yield from self._offsets(["seq IN (" + ",".join("?" for _ in sequences) + ")"],
-                                 [*sorted(sequences)], lower=None, upper=None,
-                                 descending=False, before_offset=before_offset)
+        yield from self._offsets(
+            ["seq IN (" + ",".join("?" for _ in sequences) + ")"],
+            [*sorted(sequences)],
+            lower=None,
+            upper=None,
+            descending=False,
+            before_offset=before_offset,
+        )
 
     def _offsets(
-        self, clauses: list[str], params: list[object], *, lower: int | None,
-        upper: int | None, descending: bool, before_offset: int | None,
+        self,
+        clauses: list[str],
+        params: list[object],
+        *,
+        lower: int | None,
+        upper: int | None,
+        descending: bool,
+        before_offset: int | None,
     ) -> Generator[BusPageRow]:
         """One owner for source bounds, ordering and typed offset decoding."""
         if lower is not None:
@@ -263,64 +303,106 @@ class BusPageIndex(TypedStore):
         if before_offset is not None:
             clauses.append("offset < ?")
             params.append(before_offset)
-        with closing(BusPageRow.stream(self.connection, where=" AND ".join(clauses) or "1",
-                     parameters=tuple(params), order_by=("seq",), descending=descending)) as rows:
+        with closing(
+            BusPageRow.stream(
+                self.connection,
+                where=" AND ".join(clauses) or "1",
+                parameters=tuple(params),
+                order_by=("seq",),
+                descending=descending,
+            )
+        ) as rows:
             try:
                 yield from rows
             except MalformedRecord as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
-    def display_snapshot(self, scopes: tuple[ChannelDisplayScope, ...], before_offset: int) -> DisplaySnapshot:
+    def display_snapshot(
+        self, scopes: tuple[ChannelDisplayScope, ...], before_offset: int
+    ) -> DisplaySnapshot:
         snapshot = DisplaySnapshot.empty(scopes)
         for scope in scopes:
             predicate, parameters = scope.index_predicate
-            row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
+            (row,) = BusPageRow.select(
+                self.connection,
+                row_type=BusPageMetrics,
                 where=f"offset < ? AND ({predicate})",
-                parameters=(before_offset, *parameters))
+                parameters=(before_offset, *parameters),
+            )
             snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
         return snapshot
 
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
-        rows = BusPageRow.select(self.connection, where="target=? AND offset<?",
-                                 parameters=(target, before_offset), order_by=("seq",),
-                                 descending=True, limit=1)
+        rows = BusPageRow.select(
+            self.connection,
+            where="target=? AND offset<?",
+            parameters=(target, before_offset),
+            order_by=("seq",),
+            descending=True,
+            limit=1,
+        )
         return rows[0] if rows else None
 
-    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
-                               *, through: int) -> list[LatestConversation]:
+    def latest_by_conversation(
+        self, scope: MessageDisplayScope, before_offset: int, *, through: int
+    ) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
-        return LatestConversation.read(self.connection.execute(
-            f'SELECT target, sender, MAX(seq) AS seq '
-            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND seq<=? AND ({predicate}) '
-            f'GROUP BY target, sender', (before_offset, through, *parameters),
-        ))
+        return LatestConversation.read(
+            self.connection.execute(
+                f"SELECT target, sender, MAX(seq) AS seq "
+                f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND seq<=? AND ({predicate}) '
+                f"GROUP BY target, sender",
+                (before_offset, through, *parameters),
+            )
+        )
 
-    def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
-                           sequences: tuple[int, ...], before_offset: int) -> int:
+    def proved_read_prefix(
+        self,
+        scope: ChannelDisplayScope | DMDisplayScope,
+        previous: ConversationCursor,
+        sequences: tuple[int, ...],
+        before_offset: int,
+    ) -> int:
         through = max((*sequences, *previous.exceptions, previous.high_water))
         predicate, parameters = scope.index_predicate
-        missing, = self.connection.execute(
+        (missing,) = self.connection.execute(
             f'SELECT MIN(seq) FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
-            'AND seq>? AND seq<=? AND seq NOT IN (SELECT value FROM json_each(?))',
-            (before_offset, *parameters, previous.high_water, through,
-             json.dumps((*sequences, *previous.exceptions))),
+            "AND seq>? AND seq<=? AND seq NOT IN (SELECT value FROM json_each(?))",
+            (
+                before_offset,
+                *parameters,
+                previous.high_water,
+                through,
+                json.dumps((*sequences, *previous.exceptions)),
+            ),
         ).fetchone()
         return through if missing is None else missing - 1
 
-    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
+    def display_unread(
+        self,
+        scopes: tuple[ChannelDisplayScope, ...],
+        viewer_names: frozenset[str],
+        seen: ReadCursor,
+        before_offset: int,
+        snapshot: RegistryProvenance,
+    ) -> dict[str, int]:
         counts = {}
         for scope in scopes:
             bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
             predicate, parameters = scope.index_predicate
             counts[scope.channel] = self.connection.execute(
-                f'WITH {ReadCursor.sql("?")}, requests AS ('
-                f'SELECT \'viewer\' AS actor,* FROM "{BusPageRow.declared_name}" '
-                'WHERE seq > ? AND offset < ? '
-                f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
-                f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
-                (*bindings.values(), seen.lower_bound(scope, snapshot), before_offset, *parameters,
-                 json.dumps(tuple(viewer_names))),
+                f"WITH {ReadCursor.sql('?')}, requests AS ("
+                f"SELECT 'viewer' AS actor,* FROM \"{BusPageRow.declared_name}\" "
+                "WHERE seq > ? AND offset < ? "
+                f"AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), "
+                f"{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}",
+                (
+                    *bindings.values(),
+                    seen.lower_bound(scope, snapshot),
+                    before_offset,
+                    *parameters,
+                    json.dumps(tuple(viewer_names)),
+                ),
             ).fetchone()[0]
         return counts
 
@@ -337,13 +419,20 @@ class EmptyBusPageIndex(BusPageIndex):
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
-                               *, through: int) -> list[LatestConversation]:
+    def latest_by_conversation(
+        self, scope: MessageDisplayScope, before_offset: int, *, through: int
+    ) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)
 
-    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
+    def display_unread(
+        self,
+        scopes: tuple[ChannelDisplayScope, ...],
+        viewer_names: frozenset[str],
+        seen: ReadCursor,
+        before_offset: int,
+        snapshot: RegistryProvenance,
+    ) -> dict[str, int]:
         return dict.fromkeys((scope.channel for scope in scopes), 0)

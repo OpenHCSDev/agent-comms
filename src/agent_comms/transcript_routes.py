@@ -53,8 +53,9 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
 
 
 def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(connection.execute(
-        "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
+    return SQLiteSchemaObject.read(
+        connection.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+    )
 
 
 def _declared_schema() -> dict[str, str]:
@@ -221,23 +222,40 @@ class TranscriptRoutes(StoreWriter):
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease.renamed(incarnation.name):
                 raise RelationViolationError("Native publication turn lease changed")
-            if current.runtime.read_key != thread.runtime.read_key or FileRevision.capture(path) != revision:
+            if (
+                current.runtime.read_key != thread.runtime.read_key
+                or FileRevision.capture(path) != revision
+            ):
                 raise RelationViolationError("Native publication session changed")
             if not inputs.in_turn(lease.turn_id).started_for_native(
-                    lease, user.input_id, user.message.text, snapshot=snapshot):
+                lease, user.input_id, user.message.text, snapshot=snapshot
+            ):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
             marks = ",".join("?" for _ in references)
-            originals = tuple(source.conversation_sources(
-                lookup, f"w.seq IN ({marks})", tuple(ref.seq for ref in references),
-                limit=len(references), ascending=True,
-            )) if references else ()
-            if {item.message.reference for item in originals} != set(references) or len(set(published)) != len(published):
+            originals = (
+                tuple(
+                    source.conversation_sources(
+                        lookup,
+                        f"w.seq IN ({marks})",
+                        tuple(ref.seq for ref in references),
+                        limit=len(references),
+                        ascending=True,
+                    )
+                )
+                if references
+                else ()
+            )
+            if {item.message.reference for item in originals} != set(references) or len(
+                set(published)
+            ) != len(published):
                 raise RelationViolationError("Publication is not its original seq/id relation")
             routing.require_publications(
                 tuple(item for item in originals if item.message.reference in published), lookup
             )
-            self._record_publication(thread.runtime.read_key, ids, final.entry.id, routing, published)
+            self._record_publication(
+                thread.runtime.read_key, ids, final.entry.id, routing, published
+            )
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
         with self.writing() as connection:

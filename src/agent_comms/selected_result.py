@@ -25,9 +25,13 @@ class CoordinatedTurn:
 
     @classmethod
     async def capture(
-        cls, participant, input_id, disposition: type[AssignmentState],
+        cls,
+        participant,
+        input_id,
+        disposition: type[AssignmentState],
         publications: tuple[PublicationEvidence, ...] = (),
-        *, notices: tuple[str, ...] = (),
+        *,
+        notices: tuple[str, ...] = (),
     ):
         return cls(
             participant.batch.assignment_ids,

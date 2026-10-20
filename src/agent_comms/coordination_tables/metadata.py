@@ -36,8 +36,7 @@ class SchemaMeta(CoordinatorTable, TypedTable):
         expected = cls.current()
         if version != expected.schema_version:
             raise SchemaVersionError(
-                f"coordination schema {version} is unsupported; "
-                f"expected {expected.schema_version}"
+                f"coordination schema {version} is unsupported; expected {expected.schema_version}"
             )
         if cls.one(db, singleton=expected.singleton) != expected:
             raise SchemaVersionError("coordination schema metadata is inconsistent")

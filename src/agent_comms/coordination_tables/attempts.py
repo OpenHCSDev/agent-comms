@@ -98,11 +98,17 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
     owner_lookup: str
     owner_thread: typing.Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_generation: typing.Annotated[int, Column(check="owner_generation > 0")]
-    owner_token_digest: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256")]
+    owner_token_digest: typing.Annotated[
+        str,
+        field_codec.SnapshotExclude(True),
+        Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
+    ]
     lifecycle: typing.Annotated[AttemptState, field_codec.SnapshotExclude(True)]
     revision: typing.Annotated[int, Column(check="revision > 0")]
     last_progress_at_ms: int | None
-    reason_code: typing.Annotated[str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")]
+    reason_code: typing.Annotated[
+        str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+    ]
     created_at_ms: typing.Annotated[int, Column(check="created_at_ms >= 0")]
     updated_at_ms: typing.Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
@@ -141,29 +147,49 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: typing.Annotated[str, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    lease_expires_at_ms: typing.Annotated[int | None, field_codec.SnapshotExclude(True), Column(
-                generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
-                check="lease_expires_at_ms >= 0",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    backend_done: typing.Annotated[bool, field_codec.SnapshotExclude(True), Column(
-                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
-                check="backend_done IN (0,1)",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    process_dead: typing.Annotated[bool, field_codec.SnapshotExclude(True), Column(
-                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
-                check="process_dead IN (0,1)",
-            )] = dataclass_field(init=False, compare=False, repr=False, default=None)
-    phase_kind: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(
-                generated=(
-                    "CASE\n"
-                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
-                    "'active' END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
-    active_required_status: typing.Annotated[str | None, field_codec.SnapshotExclude(True), Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END")] = dataclass_field(init=False, default=None, compare=False)
+    phase: typing.Annotated[
+        str,
+        field_codec.SnapshotExclude(True),
+        Column(generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    lease_expires_at_ms: typing.Annotated[
+        int | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
+            check="lease_expires_at_ms >= 0",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    backend_done: typing.Annotated[
+        bool,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
+            check="backend_done IN (0,1)",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    process_dead: typing.Annotated[
+        bool,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
+            check="process_dead IN (0,1)",
+        ),
+    ] = dataclass_field(init=False, compare=False, repr=False, default=None)
+    phase_kind: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(
+            generated=(
+                "CASE\n       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
+    active_required_status: typing.Annotated[
+        str | None,
+        field_codec.SnapshotExclude(True),
+        Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
+    ] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         (
             "last_progress_at_ms IS NULL OR\n"
@@ -291,8 +317,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if not observed or cls.exists(
             db,
             where=(
-                "execution_id=? AND (facts & ?) = ? "
-                "AND replay_safe=0 AND side_effects_possible=1"
+                "execution_id=? AND (facts & ?) = ? AND replay_safe=0 AND side_effects_possible=1"
             ),
             parameters=(execution_id, int(observed), int(observed)),
         ):
@@ -303,7 +328,8 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         # different evidence since the existence check, even in autocommit use.
         statement, values = cls(execution_id, observed, False, True, 1)._insertion()
         db.execute(
-            statement + """
+            statement
+            + """
             ON CONFLICT (execution_id) DO UPDATE SET
                 facts = facts | excluded.facts,
                 replay_safe = 0,
@@ -369,13 +395,16 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: typing.Annotated[int | None, Column(
-                generated=(
-                    "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
-                    "e = 0\n"
-                    "              THEN 1 ELSE 0 END"
-                )
-            )] = dataclass_field(init=False, default=None, compare=False)
+    retry_authorized: typing.Annotated[
+        int | None,
+        Column(
+            generated=(
+                "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
+                "e = 0\n"
+                "              THEN 1 ELSE 0 END"
+            )
+        ),
+    ] = dataclass_field(init=False, default=None, compare=False)
 
     checks = ("facts = 0 OR replay_safe = 0",)
 

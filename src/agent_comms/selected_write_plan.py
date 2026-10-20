@@ -54,7 +54,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName('admission')]
+    claim_scope: typing.Annotated[ClaimedIdentity, field_codec.WireName("admission")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,7 +69,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    claim_epoch: typing.Annotated[int, field_codec.WireName('admission_epoch')]
+    claim_epoch: typing.Annotated[int, field_codec.WireName("admission_epoch")]
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str
@@ -79,8 +79,12 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     @property
     def binding(self) -> SelectedWriteBinding:
         return SelectedWriteBinding(
-            self.root_id, MessageReference(self.source_seq, self.source_message_id),
-            self.claim_id, ClaimedIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch),
+            self.root_id,
+            MessageReference(self.source_seq, self.source_message_id),
+            self.claim_id,
+            ClaimedIdentity(
+                RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch
+            ),
         )
 
     def require_accepted(self):
@@ -214,13 +218,23 @@ class SelectedWritePlans:
             record_path = self._path(source_seq, lookup)
             operation_id = Id128Text.mint()
             record = AcceptedWriteIntent(
-                schema=1, root_id=self.root_id, source_seq=source_seq,
-                source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, claim_epoch=claimed_generation,
-                expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
-                contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
+                schema=1,
+                root_id=self.root_id,
+                source_seq=source_seq,
+                source_message_id=source_message_id,
+                claim_id=selected[0].assignment_id,
+                owner=owner.name,
+                incarnation=owner.created_at,
+                claim_epoch=claimed_generation,
+                expected_attempt_ordinal=1,
+                operation_id=operation_id,
+                resource=str(path),
+                contents_b64=base64.b64encode(raw).decode("ascii"),
+                digest=hashlib.sha256(raw).hexdigest(),
             )
-            data = json.dumps(FieldCodec.encode(record), sort_keys=True, separators=(",", ":")).encode()
+            data = json.dumps(
+                FieldCodec.encode(record), sort_keys=True, separators=(",", ":")
+            ).encode()
             try:
                 fd = os.open(
                     record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
@@ -253,7 +267,9 @@ class SelectedWritePlans:
             return None
         row = row.require_accepted()
         expected = SelectedWriteBinding(
-            self.root_id, assignment.source, assignment.assignment_id,
+            self.root_id,
+            assignment.source,
+            assignment.assignment_id,
             ClaimedIdentity(owner.incarnation, claimed_generation),
         )
         if row.binding != expected:
@@ -273,7 +289,11 @@ class SelectedWritePlans:
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")).encode())
+                stream.write(
+                    json.dumps(
+                        FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")
+                    ).encode()
+                )
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, path)

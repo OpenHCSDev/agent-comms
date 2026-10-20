@@ -216,7 +216,9 @@ class RefreshTokenGrant(TokenGrant):
 class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
-    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(default_factory=dict)
+    meta: typing.Annotated[dict[str, object], field_codec.WireName("_meta")] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def of(cls, tool: type[ToolRequest]) -> ToolCall:
@@ -319,7 +321,9 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
 
     async def answer(self, connector: Connector) -> web.Response:
         return web.json_response(
-            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector), Path(sys.executable)))
+            FieldCodec.encode(
+                ToolsCallReply(self.id, await self.result(connector), Path(sys.executable))
+            )
         )
 
     async def result(self, connector: Connector) -> ToolsCallResult:
@@ -348,7 +352,11 @@ class ToolsCallResult:
 
     content: tuple[TextContent, ...]
     is_error: typing.Annotated[bool, field_codec.WireName("isError")]
-    structured_content: typing.Annotated[dict[str, JsonValue], field_codec.WireName("structuredContent"), field_codec.WireOmitDefault(True)] = field(default_factory=dict)
+    structured_content: typing.Annotated[
+        dict[str, JsonValue],
+        field_codec.WireName("structuredContent"),
+        field_codec.WireOmitDefault(True),
+    ] = field(default_factory=dict)
 
     @classmethod
     def failed(cls, error: Exception) -> ToolsCallResult:
@@ -380,9 +388,9 @@ class Connector:
         tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
             tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
         }
-        tools.update({
-            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
-        })
+        tools.update(
+            {tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)}
+        )
         return tools
 
     @contextmanager
@@ -420,10 +428,12 @@ class Connector:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         heartbeat = CommanderHeartbeat()
         tasks = (
-            asyncio.create_task(Coordination.watch_worker(
-                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
-            asyncio.create_task(Coordination.watch_worker(
-                lambda: heartbeat.watch_pass(self.opened_wire))),
+            asyncio.create_task(
+                Coordination.watch_worker(lambda: UnownedWheelSpin.watch_pass(self.opened_wire))
+            ),
+            asyncio.create_task(
+                Coordination.watch_worker(lambda: heartbeat.watch_pass(self.opened_wire))
+            ),
         )
         try:
             yield
@@ -587,9 +597,23 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorVerb):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
-    root: Annotated[Path, PathText, field_codec.Argument(flags=("--root",), options={'help': "Explicit Comms root to serve"})]
-    port: typing.Annotated[int, field_codec.Argument(flags=("--port",), options={'help': "The loopback port it listens on"})] = dataclasses.field(default=PORT)
-    issuer: typing.Annotated[str, field_codec.Argument(flags=("--issuer",), options={'help': "Public origin the OAuth metadata names"})] = dataclasses.field(default=f"http://{LOOPBACK}:{PORT}")
+    root: Annotated[
+        Path,
+        PathText,
+        field_codec.Argument(flags=("--root",), options={"help": "Explicit Comms root to serve"}),
+    ]
+    port: typing.Annotated[
+        int,
+        field_codec.Argument(
+            flags=("--port",), options={"help": "The loopback port it listens on"}
+        ),
+    ] = dataclasses.field(default=PORT)
+    issuer: typing.Annotated[
+        str,
+        field_codec.Argument(
+            flags=("--issuer",), options={"help": "Public origin the OAuth metadata names"}
+        ),
+    ] = dataclasses.field(default=f"http://{LOOPBACK}:{PORT}")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
@@ -607,9 +631,20 @@ class RoundTripVerb(ConnectorVerb):
     runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
     help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText, field_codec.Argument(flags=("root",), options={'help': "The comms root it proves"})]
-    runtime: Annotated[Path, PathText, field_codec.Argument(flags=("runtime",), options={'help': "The Python the service runs"})]
-    port: typing.Annotated[int, field_codec.Argument(flags=("--port",), options={'help': "The service's loopback port"})] = dataclasses.field(default=PORT)
+    root: Annotated[
+        Path,
+        PathText,
+        field_codec.Argument(flags=("root",), options={"help": "The comms root it proves"}),
+    ]
+    runtime: Annotated[
+        Path,
+        PathText,
+        field_codec.Argument(flags=("runtime",), options={"help": "The Python the service runs"}),
+    ]
+    port: typing.Annotated[
+        int,
+        field_codec.Argument(flags=("--port",), options={"help": "The service's loopback port"}),
+    ] = dataclasses.field(default=PORT)
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         read = ToolCall.of(CommsChannelsTool)
@@ -655,7 +690,12 @@ class PendingVerb(ConnectorVerb):
 @dataclass(frozen=True, kw_only=True)
 class ApproveVerb(ConnectorVerb):
     help = "Approve one waiting authorization"
-    request: typing.Annotated[str, field_codec.Argument(flags=("request",), options={'help': "The id the authorize page shows"})]
+    request: typing.Annotated[
+        str,
+        field_codec.Argument(
+            flags=("request",), options={"help": "The id the authorize page shows"}
+        ),
+    ]
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         def approved(grants: ConnectorGrants) -> ConnectorGrants:
