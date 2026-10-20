@@ -404,8 +404,13 @@ class Machine(DeclaredFamily, affix="Machine"):
         return context
 
     def rehearse(
-        self, args: GateArguments, target: Target, previous: Path, tree: Path,
-        log: Path, work: Path,
+        self,
+        args: GateArguments,
+        target: Target,
+        previous: Path,
+        tree: Path,
+        log: Path,
+        work: Path,
     ) -> CompletedRehearsal:
         with tempfile.TemporaryDirectory(dir=args.scratch, prefix=self.name + "-") as copy:
             root = Path(copy)
@@ -443,16 +448,21 @@ class Desktop(Machine):
     root = "/var/tmp/agent-comms-live-20260927-wzjtqhza"
 
     def rehearse(
-        self, args: GateArguments, target: Target, previous: Path, tree: Path,
-        log: Path, work: Path,
+        self,
+        args: GateArguments,
+        target: Target,
+        previous: Path,
+        tree: Path,
+        log: Path,
+        work: Path,
     ) -> CompletedRehearsal:
         if self.transport:
             raise GateError("Run the desktop practice route on the desktop host")
         with tempfile.TemporaryDirectory(dir=args.scratch, prefix=self.name + "-") as copy:
             home = Path(copy) / "home"
-            return PracticeCopy(
-                Comms(CommsRoute.current().root), home / ".agent-comms"
-            ).rehearse(tree, previous, target.head, args.python, log, work)
+            return PracticeCopy(Comms(CommsRoute.current().root), home / ".agent-comms").rehearse(
+                tree, previous, target.head, args.python, log, work
+            )
 
 
 def storage_floor() -> float:
