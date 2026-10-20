@@ -28,7 +28,8 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     todo, unit = checkout
     if delivered:
         CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
-                          delivery=OperationDelivery(at=RecordedEventTime(500))).apply(comms, caller)
+                          delivery=OperationDelivery(at=RecordedEventTime(500)),
+                          claims=working(comms)).apply(comms, caller)
         todo = comms.goals.todos.get(todo.id)
     CommsOrderServeTool(problem=todo.id, serves=RecordPlanePhase).apply(comms, caller)
     todo = comms.goals.todos.get(todo.id)

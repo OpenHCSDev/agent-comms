@@ -22,6 +22,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.progress_claims import MergedClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     AcceptedVerdict,
@@ -225,6 +226,7 @@ def deliver(problem: str, delivered: str, checked: str) -> None:
             problem=problem,
             order_id=f"record-order-{problem}",
             delivery=CommitDelivery(commit=checked, delivered_commit=delivered),
+            claims=(MergedClaim(delivered),),
         ),
     )
 

@@ -29,6 +29,7 @@ from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
@@ -132,6 +133,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             problem="P1",
             order_id="probe-order",
             delivery=OperationDelivery(),
+            claims=(WorkingClaim(str(screenshot)),),
         ).apply(comms, ThreadCaller("claude-ai"))
     if name in {"comms_decision", "comms_constraint", "comms_subtask"}:
         thread = comms.registry.require("claude-ai")

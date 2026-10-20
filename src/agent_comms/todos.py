@@ -27,7 +27,7 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .progress_claims import MergedClaim
+from .progress_claims import MergedClaim, ProgressClaim
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -94,7 +94,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return claims
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
         check = todo.order.check
         for each in (check, *todo.order.deletes.checks):
@@ -180,13 +186,25 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
 
-    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
-        verified = await super().verified(todo, registry)
-        merge = await self.merge_state(todo, registry)
+    def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
+        return (*claims, MergedClaim(self.delivered))
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery:
+        try:
+            branches = verified_claims[MergedClaim(self.delivered)]
+        except KeyError as error:
+            raise ValueError("Commit delivery requires the order-done claim verification.") from error
+        verified = await super().verified(todo, registry, verified_claims)
+        merge = await self.merge_state(todo, registry, branches)
         return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
                                      at=verified.at, evidence=self.evidence, merge=merge)
 
-    async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
+    async def merge_state(
+        self, todo: Todo, registry: Registration, branches: tuple[str, ...],
+    ) -> DeliveryMerge:
         """Observe integration, not merely publication, at the time of completion.
 
         Git proves ordinary merges to main. The order's merged PR also proves squash merges
@@ -194,8 +212,6 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         whose owner is WorkBranches, not a second branch policy in the delivery tool.
         """
         check = todo.order.checked().check
-        branches = await asyncio.to_thread(
-            MergedClaim(self.delivered).origin_branches, Path(check.directory))
         if WorkBranches.main in branches:
             return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
@@ -2258,13 +2274,17 @@ class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
+    verified_claims: dict[ProgressClaim, tuple[str, ...]] = field(
+        default_factory=dict, kw_only=True, repr=False, compare=False,
+        metadata={"wire_transient": True},
+    )
 
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        verified = self.delivery.verified(current, goals.registry)
+        verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):

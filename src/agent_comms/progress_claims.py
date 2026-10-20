@@ -22,13 +22,14 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ProgressClaim(DeclaredFamily, affix="Claim"):
     @abstractmethod
-    def verify(self, comms: Comms, worktree: Path) -> None:
-        """Raise ValueError naming the missing artifact unless it verifies."""
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
+        """Verify the artifact, returning the claim's observation for this operation."""
 
     @classmethod
-    def require_all(cls, claims: tuple[ProgressClaim, ...], comms: Comms, worktree: Path) -> None:
-        for claim in claims:
-            claim.verify(comms, worktree)
+    def require_all(
+        cls, claims: tuple[ProgressClaim, ...], comms: Comms, worktree: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]:
+        return {claim: claim.verify(comms, worktree) for claim in dict.fromkeys(claims)}
 
     @classmethod
     def require_claimed(cls, claims: tuple[ProgressClaim, ...], report: str) -> None:
@@ -46,8 +47,8 @@ class MergedClaim(ProgressClaim):
 
     timeout: ClassVar[float] = 30.0
 
-    def verify(self, comms: Comms, worktree: Path) -> None:
-        self.origin_branches(worktree)
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
+        return self.origin_branches(worktree)
 
     def origin_branches(self, worktree: Path) -> tuple[str, ...]:
         command = [
@@ -83,17 +84,19 @@ class MergedClaim(ProgressClaim):
 class InstalledClaim(ProgressClaim):
     problem: str
 
-    def verify(self, comms: Comms, worktree: Path) -> None:
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
         comms.goals.todos.get(self.problem).order.require_checked(self.problem)
+        return ()
 
 
 @dataclass(frozen=True)
 class WorkingClaim(ProgressClaim):
     screenshot: str
 
-    def verify(self, comms: Comms, worktree: Path) -> None:
+    def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
         if not self.screenshot.strip() or not Path(self.screenshot).is_file():
             raise ValueError(
                 f"A working claim needs a screenshot path that exists; "
                 f"{self.screenshot!r} does not."
             )
+        return ()

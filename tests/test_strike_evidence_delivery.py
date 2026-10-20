@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import StrikeTodo
+from agent_comms.todos import DeliverTodo, StrikeTodo
 from agent_comms.tools import CommsChangeProblemTool, CommsOrderDoneTool
 from test_commander_problem_orders import create
 
@@ -48,10 +48,12 @@ def test_real_delivery_tool_decodes_once_and_queries_origin_once(commander, monk
     trace = source / 'git-trace.jsonl'
     monkeypatch.setenv('GIT_TRACE2_EVENT', str(trace))
     CommsOrderDoneTool.invoke(comms, dict(problem='P1', order_id=todo.order.id,
-        delivery=dict(kind='delivered_commit', commit=commit, delivered_commit=commit)), caller=caller)
+        delivery=dict(kind='delivered_commit', commit=commit, delivered_commit=commit),
+        claims=[dict(kind='merged', commit=commit)]), caller=caller)
     commands = [event['argv'] for line in trace.read_text().splitlines()
                 if (event := json.loads(line)).get('event') == 'start'
                 and any('origin' in arg for arg in event.get('argv', []))]
     assert len(commands) == 1 and 'for-each-ref' in commands[0]
     assert not comms.goals.todos.get('P1').pending
-    assert 'claims' not in CommsOrderDoneTool.schema()['parameters']['properties']
+    assert 'claims' in CommsOrderDoneTool.schema()['parameters']['properties']
+    assert 'verified_claims' not in FieldCodec.schema(DeliverTodo)['properties']
