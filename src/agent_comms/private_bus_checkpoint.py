@@ -787,24 +787,25 @@ class PublicMessages(CheckpointTable, TypedTable):
         source.require_current()
         opened = public.checked(source)
         rows = cls.read(source.connection.execute(
-            f"SELECT * FROM {cls.declared_name} WHERE message_id=? ORDER BY seq DESC",
-            (message_id,),
+            f"SELECT * FROM {cls.declared_name} "
+            "WHERE message_id=? ORDER BY seq DESC LIMIT 1", (message_id,),
         ))
-        for row in rows:
-            delivery = DeliverySources.one(source.connection, seq=row.seq)
-            if delivery:
-                original = delivery.delivery(source.stream, source.witness.root_id)
-                source.require_current()
-                return original.message
-            message = cast(Message, opened.messages_for_references((
-                MessageReference(row.seq, row.message_id),))[0])
-            if message.sender != row.sender:
-                raise RelationViolationError(
-                    "Checked public message sender differs from its original.")
+        if not rows:
             source.require_current()
-            return message
+            return None
+        row = rows[0]
+        delivery = DeliverySources.one(source.connection, seq=row.seq)
+        if delivery:
+            original = delivery.delivery(source.stream, source.witness.root_id)
+            source.require_current()
+            return original.message
+        message = cast(Message, opened.messages_for_references((
+            MessageReference(row.seq, row.message_id),))[0])
+        if message.sender != row.sender:
+            raise RelationViolationError(
+                "Checked public message sender differs from its original.")
         source.require_current()
-        return None
+        return message
 
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:

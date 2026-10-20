@@ -58,6 +58,7 @@ from cutover.backup import (
     bus_files,
     transcripts_held,
 )
+from cutover import practice_copy_worker
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
 from install_gate import PracticeMeasurement, prepare_runtime_home
@@ -261,19 +262,8 @@ publish_active_route(ActiveRoute(root, marker.root_id))
         The installed source holds the copy's lifetime; only the staged source
         reads it after the carry. No live bus row is rewritten by rehearsal.
         """
-        worker = """import json, sys
-from dataclasses import asdict
-from pathlib import Path
-from agent_comms.comms import Comms
-from install_gate import PracticeCopy
-with PracticeCopy(
-    source=Comms(Path(sys.argv[1])), into=Path(sys.argv[2])
-).open() as (_, measurement):
-    print(json.dumps(asdict(measurement)), flush=True)
-    sys.stdin.readline()
-"""
         child = subprocess.Popen(
-            [str(self.python), "-c", worker, str(root), str(into)],
+            [str(self.python), str(practice_copy_worker.__file__), str(root), str(into)],
             cwd=self.checkout, env=self.environment(Path(__file__).resolve().parent),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
