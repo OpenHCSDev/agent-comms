@@ -983,18 +983,21 @@ def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, mo
     comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
 
-    def fail_correction(self, unit, message_id, text):
-        assert message_id.encode() in (comms.root / 'bus.jsonl').read_bytes()
+    def fail_writer(self, *, check_same_thread=True):
+        assert b'The canonical result is on the order' in (comms.root / 'bus.jsonl').read_bytes()
         raise sqlite3.OperationalError('P563 forced correction write failure')
 
-    monkeypatch.setattr(TodoStore, 'correct', fail_correction)
+    monkeypatch.setattr(TodoStore, '_open_writer', fail_writer)
     reply = invoke_tool(comms, 'comms_send', {
         'from': 'worker', 'to': 'lead', 'body': 'The canonical result is on the order'}, caller=commander[1])
     decoded = PublishedMessageToolDetails.from_wire(reply)
     assert decoded.id == decoded.message.source.message_id
+    assert decoded.correction.error.startswith('TodoStoreUnwritable:')
     assert 'P563 forced correction write failure' in decoded.correction.error
-    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).to_wire()
+    cli = SendCliCommand(sender='worker', target='lead',
+                         body='A separate fresh CLI message uses canonical wording').apply(comms).to_wire()
     assert 'was sent' in cli['message']
+    assert cli['correction']['error'].startswith('TodoStoreUnwritable:')
     assert 'P563 forced correction write failure' in cli['correction']['error']
     assert cli['id'] in cli['notices'][0]
 
