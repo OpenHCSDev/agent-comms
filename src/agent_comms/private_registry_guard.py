@@ -327,13 +327,12 @@ class PrivateRegistryGuard(DurableFile, RegistryPrivacy):
             os.close(fd)
 
 
-PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
-
-
 @dataclass(frozen=True, kw_only=True)
-class PrivateOwnerRenameIntent:
+class PrivateOwnerRenameIntent(DurableFile):
     """Written before a private owner rename changes either store; while it exists, private
     publication and selected execution stay blocked."""
+
+    filename = ".private-owner-rename.pending"
 
     lookup: str
     old: str
@@ -344,13 +343,13 @@ class PrivateOwnerRenameIntent:
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        store_files._atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+        store_files._atomic_write_text(self.path_in(root),
                            json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
 
     @classmethod
     def complete(cls, root: Path) -> None:
         """A completed record proves a finished transition if the unlink is uncertain."""
-        intent = root / PRIVATE_OWNER_RENAME_PENDING
+        intent = cls.path_in(root)
         replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
         intent.unlink()
         fsync_directory(root)
@@ -358,6 +357,6 @@ class PrivateOwnerRenameIntent:
 
 def _require_no_private_owner_rename(root: Path) -> None:
     """A crashed cross-store rename cannot publish or run a selected input."""
-    intent = root / PRIVATE_OWNER_RENAME_PENDING
+    intent = PrivateOwnerRenameIntent.path_in(root)
     if intent.exists() or intent.is_symlink():
         raise RelationViolationError("Private owner rename is pending; inspect both authorities.")

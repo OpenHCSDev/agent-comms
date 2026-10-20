@@ -43,7 +43,6 @@ from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING,
     PrivateOwnerRenameIntent,
     PrivateRegistryGuard,
     PublicRegistry,
@@ -607,6 +606,6 @@ class PrivateOwnerRename(ThreadRename):
         result = ThreadRename.applied(self, title)
         # The wire lock and the check in renamed() make a present intent this rename's own;
         # it completes only after both authorities and the ancillary stores agree.
-        if (self.threads.root / PRIVATE_OWNER_RENAME_PENDING).exists():
+        if PrivateOwnerRenameIntent.path_in(self.threads.root).exists():
             PrivateOwnerRenameIntent.complete(self.threads.root)
         return result
