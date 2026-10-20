@@ -6,7 +6,9 @@ import json
 
 from pydantic import ValidationError
 
+from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
 
@@ -20,10 +22,13 @@ class SkillText(ClaudeHookProgram):
 
 def main() -> None:
     hook = ClaudeHook.read()
-    sources = (CommanderConfig.packaged_skill(), *CommanderConfig.packaged_rules_files())
     text = "\n\n".join(
-        f"# Commander file: {path.name}\n{path.read_text(encoding='utf-8', newline='')}"
-        for path in sources
+        (
+            CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
+            "# Recorded failures\n\n" + PostmortemFailure.catalog(),
+            RuleFile.document(CommanderConfig.packaged_skill())[1],
+            *(rule.render() for rule in RuleFile.packaged()),
+        )
     )
     try:
         notice = f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
@@ -40,7 +45,7 @@ def main() -> None:
             {
                 "hookSpecificOutput": {
                     "hookEventName": hook.hook_event_name,
-                    "additionalContext": f"{notice}\n\n{text}",
+                    "additionalContext": f"{text}\n\n{notice}",
                 }
             }
         )

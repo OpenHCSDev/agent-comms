@@ -9,6 +9,7 @@ from functools import partial
 
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
+from .drain_failures import UNAVAILABLE_DRAIN_ERRORS
 from .native_pi import NativePiTerminalFailure, NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
@@ -50,9 +51,9 @@ class SelectedRequest:
         except NativeRequestFailure as error:
             await self._native_failure(error)
             raise
-        except CancelledError:
-            # Native execution has unwound child/tool cleanup before the
-            # reserved request sees cancellation of its abandoned result.
+        except (CancelledError, *UNAVAILABLE_DRAIN_ERRORS):
+            # After native cleanup, cancellation or an unavailable read leaves
+            # this abandoned request UNKNOWN; settlement errors propagate.
             await self._settle_unknown()
             raise
 

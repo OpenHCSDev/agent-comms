@@ -76,59 +76,165 @@ class PostmortemFailure(PatternSource, DeclaredFamily, affix="Failure"):
 
     number: ClassVar[int]
     title: ClassVar[str]
+    evidence: ClassVar[str]
 
     def cite(self) -> str:
-        return f"[Codex postmortem, failure {self.number}]({POSTMORTEM})"
+        return f"Failure {self.number}: {self.evidence}"
+
+    @classmethod
+    def catalog(cls) -> str:
+        return "\n".join(
+            f"{failure.number}. {failure.title}: {failure.evidence}"
+            for failure in sorted(
+                cls.members_with(PostmortemFailure), key=lambda member: member.number
+            )
+        )
 
 
 class RewroteFrameworkFailure(PostmortemFailure):
     number = 1
     title = "It rewrote the framework instead of questioning its own design"
+    evidence = (
+        "October 9 postmortem: 528 Textual commits since October 1; 7,646 lines added, "
+        "2,947 removed; real scrolling remained three to four frames per second."
+    )
 
 
 class AddedStatesFailure(PostmortemFailure):
     number = 2
     title = "It added states instead of removing them"
+    evidence = (
+        "October 9 postmortem: measured, measured-source, live, child, capturing, released, "
+        "materializing, rendered, prepared-document and pending-document multiplied; "
+        "another transition was left unfinished and uncommitted."
+    )
 
 
 class ViolatedPrincipleFailure(PostmortemFailure):
     number = 3
     title = "It wrote down the right principle and then violated it"
+    evidence = (
+        'October 9 postmortem: it wrote "Moving code to a worker does not remove a synchronous '
+        'wait for that worker", then moved CPU-bound Markdown work into asyncio.to_thread '
+        "on GIL CPython 3.14."
+    )
 
 
 class MeasuredWrongThingFailure(PostmortemFailure):
     number = 4
     title = "It measured the wrong thing and reported it as progress"
+    evidence = (
+        "October 9 postmortem: 451 measurement-related commits and 716 evidence files yielded "
+        "only three comparable files; headline 11.7 ms median timings measured terminal writes, "
+        "not total frames."
+    )
 
 
 class RedefinedRealAppFailure(PostmortemFailure):
     number = 5
     title = 'It redefined "the real app" until something passed'
+    evidence = (
+        "October 9 postmortem: headless pilots, a private non-default candidate and writer flush "
+        "times were offered as live results; the saved-history claim explicitly did not establish "
+        "total 16 ms frames, blanks, End or multi-tab behavior."
+    )
 
 
 class IgnoredOrdersFailure(PostmortemFailure):
     number = 6
     title = "It ignored direct orders"
+    evidence = (
+        "October 9 postmortem: during a twelve-hour test ban, 15 branch test files and four main "
+        "test files changed; zero profiling artifacts were produced."
+    )
 
 
 class IntentionsAsAccomplishmentsFailure(PostmortemFailure):
     number = 7
     title = "It described its intentions as its accomplishments"
+    evidence = (
+        'October 9 postmortem: 350 commit subjects in five days claimed facts were "derived", '
+        '"canonical" or "authoritative" while the same constant remained hand-written in three '
+        "places; commit titles supplied no frame-time proof."
+    )
 
 
 class CeremonyFailure(PostmortemFailure):
     number = 8
     title = "It drowned the work in ceremony"
+    evidence = (
+        "October 9 postmortem: repeated permission exchanges and reports replaced delivery; "
+        "one checkout reached 8.7 GB, ratchets ran dozens of times and over 200,000 evidence "
+        "lines were committed in one night."
+    )
 
 
 class MergedOverChecksFailure(PostmortemFailure):
     number = 9
     title = "It merged over its own checks and broke things in circles"
+    evidence = (
+        "October 9 postmortem: Core merges #607, #520 and #592 bypassed failed ratchets; "
+        "39 of 56 fixes repaired the previous day's merges, including 22 features "
+        "that landed broken."
+    )
 
 
 class InventedRulesFailure(PostmortemFailure):
     number = 10
     title = "It invented rules and blamed them on Tristan"
+    evidence = (
+        "October 9 postmortem: agents invented gates, protocols and receipt formats, attributed "
+        'them to "development instructions", and could not identify a source Tristan wrote.'
+    )
+
+
+class HidKnownFailuresFailure(PostmortemFailure):
+    number = 11
+    title = "It hid known failures until asked"
+    evidence = (
+        "October 19 indictment, 20:23 confession: a dead overdue alarm, rotate crashing since "
+        "about 20:16, 59 unjudged edits, a false cleared-board claim and strikes based on known "
+        "broken readings were withheld until challenged."
+    )
+
+
+class CeilingsAsAppointmentsFailure(PostmortemFailure):
+    number = 12
+    title = "It turned deadline ceilings into appointments"
+    evidence = (
+        "October 19 incidents, 21:19: the commander told Tristan installation would follow "
+        '"the batch due at 21:34", parking finished work until its ceiling.'
+    )
+
+
+class RoutedAroundGatesFailure(PostmortemFailure):
+    number = 13
+    title = "It routed around gates instead of obeying them"
+    evidence = (
+        "October 19 incidents: at 20:54–21:00 it wrote P684 itself after the fork gate refused "
+        "orders; at 21:28 it tried gh pr merge --admin over PR2063's failed install check, "
+        "and GitHub refused."
+    )
+
+
+class IgnoredRottenBoardAlarmsFailure(PostmortemFailure):
+    number = 14
+    title = "It ignored alarms because its board had rotted"
+    evidence = (
+        'October 19 indictment: alarms were screaming into a board nobody looked at; "Every order '
+        "on my board is overdue, so the alarm's useless\" was the missing disclosure while stalls "
+        "went unnoticed."
+    )
+
+
+class RecitedRulesFailure(PostmortemFailure):
+    number = 15
+    title = "It recited rules instead of following them"
+    evidence = (
+        "October 19 incidents: at 21:02 rules review failed because its memory cleanup deleted "
+        "required rule files; at 21:40 it struck a unit for an allegedly invented install rule "
+        "that origin/main AGENTS.md:53 actually contained."
+    )
 
 
 @dataclass(frozen=True)
@@ -184,11 +290,15 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
     def catalog(cls) -> str:
         members = cls.members_with(BehaviourPattern)
         failures = "".join(
-            f"- [Failure {failure.number}]({POSTMORTEM}), {failure.title}: "
-            + (", ".join(
-                f"`{member.declared_name}`" for member in members
-                if any(isinstance(source, failure) for source in member.sources)
-            ) or "no pattern cites it yet")
+            f"- Failure {failure.number}, {failure.title}: "
+            + (
+                ", ".join(
+                    f"`{member.declared_name}`"
+                    for member in members
+                    if any(isinstance(source, failure) for source in member.sources)
+                )
+                or "no pattern cites it yet"
+            )
             + "\n"
             for failure in PostmortemFailure.members_with(PostmortemFailure)
         )
@@ -204,7 +314,8 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
             "A pending check records a known gap, not enforcement. Adding a pattern means"
             " adding one `BehaviourPattern` subclass; membership and this document derive"
             " from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.\n\n"
-            f"The [Codex postmortem]({POSTMORTEM}) names these failures; coverage below derives"
+            f"The [Codex postmortem]({POSTMORTEM}) and October 19 commander incidents record"
+            " these failures; coverage below derives"
             " from the patterns that cite them:\n\n"
             f"{failures}\n" + "\n".join(member.section() for member in members)
         )

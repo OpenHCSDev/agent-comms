@@ -35,7 +35,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsChangeProblemTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, ModuleDeletion, NoOrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -537,7 +537,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
         path.name for path in (repo.parent / 'state').iterdir()}
 
 
-def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
+def order_body(repo, check=None, edit='Set count.txt to 1.', extra='', deletes=NoOrderDeletion()):
     """Raw JSON input; the application, not the test, constructs the order."""
     body = repo.parent / 'order.json'
     checked = OrderCheck.parse(f'{repo} :: {check or "cat count.txt -> 1"}')
@@ -546,6 +546,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
         'why_stupid': 'The counter is wrong and that is stupid.',
         'order': {'kind': 'pending', 'owner': f'{__file__}:1',
                   'check': FieldCodec.encode(checked), 'edits': [edit],
+                  'deletes': FieldCodec.encode(deletes),
                   'run': {'kind': 'application', 'text': 'the installed app shows the counter at one after restart'},
                   'banned': ['no second store', 'no cache'],
                   'report': 'the commit and the count before -> after ' + extra}}))
@@ -696,11 +697,14 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     script = script.model_copy(update={'repos': (
         Repo(checkout=toad, github='OpenHCSDev/toad'),)})
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
-    edit = 'Delete src/agent_comms/acp_ingress.py.'
+    edit = 'Remove the obsolete ingress implementation.'
+    deletes = ModuleDeletion(('src/agent_comms/acp_ingress.py',))
     with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
-        problem(script, order_body(repo, 'grep -rl Ingress . | wc -l -> 0', edit))
-    problem(script, order_body(repo, f'grep -rl Ingress . {toad} | wc -l -> 0', edit))
+        problem(script, order_body(repo, 'grep -rl Ingress . | wc -l -> 0', edit, deletes=deletes))
+    problem(script, order_body(repo, f'grep -rl Ingress . {toad} | wc -l -> 0', edit, deletes=deletes))
     assert comms.goals.todos.get('P1').order.check.command == f'grep -rl Ingress . {toad} | wc -l'
+    assert comms.goals.todos.get('P1').order.deletes == deletes
+    assert deletes.instructions() == ('Deletes: src/agent_comms/acp_ingress.py',)
 
 
 def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
@@ -708,7 +712,11 @@ def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_sc
     script, repo = commander_script
     monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
     (repo / 'count.txt').write_text('0\n')
-    edit = 'Count the measure in tools/debt_ratchet.py.'
+    tools = repo / 'tools'
+    tools.mkdir()
+    measure = tools / 'debt_ratchet.py'
+    measure.write_text('# Existing measure owner\n')
+    edit = f'Count the measure at {measure}:1.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
         problem(script, order_body(repo, edit=edit))
     problem(script, order_body(repo, edit=edit, extra='Ratchet with --root tools and with --root src, each as its own command.\n'))

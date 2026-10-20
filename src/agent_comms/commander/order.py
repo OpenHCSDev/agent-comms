@@ -348,20 +348,19 @@ class Commander(CommanderContext):
                     problems += check.result.distance(ran).unproven(check.command, 0)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
-        for reference in FileLine.scan('\n'.join((document.prose, *edits))):
+        references = FileLine.scan('\n'.join((document.prose, *edits)))
+        for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
                     reference.require_exists()
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
-        # A module deleted here can still be imported by another repo:
-        # P12 deleted acp_ingress.py, which Toad imports.
-        deleted = {stem for edit in edits
-                   for stem in re.findall(r'(?i)\bdelete\s+`?(?:\S*/)?(\w+)\.py\b', edit)}
+        deleted = {Path(module).stem for module in order.deletes.modules}
         if check and deleted and (unread := self.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                             'the check must also count their `from agent_comms` imports')
-        if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
+        if any(Path(reference.file).resolve().is_relative_to(Path(check.directory) / 'tools/')
+               for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
             problems.append('the order changes tools/: say "ratchet with --root tools and with '
                             '--root src, each as its own command"')

@@ -3,7 +3,8 @@
 A client (Toad) never takes these locks itself. It awaits this owner, which
 acquires every lock in a worker thread so the client's event loop never waits
 on a file lock, and then performs its guarded write on its own loop because
-asyncio streams are loop-owned. Release only closes descriptors.
+asyncio streams are loop-owned. Release re-enters the acquisition's Context
+before closing its descriptors.
 
 Lock order is fixed: the route lock precedes the maintenance/wire gates, and
 the gates of the selected and attached roots are taken in registry-path order,
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextvars
 from collections.abc import AsyncIterator, Mapping
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
@@ -61,14 +63,17 @@ class AcpIngress:
 
     @staticmethod
     async def _acquire(lock_roots) -> ExitStack:
-        """Acquire locks in a worker; a cancelled waiter never leaks it."""
+        """Acquire and release in one Context, including an abandoned waiter."""
+        context = contextvars.copy_context()
 
         def acquire() -> ExitStack:
             with ExitStack() as locks:
                 lock_roots(locks)
-                return locks.pop_all()
+                release = ExitStack()
+                release.callback(context.run, locks.pop_all().close)
+                return release
 
-        task = asyncio.ensure_future(asyncio.to_thread(acquire))
+        task = asyncio.ensure_future(asyncio.to_thread(context.run, acquire))
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
