@@ -22,13 +22,14 @@ import base64
 import hashlib
 import html
 import json
+import logging
 import secrets
 import sys
 import time
 import urllib.request
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -37,21 +38,27 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
-from .cli_commands import DeclaredOptions, option
+from .cli_commands import DeclaredOptions
+from .command import Command
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
     CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
     RegisteredClient, digest,
 )
 from .messages import Message
-from .todos import DirectiveText
+from .commander.standing import UnownedWheelSpin
+from .commander_heartbeat import CommanderHeartbeat
+from .coordinator import Coordination
+from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
-from .tools import CommsChannelsTool, ReadTool, ToolRequest
+from .tools import (
+    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+)
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -73,6 +80,24 @@ class DirectorCaller(ThreadCaller):
                 message.target,
                 DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
             )
+
+
+class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
+    """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
+    label = "Review PR head"
+    description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
+    id: str = tool_field("Problem ID")
+    operation: ReviewedHeadVerdict = tool_field("Accepted PR-head verdict")
+
+    def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
+        todo = self.operation.reviewed(
+            comms.goals, self.id, comms.registry.require(caller.name).incarnation
+        )
+        return TodoChanged(todo, todo.strike_count)
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
@@ -286,14 +311,15 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     async def result(self, connector: Connector) -> ToolsCallResult:
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
-            return ToolsCallResult.refused(
+            return ToolsCallResult.failed(
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except ToolRefusedError as error:
-            return ToolsCallResult.refused(error)
-        return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+            return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+        except Exception as error:
+            logging.exception("Connector tool %s failed", self.params.name)
+            return ToolsCallResult.failed(error)
 
 
 @dataclass(frozen=True)
@@ -304,7 +330,7 @@ class TextContent:
 
 @dataclass(frozen=True)
 class ToolsCallResult:
-    """A tool's encoded reply, or the refusal standing in its place."""
+    """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
     is_error: bool = field(metadata={"wire_name": "isError"})
@@ -314,7 +340,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
+    def failed(cls, error: Exception) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 
@@ -339,8 +365,14 @@ class Connector:
         return f"{self.issuer}/.well-known/oauth-protected-resource"
 
     @staticmethod
-    def exposed() -> dict[str, type[ToolRequest]]:
-        return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
+    def exposed() -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
+        tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
+            tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
+        }
+        tools.update({
+            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
+        })
+        return tools
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
@@ -350,7 +382,7 @@ class Connector:
             yield comms
 
     def invoke(
-        self, tool: type[ToolRequest], arguments: Mapping[str, object]
+        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
         with self.opened_wire() as comms:
             return tool.invoke(comms, arguments, caller=CALLER)
@@ -359,6 +391,7 @@ class Connector:
         with self.opened_wire():
             pass
         app = web.Application()
+        app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
@@ -371,6 +404,24 @@ class Connector:
             ]
         )
         return app
+
+    async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
+        """Core owns both order maintenance and the commander's changed-rule wakes."""
+        heartbeat = CommanderHeartbeat(CALLER.name)
+        tasks = (
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: heartbeat.watch_pass(self.opened_wire))),
+        )
+        try:
+            yield
+        finally:
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with suppress(asyncio.CancelledError):
+                    await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(
@@ -502,7 +553,7 @@ class Connector:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One connector command: its options are its fields, and its parser comes from them."""
 
     @abstractmethod
@@ -519,7 +570,7 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_arguments(args)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -571,7 +622,7 @@ class RoundTripVerb(ConnectorVerb):
         if running != self.runtime:
             return f"The connector service runs {running}, not the installed {self.runtime}"
         if reply.is_error:
-            return f"The connector round trip was refused: {reply.content[0].text}"
+            return f"The connector round trip failed: {reply.content[0].text}"
         with client_wire(self.root) as comms:
             if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                 return f"The service on port {self.port} reads another bus than {self.root}"

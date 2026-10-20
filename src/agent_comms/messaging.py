@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Type
@@ -23,7 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
-from .todos import TodoConflict, TodoStore
+from .todos import TodoError, TodoStore
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -51,6 +50,7 @@ class Messaging:
         releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
         report: ChangeReport | None = None,
+        answers: Sequence[MessageReference] = (),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -66,6 +66,9 @@ class Messaging:
             todos = TodoStore(self.root)
             with todos.snapshot():
                 pass  # The store validates its schema before any envelope is committed.
+            if answers:
+                with self.bus.log.checked_read() as source:
+                    tuple(source.references(answers))
             message = Message(
                 sender=owner.name,
                 target=target,
@@ -74,7 +77,7 @@ class Messaging:
                 role=role,
                 task=task,
                 report=report,
-                answers=self._answered_by(owner, target),
+                answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
             publisher: OwnerPublisher = self.bus.publisher
             if claims or releases:
@@ -89,7 +92,7 @@ class Messaging:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
             todos.correct(owner.name, committed.message_id, body)
-        except (TodoConflict, sqlite3.Error) as error:
+        except TodoError as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()

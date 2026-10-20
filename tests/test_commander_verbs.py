@@ -5,14 +5,16 @@ import shlex
 
 import pytest
 
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+
 DOCUMENTED = [
     ("order", "send worker 23:59 order.txt --clean --reassign 'missed two deadlines' --fork f1",
      {"unit": "worker", "due": "23:59", "body_file": "order.txt", "clean": True,
-      "mechanical": False, "reassign": "missed two deadlines", "fork": "f1"}),
+      "reassign": "missed two deadlines", "fork": ThreadCaller("f1")}),
     ("order", "strike worker --why 'P1 late' --caught 'lead at install'",
-     {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": None}),
+     {"unit": "worker", "why": "P1 late", "caught": "lead at install", "fork": NoThreadCaller()}),
     ("order", "strike worker --why 'P1 late'",
-     {"unit": "worker", "why": "P1 late", "caught": "lead at review"}),
+     {"unit": "worker", "why": "P1 late", "caught": "review"}),
     ("order", "done worker m1 --sha abc123 --seen proof.txt", {"unit": "worker", "message": "m1", "sha": "abc123", "seen": "proof.txt"}),
     ("order", "withdraw P68 --why 'duplicate of P67' --superseded-by P67",
      {"pid": "P68", "why": "duplicate of P67", "superseded_by": "P67"}),
@@ -20,8 +22,8 @@ DOCUMENTED = [
     ("order", "check P1 --check 'repo :: cat n -> 1' --why 'counted the wrong file'",
      {"pid": "P1", "check": "repo :: cat n -> 1", "why": "counted the wrong file"}),
     ("order", "say worker,#comms note.txt", {"units": "worker,#comms", "body_file": "note.txt"}),
-    ("order", "problem 'the text' --to worker --due 23:59 --order order.txt --where file.py:1",
-     {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt", "where": "file.py:1"}),
+    ("order", "problem order.json --to worker --due 23:59 --where file.py:1",
+     {"to": "worker", "due": "23:59", "order": "order.json", "where": "file.py:1"}),
     ("order", "unstrike P1 --why 'recorded in error' --at 12:46",
      {"pid": "P1", "why": "recorded in error", "at": "12:46"}),
     ("order", "fire worker --why 'late twice'", {"unit": "worker", "why": "late twice"}),
@@ -41,7 +43,7 @@ DOCUMENTED = [
     ("judge", "alarm", {}),
     ("judge", "ok 0123456789:ab --msg m1 --serves 'the words' --line one --line two --why why --fork f1",
      {"ids": ("0123456789:ab",), "msg": "m1", "serves": "the words", "lines": ("one", "two"), "why": "why",
-      "fork": "f1"}),
+      "fork": ThreadCaller("f1")}),
     ("judge", "ok 0123456789:ab --msg m1 --serves 'the words' --line one --why why --no-owner proof",
      {"serves": "the words", "no_owner": "proof"}),
     ("judge", "back 0123456789:ab --msg m1 --line one --why why --roast r --fix f --slop IDEN-5"
@@ -53,7 +55,7 @@ DOCUMENTED = [
 
 @pytest.mark.parametrize("tool,line,fields", DOCUMENTED)
 def test_every_verb_parses_its_documented_command_line(commander_script, tool, line, fields):
-    order, _ = commander_script
+    order = importlib.import_module("agent_comms.commander.order")
     module = (order if tool == "order"
               else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
     family = getattr(module, f"{tool.capitalize()}Verb")
@@ -63,7 +65,7 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
 
 
 def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander_script):
-    order, _ = commander_script
+    order = importlib.import_module("agent_comms.commander.order")
     printed = order.HuntVerb.due("a.py").split("then ", 1)[1]
     tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
     assert (tool, verb) == ("order", "hunt")

@@ -21,11 +21,11 @@ TEN = "the unit pushed a commit that deleted the store test file"
     (OrderText, 'Delete the line that says "if possible"', True),
     (BluntText, "The second store is slop because Core already owns the rows", True),
     (BluntText, "The second store restates the rows Core owns", False),
-    (FairText, "Banned: composition over inheritance as the reason\nFold the store into its parent", True),
+    (FairText, "Fold the store into its parent", True),
     (FairText, "Prefer composition over inheritance for the store", False),
-    (HierarchyText, "Banned: removing the base class\nFold the forwarder into the owner", True),
+    (HierarchyText, "Fold the forwarder into the owner", True),
     (HierarchyText, "Keep the store forwarding to Core", False),
-    (HierarchyText, "Banned: a new base class", False),
+    (HierarchyText, "Use a new base class", True),
 ])
 def test_value_types_refuse_their_declared_words(family, text, accepted):
     if accepted:
