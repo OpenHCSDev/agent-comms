@@ -8,7 +8,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from .field_codec import FieldCodec, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
@@ -27,17 +27,6 @@ class PageCursor(SubclassUnion, affix=""):
 
     @abstractmethod
     def newer(self) -> NewerTraversal: ...
-
-
-@dataclass(frozen=True)
-class NoPageCursor(NullMember, PageCursor):
-    """No page position has been observed; traversal starts at its ordinary edge."""
-
-    def older(self) -> OlderTraversal:
-        return OlderTraversal()
-
-    def newer(self) -> NewerTraversal:
-        return NewerTraversal()
 
 
 @dataclass(frozen=True)
