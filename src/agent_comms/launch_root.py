@@ -6,14 +6,25 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .errors import RelationViolationError
-from .field_codec import FieldCodec, PathText, boundary_decoder
+from .field_codec import FieldCodec, PathText
+
+if TYPE_CHECKING:
+    from .active_route import CommsRoute
 
 
 class UnstartedLaunch:
-    """A process with no selected root; startup must run before use."""
+    """A process with no explicit root uses the published route."""
+
+    def root(self) -> LaunchRoot:
+        return LaunchRoot.from_path(self.route().root)
+
+    def route(self) -> CommsRoute:
+        # The route module imports LaunchRoot; load it after both states exist.
+        from .active_route import ActiveRoute
+
+        return ActiveRoute.published()
 
 
 @dataclass(frozen=True)
@@ -35,23 +46,20 @@ class LaunchRoot:
         return UnstartedLaunch()
 
     @classmethod
-    @boundary_decoder
     def current(cls) -> LaunchRoot:
-        if isinstance(cls._current, UnstartedLaunch):
-            # Import here: the route owner also imports LaunchRoot for explicit selection.
-            from .active_route import read_active_route
+        return cls._current.root()
 
-            route = read_active_route()
-            if route is None:
-                raise RelationViolationError(
-                    "No active Comms route is published; --comms-root or --root is required."
-                )
-            # A process may resolve its route and open its wire separately (ACP).
-            # Pin one choice so a route replacement cannot split those operations.
-            selected = cls.from_path(route.root)
-            selected.install()
-            return selected
-        return cls._current
+    @classmethod
+    def current_route(cls) -> CommsRoute:
+        return cls._current.route()
+
+    def root(self) -> LaunchRoot:
+        return self
+
+    def route(self) -> CommsRoute:
+        from .active_route import LocalRoute
+
+        return LocalRoute(self.path)
 
     def install(self) -> None:
         LaunchRoot._current = self

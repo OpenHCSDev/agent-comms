@@ -104,6 +104,13 @@ def test_explicit_environment_absent_default_and_invalid_route(tmp_path, monkeyp
     assert not (tmp_path / ".agent-comms").exists()
 
 
+def test_rootless_service_rejects_published_root_with_wrong_marker_id(tmp_path, monkeypatch):
+    route, root, _ = route_fixture(tmp_path, monkeypatch)
+    route.write_text(json.dumps(dict(version=2, root=str(root), wire_root_id='0' * 32)))
+    with pytest.raises(RelationViolationError, match='root ID'):
+        wire()
+
+
 def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkeypatch, verified_native_package):
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
     LaunchRoot.from_path(root).install()

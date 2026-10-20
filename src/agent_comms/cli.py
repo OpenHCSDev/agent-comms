@@ -13,6 +13,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from .active_route import resolve_comms_route
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
@@ -52,10 +53,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
         LaunchRoot.startup(arguments)
         args = build_parser().parse_args(arguments, namespace=SendArguments())
-        root = LaunchRoot.from_path(args.root) if args.root else LaunchRoot.current()
-        with root.selected():
+        route = resolve_comms_route(args.root)
+        with LaunchRoot.from_path(route.root).selected():
             command = CliCommand.member_named(args.command).from_arguments(args)
-            with client_wire(root.path) as comms:
+            with client_wire(route) as comms:
                 return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

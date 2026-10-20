@@ -39,13 +39,14 @@ def test_rootless_client_uses_published_route_not_environment(tmp_path, monkeypa
     root = publish_route(tmp_path)
     unrelated = tmp_path / 'wrong'
     monkeypatch.setenv('AGENT_COMMS_ROOT', str(unrelated))
+    assert isinstance(resolve_comms_route(), ActiveRoute)
     assert resolve_comms_route().root == root
     assert child_root(dict(os.environ), tmp_path) == root
     assert main(['threads']) == 0
     assert not unrelated.exists()
 
 
-def test_rootless_process_pins_its_route_before_launching_children(tmp_path, monkeypatch):
+def test_rootless_route_tracks_publication_until_an_explicit_selection(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     first = publish_route(tmp_path)
     selected = LaunchRoot.current()
@@ -53,9 +54,11 @@ def test_rootless_process_pins_its_route_before_launching_children(tmp_path, mon
     second_id = Comms(second).messaging.initialize_private_initial_protocol()
     route = tmp_path / '.local/state/agent-comms/active-route.json'
     route.write_text(json.dumps(ActiveRoute(second, second_id).to_record()))
-    assert LaunchRoot.current() is selected
-    assert child_root({'AGENT_COMMS_ROOT': str(second)}, tmp_path) == first
-    assert selected.arguments() == ('--comms-root', str(first))
+    assert isinstance(resolve_comms_route(), ActiveRoute)
+    assert LaunchRoot.current().path == second
+    with selected.selected():
+        assert child_root({'AGENT_COMMS_ROOT': str(second)}, tmp_path) == first
+        assert selected.arguments() == ('--comms-root', str(first))
 
 
 def test_selection_is_scoped_and_child_ignores_home_and_environment(tmp_path, monkeypatch):
