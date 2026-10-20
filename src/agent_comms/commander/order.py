@@ -1,5 +1,3 @@
-
-from ..field_codec import option
 """The only way the commander sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
 
 `order send` bodies declare, on their own lines:
@@ -31,6 +29,7 @@ from ..cli_commands import DeclaredOptions
 from ..command import Command
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
+from ..field_codec import option
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -43,7 +42,8 @@ from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
-                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool,
+                     CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
@@ -300,7 +300,8 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
+            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision,
+            traced=trace, **common)))
     message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
     sent = post(VerdictAudience((unit,)), message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -494,8 +495,10 @@ def done(pid, sha, screenshot='', seen='', repo=''):
         if added := forwarders_added(diff, after):
             sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
     thread = COMMS.registry.require(unit)
-    if left := [str(t) for t in COMMS.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
-        sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
+    if left := [str(t) for t in COMMS.registry.storage_rule.checkouts_of(thread)
+                if pid.lower() in t.name.lower()]:
+        sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: '
+                 'it removes it before the order counts as done.')
     try:
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
@@ -638,12 +641,13 @@ def overdue():
             for line in lines:
                 print(line, flush=True)
             installs = lines
-        # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
-        # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
+        # Units leave finished PRs open and wander off. An order's open PR that nobody has
+        # touched for 5 minutes is a stall; until its deadline, OVERDUE owns the alarm.
         idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
                     for t in pending if t.overdue(now) and read[t.id].untouched(now)]
         if idle_prs:
-            print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
+            print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs)
+                  + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):
             print(HuntVerb.due(next_hunt()), flush=True)
         since = now

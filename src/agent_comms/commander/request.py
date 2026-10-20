@@ -9,10 +9,9 @@ open request that no open order serves.
 
 from __future__ import annotations
 
-from ..field_codec import option
-
 from dataclasses import dataclass
 
+from ..field_codec import option
 from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder

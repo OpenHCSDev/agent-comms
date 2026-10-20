@@ -126,7 +126,8 @@ class FieldPlan:
         return convert(value)
 
     def editor_default(self, value: object) -> object:
-        convert: Callable[[object], object] = self.setting("editor_format", self.value.encode_editor)
+        convert: Callable[[object], object] = self.setting(
+            "editor_format", self.value.encode_editor)
         return convert(value)
 
     @property
@@ -140,16 +141,16 @@ class FieldPlan:
         metadata = self.declared.metadata
         owner: argparse._ActionsContainer = parser
         if "group" in metadata:
-            group = metadata["group"]
+            group = metadata.get("group")
             if group not in groups:
                 groups[group] = parser.add_mutually_exclusive_group(required=True)
             owner = groups[group]
         supplied = metadata.get("parser_options", {})
         options = {**({} if "action" in supplied else self.value.argument_options()), **supplied}
         if "parser_default" in metadata:
-            options["default"] = metadata["parser_default"]
+            options["default"] = metadata.get("parser_default")
         elif "parser_default_factory" in metadata:
-            options["default"] = metadata["parser_default_factory"]()
+            options["default"] = metadata.get("parser_default_factory")()
         elif self.constructor_required:
             options["required"] = True
         else:
@@ -784,14 +785,15 @@ def projected(*, view: str, name: str | None = None):
 
 
 def option(*flags: str, default: Any = MISSING, default_factory: Any = MISSING,
-           **options: object) -> Any:
-    """Attach parser/editor hints to the existing dataclass field declaration."""
-    metadata: dict[str, object] = {name: options.pop(name) for name in (
-        "group", "normalize", "wire_name", "parser_default", "parser_default_factory",
-        "multiline", "target_bound", "editor_format", "editor", "catalog",
-    ) if name in options}
-    metadata.update(flags=flags, parser_options=options)
-    return field(default=default, default_factory=default_factory, metadata=metadata)
+           group: object = MISSING, normalize: object = MISSING, wire_name: object = MISSING,
+           parser_default: object = MISSING, parser_default_factory: object = MISSING,
+           multiline: object = MISSING, target_bound: object = MISSING,
+           editor_format: object = MISSING, editor: object = MISSING, catalog: object = MISSING,
+           **parser_options: object) -> Any:
+    """The signature declares field hints; remaining keywords belong to argparse."""
+    metadata = locals()
+    return field(default=metadata.pop("default"), default_factory=metadata.pop("default_factory"),
+                 metadata={name: value for name, value in metadata.items() if value is not MISSING})
 
 
 class FieldCodec(Sealed):

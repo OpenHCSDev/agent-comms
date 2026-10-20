@@ -51,6 +51,24 @@ from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
+class DeclaredOptions:
+    """The CLI adapter consumes FieldCodec's existing field plans."""
+    help: ClassVar[str]
+
+    @classmethod
+    def add_parser[P: argparse.ArgumentParser](
+            cls, subparsers: argparse._SubParsersAction[P]) -> None:
+        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        FieldCodec.add_arguments(cls, parser)
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        return FieldCodec.decode_arguments(cls, args)
+
+
 @dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
@@ -221,23 +239,6 @@ BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 
 
-class DeclaredOptions:
-    """The CLI adapter consumes FieldCodec's existing field plans."""
-    help: ClassVar[str]
-
-    @classmethod
-    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        FieldCodec.add_arguments(cls, parser)
-
-    @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return FieldCodec.decode_arguments(cls, args)
-
-
 @dataclass(frozen=True)
 class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
@@ -273,7 +274,8 @@ class TargetField:
 
     @classmethod
     def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
-        editor = CatalogTargetField if 'catalog' in plan.declared.metadata else plan.setting('editor', cls)
+        editor = (CatalogTargetField if 'catalog' in plan.declared.metadata
+                  else plan.setting('editor', cls))
         return editor(plan, value)
 
     @property
@@ -328,9 +330,11 @@ class ChoiceTargetField(TargetField):
     def choices(self) -> tuple[tuple[str, str], ...]:
         return tuple((choice.name, choice.value) for choice in self.options)
 
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
+    async def prepare(self, catalogs: ConfigOptions,
+                      selection: CatalogSelection) -> ChoiceTargetField:
         decoder = field_codec.compile_decoder(self.annotation)
-        options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
+        options = (SessionConfigSelectOption(
+                       name=label, value=decoder.encode_editor(decoder.decode(value)))
                    for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
 
@@ -347,7 +351,8 @@ class CatalogTargetField(ChoiceTargetField):
     def editor_declarations(self) -> tuple[object, ...]:
         return (self.catalog,)
 
-    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
+    async def prepare(self, catalogs: ConfigOptions,
+                      selection: CatalogSelection) -> CatalogTargetField:
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(selection)
         decoder = field_codec.compile_decoder(self.annotation)
@@ -355,7 +360,8 @@ class CatalogTargetField(ChoiceTargetField):
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
+        return {**FieldCodec.value_schema(self.annotation),
+                'configuration': FieldCodec.encode(self.catalog)}
 
 
 

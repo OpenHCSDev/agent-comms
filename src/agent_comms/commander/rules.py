@@ -1,5 +1,3 @@
-
-from ..field_codec import option
 """Forced rule review for the commander (HARD RULE: the commander cannot trust itself to remember the rules alone).
 
 The rules have one source each: the commander skill's bold-lead lines, every packaged feedback rule,
@@ -18,6 +16,7 @@ import glob, os, random, re, sys
 from dataclasses import dataclass
 
 
+from ..field_codec import option
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
 from ..tool_caller import ThreadCaller

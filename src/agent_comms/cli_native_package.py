@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .field_codec import option
-
 import argparse
 import json
 import sys
@@ -13,6 +11,7 @@ from dataclasses import dataclass
 from .cli_commands import DeclaredOptions
 from .command import Command
 from .declared_family import DeclaredFamily
+from .field_codec import option
 from .native_package import (
     install_declared_sources,
     native_environment,
