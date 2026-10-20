@@ -921,11 +921,16 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
 
+@pytest.mark.parametrize('released', (False, True))
 def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(commander, commander_script, tmp_path,
-                                                                           monkeypatch):
+                                                                           monkeypatch, released):
     comms, _ = commander
     script, _ = commander_script
-    create(commander, 'P1', deadline=1)
+    todo = create(commander, 'P1', deadline=1)
+    if released:
+        comms.goals.todos.apply('P1', ReleaseTodo(todo.revision,
+            comms.registry.require('lead').incarnation, todo.held(),
+            StrikeReason('The worker stopped without delivering its assigned repair on this problem.')))
     posted = []
     monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): posted.append((recipients, body)))
     script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')

@@ -1773,7 +1773,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
         return (*super().story(), *self.delivery.story())
 
     def require_transfer(self, todo: Todo) -> None:
-        owner = (todo.assignment or todo.released[-1].previous).owner
+        owner = todo.holder_state.previous_assignment().owner
         raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
@@ -2002,6 +2002,10 @@ class Assignment:
         if owner != self.owner and len(owners) >= 2 and traced is None:
             raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
                              "and pass --traced PATH:LINE.")
+
+    def previous_assignment(self) -> Assignment:
+        """The current holder supplies its own assignment for retirement."""
+        return self
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
@@ -2479,6 +2483,10 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 class ReleaseTodo(TodoOperation, StoryEvent):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
 
+    def previous_assignment(self) -> Assignment:
+        """The release keeps the assignment of the holder it removed."""
+        return self.previous
+
     def story_text(self) -> str:
         return f"{self.actor.name} released {self.previous.owner}: {self.reason.text}"
     actor: ThreadIncarnation
@@ -2602,9 +2610,7 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        closed = replace(current, order=self.closed(current))
-        return DoneTodoState.decide(closed, ChangeTodoState(
-            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+        return DoneTodoState.closed(current, self.closed(current))
 
 
 @dataclass(frozen=True)
@@ -2632,9 +2638,11 @@ class WithdrawTodo(CloseOrderTodo):
     superseded_by: str | None = None
 
     def closed(self, current: Todo) -> ProblemOrder:
-        current.require_assignment(self.previous)
+        order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
+        if current.holder_state.previous_assignment() != self.previous:
+            raise TodoConflict(current)
         _text(self.why, "Withdrawal reason", 2000)
-        return current.order.withdrawn(self.previous, self.why, self.superseded_by)
+        return order
 
 
 @dataclass(frozen=True)
@@ -2735,6 +2743,11 @@ class Todo(TypedTable):
     def holder(self) -> str | None:
         """The unit holding this problem; None once it is closed or released."""
         return None if self.assignment is None else self.assignment.owner
+
+    @property
+    def holder_state(self) -> Assignment | ReleaseTodo:
+        """An ordered problem's current holder, or the release that removed it."""
+        return self.assignment or self.released[-1]
 
     def held(self) -> Assignment:
         """The open order's assignment; a problem nobody holds has no order work."""

@@ -22,7 +22,8 @@ from agent_comms.threads import Thread
 from agent_comms.todos import (
     AssignTodo, Assignment, ChangeTodoState, DoneTodoState, GoalRef,
     MechanicalOrderRun, PendingProblemOrder,
-    BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
+    BlockedTodoState, DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
+    Todo, TodoConflict, TodoError, TodoState, TodoStore, WithdrawTodo,
 )
 
 from cutover.carry_todo_open_indexes import TodoOpenIndexes
@@ -84,6 +85,49 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     with pytest.raises(TodoConflict):
         store.apply("todo-1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("todo-1") == original
+
+
+def test_withdraw_retires_a_released_problem(tmp_path):
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    worker = thread("worker", tmp_path, 2.0)
+    todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Obsolete problem",
+        creator=lead, owner=worker, generation="first", goal=GoalRef("lead", 1.0, "request"),
+        deadline=RecordedEventTime(1000), order=order(tmp_path))
+    released = store.apply(todo.id, ReleaseTodo(todo.revision, lead.incarnation, todo.held(),
+        StrikeReason("The previous worker stopped before completing this assigned repair on main.")))
+    previous = released.holder_state.previous_assignment()
+    assert previous == todo.held()
+    why = "The requested repair already merged into main through another problem."
+    with pytest.raises(TodoConflict):
+        store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
+            replace(previous, generation="wrong"), why))
+    withdrawn = store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
+        previous, why))
+    assert store.for_commander(lead.incarnation) == ()
+    assert withdrawn.state is DoneTodoState and not withdrawn.pending
+    assert withdrawn.order.previous == todo.held()
+    assert withdrawn.released == released.released and withdrawn.strikes == ()
+    assert "withdrawn from worker, no strike" in withdrawn.order.withdrawals(withdrawn)[0]
+    assert FieldCodec.decode(Todo, FieldCodec.encode(withdrawn)) == withdrawn
+
+
+@pytest.mark.parametrize("released", (False, True))
+def test_withdraw_refuses_a_delivered_problem(tmp_path, released):
+    store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
+    todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Delivered problem",
+        creator=lead, owner=lead, generation="first", goal=GoalRef("lead", 1.0, "request"),
+        deadline=RecordedEventTime(1000), order=order(tmp_path))
+    delivered = store.apply(todo.id, DeliverTodo(todo.revision, lead.incarnation,
+        OperationDelivery(at=RecordedEventTime(20)), todo.order.id))
+    if released:
+        delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, lead.incarnation,
+            todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
+    with pytest.raises(ValueError, match="Only an undelivered order can be withdrawn"):
+        store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
+            delivered.holder_state.previous_assignment(), "This delivery must remain on record."))
+    assert store.get(todo.id) == delivered
 
 
 def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
