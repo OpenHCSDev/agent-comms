@@ -38,10 +38,12 @@ class CliArgumentParser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_argument(
-        LaunchRoot.root_argument,
+        "--root",
         default=None,
         help="Explicit Comms root directory (otherwise uses the published active route)",
     )
+    # Admit the generic launch option before parsing; LaunchRoot owns its consumption.
+    parser.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
@@ -51,8 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
-        LaunchRoot.startup(arguments, ActiveRoute.published_launch)
-        args = build_parser().parse_args(arguments, namespace=SendArguments())
+        args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
+        if unknown:
+            raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
+        LaunchRoot.startup(
+            arguments,
+            lambda: (
+                LaunchRoot.from_path(args.root) if args.root else ActiveRoute.published_launch()
+            ),
+        )
         route = resolve_comms_route(args.root)
         with LaunchRoot.from_path(route.root).selected():
             command = CliCommand.member_named(args.command).from_arguments(args)

@@ -22,7 +22,6 @@ class LaunchRoot:
 
     path: Annotated[Path, PathText]
     argument: ClassVar[str] = "--comms-root"
-    root_argument: ClassVar[str] = "--root"
     environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
     _current: ClassVar[LaunchRoot | UnstartedLaunch] = UnstartedLaunch()
 
@@ -66,11 +65,6 @@ class LaunchRoot:
             record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
             cls.from_path(record.path).install()
             del arguments[index : index + 2]
-        elif arguments and (
-            arguments[0] == cls.root_argument or arguments[0].startswith(f"{cls.root_argument}=")
-        ):
-            # Only the CLI parses its leading --root; it selects that path afterward.
-            return
         else:
             published().install()
 
