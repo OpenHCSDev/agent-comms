@@ -294,6 +294,7 @@ class TargetBatch(TargetSelection):
                         if declaration.catalog_declaration() is declaration else (declaration,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
         planned: dict[CliCommand, tuple[int, CommandTarget, str | None]] = {}
+        together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]] = {}
         for name in self.targets:
             try:
                 resolved = name.resolve(snapshot, comms.bus.require_channel)
@@ -328,11 +329,26 @@ class TargetBatch(TargetSelection):
                         resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
+                if isinstance(command, AppliedTogether):
+                    together.setdefault(type(command), []).append((position, name, command))
+                    continue
                 result = TargetCompleted(name.name, command, command.apply(comms))
             except (CommandSelectionChanged, UnregisteredThreadError) as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
             outcomes.append((position, result))
+        for declaration, members in together.items():
+            results = declaration.apply_together(comms, tuple(command for _, _, command in members))
+            outcomes.extend((position, TargetCompleted(name.name, command, result))
+                            for (position, name, command), result in zip(members, results, strict=True))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
+
+
+class AppliedTogether:
+    """A command whose bindings in one target batch are applied as one operation."""
+
+    @classmethod
+    @abstractmethod
+    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[CliResult, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -1370,12 +1386,17 @@ class ThreadLifecycleCliCommand(ThreadBoundCliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand):
+class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand):
     help = "Stop process"
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
-        ctx.owners.stop(self.name)
-        return ThreadStoppedResult(self.name)
+        return self.apply_together(ctx, (self,))[0]
+
+    @classmethod
+    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[ThreadStoppedResult, ...]:
+        """Every selected owner shares one signal pass and one grace period."""
+        ctx.owners.stop(*(command.name for command in commands))
+        return tuple(ThreadStoppedResult(command.name) for command in commands)
 
 
 @dataclass(frozen=True, kw_only=True)
