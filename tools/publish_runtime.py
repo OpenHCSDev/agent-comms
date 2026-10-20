@@ -51,7 +51,7 @@ from agent_comms.threads import Thread
 
 
 class PublicationIntent(SubclassUnion, affix=''):
-    """A new publication selects workers; an interrupted one keeps its exact selection."""
+    """Retain stopped witnesses and include owners running when publication resumes."""
 
     @classmethod
     def read(cls, path: Path) -> PublicationIntent:
@@ -68,6 +68,16 @@ class PublicationIntent(SubclassUnion, affix=''):
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent: ...
 
+    @staticmethod
+    def capture(snapshot, selected, runtime: Path, previous: Path, path: Path,
+                owners: tuple[OwnerRestartSelection, ...] = ()) -> SavedPublicationIntent:
+        names = {owner.name for owner in owners}
+        intent = SavedPublicationIntent(str(runtime), str(previous), owners + tuple(
+            OwnerRestartSelection.capture(snapshot, thread.name)
+            for thread in selected if thread.name not in names))
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(intent)) + '\n', fsync_parent=True)
+        return intent
+
 
 class NoPublicationIntent(NullMember, PublicationIntent):
     def require_target(self, runtime: Path, previous: Path) -> None:
@@ -76,10 +86,7 @@ class NoPublicationIntent(NullMember, PublicationIntent):
 
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent:
-        intent = SavedPublicationIntent(str(runtime), str(previous), tuple(
-            OwnerRestartSelection.capture(snapshot, thread.name) for thread in selected))
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(intent)) + '\n', fsync_parent=True)
-        return intent
+        return self.capture(snapshot, selected, runtime, previous, path)
 
 
 @dataclass(frozen=True)
@@ -95,7 +102,8 @@ class SavedPublicationIntent(RecordMember, PublicationIntent):
 
     def select(self, snapshot, selected, runtime: Path, previous: Path,
                path: Path) -> SavedPublicationIntent:
-        return self
+        return self.capture(snapshot, selected, Path(self.runtime), Path(self.previous),
+                            path, self.owners)
 
 
 @dataclass(frozen=True)
