@@ -1570,6 +1570,11 @@ class PendingProblemOrder(CheckedProblemOrder):
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
 
+    def require_wording(self) -> None:
+        """Check fresh order prose, never reinterpret stored history or shell commands."""
+        for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
+            DirectiveText.require(text)
+
     def reissued(self, at: float) -> PendingProblemOrder:
         window = (self.first_call_deadline.recorded_at("A first-call deadline")
                   - self.at.recorded_at("An order"))
@@ -1952,6 +1957,7 @@ class AssignTodo(TodoOperation):
         current.require_revision(self.expected_revision)
         self.actor.require_may_change(current)
         if self.order != current.order:
+            self.order.require_wording()
             self.order.require_writable()
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
@@ -2751,6 +2757,8 @@ class TodoStore(TypedStore):
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
         goal.require_reference()
+        DirectiveText.require(text)
+        order.require_wording()
         order.require_writable()
         proposed = Todo(
             id=todo_id,
