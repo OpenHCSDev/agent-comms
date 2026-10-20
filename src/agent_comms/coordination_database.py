@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from .declared_family import DeclaredFamily
-
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
@@ -31,6 +29,8 @@ from agent_comms.typed_table import (
     StoreWriter,
     TypedRow,
 )
+
+from .declared_family import DeclaredFamily
 
 
 @dataclass(frozen=True)

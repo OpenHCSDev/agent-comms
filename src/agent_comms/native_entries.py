@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .locked_store import DurableFile, PatternFile
-
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
@@ -11,6 +9,8 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
+
+from .locked_store import DurableFile, PatternFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof

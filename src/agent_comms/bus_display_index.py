@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .bus_activity_index import ChannelActivity
-from .locked_store import PatternFile
 from .bus_projection import AppendCheckpoint, BusAppendIndex, NoCheckpoint
+from .locked_store import PatternFile
 from .messages import Message
 from .read_basis import ChannelDisplayScope
 

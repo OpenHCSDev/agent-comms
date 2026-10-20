@@ -13,28 +13,40 @@ from typing import TYPE_CHECKING
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
-from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
-                           SentBackOrderGoalAction)
+from .goal_actions import (
+    GoalAction,
+    GoalActionContext,
+    GoalPrecondition,
+    RuntimeInvocable,
+    SentBackOrderGoalAction,
+)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, RecordedGoalWait, StandbyReview
+from .goal_waits import (
+    GoalInputReview,
+    GoalWait,
+    GoalWaits,
+    NoGoalWait,
+    RecordedGoalWait,
+    StandbyReview,
+)
 from .native_input_owner import GoalLaunchOwner
 from .registration import Registration
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
+    from .registry_document import RegistrySnapshot
+from .goal_presentation import GoalSnapshot, GoalWaitTarget, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .turn_lease import TurnCompletion
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
+from .turn_lease import TurnCompletion
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)

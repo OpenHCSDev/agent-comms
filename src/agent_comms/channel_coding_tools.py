@@ -7,7 +7,6 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
@@ -16,6 +15,7 @@ from pathlib import Path
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .coordination_database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,

@@ -6,7 +6,6 @@ write boundary must repeat current authority checks before touching the file.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import os
 import stat
 from collections.abc import Callable, Iterator
@@ -20,6 +19,7 @@ from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordination_cohort import _claim_record
+from .coordination_database import CoordinationStore
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
@@ -30,9 +30,9 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .publisher import Publisher
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
+from .publisher import Publisher
 from .registry_document import RegistrySnapshot
 from .store_files import ExclusiveLock, LockMode, SharedLock, _store_lock
 from .threads import Thread

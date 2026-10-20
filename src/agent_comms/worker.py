@@ -1,21 +1,21 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
-from .coordination_database import CoordinationStore
-import asyncio
 import argparse
+import asyncio
 import os
 import signal
 import sys
-from functools import partial
-from .coordinator import Coordination
 from contextlib import suppress
+from functools import partial
 
 from .acp import CommsAgent
 from .active_route import ActiveRoute
 from .comms import Comms, wire
-from .native_arguments import NativeArguments
+from .coordination_database import CoordinationStore
+from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .native_arguments import NativeArguments
 
 
 async def run() -> None:

@@ -16,10 +16,10 @@ from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
+from .locked_store import RuntimeFile, SQLiteFile
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
-from .locked_store import RuntimeFile, SQLiteFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock

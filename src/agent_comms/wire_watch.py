@@ -8,17 +8,18 @@ notification is unavailable.
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 import ctypes
 import os
 import struct
 import sys
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
 from .goal_waits import GoalWaits
+from .locked_store import RegistryFile
 from .private_path import FileRevision
 
 _IN_MODIFY = 0x00000002
@@ -52,12 +53,11 @@ class WatchSource(ABC):
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
         from .private_registry_guard import PrivateRegistryGuard
-        from .registry_store import RegistryStore
         from .wire_log import WireLog
 
         return ReplacedWatchSource(root, frozenset(
             owner.filename.encode()
-            for owner in (WireLog, RegistryStore, PrivateRegistryGuard, GoalWaits)
+            for owner in (WireLog, RegistryFile, PrivateRegistryGuard, GoalWaits)
         ))
 
     @classmethod

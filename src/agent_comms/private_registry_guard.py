@@ -16,8 +16,6 @@ next write reuses the abandoned slot.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
-from .locked_store import DurableFile
 import hashlib
 import json
 import os
@@ -30,9 +28,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import store_files
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import DurableFile
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:

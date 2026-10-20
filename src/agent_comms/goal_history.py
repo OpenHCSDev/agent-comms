@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .locked_store import DurableFile, SQLiteFile
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
+from .locked_store import DurableFile, SQLiteFile
 from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 

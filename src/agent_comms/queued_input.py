@@ -6,11 +6,10 @@ birth identity and input generation; the registry resolves its name before compa
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
-from dataclasses import field, dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
@@ -19,6 +18,7 @@ from acp import RequestError
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .coordination_cohort import pending_sealed_assignments
+from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination

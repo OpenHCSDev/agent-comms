@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
@@ -132,7 +132,7 @@ class JsonDocument(ABC, Generic[T]):
 
 
 class RootFile:
-    """A declared file location, with construction for file-taking owners."""
+    """A declared bus-file location, independent of its value or I/O constructor."""
 
     __slots__ = ()
     filename: ClassVar[str]
@@ -148,12 +148,10 @@ class RootFile:
         return frozenset((path, store_lock_path(path)))
 
     @classmethod
-    def at(cls, root: Path | str, *args, **kwargs):
-        return cls(cls.path_in(root), *args, **kwargs)
-
-    @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared, pending, visited = set(), [cls], set()
+        declared: set[Path] = set()
+        pending: list[type[RootFile]] = [cls]
+        visited: set[type[RootFile]] = set()
         while pending:
             family = pending.pop()
             if family in visited:
@@ -163,6 +161,19 @@ class RootFile:
             if "filename" in vars(family):
                 declared.update(family.files_in(root / family.root_directory))
         return frozenset(declared)
+
+
+class FileStore(RootFile, ABC):
+    """Construction belongs only to owners whose initializer takes a file."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __init__(self, path: Path, *args, **kwargs) -> None: ...
+
+    @classmethod
+    def at(cls, root: Path | str, *args, **kwargs) -> Self:
+        return cls(cls.path_in(root), *args, **kwargs)
 
 
 class PatternFile(RootFile):
@@ -229,7 +240,7 @@ class DocumentConversion(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(StoreLockOwner, JsonDocument[T]):
+class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path

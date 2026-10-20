@@ -30,10 +30,10 @@ from typing import (
     get_type_hints,
 )
 
-from .locked_store import DurableFile, SQLiteFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
+from .locked_store import DurableFile, FileStore, SQLiteFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -768,7 +768,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreWriter(DurableFile, SQLiteFile):
+class StoreWriter(DurableFile, SQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers."""
 
     def __init__(self, path: Path) -> None:

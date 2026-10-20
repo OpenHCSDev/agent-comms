@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
-from .agent_backend import TurnInboxItem
-from .maintenance_barrier import MaintenanceBarrier
 from . import turn_failure as failures
+from .agent_backend import TurnInboxItem
+from .locked_store import RegistryFile
+from .maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
     from .backend import TurnSession

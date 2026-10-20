@@ -6,7 +6,6 @@ command catalog. Existing CLI spellings belong to the store_files.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import argparse
 import asyncio
 import json
@@ -44,6 +43,7 @@ from .config_options import (
     ModelConfigOption,
     ThinkingLevelConfigOption,
 )
+from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .exporting import (

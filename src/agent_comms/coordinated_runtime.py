@@ -7,7 +7,6 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -16,19 +15,20 @@ from pathlib import Path
 from typing import ClassVar
 
 from .agent_events import CompactionEvent
-from .pi_native_backend import PersistentPiSession
 from .comms import Comms
+from .coordination_database import CoordinationStore
 from .coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
 )
+from .coordination_snapshot import RecoverySnapshot
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
-from .coordination_snapshot import RecoverySnapshot
 from .following_inputs import FollowingInputs
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
 from .native_package import VerifiedNativePackage
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .pi_native_backend import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn

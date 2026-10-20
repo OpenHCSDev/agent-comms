@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .locked_store import DurableFile, PatternFile
-
 import hashlib
 import json
 import os
@@ -16,8 +14,9 @@ from traceback import TracebackException
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from .store_files import _atomic_write_text
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import DurableFile, PatternFile
+from .store_files import _atomic_write_text
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic

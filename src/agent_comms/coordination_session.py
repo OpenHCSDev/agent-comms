@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
-from .wire_log import WireLog
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
@@ -20,6 +18,9 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
+
+from .locked_store import RegistryFile
+from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus

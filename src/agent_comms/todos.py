@@ -7,7 +7,6 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
-from .locked_store import DurableFile, RegistryFile
 import asyncio
 import calendar
 import json
@@ -27,13 +26,17 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
-from .change_report import FileLine
 from .bus_publication import AgentOrigin
+from .change_report import FileLine
 from .channel_targets import CommandTarget
 from .child_process import (
-    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+    BoundedRun,
+    CheckPrinted,
+    ChildResult,
+    ExitedOutcome,
+    NoIntegerPrinted,
+    OrderCheckFailedError,
 )
-from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -48,7 +51,9 @@ from .field_codec import (
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
+from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -980,7 +985,7 @@ class UnplannedInstallDeadline(InstallDeadline):
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
-    at: RecordedEventTime = field()
+    at: RecordedEventTime
     installer: str
 
     @classmethod

@@ -1,7 +1,6 @@
 """Runtime-owned annotation work borrows original observations after commit."""
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import asyncio
 import os
 from functools import partial
@@ -10,13 +9,18 @@ from http.client import HTTPException
 from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from .working_memory_disclosure import DisclosureState, DisclosureWithheld
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion
-from .working_memory_requests import AnnotationBudgetExhausted, DisclosureRequest, FailedAnnotationOutcome
+from .working_memory_requests import (
+    AnnotationBudgetExhausted,
+    DisclosureRequest,
+    FailedAnnotationOutcome,
+)
 
 
 class AnnotationWorker:

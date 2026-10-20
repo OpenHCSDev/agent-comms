@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 from collections.abc import Sequence
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .registration import Registration
-
 from .bus_publication import AgentOrigin, HumanOrigin
 from .change_report import ChangeReport
 from .errors import RelationViolationError, UnregisteredThreadError
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
+from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
 from .store_files import SharedLock, _store_lock
 from .task_sources import (

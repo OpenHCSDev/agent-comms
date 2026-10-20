@@ -1,21 +1,21 @@
 """Current-owner source cursor; captured state owns incremental proof and publication."""
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 from functools import partial
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
+from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import SourceCoverage
-from .threads import Thread
-from .field_codec import FieldCodec
 from .store_files import StoreLockContention
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope

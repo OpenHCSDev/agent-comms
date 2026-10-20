@@ -13,7 +13,6 @@ so attachments of different clients cannot deadlock across roots.
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 import asyncio
 import concurrent.futures
 import contextvars
@@ -24,6 +23,7 @@ from pathlib import Path
 
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .launch_root import LaunchRoot
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .route_selection import RouteChanged, RouteSelection, child_root
 

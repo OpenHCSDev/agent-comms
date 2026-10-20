@@ -14,8 +14,6 @@ arbitrary code running as the same uid, nor protection from a malicious filesyst
 
 from __future__ import annotations
 
-from .store_files import StoreOwner
-
 import hashlib
 import json
 import os
@@ -31,6 +29,7 @@ from typing import Literal
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 
+from .store_files import StoreOwner
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024

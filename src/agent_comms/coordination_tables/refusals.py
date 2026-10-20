@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..locked_store import RegistryFile
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -17,6 +16,8 @@ from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+
+from ..locked_store import RegistryFile
 
 if TYPE_CHECKING:
     from agent_comms.coordinator import Coordination

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -11,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .locked_store import RegistryFile
 from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
 import hashlib
 import json
 from collections.abc import Callable, Sequence
@@ -27,6 +26,7 @@ from .bus_publication import (
     initial_sideband,
 )
 from .channel_targets import CommandTarget, NamedTarget
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (

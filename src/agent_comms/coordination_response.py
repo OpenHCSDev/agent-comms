@@ -15,7 +15,6 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 import hashlib
 import json
 import sqlite3
@@ -25,7 +24,6 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, Type
 
-from .field_codec import MalformedRecord
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -37,31 +35,34 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
-    PublicationIntents,
     PublicationEvidence,
+    PublicationIntents,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import ResponseWrites
-from agent_comms.messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole
-from agent_comms.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_send_rules import RunningTurnRegistryCheck
+from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.typed_table import (
     Column,
+    ForeignKey,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
-    TypedRow,
     SqlValue,
+    TypedRow,
     TypedTable,
-    ForeignKey,
 )
+
+from .field_codec import MalformedRecord
+from .locked_store import RegistryFile
 
 
 class ResponseTable:

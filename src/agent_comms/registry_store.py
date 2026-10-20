@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .wire_metadata import WireMetadata
 import json
 import os
 import threading
@@ -17,16 +16,17 @@ from typing import Any, ClassVar
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import DocumentConversion, LockedStore, RegistryFile
+from .native_input_owner import RegistryOwner
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
 from .registration_change import NativeSourcePublication
-from .native_input_owner import RegistryOwner
+from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, StoredTurnRecord
+from .wire_metadata import WireMetadata
 
 
 @dataclass(frozen=True)

@@ -10,24 +10,33 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
-from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING, ClassVar
+from sqlite3 import Connection
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
+from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
-from .transcript_events import TranscriptEvent, TurnDigest, ToolStartTranscript
+from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptRecord, TranscriptSource
-from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
+from .typed_table import (
+    Column,
+    ForeignKey,
+    Index,
+    RealStorage,
+    StoreWriter,
+    TypedRow,
+    TypedStore,
+    TypedTable,
+)
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:

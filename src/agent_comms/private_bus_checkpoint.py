@@ -19,41 +19,53 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
-from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
-    ResourceClaim, UnclaimedResource,
-)
 from .coordination_tables.publications import PublicationIntents
-from .locked_store import DurableFile, SQLiteFile
+from .envelope_claim_transitions import (
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    ClaimTransitionError,
+    ResourceClaim,
+    UnclaimedResource,
+)
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
-from .private_path import FileIdentity, FileRevision
-from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from .locked_store import DurableFile, SQLiteFile
 from .message_reference import MessageReference
 from .messages import Message
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
-from .wire_metadata import WireMetadata
-from .wire_record import WireRecord
+from .private_path import FileIdentity, FileRevision
+from .store_files import ExclusiveLock, LockMode, SharedLock
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextEntryManifest, RecordedContextManifest
+from .typed_table import (
+    Column,
+    ForeignKey,
+    Index,
+    SQLiteSchemaObject,
+    SqlStorage,
+    SqlValue,
+    TypedTable,
+)
+from .wire_metadata import WireMetadata
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .wire_log import WireLog, WireSnapshot
-    from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .retained_task_facts import ExactTaskFact
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
+    from .wire_log import WireLog, WireSnapshot
 
 OriginalSource = TypeVar("OriginalSource")
 

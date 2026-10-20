@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
-from .coordination_database import CoordinationStore
 import os
 import shutil
 import time
@@ -11,17 +9,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from uuid import uuid4
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from .field_codec import MalformedRecord
-from .input_disposition import InputDispositions
-from .registration import Registration
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
 )
-from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -37,12 +31,19 @@ from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
+from .coordination_database import CoordinationStore
+from .field_codec import MalformedRecord
+from .input_disposition import InputDispositions
+from .locked_store import RegistryFile
+from .registration import Registration
+
 if TYPE_CHECKING:
-    from agent_comms.owner_lifecycle import OwnerReleaseEvidence
     from agent_comms.coordination_session import NativeBoundary
+    from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 
 _OWNER_LOSS_ISSUER = object()
 
@@ -290,7 +291,7 @@ class RecoveryMonitorCapability:
         """Settle the old input without re-running it or fabricating delivery."""
         from .native_entries import NativeEntry
         from .native_pi import NativeContextProof, NativePiUnavailable
-        from .native_prompt_binding import expected_prompt_matches_journal, expected_prompt_bindings
+        from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision
 
@@ -405,8 +406,8 @@ class RecoveryMonitorCapability:
         from agent_comms.native_entries import MessageEntry, NativeEntry
         from agent_comms.native_pi import NativeContextProof
         from agent_comms.native_prompt_binding import (
-            expected_prompt_matches_journal,
             expected_prompt_bindings,
+            expected_prompt_matches_journal,
         )
 
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:

@@ -10,8 +10,8 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .locked_store import DurableFile
 from .field_codec import Id128Text
+from .locked_store import DurableFile
 
 if TYPE_CHECKING:
     import sqlite3
@@ -62,7 +62,7 @@ class ArchivedAccess(WireAccess):
         return _connect(path, readonly=True)
 
     def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
-        from .private_bus_checkpoint import CheckedRead, CheckedPrefix, _tail
+        from .private_bus_checkpoint import CheckedPrefix, CheckedRead, _tail
 
         # The saved check binds the bus bytes and index file, not
         # the current writer's disposable index membership. No recovery writes

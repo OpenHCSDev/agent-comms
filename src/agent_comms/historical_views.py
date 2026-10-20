@@ -8,45 +8,54 @@ from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
-from pathlib import Path
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .locked_store import DurableFile, RegistryFile, RootFile
-from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
+from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
+from .locked_store import DurableFile, RegistryFile, RootFile
 from .message_page import (
+    NEWEST_PAGE,
     ConversationMessagePageRequest,
     MessagePage,
-    NEWEST_PAGE,
     MessagePageRequest,
     PageBounds,
 )
-from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .messages import Message
+from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .private_path import FileIdentity, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
-    AnonymousViewer, ChannelDisplayScope, ChannelDisplayIdentity, DisplayBasis, DisplayIdentity, DisplayViewer,
-    DMDisplayScope, DMDisplayIdentity, MessageDisplayScope, NamedViewer, NoDisplaySelection,
+    AnonymousViewer,
+    ChannelDisplayIdentity,
+    ChannelDisplayScope,
+    DisplayBasis,
+    DisplayIdentity,
+    DisplayViewer,
+    DMDisplayIdentity,
+    DMDisplayScope,
+    MessageDisplayScope,
+    NamedViewer,
+    NoDisplaySelection,
 )
-from .registration import Registration
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
+from .registration import Registration
 from .registry_provenance import RegistryProvenance
+from .revision_views import BusSourceView
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
-from .revision_views import BusSourceView
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess, WireMetadata
 
 if TYPE_CHECKING:
-    from .presentation import BusPresentation, WireRevision
-    from .history_views import HistoryViews
-    from .registry_document import RegistrySnapshot
     from .catalog_document import CatalogDocument
+    from .history_views import HistoryViews
+    from .presentation import BusPresentation, WireRevision
+    from .registry_document import RegistrySnapshot
 
 
 class HistoryView(ABC):
@@ -416,8 +425,8 @@ class HistoryArchive(DurableFile):
         import tempfile
 
         from .catalog_store import ChannelCatalog
-        from .private_bus_checkpoint import install_private_bus_checkpoint
         from .historical_views import HistorySource
+        from .private_bus_checkpoint import install_private_bus_checkpoint
         from .transcript_routes import TranscriptRoutes
 
         source_root = source_root.resolve()

@@ -7,7 +7,6 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from .wire_log import WireLog
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -16,11 +15,9 @@ from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
-from .locked_store import DurableFile, LockedStore
 from .field_codec import FieldCodec, NullMember, SubclassUnion
-from .store_files import SharedLock
+from .locked_store import DurableFile, LockedStore
 from .private_path import ObservedPath
-from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .read_basis import (
     ChannelConversation,
     Conversation,
@@ -30,9 +27,12 @@ from .read_basis import (
     DMConversation,
     ReadCursor,
 )
+from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .sealed import Sealed
+from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery

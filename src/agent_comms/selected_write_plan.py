@@ -8,9 +8,6 @@ an interceptor for Pi/shell/edit writes or a filesystem security boundary.
 
 from __future__ import annotations
 
-from .locked_store import DurableFile, PatternFile
-
-from .coordination_database import CoordinationStore
 import base64
 import hashlib
 import json
@@ -21,6 +18,9 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from .coordination_database import CoordinationStore
+from .locked_store import DurableFile, PatternFile
+
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
 
@@ -30,14 +30,14 @@ from agent_comms.coordinator import Coordination
 
 from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
-from .envelope_claim_transitions import ExistingFileClaim
-from .store_files import _store_lock
-from .threads import Thread
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .declared_family import DeclaredFamily
-from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .envelope_claim_transitions import ExistingFileClaim
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
+from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from .threads import Thread
 
 _MAX_BYTES = 1024 * 1024
 

@@ -6,16 +6,25 @@ its Pi command when it writes it to the running child.
 
 from __future__ import annotations
 
-from .locked_store import RegistryFile
 import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
+from .agent_backend import (
+    ClearQueue,
+    InputId,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+    UseSettings,
+    WhenBusy,
+)
 from .field_codec import Id128Text
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
-from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
 if TYPE_CHECKING:
     from .backend import TurnSession

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .wire_log import WireLog
 import secrets
 from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import asynccontextmanager
@@ -16,7 +15,6 @@ from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
-from .native_arguments import SelectedModel
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
@@ -25,9 +23,9 @@ from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .publisher import ParticipantPublisher
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
+from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
@@ -35,9 +33,11 @@ from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
+from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
+from .wire_log import WireLog
 
 
 @dataclass

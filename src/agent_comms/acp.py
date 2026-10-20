@@ -17,8 +17,6 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
-from .coordination_database import CoordinationStore
-from .wire_log import WireLog
 import asyncio
 import json
 import os
@@ -48,26 +46,26 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
-from .acp_failure import NativeTurnError
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
     encode_updates,
 )
+from .acp_failure import NativeTurnError
 from .agent_event_updates import AcpEventConsumer
-from .launch_root import LaunchRoot
-from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
-from .field_codec import FieldCodec, MalformedRecord
+from .coordination_database import CoordinationStore
 from .cursor_publication import CursorPublication
+from .field_codec import FieldCodec, MalformedRecord
+from .image_inputs import prompt_images
 from .input_drain import InputDrain
-from .queued_input import DeliveredInput
-from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
+from .launch_root import LaunchRoot
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
+from .queued_input import DeliveredInput
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -75,12 +73,14 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
+from .schedule_rules import SelectedWakeCheck
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
+from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
