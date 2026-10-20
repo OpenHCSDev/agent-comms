@@ -32,12 +32,10 @@ from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
 )
-from .external_transcript import ExternalTranscript
 from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
-from .external_transcript import ExternalTranscript
 from .field_codec import (
     FieldCodec,
     GitCommitText,
@@ -2279,8 +2277,8 @@ class MissedFirstCallStrike(ObjectiveStrike):
         due = order.first_call_deadline.recorded_at("A first-call deadline")
         if now <= due:
             return ()
-        transcript = ExternalTranscript(goals.root, todo.held().owner_identity)
-        if transcript.tool_call_between(order.at.recorded_at("An order"), due):
+        thread = goals.registry.require(todo.held().owner)
+        if thread.execution.tool_call_between(goals, thread, order.at.recorded_at("An order"), due):
             return ()
         return (cls.make(todo, now,
             f"made no first tool call before its first-call deadline; "

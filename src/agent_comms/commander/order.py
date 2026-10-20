@@ -38,7 +38,6 @@ from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
-from ..external_transcript import ExternalTranscript
 from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -286,8 +285,8 @@ class CommanderContext(CommanderConfig):
                                     str(repo.checkout / repo.source)]).returncode == 0]
 
     def last_activity(self, unit):
-        return ExternalTranscript(self.comms.root,
-            self.comms.registry.require(unit).incarnation).last_tool_call()
+        thread = self.comms.registry.require(unit)
+        return thread.execution.last_tool_call(self.comms, thread)
 
     def hunts(self):
         return self.comms.goals.todos.hunts_for_commander(self.incarnation)
