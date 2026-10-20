@@ -57,7 +57,7 @@ from .locked_store import DurableFile, SQLiteFile
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
-from .typed_table import Column, Generated, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -446,13 +446,7 @@ class GoalAttemptSchema(GoalLedgerTable, TypedTable):
 
 
 def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
-    schema = GoalLedgerTable.declared_schema()
-    actual = SQLiteSchemaObject.read(
-        conn.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
-        )
-    )
-    if SQLiteSchemaObject.differences(actual, schema):
+    if GoalLedgerTable.schema_differs(conn):
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
     if GoalAttemptSchema.select(conn) != [GoalAttemptSchema.current()]:
         raise StorageUncertainError("Unsupported goal attempt schema declaration.")
@@ -751,8 +745,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
                 conn.execute("BEGIN IMMEDIATE")
-                for table in TypedTable.members_with(GoalLedgerTable):
-                    table.create(conn)
+                GoalLedgerTable.create_schema(conn)
                 GoalAttemptSchema.current().insert(conn)
                 conn.commit()
             cls._sync_paths(staging, directory)

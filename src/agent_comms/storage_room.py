@@ -20,7 +20,7 @@ from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, DurableTables, JsonStorage, TypedStore, TypedTable
 from .wire_watch import ModifiedWatchSource, WireWatch
 
 
@@ -102,7 +102,7 @@ class RoomClaim(TypedTable):
 
 
 @dataclass(frozen=True)
-class RoomLedger(TypedStore):
+class RoomLedger(TypedStore, DurableTables):
     root: Path
     filename = "work_room.sqlite3"
     rows = (WorkPeak, RoomClaim)

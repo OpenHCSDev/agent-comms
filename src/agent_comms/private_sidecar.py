@@ -32,7 +32,7 @@ from agent_comms.coordination_errors import IdentityConflict
 
 from .private_path import ObservedPath
 from .store_files import StoreOwner
-from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
+from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TableSchema, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
@@ -231,9 +231,7 @@ def _digest(row_type: type[TypedTable]) -> str:
 
 def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
     # Every named SQL object is checked, including triggers without our prefix.
-    actual = SQLiteSchemaObject.read(
-        connection.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-    )
+    actual = TableSchema.every_stored_object(connection)
     temporary = SQLiteSchemaObject.read(
         connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
     )

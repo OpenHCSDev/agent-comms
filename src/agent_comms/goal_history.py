@@ -23,7 +23,7 @@ from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile, SQLiteFile
-from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, DurableTables, Index, JsonStorage, TypedTable
 
 
 class GoalHistoryError(RuntimeError):
@@ -41,8 +41,9 @@ class RecordedGoalRevision:
 
 
 @dataclass(frozen=True)
-class GoalHistoryEntry(TypedTable):
+class GoalHistoryEntry(TypedTable, DurableTables):
     # The durable kind field is a journal fact, not the TypedTable family tag.
+    schema_error = GoalHistoryError
 
     sequence: Annotated[int, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
@@ -94,12 +95,7 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
                     or stat.S_IMODE(before.st_mode) != 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
             with closing(CoordinationStore.read_snapshot(path)) as connection:
-                actual = SQLiteSchemaObject.read(connection.execute(
-                    "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                    "AND name NOT LIKE 'sqlite_%'"
-                ))
-                if SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
-                    raise GoalHistoryError("Original goal history declaration differs.")
+                GoalHistoryEntry.require_schema(connection)
                 rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
             after = path.lstat()
             if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
@@ -155,16 +151,9 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
         try:
             with closing(self._connect()) as connection:
                 connection.execute("BEGIN IMMEDIATE")
-                actual = SQLiteSchemaObject.read(
-                    connection.execute(
-                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                        "AND name NOT LIKE 'sqlite_%'"
-                    )
-                )
-                if not actual:
-                    GoalHistoryEntry.create(connection)
-                elif SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
-                    raise GoalHistoryError("Goal history requires the one-shot durable migration.")
+                if not GoalHistoryEntry.stored_schema(connection):
+                    GoalHistoryEntry.create_schema(connection)
+                GoalHistoryEntry.reconcile_schema(connection)
                 connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:

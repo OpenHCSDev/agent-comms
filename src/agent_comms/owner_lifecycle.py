@@ -47,7 +47,7 @@ from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 from .tool_result import ToolResult
 from .turn_lease import NoTurnRecord
-from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, DurableTables, JsonStorage, TypedStore, TypedTable
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -219,7 +219,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
 
 
 @dataclass(frozen=True)
-class OwnerReleaseStore(ThreadOwnedState, TypedStore):
+class OwnerReleaseStore(ThreadOwnedState, TypedStore, DurableTables):
     root: Path
     filename = "owner_releases.sqlite3"
     rows = (OwnerReleaseEvidence,)

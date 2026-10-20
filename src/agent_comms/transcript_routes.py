@@ -15,11 +15,13 @@ from .field_codec import MalformedRecord
 from .private_path import FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .typed_table import Column, SQLiteSchemaObject, StoreWriter, TypedTable
+from .typed_table import Column, DurableTables, StoreWriter, TypedTable
 
 
-class RouteAnnotationTable:
-    """Durable annotations written by an owner, not a transcript-derived cache."""
+class RouteAnnotationTable(DurableTables):
+    """Annotations written by an owner, not a transcript-derived cache."""
+
+    schema_error = ValueError
 
 
 @dataclass(frozen=True)
@@ -50,24 +52,6 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
             self.sent_text_digest is None
             or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
         )
-
-
-def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(connection.execute(
-        "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
-
-
-def _declared_schema() -> dict[str, str]:
-    return {
-        name: sql
-        for table in TypedTable.members_with(RouteAnnotationTable)
-        for name, sql in table.schema_objects().items()
-    }
-
-
-def _assert_schema(connection: sqlite3.Connection) -> None:
-    if SQLiteSchemaObject.differences(_schema(connection), _declared_schema()):
-        raise ValueError("Transcript annotations require the one-shot durable migration")
 
 
 class _SessionRoutes:
@@ -129,9 +113,9 @@ class TranscriptRoutes(StoreWriter):
             closing(CoordinationStore.read_snapshot(self.path)) as source,
             closing(CoordinationStore.writer(target)) as output,
         ):
-            _assert_schema(source)
+            RouteAnnotationTable.require_schema(source)
             source.backup(output)
-            _assert_schema(output)
+            RouteAnnotationTable.require_schema(output)
 
     def _ensure_database(self, *, create: bool = False) -> bool:
         if self._initialized and self.path.is_file():
@@ -145,10 +129,9 @@ class TranscriptRoutes(StoreWriter):
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with self.transaction(connection):
-                if not _schema(connection):
-                    for table in TypedTable.members_with(RouteAnnotationTable):
-                        table.create(connection)
-                _assert_schema(connection)
+                if not RouteAnnotationTable.stored_schema(connection):
+                    RouteAnnotationTable.create_schema(connection)
+                RouteAnnotationTable.reconcile_schema(connection)
         self._initialized = True
         return True
 
@@ -172,7 +155,7 @@ class TranscriptRoutes(StoreWriter):
         if not self.path.exists():
             return {}
         with closing(CoordinationStore.read_snapshot(self.path)) as connection:
-            _assert_schema(connection)
+            RouteAnnotationTable.require_schema(connection)
             return {
                 row.native_id: row
                 for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")

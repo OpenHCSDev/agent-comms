@@ -15,7 +15,7 @@ from agent_comms.coordination_session import CoordinationSession
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.store_files import SharedLock, _store_lock
-from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from agent_comms.typed_table import Column, DurableTables, Index, TypedTable
 
 from ..locked_store import RegistryFile
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SendRefusal(CoordinatorTable, TypedTable):
+class SendRefusal(CoordinatorTable, TypedTable, DurableTables):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
     id: Annotated[int, Column(primary_key=True)]
@@ -35,28 +35,11 @@ class SendRefusal(CoordinatorTable, TypedTable):
     indexes = (Index(("sender", "id")), Index(("target", "id")))
 
     @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-                (cls.declared_name,),
-            )
-        )
-
-    @classmethod
-    def require_schema(cls, actual: list[SQLiteSchemaObject]) -> None:
-        if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
-            raise RelationViolationError(
-                "Send refusal outcomes need their declared schema installed"
-            )
-
-    @classmethod
     def install(cls, store: Coordination) -> None:
         """Explicit upgrade operation; ordinary reads and writes never repair schema."""
         with store.session.writing() as db:
-            actual = cls.stored_schema(db)
-            if actual:
-                cls.require_schema(actual)
+            if cls.stored_member_schema(db):
+                cls.require_member_schema(db)
             else:
                 cls.create(db)
 
@@ -68,7 +51,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,
             ):
-                cls.require_schema(cls.stored_schema(db))
+                cls.require_member_schema(db)
                 # SQLite allocates this attempt's identity. The text is exactly
                 # the refusal returned to the caller, not a page's summary.
                 cls.insert_values(
@@ -91,7 +74,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
 
     @classmethod
     def capture(cls, db: sqlite3.Connection, sender: str, target: str, limit: int):
-        cls.require_schema(cls.stored_schema(db))
+        cls.require_member_schema(db)
         filters = {name: value for name, value in (("sender", sender), ("target", target)) if value}
         return tuple(cls.select(db, order_by=("id",), descending=True, limit=limit, **filters))
 
