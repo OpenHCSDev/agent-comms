@@ -37,6 +37,7 @@ from .field_codec import (
 from .channel_targets import CommandTarget
 from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .maintenance_barrier import MaintenanceBarrier
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
@@ -2475,6 +2476,12 @@ class TodoStore(TypedStore):
             raise TodoStoreUnwritable(
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
+
+    @contextmanager
+    def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        with MaintenanceBarrier(self.root / "registry.json").allow_input():
+            with super().writer_connection(check_same_thread=check_same_thread) as connection:
+                yield connection
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
