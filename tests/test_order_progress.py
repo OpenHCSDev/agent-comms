@@ -65,7 +65,7 @@ def read(checkout, pulls=None):
     return OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), pulls or Listed())
 
 
-def test_uncounted_check_keeps_other_overdue_orders_visible(
+def test_unfinished_check_keeps_other_overdue_orders_visible(
         checkout, commander, commander_script, monkeypatch):
     import asyncio
     from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
