@@ -7,7 +7,7 @@ import os
 import time
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -41,8 +41,10 @@ from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
+    NoThreadText,
     ThreadProvenance,
     ThreadRole,
+    ThreadText,
     TurnFence,
     TurnId,
     TurnIdentity,
@@ -69,7 +71,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
     worktree: str = field(kw_only=False)
     parent: str | None = None
-    task: str | None = None
+    task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
     session_file: str | None = field(
         default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
@@ -101,7 +103,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         default=False,
         metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
     )
-    title: str | None = field(default=None, kw_only=True,
+    title: ThreadText = field(default_factory=NoThreadText, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: type[ThreadRole] = field(
         default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
@@ -197,7 +199,10 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
+        return ThreadLaunch(
+            self.name, self.worktree, frozenset(self.tags), self.parent,
+            cast(str | None, FieldCodec.encode(self.task)),
+        )
 
     def native_session_directory(self, root: Path) -> Path:
         return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
@@ -208,6 +213,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
+        object.__setattr__(self, "task", NoThreadText.from_input(self.task))
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         self.process_identity.require_held_by(self.role)
         if (

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Self
 
 from ..field_codec import NullMember, RecordMember, SubclassUnion
 from ..goal_states import GoalState
+from ..thread_identity import ThreadText
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
@@ -31,9 +32,9 @@ class WakeGoalContext(RecordMember, WakeGoalValue):
 @dataclass(frozen=True)
 class WakeWorkContext(RecordMember):
     name: str
-    title: str | None
+    title: ThreadText
     tags: tuple[str, ...]
-    original_assignment: str | None
+    original_assignment: ThreadText
     current_goal: WakeGoalValue
 
     @classmethod
