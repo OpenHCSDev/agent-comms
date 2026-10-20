@@ -13,7 +13,7 @@ from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
-    StringIdentity, python_paths,
+    StringFieldMetadata, StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -24,6 +24,18 @@ def test_measure_owner_rejects_a_new_absence() -> None:
     result = Comparison("tools", "base", "head", (), {name: 0}, {name: 1}, {}, {})
     assert result.delta[name] == 1
     assert result.failed
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("from dataclasses import field as f\nx=f(metadata={'sql': 1, 'wire_name': 'x'})", 2),
+    ("import dataclasses as dc\nx=dc.field(metadata={'sql': 1})", 1),
+    ("from dataclasses import field\nx=field(metadata=options)", 1),
+    ("from dataclasses import field\nx=field(metadata={**options})", 1),
+    ("from dataclasses import field\nx=field(default=None)", 0),
+    ("from another_library import field\nx=field(metadata={'ui_hidden': True})", 0),
+])
+def test_string_field_metadata_resolves_imports_and_refuses_opaque_keys(source, expected):
+    assert StringFieldMetadata.count(source.encode(), "example.py") == expected
 
 
 class Repository:

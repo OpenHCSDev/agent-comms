@@ -281,7 +281,8 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
 
     @staticmethod
     def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
-        constructors, modules = set(), set()
+        constructors: set[str] = set()
+        modules: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "dataclasses":
                 constructors.update(alias.asname or alias.name for alias in node.names
@@ -300,9 +301,10 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         return sum(
-            sum(isinstance(key, ast.Constant) and isinstance(key.value, str)
-                for key in keyword.value.keys) if isinstance(keyword.value, ast.Dict) else 1
-            for keyword in node.keywords if keyword.arg == "metadata"
+            sum(1 for key in keyword.value.keys
+                if not isinstance(key, ast.Constant) or isinstance(key.value, str))
+            if isinstance(keyword.value, ast.Dict) else 1
+            for keyword in typing.cast(ast.Call, node).keywords if keyword.arg == "metadata"
         )
 
 

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import typing
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import JsonValue
@@ -24,7 +23,7 @@ from .carry import Carried, Carry
 @dataclass(frozen=True)
 class SavedGoalJson(TypedRow):
     sequence: int
-    payload: typing.Annotated[JsonValue, Column(storage=JsonStorage)]
+    payload: JsonValue = field(metadata={"sql": Column(storage=JsonStorage)})
 
 
 class DirectiveAnswers(Carry):

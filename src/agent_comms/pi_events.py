@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import typing
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
@@ -31,7 +32,6 @@ from .pi_payloads import (
     PiUsage,
     ProviderRetryOutcome,
     UnreportedUsage,
-    wire_field,
 )
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -718,7 +718,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 class MessageUpdate(NativePiEvent, DurablePiEvent):
     assistant_message_event: typing.Annotated[PiDelta | None, field_codec.WireName("assistantMessageEvent")] = field(default=None)
     message: typing.Annotated[PiMessage, field_codec.WireName("message")] = field(default_factory=AbsentMessage)
-    usage: PiUsage = wire_field("usage", UnreportedUsage())
+    usage: typing.Annotated[PiUsage, field_codec.WireName("usage"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedUsage())
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:

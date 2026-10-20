@@ -92,7 +92,7 @@ class FieldDirective:
 
     @staticmethod
     @cache
-    def on(annotation: object) -> Mapping[type[FieldDirective], tuple[FieldDirective, ...]]:
+    def _index(annotation: object) -> Mapping[type[FieldDirective], tuple[FieldDirective, ...]]:
         """Compile a declaration's directives once, indexed by their capabilities."""
         found: dict[type[FieldDirective], list[FieldDirective]] = {}
         if get_origin(annotation) is Annotated:
@@ -104,8 +104,12 @@ class FieldDirective:
         return types.MappingProxyType({kind: tuple(items) for kind, items in found.items()})
 
     @classmethod
+    def on(cls, annotation: object) -> tuple[Self, ...]:
+        return cast(tuple[Self, ...], cls._index(annotation).get(cls, ()))
+
+    @classmethod
     def find(cls, annotation: object) -> Self | None:
-        matches = cls.on(annotation).get(cls, ())
+        matches = cls.on(annotation)
         if len(matches) > 1:
             raise TypeError(f"A field declares {cls.__name__} more than once")
         return cast(Self, matches[0]) if matches else None
@@ -129,7 +133,7 @@ class FlagDirective(ValueDirective[bool]):
 class ViewName(ValueDirective[str], DeclaredFamily, affix="Name"):
     @classmethod
     def key_in(cls, annotation: object, view: str, default: str) -> str:
-        for directive in cls.on(annotation).get(cls, ()):
+        for directive in cls.on(annotation):
             if type(directive).declared_name == view:
                 return directive.value
         return default
@@ -140,7 +144,7 @@ class ViewExclusion(FlagDirective, DeclaredFamily, affix="Exclude"):
     def excluded_in(cls, annotation: object, view: str) -> bool:
         return any(
             directive.value
-            for directive in cls.on(annotation).get(cls, ())
+            for directive in cls.on(annotation)
             if type(directive).declared_name == view
         )
 
@@ -367,7 +371,8 @@ class Argument(FieldDirective):
             if self.group not in groups:
                 groups[self.group] = parser.add_mutually_exclusive_group(required=True)
             owner = groups[self.group]
-        options = {
+        # argparse actions own an extensible keyword protocol, not a closed Core record.
+        options: dict[str, Any] = {
             **({} if "action" in self.options else plan.value.argument_options()),
             **self.options,
         }
@@ -1157,37 +1162,15 @@ class FieldCodec(Sealed):
             _, representation = cls._representation(type(value))
         return representation
 
-    @staticmethod
-    @cache
-    def record_fields(cls: type) -> tuple[tuple[Field[object], str], ...]:
-        """The record's field declarations, in wire order; plans own expanded keys."""
-        # Declarations are immutable for this process; cache only their derived
-        # schema, never decoded rows, registry membership or document revisions.
-        declared = tuple(
-            plan for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records
-        )
-        if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
-            raise TypeError("Wire field names must be nonempty strings.")
-        return tuple(
-            (plan.declared, plan.key)
-            for _, plan in sorted(
-                enumerate(declared),
-                key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
-            )
-        )
+    @classmethod
+    def record_fields(cls, record: type) -> tuple[tuple[Field[object], str], ...]:
+        """The compiled record owns declaration order and expanded keys."""
+        return cls._record_plan(record).record_fields
 
     @classmethod
-    @cache
     def field_plans(cls, record: type) -> tuple[FieldPlan, ...]:
-        """Resolve each declaration once, without compiling unused value decoders."""
-        hints = cls._types(record)
-        return tuple(
-            cls._field_plan(declared, hints[declared.name])(
-                declared=declared,
-                annotation=hints[declared.name],
-            )
-            for declared in fields(record)
-        )
+        """All declarations, including context fields, without unused value decoders."""
+        return cls._record_plan(record).declarations
 
     @classmethod
     def record_key(cls, record: type, name: str) -> str:
@@ -1456,11 +1439,16 @@ class FieldCodec(Sealed):
     class _RecordPlan:
         """A record's field plan, derived once from its declaration."""
 
+        declarations: tuple[FieldPlan, ...]
         fields: tuple[FieldPlan, ...]
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         accepted_keys: frozenset[str]
+
+        @cached_property
+        def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
+            return tuple((plan.declared, plan.key) for plan in self.bindings)
 
         def encoded(self, value, view, encode_value) -> dict[str, object]:
             result: dict[str, object] = {}
@@ -1487,10 +1475,19 @@ class FieldCodec(Sealed):
     @cache
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
-        declared = cls.record_fields(record)
+        hints = cls._types(record)
+        declarations = tuple(
+            cls._field_plan(item, hints[item.name])(declared=item, annotation=hints[item.name])
+            for item in fields(record)
+        )
+        declared = tuple(plan for plan in declarations if plan.declared.init and plan.records)
+        if any(not isinstance(plan.key, str) or not plan.key for plan in declared):
+            raise TypeError("Wire field names must be nonempty strings.")
+        entries = tuple(plan for _, plan in sorted(
+            enumerate(declared),
+            key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
+        ))
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
-        plans = {plan.name: plan for plan in cls.field_plans(record)}
-        entries = tuple(plans[field.name] for field, key in declared)
         wire_fields, required_keys, init_required_keys = [], [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
@@ -1504,6 +1501,7 @@ class FieldCodec(Sealed):
         ):
             raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
+            declarations=declarations,
             fields=tuple(wire_fields),
             bindings=entries,
             required_keys=tuple(required_keys),

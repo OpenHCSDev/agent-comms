@@ -6,6 +6,7 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import re
 import types
@@ -41,13 +42,10 @@ if TYPE_CHECKING:
     from .turn_usage import UsageAccount
 
 
-def wire_field(name: str, default=None):
-    return field(default=default, metadata={"wire_name": name, "wire_omit_default": True})
-
-
 def wire_options(target):
     """Python's annotation taxonomy is interpreted only at this ingress boundary."""
-    return get_args(target) if get_origin(target) in (Union, types.UnionType) else (target,)
+    declared, _ = FieldCodec._representation(target)
+    return get_args(declared) if get_origin(declared) in (Union, types.UnionType) else (declared,)
 
 
 @singledispatch
@@ -225,11 +223,11 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
 
 @dataclass(frozen=True)
 class PiCost(PiPayload):
-    input: float = wire_field("input", 0.0)
-    output: float = wire_field("output", 0.0)
-    cache_read: float = wire_field("cacheRead", 0.0)
-    cache_write: float = wire_field("cacheWrite", 0.0)
-    total: float = wire_field("total", 0.0)
+    input: typing.Annotated[float, field_codec.WireName("input"), field_codec.WireOmitDefault()] = dataclasses.field(default=0.0)
+    output: typing.Annotated[float, field_codec.WireName("output"), field_codec.WireOmitDefault()] = dataclasses.field(default=0.0)
+    cache_read: typing.Annotated[float, field_codec.WireName("cacheRead"), field_codec.WireOmitDefault()] = dataclasses.field(default=0.0)
+    cache_write: typing.Annotated[float, field_codec.WireName("cacheWrite"), field_codec.WireOmitDefault()] = dataclasses.field(default=0.0)
+    total: typing.Annotated[float, field_codec.WireName("total"), field_codec.WireOmitDefault()] = dataclasses.field(default=0.0)
 
     @classmethod
     def normalize_field(cls, target: object, key: str, value: object, record: object) -> object:
@@ -252,14 +250,14 @@ class PiUsage(PiPayload):
             return None
         return super().normalize_field(target, key, value, record)
 
-    input: NonnegativePiCount = wire_field("input", UnreportedCount())
-    output: NonnegativePiCount = wire_field("output", UnreportedCount())
-    cache_read: NonnegativePiCount = wire_field("cacheRead", UnreportedCount())
-    cache_write: NonnegativePiCount = wire_field("cacheWrite", UnreportedCount())
-    total_tokens: PiCount = wire_field("totalTokens", UnreportedCount())
-    cost: PiCost = wire_field("cost", PiCost())
-    reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
-    cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
+    input: typing.Annotated[NonnegativePiCount, field_codec.WireName("input"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    output: typing.Annotated[NonnegativePiCount, field_codec.WireName("output"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    cache_read: typing.Annotated[NonnegativePiCount, field_codec.WireName("cacheRead"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    cache_write: typing.Annotated[NonnegativePiCount, field_codec.WireName("cacheWrite"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    total_tokens: typing.Annotated[PiCount, field_codec.WireName("totalTokens"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    cost: typing.Annotated[PiCost, field_codec.WireName("cost"), field_codec.WireOmitDefault()] = dataclasses.field(default=PiCost())
+    reasoning: typing.Annotated[NonnegativePiCount, field_codec.WireName("reasoning"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    cache_write_1h: typing.Annotated[NonnegativePiCount, field_codec.WireName("cacheWrite1h"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
 
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return (account.charge(self),)
@@ -319,7 +317,7 @@ class TextContent(PiContent):
         return [AssistantTranscript(self.text, position=position, timestamp=timestamp)]
 
     text: str = field()
-    text_signature: str | None = wire_field("textSignature")
+    text_signature: typing.Annotated[str | None, field_codec.WireName("textSignature"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     tool_round_allowed = True
 
     @property
@@ -335,7 +333,7 @@ class ThinkingContent(PiContent):
         return [ThinkingTranscript(self.thinking, position=position, timestamp=timestamp)]
 
     thinking: str = ""
-    thinking_signature: str | None = wire_field("thinkingSignature")
+    thinking_signature: typing.Annotated[str | None, field_codec.WireName("thinkingSignature"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     tool_round_allowed = True
 
     @property
@@ -370,7 +368,7 @@ class ImageContent(PiContent):
         return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
 
     data: str
-    mime_type: str = wire_field("mimeType")
+    mime_type: typing.Annotated[str, field_codec.WireName("mimeType"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
 
 @dataclass(frozen=True)
@@ -468,13 +466,13 @@ class TransportStageText(TextRepresentation[ProviderTransportStage]):
 
 @dataclass(frozen=True)
 class ProviderTransportDetails(PiPayload):
-    configured_transport: str | None = wire_field("configuredTransport")
-    fallback_transport: str | None = wire_field("fallbackTransport")
-    events_emitted: bool | None = wire_field("eventsEmitted")
+    configured_transport: typing.Annotated[str | None, field_codec.WireName("configuredTransport"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    fallback_transport: typing.Annotated[str | None, field_codec.WireName("fallbackTransport"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    events_emitted: typing.Annotated[bool | None, field_codec.WireName("eventsEmitted"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     phase: Annotated[ProviderTransportStage, TransportStageText] = field(
         default_factory=UnreportedTransportStage
     )
-    request_bytes: int | None = wire_field("requestBytes")
+    request_bytes: typing.Annotated[int | None, field_codec.WireName("requestBytes"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
     def __post_init__(self):
         if self.request_bytes is not None and self.request_bytes < 0:
@@ -575,11 +573,11 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
-    usage: PiUsage = wire_field("usage", UnreportedUsage())
-    input_id: str | None = wire_field("inputId")
-    input_digest: str | None = wire_field("inputDigest")
-    stop_reason: type[PiStopReason] = wire_field("stopReason", UnreportedStopReason)
-    error_message: str | None = wire_field("errorMessage")
+    usage: typing.Annotated[PiUsage, field_codec.WireName("usage"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedUsage())
+    input_id: typing.Annotated[str | None, field_codec.WireName("inputId"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    input_digest: typing.Annotated[str | None, field_codec.WireName("inputDigest"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    stop_reason: typing.Annotated[type[PiStopReason], field_codec.WireName("stopReason"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedStopReason)
+    error_message: typing.Annotated[str | None, field_codec.WireName("errorMessage"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     diagnostics: tuple[PiDiagnostic, ...] = ()
 
     def __post_init__(self):
@@ -653,12 +651,12 @@ class AssistantMessage(PiMessage):
     content: typing.Annotated[tuple[PiContent, ...], field_codec.WireRequired(True)] = field(default=())
     # Original Pi completion metadata. These are observations, not registry
     # configuration or permission to select a model for a later request.
-    api: str | None = wire_field("api")
-    provider: str | None = wire_field("provider")
-    model: str | None = wire_field("model")
-    response_model: str | None = wire_field("responseModel")
-    response_id: str | None = wire_field("responseId")
-    provider_thinking_level: str | None = wire_field("providerThinkingLevel")
+    api: typing.Annotated[str | None, field_codec.WireName("api"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    provider: typing.Annotated[str | None, field_codec.WireName("provider"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    model: typing.Annotated[str | None, field_codec.WireName("model"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    response_model: typing.Annotated[str | None, field_codec.WireName("responseModel"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    response_id: typing.Annotated[str | None, field_codec.WireName("responseId"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    provider_thinking_level: typing.Annotated[str | None, field_codec.WireName("providerThinkingLevel"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     assistant = True
 
     @property
@@ -773,9 +771,9 @@ class ToolDetailsPayload(PiPayload):
 
 @dataclass(frozen=True)
 class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult"):
-    tool_call_id: str = wire_field("toolCallId", "")
-    tool_name: str = wire_field("toolName", "tool")
-    is_error: bool = wire_field("isError", False)
+    tool_call_id: typing.Annotated[str, field_codec.WireName("toolCallId"), field_codec.WireOmitDefault()] = dataclasses.field(default="")
+    tool_name: typing.Annotated[str, field_codec.WireName("toolName"), field_codec.WireOmitDefault()] = dataclasses.field(default="tool")
+    is_error: typing.Annotated[bool, field_codec.WireName("isError"), field_codec.WireOmitDefault()] = dataclasses.field(default=False)
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
@@ -918,8 +916,8 @@ class ReportedModel(PiModel):
     provider: str | None = None
     id: str | None = None
     name: str | None = None
-    context_window: PiCount = wire_field("contextWindow", UnreportedCount())
-    max_tokens: PiCount = wire_field("maxTokens", UnreportedCount())
+    context_window: typing.Annotated[PiCount, field_codec.WireName("contextWindow"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    max_tokens: typing.Annotated[PiCount, field_codec.WireName("maxTokens"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
 
     @property
     def identity(self):
@@ -947,8 +945,8 @@ class PiContextUsage(PiPayload):
             return None
         return super().normalize_field(target, key, value, record)
 
-    tokens: PiCount = wire_field("tokens", UnreportedCount())
-    context_window: PiCount = wire_field("contextWindow", UnreportedCount())
+    tokens: typing.Annotated[PiCount, field_codec.WireName("tokens"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    context_window: typing.Annotated[PiCount, field_codec.WireName("contextWindow"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
 
     @property
     def token_total(self) -> PiCount:
@@ -1013,8 +1011,8 @@ class SessionSwitchData(PiResponseData):
 class NativeSessionSnapshot(PiPayload):
     """External snapshots may report only part of a saved session's identity."""
 
-    session_id: str | None = wire_field("sessionId")
-    session_file: str | None = wire_field("sessionFile")
+    session_id: typing.Annotated[str | None, field_codec.WireName("sessionId"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    session_file: typing.Annotated[str | None, field_codec.WireName("sessionFile"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
     def _known_identity(self) -> dict[str, str]:
         return {
@@ -1040,15 +1038,15 @@ class NativeSessionSnapshot(PiPayload):
 
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
-    native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
+    native_input_proof_capability: typing.Annotated[str | None, field_codec.WireName("nativeInputProofCapability"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
     # Native omission and null both mean no model observation. Omit the named
     # default on output; its internal family tag is not a native model object.
     model: typing.Annotated[PiModel, field_codec.WireOmitDefault(True)] = field(default_factory=UnreportedModel)
-    thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
-    message_count: NonnegativePiCount = wire_field("messageCount", UnreportedCount())
-    pending_message_count: NonnegativePiCount = wire_field("pendingMessageCount", UnreportedCount())
-    is_streaming: bool | None = wire_field("isStreaming")
-    is_compacting: bool | None = wire_field("isCompacting")
+    thinking_level: typing.Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel"), field_codec.WireOmitDefault()] = dataclasses.field(default=NoThinkingOverride)
+    message_count: typing.Annotated[NonnegativePiCount, field_codec.WireName("messageCount"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    pending_message_count: typing.Annotated[NonnegativePiCount, field_codec.WireName("pendingMessageCount"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    is_streaming: typing.Annotated[bool | None, field_codec.WireName("isStreaming"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    is_compacting: typing.Annotated[bool | None, field_codec.WireName("isCompacting"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -1077,7 +1075,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 
 @dataclass(frozen=True)
 class SessionStatsData(NativeSessionSnapshot, PiResponseData):
-    context_usage: PiContextUsage | None = wire_field("contextUsage")
+    context_usage: typing.Annotated[PiContextUsage | None, field_codec.WireName("contextUsage"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
 
 @dataclass(frozen=True)
@@ -1093,10 +1091,10 @@ class ThinkingLevelsData(PiResponseData):
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
     summary: str | None = None
-    usage: PiUsage = wire_field("usage", UnreportedUsage())
-    first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
-    tokens_before: PiCount = wire_field("tokensBefore", UnreportedCount())
-    estimated_tokens_after: PiCount = wire_field("estimatedTokensAfter", UnreportedCount())
+    usage: typing.Annotated[PiUsage, field_codec.WireName("usage"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedUsage())
+    first_kept_entry_id: typing.Annotated[str | None, field_codec.WireName("firstKeptEntryId"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    tokens_before: typing.Annotated[PiCount, field_codec.WireName("tokensBefore"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
+    estimated_tokens_after: typing.Annotated[PiCount, field_codec.WireName("estimatedTokensAfter"), field_codec.WireOmitDefault()] = dataclasses.field(default=UnreportedCount())
 
     @property
     def display_summary(self):
@@ -1169,9 +1167,9 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 class NativeEditDetails(PiPayload):
     """Native edit metadata, decoded only when projecting actual edit evidence."""
 
-    patch: str | None = wire_field("patch")
-    diff: str | None = wire_field("diff")
-    first_changed_line: int | None = wire_field("firstChangedLine")
+    patch: typing.Annotated[str | None, field_codec.WireName("patch"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    diff: typing.Annotated[str | None, field_codec.WireName("diff"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
+    first_changed_line: typing.Annotated[int | None, field_codec.WireName("firstChangedLine"), field_codec.WireOmitDefault()] = dataclasses.field(default=None)
 
     @classmethod
     def capture_diff(cls, raw):
