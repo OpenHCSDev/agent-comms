@@ -122,7 +122,7 @@ Update the board row, move on. One line per unit touched.
 - **A failing PR drops out and the rest land in the same run.** A batch is never abandoned in silence: every landing and every drop is posted to #comms with its time and reason.
 - **Units never merge main into their branches.** The batch merges each head onto fresh main; the merger resolves trivial conflicts itself and sends only a real conflict back.
 - **The PR owns its state.** Ready is out of draft with both ratchets and the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
-- **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay; the peer-sync hook enforces it until one shared record replaces it.
+- **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay until one shared record replaces it.
 
 ## Orders
 

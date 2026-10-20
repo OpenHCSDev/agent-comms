@@ -31,7 +31,7 @@ The commander isn't built into Core yet; `plans/commander-native-plan.md` moves 
 
 | What | Where |
 |---|---|
-| Its code | `src/agent_comms/commander/`: `order.py` (orders, strikes, done, hunts), `rules.py` and `rules/` (the rule review and the rule texts), `rotate.py` (the rotation tick), `send_guard.py`, `judge.py` |
+| Its code | `src/agent_comms/commander/`: `order.py` (orders, strikes, done, hunts), `rules.py` and `rules/` (the rule review and the rule texts), `rotate.py` (the rotation tick), `judge.py` |
 | Its state | `~/.local/state/agent-comms/commander/`: `orders/`, `problems.json`, `deadlines.json`, `done.jsonl`, `closed.jsonl`, `hunts.jsonl`, `artifacts/`, `forks/` (the beats that count as live forks), `activity.log` |
 | How to run it | `src/agent_comms/skills/comms-commander/SKILL.md` |
 | The game it plays | `docs/agents/commander-game.md` |
