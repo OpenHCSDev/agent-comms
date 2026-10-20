@@ -22,6 +22,7 @@ from contextlib import (
 )
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
@@ -255,6 +256,30 @@ UNBOUNDED_STORE_READ = StoreReadBudget()
 
 class StoreOwner(DeclaredFamily):
     __slots__ = ()
+    staging_name: ClassVar[str] = ".{name}.{token}"
+    staging_suffix: ClassVar[str] = ".tmp"
+    rollback_suffix: ClassVar[str] = ".previous"
+
+    @classmethod
+    def stage_file(cls, path: Path) -> tuple[int, Path]:
+        descriptor, name = tempfile.mkstemp(
+            prefix=cls.staging_name.format(name=path.name, token=""),
+            suffix=cls.staging_suffix,
+            dir=path.parent,
+        )
+        return descriptor, Path(name)
+
+    @classmethod
+    def rollback_file(cls, staged: Path) -> Path:
+        return staged.with_suffix(cls.rollback_suffix)
+
+    @classmethod
+    def is_staging(cls, path: Path) -> bool:
+        pattern = cls.staging_name.format(name="*", token="*")
+        return any(
+            fnmatchcase(path.name, pattern + suffix)
+            for suffix in (cls.staging_suffix, cls.rollback_suffix)
+        )
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):
@@ -469,8 +494,7 @@ def _atomic_write_text(
 ) -> None:
     """Replace a snapshot; private guarded writes also durably sync its name."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary_path = Path(temporary)
+    fd, temporary_path = StoreOwner.stage_file(path)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             os.chmod(temporary_path, mode)

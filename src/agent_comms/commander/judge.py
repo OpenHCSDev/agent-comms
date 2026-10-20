@@ -32,7 +32,6 @@ from .order import CommanderVerb, RuledVerb
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
 
-@dataclass(frozen=True)
 class Hunk(ReplacementEdit):
 
     def branches_added(self) -> int:
@@ -45,7 +44,6 @@ class Hunk(ReplacementEdit):
                 + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
 
 
-@dataclass(frozen=True)
 class Edit(EditCall):
     """The Core result row, decoded at the commander's tool boundary."""
     hunks: tuple[Hunk, ...]
@@ -69,8 +67,7 @@ class Edit(EditCall):
         return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def rendered(self) -> str:
-        stamp = time.strftime('%H:%M', time.localtime(self.at))
-        return (f'--- {self.id} {stamp} {self.path}\n'
+        return (f'--- {self.id} {self.at.clock()} {self.path}\n'
                 + '\n'.join(hunk.rendered() for hunk in self.hunks)
                 + f'\n=== end {self.id} code {self.code()}')
 
@@ -101,12 +98,13 @@ def roast(ctx, audience, thread, lines, text, fix, slop):
 
 def alarm(ctx):
     while True:
-        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
+                if edit.at.before(time.time() - 300)]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
                 counts[edit.thread] = counts.get(edit.thread, 0) + 1
-            oldest = min(edit.at for edit in late)
+            oldest = min(edit.at.recorded_at("An overdue edit") for edit in late)
             print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
                   + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge show', flush=True)
         time.sleep(60)
