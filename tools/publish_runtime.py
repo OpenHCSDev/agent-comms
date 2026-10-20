@@ -250,8 +250,8 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
             if snapshot.require(original.name).incarnation != original.identity.incarnation:
                 raise ValueError('Saved publication owner incarnation changed')
         running = replace(request, names=tuple(
-            thread.name for thread in request.threads(snapshot)
-            if thread.restart_candidates(snapshot.status(thread.name))))
+            original.name for original in self.selection
+            if snapshot.require(original.name).restart_candidates(snapshot.status(original.name))))
         results = super().restart(lifecycle, running)
         # A previous failed cutover already retired these owners. Their /proc
         # environment is gone; normal start derives their declared launch anew.
