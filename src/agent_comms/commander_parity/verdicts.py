@@ -188,6 +188,11 @@ class AcceptedCase(VerdictCase):
 class SendBackCase(VerdictCase):
     changes = 1
     native_owner = SendBackVerdict
+    why: ClassVar[str] = "The edit duplicates the copied workflow decision instead of removing it."
+
+    @classmethod
+    def valid(cls, effect: VerdictEffect) -> bool:
+        return super().valid(effect) and cls.why in effect.progress
 
     @classmethod
     def replacement(cls, run: LifecycleRun) -> str:
@@ -199,7 +204,7 @@ class SendBackCase(VerdictCase):
             ids=(f"{edit.id}:{edit.code()}",),
             msg=todo.messages[-1].message_id,
             lines=(edit.hunks[0].new_text,),
-            why="The edit duplicates the copied workflow decision instead of removing it.",
+            why=cls.why,
             roast=(
                 "This is stupid because the edit keeps two copies of the same decision "
                 "instead of deleting it."
