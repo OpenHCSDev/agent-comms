@@ -1,8 +1,7 @@
 from dataclasses import replace
 
 from agent_comms.commander.capacity import Load
-from agent_comms.commander_parity.load import LoadComparison, MeasuredOutput
-from agent_comms.private_path import FileRevision
+from agent_comms.commander_parity.load import LoadComparison, MeasuredOutput, state_files
 
 
 def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_path):
@@ -19,7 +18,7 @@ def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_
         assert not replace(comparison, observation=replace(observed, native=str(different))).passed
     path = tmp_path / "old-state"
     path.write_text("before")
-    before = ((path.name, FileRevision.capture(path)),)
+    before = state_files(tmp_path)
     path.write_text("after")
-    after = ((path.name, FileRevision.capture(path)),)
+    after = state_files(tmp_path)
     assert not LoadComparison(observed, before, after).passed

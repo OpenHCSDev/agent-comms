@@ -40,9 +40,9 @@ print(json.dumps(dict(current=output.getvalue(), native=str(measured[0]),
 """
 
 
-def state_files(directory: Path) -> tuple[tuple[str, FileRevision | None], ...]:
+def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
     return tuple(
-        (str(path.relative_to(directory)), FileRevision.capture(path))
+        (str(path.relative_to(directory)), FileRevision.from_stat(path.stat()))
         for path in sorted(directory.rglob("*"))
         if path.is_file()
     )
@@ -60,8 +60,8 @@ class MeasuredOutput:
 @dataclass(frozen=True)
 class LoadComparison(ParityComparison):
     observation: MeasuredOutput
-    state_before: tuple[tuple[str, FileRevision | None], ...]
-    state_after: tuple[tuple[str, FileRevision | None], ...]
+    state_before: tuple[tuple[str, FileRevision], ...]
+    state_after: tuple[tuple[str, FileRevision], ...]
 
     @property
     def passed(self) -> bool:
@@ -80,26 +80,29 @@ class LoadComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> ParityComparison:
-        config = CommanderConfig.read(CommanderConfig.path())
-        before = state_files(config.state)
-        # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
-        # HOME and the environment stay unchanged; the actual CLI main runs.
-        current = subprocess.run(
-            (str(config.cli.parent / "python"), "-I", "-c", OBSERVE_CAPACITY, "capacity"),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if current.returncode:
-            return UnverifiedParity(current.stderr)
-        observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
-        source = Path(observed.source)
-        if (
-            observed.root != str(config.root)
-            or observed.commander != config.commander
-            or not any(source.is_relative_to(repo.checkout) for repo in config.repos)
-        ):
-            return UnverifiedParity(
-                "The installed command used a different configuration or source"
+        try:
+            config = CommanderConfig.read(CommanderConfig.path())
+            before = state_files(config.state)
+            # -I uses installed imports even when this candidate runs with PYTHONPATH=src.
+            # HOME and the environment stay unchanged; the actual CLI main runs.
+            current = subprocess.run(
+                (str(config.cli.parent / "python"), "-I", "-c", OBSERVE_CAPACITY, "capacity"),
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
-        return cls(observed, before, state_files(config.state))
+            if current.returncode:
+                return UnverifiedParity(current.stderr)
+            observed = FieldCodec.decode(MeasuredOutput, FieldCodec.parse(current.stdout))
+            source = Path(observed.source)
+            if (
+                observed.root != str(config.root)
+                or observed.commander != config.commander
+                or not any(source.is_relative_to(repo.checkout) for repo in config.repos)
+            ):
+                return UnverifiedParity(
+                    "The installed command used a different configuration or source"
+                )
+            return cls(observed, before, state_files(config.state))
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return UnverifiedParity(str(error))
