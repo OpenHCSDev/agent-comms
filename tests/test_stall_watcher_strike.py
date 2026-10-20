@@ -11,6 +11,8 @@ import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.goals import CountCheckResult
 from agent_comms.active_route import active_route_path
 from agent_comms.commander import standing
 from agent_comms.commander.config import CommanderConfig
@@ -20,8 +22,12 @@ from agent_comms import coordinator
 from agent_comms.thread_identity import StallWatcherIncarnation
 from agent_comms.todos import (BlockedTodoState, ChangeTodoState, CorrectCheckTodo,
                               MissedDeadlineStrike, MissedFirstCallStrike,
-                              ReleaseTodo, StrikeReason, StrikeTodo, TodoConflict)
+                              ReleaseTodo, StallStrike, StrikeReason, TodoConflict)
+from agent_comms.storage_rules import StorageRule
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import CommsStandingRulesTool
 from test_commander_problem_orders import create
+from test_order_progress import checkout, commit, git
 from test_standing_rules import working
 
 
@@ -37,7 +43,7 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
     comms = Comms(copied)
     standing.UnownedWheelSpin.after_stall(comms)
     todo = comms.goals.todos.get("P1")
-    assert [type(s) for s in todo.strikes] == [StrikeTodo]
+    assert [type(s) for s in todo.strikes] == [StallStrike]
     assert [type(r) for r in todo.released] == [ReleaseTodo]
     assert todo.strikes[0].actor == todo.released[0].actor == StallWatcherIncarnation.watcher()
     assert todo.holder == "spare" and todo.live_strikes("worker")
@@ -53,6 +59,54 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
         "assigner": todo.held().parent_identity.to_wire(),
         "original_holder": source.holder, "original_strikes": len(source.strikes),
         "qualification": "Copied fixture root and controlled saved native records; actual history reader, no commander invocation."}, indent=2))
+
+
+@pytest.mark.parametrize('spare', (False, True), ids=('fully-held', 'idle-successor'))
+def test_flat_wheel_strikes_before_selecting_a_successor_on_a_copied_registry(
+        commander, commander_script, checkout, tmp_path, monkeypatch, spare):
+    original, _ = commander
+    todo, unit = checkout
+    check = replace(todo.order.check, directory=str(unit), command='printf 2',
+                    result=CountCheckResult(0))
+    todo = original.goals.todos.apply('P1', CorrectCheckTodo(
+        todo.revision, original.registry.require('lead').incarnation, todo.order.check,
+        check, 'Measure the actual checked branch at each recorded commit.'))
+    for _ in range(2):
+        commit(unit)
+        check.at(git(unit, 'rev-parse', 'HEAD'), str(unit), unit.parent)
+    if spare:
+        original.registry.declare(original.registry.new_thread(
+            'spare', frozenset({'comms'}), str(tmp_path), created_at=3.0))
+    copied = original.root.with_name('flat-wheel-copy')
+    shutil.copytree(original.root, copied)
+    comms = Comms(copied)
+    monkeypatch.setattr(comms.registry, 'storage_rule', StorageRule(checkout_base=unit.parent))
+    working(comms, 'worker', 2.0)
+    if spare:
+        working(comms, 'spare', 3.0)
+    [rule] = standing.FlatWheelSpin.violations(comms, 'lead')
+    read = CommsStandingRulesTool().apply(comms, ThreadCaller('lead'))
+    assert rule.line() in read.broken
+    result = comms.goals.todos.get('P1')
+    assert [type(strike) for strike in result.strikes] == [StallStrike]
+    assert result.strikes[0].previous == todo.held()
+    assert result.strikes[0].actor == StallWatcherIncarnation.watcher()
+    assert result.holder == ('spare' if spare else 'worker')
+    assert len(result.released) == int(spare)
+    assert original.goals.todos.get('P1') == todo
+    if not spare:
+        [message] = [message for message in comms.views.history_page(
+            CommandTarget.named('#comms'), viewer='lead').messages
+                     if 'STALL with no idle unit:' in message.body]
+        assert message.sender == 'lead' and message.target == '#comms'
+        assert 'worker on P1, distance not falling since ' in message.body
+        assert message.body.endswith('; struck, still held')
+        for _ in range(2):
+            standing.FlatWheelSpin(result, rule.since).enforce(comms, 'lead')
+            result = comms.goals.todos.get('P1')
+        assert len(result.strikes) == 3 and result.holder == 'worker' and not result.released
+        (tmp_path / 'P295-copied-bus-line.txt').write_text(message.body + '\n')
+        print(message.body)
 
 
 def test_a_failed_stall_pass_logs_and_releases_the_root_before_the_next_pass(commander, monkeypatch, caplog):

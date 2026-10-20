@@ -381,7 +381,7 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
 
     read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
     assert ("WHEEL SPIN: worker kept working on P1 while its distance to done did not fall across"
-            " two readings -> Core strikes it and gives the order to an idle unit") in read.broken
+            " two readings -> Core strikes the holder before looking for an idle unit") in read.broken
     moved = comms.goals.todos.get("P1")
     assert [strike.previous.owner for strike in moved.live_strikes()] == ["worker"]
     assert moved.holder == "spare"
