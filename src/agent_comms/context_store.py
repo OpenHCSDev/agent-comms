@@ -37,7 +37,7 @@ from .turn_context import (
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
-from .typed_table import Column, Index, TypedStore, TypedTable
+from .typed_table import Column, Generated, Index, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
@@ -195,10 +195,14 @@ class ContextSegmentVersion(TypedTable):
 class ContextRequest(TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
-    thread_name: Annotated[str, Column(generated="json_extract(identity,'$.thread.name')")]
-    thread_birth: Annotated[
-        float, Column(generated="json_extract(identity,'$.thread.created_at')")
-    ]
+    thread_name: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(identity,'$.thread.name')"),
+    )
+    thread_birth: ClassVar[Generated] = Generated(
+        float,
+        Column(generated="json_extract(identity,'$.thread.created_at')"),
+    )
     versions: tuple[int, ...]
     size: int
     indexes = (Index(("thread_name", "thread_birth", "id")),)

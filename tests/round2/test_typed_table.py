@@ -2,7 +2,7 @@
 
 import sqlite3
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Type
+from typing import Annotated, ClassVar, Type
 
 import pytest
 
@@ -12,6 +12,7 @@ from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
+    Generated,
     Index,
     IntegerStorage,
     SqlStorage,
@@ -131,7 +132,7 @@ def test_new_row_declaration_needs_no_other_edit():
         representation: type[SqlStorage] = IntegerStorage
         exact: Annotated[int, Column(storage=ExactStorage)] = 7
         ordinal: Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(default=None, compare=False)
-        label_size: Annotated[int | None, Column(generated="length(label)")] = field(default=None, init=False, compare=False)
+        label_size: ClassVar[Generated] = Generated(int, Column(generated="length(label)"))
 
     @dataclass(frozen=True)
     class Projection(TypedRow):
@@ -144,7 +145,9 @@ def test_new_row_declaration_needs_no_other_edit():
         value.insert(db)
         assert AddedTableRow.select(db) == [value]
         stored = AddedTableRow.one(db, label="new")
-        assert stored.ordinal == 1 and stored.label_size == 3
+        assert stored.ordinal == 1 and AddedTableRow.count(db, label_size=3) == 1
+        with pytest.raises(AttributeError):
+            stored.label_size
         assert stored.representation is IntegerStorage and stored.event is InfoKind
         assert AddedTableRow.count(db, exact=7) == 1
         with pytest.raises(ValueError):
@@ -191,6 +194,16 @@ def test_null_member_column_stores_sql_null():
         assert db.execute("SELECT key FROM noted_table WHERE note IS NULL").fetchall() == [("silent",)]
         assert NotedTableRow.one(db, key="silent") == NotedTableRow("silent")
         assert NotedTableRow.one(db, key="said").note == "hello"
+
+
+def test_generated_column_is_declared_by_the_table_not_a_record_field():
+    @dataclass(frozen=True)
+    class FieldGeneratedTableRow(TypedTable):
+        label: str
+        label_size: Annotated[int, Column(generated="length(label)")] = field(init=False)
+
+    with pytest.raises(TypeError):
+        FieldGeneratedTableRow.ddl()
 
 
 def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():

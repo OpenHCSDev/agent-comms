@@ -22,7 +22,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
-from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
+from .recorded_time import EventTime, GeneratedTimestamp
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
@@ -30,6 +30,7 @@ from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSou
 from .typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     RealStorage,
     StoreWriter,
@@ -198,18 +199,21 @@ class ExternalEventRow(TypedTable):
     seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True)]
     event: TranscriptEvent
-    timestamp: Annotated[
+    timestamp: ClassVar[Generated] = Generated(
         EventTime,
-        GeneratedTimestamp,
         Column(
             storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')"
         ),
-    ]
-    kind: Annotated[str, Column(generated="json_extract({event}, '$.kind')")]
-    tool: Annotated[str | None, Column(generated="json_extract({event}, '$.tool.tool')")]
-    call_id: Annotated[
-        str | None, Column(generated="json_extract({event}, '$.tool_call_id')")
-    ]
+    )
+    kind: ClassVar[Generated] = Generated(str, Column(generated="json_extract({event}, '$.kind')"))
+    tool: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract({event}, '$.tool.tool')", nullable=True),
+    )
+    call_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract({event}, '$.tool_call_id')", nullable=True),
+    )
 
     foreign_keys = (
         ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),
@@ -223,7 +227,7 @@ class ExternalEventRow(TypedTable):
     @classmethod
     def append(cls, connection, thread, seq, events) -> None:
         for ordinal, event in enumerate(events):
-            cls(thread, seq, ordinal, event, UnrecordedEventTime(), "", None, None).insert(connection)
+            cls(thread, seq, ordinal, event).insert(connection)
 
     @classmethod
     def unjudged_query(cls, thread, todo):
