@@ -764,7 +764,7 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: ToolCaller = option("--fork", type=FieldCodec.decoder(ThreadCaller),
+    fork: ToolCaller = option("--fork", type=ThreadCaller,
                               default=NoThreadCaller(), help="the acting commander's name")
 
     def who(self, ctx: Commander) -> str:
