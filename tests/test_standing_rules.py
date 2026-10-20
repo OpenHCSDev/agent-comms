@@ -235,6 +235,27 @@ async def test_order_alarm_family_is_delivered_once_without_a_monitor_and_resolv
         assert 'NO LONGER CURRENT: OWNER IDLE idle' in resolved
 
 
+def test_owner_idle_ignores_delivered_orders_but_reports_pending_work(commander, monkeypatch):
+    from agent_comms.todos import OperationDelivery
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    comms, _ = commander
+    monkeypatch.setattr(time, 'time', lambda: 10000.0)
+    comms.registry.register(replace(comms.registry.require('worker'),
+                                    execution=ExternalThreadExecution))
+    comms.transcripts.external('worker').finish(turn_id='old', item_id='call', events=(
+        ToolStartTranscript(position=0, tool_call_id='call', tool_name='bash', timestamp=8000),))
+    todo = create(commander, 'P1', deadline=11000)
+    with comms.goals.todos.writing() as db:
+        replace(todo, order=todo.order.delivered(
+            OperationDelivery(at=RecordedEventTime(9900)))).upsert(db)
+    held = comms.goals.todos.get('P1')
+    assert held.holder == 'worker' and not held.pending
+    assert OwnerIdle.violations(comms, 'lead') == ()
+    create(commander, 'P2', deadline=11000)
+    assert OwnerIdle.violations(comms, 'lead') == (OwnerIdle('worker', 9200),)
+
+
 def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tmp_path):
     comms, _ = commander
     comms.registry.declare(comms.registry.new_thread(
