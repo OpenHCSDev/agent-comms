@@ -31,6 +31,7 @@ import json
 import os
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -197,22 +198,25 @@ class Revisions:
 def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
     """Run one step with the src of the revision its family names, and
     ``stack``'s Python: the target's staged stack, never the installed one."""
-    if step.columns:
-        if "--before-stop" in flags:
-            return TodoColumnCarry.before_stop(root, apply=True)
-        return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
-    tree = revisions.tree(step.family.source_revision(step))
-    environment = stack.environment(tree / "src", tree / "tools")
-    worker = (
-        "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
-        "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
-        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
-    )
-    operation = "before_stop" if "--before-stop" in flags else "carry"
-    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
-                 operation, root, cwd=tree, env=environment)
-    return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
+    try:
+        if step.columns:
+            if "--before-stop" in flags:
+                return TodoColumnCarry.before_stop(root, apply=True)
+            return TodoColumnCarry.carry_step(
+                root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
+        tree = revisions.tree(step.family.source_revision(step))
+        environment = stack.environment(tree / "src", tree / "tools")
+        worker = (
+            "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
+            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
+            "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
+        )
+        operation = "before_stop" if "--before-stop" in flags else "carry"
+        output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
+                     operation, root, cwd=tree, env=environment)
+        return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
+    except (UpgradeRefused, ValueError, sqlite3.Error) as error:
+        raise UpgradeRefused(f"Conversion step {step.name} failed") from error
 
 
 def before_stop(
@@ -229,13 +233,10 @@ def carry_all(
 ) -> list[dict]:
     results = []
     for step in pending:
-        try:
-            with _store_lock(root / "wire"):
-                result = CarryLedger(root).apply(
-                    CarryChain.at(revisions.repo, step.revision), step.name,
-                    lambda: carry(step, root, stack, revisions, "--apply"))
-        except UpgradeRefused as error:
-            raise UpgradeRefused(f"Conversion step {step.name} failed") from error
+        with _store_lock(root / "wire"):
+            result = CarryLedger(root).apply(
+                CarryChain.at(revisions.repo, step.revision), step.name,
+                lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results
 

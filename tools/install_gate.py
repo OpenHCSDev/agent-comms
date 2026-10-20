@@ -268,8 +268,10 @@ class PracticeCopy:
             raise GateError("Insufficient free space before building the retained-tail copy")
         with CheckRoot(self.source, names, self.into).open() as copied:
             required = sum(path.stat().st_size for path in retained)
-            if (required > self.max_bytes
-                    or shutil.disk_usage(copied.root).free < 2 * required + storage_floor()):
+            if (
+                required > self.max_bytes
+                or shutil.disk_usage(copied.root).free < 2 * required + storage_floor()
+            ):
                 raise GateError(f"Insufficient space for {required} bytes of retained stores")
             for path in retained:
                 destination = copied.root / path.relative_to(self.source.root)
@@ -290,9 +292,12 @@ class PracticeCopy:
         """The practice command and desktop gate use the same private-root lifetime."""
         ledger = CarryLedger(self.source.root)
         pending = CarryChain.at(target, head).pending(ledger.applied())
-        files = {path for step in pending
-                 for path in step.current(target).backup_files(self.source.root)
-                 if path.is_file()}
+        files = {
+            path
+            for step in pending
+            for path in step.current(target).backup_files(self.source.root)
+            if path.is_file()
+        }
         if ledger.path.is_file():
             files.add(ledger.path)
         with self.open(tuple(sorted(files))) as copied:
