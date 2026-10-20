@@ -7,7 +7,7 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 from agent_comms import todos
 from agent_comms.change_report import FileLine
@@ -94,7 +94,7 @@ class MechanicalRunJson(FieldRepresentation):
         return None
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type(None))
 
 
@@ -105,7 +105,7 @@ class ApplicationRunText(TextRepresentation[todos.ApplicationOrderRun]):
 
     @classmethod
     def encode(cls, value: object) -> str:
-        return FieldCodec.encode_record(value)["text"]
+        return cast(todos.ApplicationOrderRun, value).text
 
 
 @dataclass(frozen=True)
