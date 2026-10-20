@@ -65,11 +65,11 @@ def test_nested_release_scope_runs_only_after_outer_release():
 def notifications(monkeypatch):
     def activate(comms):
         calls, finished = [], threading.Event()
-        drain = candidate_maintenance._drain_candidate
+        drain = candidate_maintenance.CandidateMaintenance.run
 
-        def complete(root):
+        def complete(worker):
             try:
-                drain(root)
+                drain(worker)
             finally:
                 finished.set()
 
@@ -94,7 +94,7 @@ def notifications(monkeypatch):
             calls.append(through_bytes)
             _SCHEDULE(log, through_bytes)
 
-        monkeypatch.setattr(candidate_maintenance, "_drain_candidate", complete)
+        monkeypatch.setattr(candidate_maintenance.CandidateMaintenance, "run", complete)
         monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", notify)
         return calls, finished
 
@@ -250,7 +250,8 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
         publish_initial(comms, "sender", "member000", "first")
         assert index.maintain(start=RebuildIndex())
         root = index.log.path.parent
-        candidate_maintenance._pending[root] = (index.log, index.log.path.stat().st_size)
+        worker = candidate_maintenance.CandidateMaintenance(index.log, index.log.path.stat().st_size)
+        candidate_maintenance._pending[root] = worker
         original_guard = candidate_maintenance._guard
         successor = []
 
@@ -269,11 +270,11 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
         monkeypatch.setattr(candidate_maintenance, "_guard", InterleavedLock())
         monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", _SCHEDULE)
         monkeypatch.setattr(threading.Thread, "start", lambda _: None)
-        candidate_maintenance._drain_candidate(root)
+        worker.run()
         assert successor
-        assert candidate_maintenance._pending[root][1] == index.log.path.stat().st_size
+        assert candidate_maintenance._pending[root].through_bytes == index.log.path.stat().st_size
         # Complete the retained successor without launching another daemon.
-        candidate_maintenance._drain_candidate(root)
+        candidate_maintenance._pending[root].run()
         assert root not in candidate_maintenance._pending
         assert index._verified_checkpoint(root_id).last_seq == 2
     finally:
