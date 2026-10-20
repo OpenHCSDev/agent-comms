@@ -166,13 +166,20 @@ class PendingSeal(CheckpointSeal):
         saved: private_bus_checkpoint.PrefixWitness,
         info: os.stat_result,
     ) -> private_bus_checkpoint.PrefixWitness:
+        relocated = saved.revision.identity != FileIdentity.from_stat(info)
+        contains_cut = (
+            info.st_size >= self.expected.revision.size if relocated
+            else self.expected.revision.holds_cut(
+                FileRevision.from_stat(info), self.expected.revision.size)
+        )
         if (saved.seal() not in (self.prior, self.expected)
-                or not self.expected.revision.holds_cut(
-                    FileRevision.from_stat(info), self.expected.revision.size)
+                or not contains_cut
                 or self.prior.root_id != marker.root_id):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
-        if saved.revision.identity != FileIdentity.from_stat(info):
-            saved = saved.rebind_source(bus, marker, db, info)
+        if relocated:
+            # Preserve the pending intent until its entire suffix is proved and
+            # committed; a zero-suffix rebind cannot complete a pending append.
+            saved.require_prefix(bus, info)
         return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
