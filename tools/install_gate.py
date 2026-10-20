@@ -31,10 +31,10 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self, cast
 
 from cutover.backup import UpgradeRefused
-from cutover.carry_maintenance_identity import MaintenanceIdentity
+from cutover.carry_maintenance_identity import OldMarker, StoredMaintenanceState
 from install_snapshot import SnapshotHome
 
 from agent_comms.active_route import ActiveRoute, CommsRoute
@@ -50,10 +50,13 @@ from agent_comms.field_codec import (
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
+    compile_decoder,
 )
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceMarker
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _atomic_write_text
 
 REPO = Path(__file__).resolve().parents[1]
 CONTEXT = "install-rehearsal"
@@ -274,7 +277,7 @@ class PracticeCopy:
         if shutil.disk_usage(self.into.parent).free < storage_floor():
             raise GateError("Insufficient free space before building the retained-tail copy")
         with CheckRoot(self.source, names, self.into).open() as copied:
-            MaintenanceIdentity.copy_to(self.source.root, copied.root)
+            self.copy_maintenance(copied.root)
             size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
             if size > self.max_bytes:
                 raise GateError(
@@ -283,6 +286,30 @@ class PracticeCopy:
             if shutil.disk_usage(self.into.parent).free < 2 * size + storage_floor():
                 raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
             yield copied, PracticeMeasurement(size, time.monotonic() - started)
+
+    def copy_maintenance(self, into: Path) -> None:
+        """Preserve source formats, using the carry owner's declared old shapes."""
+        original = MaintenanceBarrier(self.source.root / "registry.json")
+        copied = MaintenanceBarrier(into / "registry.json")
+        records = (
+            (
+                original.marker_path,
+                copied.marker_path,
+                compile_decoder(MaintenanceMarker | OldMarker),
+            ),
+            (original.state_path, copied.state_path, compile_decoder(StoredMaintenanceState)),
+        )
+        for source_path, destination, decoder in records:
+            if source_path.exists():
+                record = cast(
+                    MaintenanceMarker | OldMarker | StoredMaintenanceState,
+                    decoder.decode(FieldCodec.parse(source_path.read_text())),
+                )
+                relocated = replace(record, root=str(into.resolve()))
+                _atomic_write_text(
+                    destination, json.dumps(FieldCodec.encode(relocated)), fsync_parent=True
+                )
+                destination.chmod(0o600)
 
     def rehearse(
         self, target: Path, previous: Path, head: str, python: Path, log: Path, work: Path
