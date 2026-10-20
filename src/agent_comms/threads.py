@@ -213,7 +213,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
-        object.__setattr__(self, "task", NoThreadText.from_input(self.task))
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         self.process_identity.require_held_by(self.role)
         if (
@@ -448,7 +447,7 @@ def current_thread(registry) -> Thread:
         tags=launch.tags,
         worktree=launch.worktree,
         parent=launch.parent,
-        task=launch.task,
+        task=NoThreadText.from_input(launch.task),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
 

@@ -19,7 +19,7 @@ from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, WireValue
+from .field_codec import FieldCodec, NullMember, WireValue, boundary_decoder
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
@@ -253,6 +253,7 @@ class NoThreadText(NullMember):
         return False
 
     @classmethod
+    @boundary_decoder
     def from_input(cls, value: ThreadText | None) -> ThreadText:
         return cls() if value is None else value
 
@@ -291,7 +292,6 @@ class ThreadProvenance:
             raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "title", NoThreadText.from_input(self.title))
         self.incarnation
         self.require_name(self.name)
         if not self.worktree:

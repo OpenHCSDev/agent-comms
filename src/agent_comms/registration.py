@@ -18,7 +18,7 @@ from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import SharedLock, _store_lock
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, NoThreadText, ThreadText, TurnId
 from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
@@ -176,9 +176,14 @@ class Registration:
             history.commit(intent)
         return change
 
-    def new_thread(self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values) -> Thread:
-        return kind(name, tags, worktree, *args,
-                      storage_roots=self.storage_rule.initial_roots(name), **values)
+    def new_thread(
+        self, name, tags, worktree, *args, kind: type[Thread] = Thread,
+        task: ThreadText = NoThreadText(), title: ThreadText = NoThreadText(), **values,
+    ) -> Thread:
+        return kind(
+            name, tags, worktree, *args, task=task, title=title,
+            storage_roots=self.storage_rule.initial_roots(name), **values,
+        )
 
     def decide_storage(self, name, effects):
         projection = StorageProjection(self.storage_rule, self.require(name))

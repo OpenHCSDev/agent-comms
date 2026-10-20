@@ -90,6 +90,7 @@ from .thread_execution import (
     ThreadExecution,
 )
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
+from .thread_identity import NoThreadText
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .tool_result import ToolResult
@@ -1234,7 +1235,7 @@ class RegisterCliCommand(CliCommand):
             tags=self.tags,
             worktree=self.worktree,
             parent=self.parent,
-            task=self.task,
+            task=NoThreadText.from_input(self.task),
             process_identity=self.process,
             execution=self.execution,
         )
