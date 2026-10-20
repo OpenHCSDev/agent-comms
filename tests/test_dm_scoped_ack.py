@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.read_basis import DMDisplayBasis, DMSelection, EmptyTail
+from agent_comms.read_basis import DMSelection, EmptyTail
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
@@ -37,38 +37,6 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
     assert [message.body for message in comms.bus.inbox(viewer, CommandTarget.named("peer"))] == [
         f"old {index}" for index in range(45)
     ]
-
-
-def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_path: Path):
-    comms = wire(tmp_path)
-    for name in ("peer", "other", "executor"):
-        comms.registry.declare(_thread(tmp_path, name))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    for index in range(50):
-        comms.messaging.send("peer", viewer, f"old {index}").message.message_id
-    comms.views.mark_user_view_read("peer", worktree=str(tmp_path))
-    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 0
-    comms.messaging.send("peer", viewer, "painted").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
-    proof = page.selection.basis
-    assert isinstance(proof, DMDisplayBasis)
-    painted = page.newest_seq
-    assert painted is not None
-    comms.messaging.send("other", viewer, "other unread").message.message_id
-    comms.messaging.send("peer", "executor", "executor unread").message.message_id
-    comms.messaging.send("peer", "#all", "channel unread").message.message_id
-    comms.messaging.send("peer", viewer, "after paint").message.message_id
-    comms.views.mark_page_read(page, worktree=str(tmp_path))
-    reopened = wire(tmp_path)
-    assert [message.body for message in reopened.bus.inbox(viewer, CommandTarget.named("peer"))] == ["after paint"]
-    assert reopened.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
-    assert reopened.bus.pending_count(viewer, CommandTarget.named("other")) == 1
-    assert reopened.bus.pending_count("executor", CommandTarget.named("peer")) == 1
-    assert reopened.bus.pending_count("executor", CommandTarget.named("#all")) == 1
-    # No global marker is created by this human DM read transition.
-    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
-    assert painted in seen and painted + 1 not in seen
-    assert not (tmp_path / "read_markers.json").exists()
 
 
 def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_path: Path):

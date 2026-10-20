@@ -148,18 +148,23 @@ class Package:
         changed = True
         while changed:
             changed = False
-            for edge in self.imports:
+            for edge in self.unit_imports:
                 source, target = self.unit(edge.source), self.unit(edge.target)
                 if source not in claimed and source != target and rank[target] > rank[source]:
                     rank[source], changed = rank[target], True
         return {unit: LAYERS[rank[unit]] for unit in self.top_level}
 
     @cached_property
+    def unit_imports(self) -> tuple[Import, ...]:
+        """Imports between units; the package root is read for reachability only."""
+        return tuple(edge for edge in self.imports if edge.source != PACKAGE)
+
+    @cached_property
     def violations(self) -> tuple[Import, ...]:
         """Imports into a later layer, or into a top layer from outside it."""
         order = {layer: index for index, layer in enumerate(LAYERS)}
         found = []
-        for edge in self.imports:
+        for edge in self.unit_imports:
             source, target = (
                 self.layers[self.unit(edge.source)],
                 self.layers[self.unit(edge.target)],

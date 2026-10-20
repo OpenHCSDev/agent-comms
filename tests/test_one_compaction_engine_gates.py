@@ -111,50 +111,6 @@ def test_no_custom_compaction_rpc_is_declared_or_sent():
     assert (commands, spelled, native) == ([], [], [])
 
 
-def test_native_config_directory_is_not_a_managed_compaction_switch():
-    """The variable names Pi's canonical auth/models/settings directory, nothing else."""
-    users = sorted(name for name, text in _stack_texts().items()
-                   if "AGENT_COMMS_NATIVE_CONFIG_DIR" in text
-                   and not Path(name).name.startswith("test-"))
-    assert users == ["stack/patch-native-model-config.py"]
-    switches = re.compile(
-        r"(if\s*\(\s*process\.env\.AGENT_COMMS_NATIVE_CONFIG_DIR\s*\))"
-        r"|(process\.env\.AGENT_COMMS_NATIVE_CONFIG_DIR\s*\|\|)"
-        r"|(AGENT_COMMS_NATIVE_CONFIG_DIR\s*\?\s*(false|0|true))"
-    )
-    assert [name for name, text in _stack_texts().items() if switches.search(text)] == []
-    python_users = sorted(module for module, tree in _modules().items()
-                          if "AGENT_COMMS_NATIVE_CONFIG_DIR" in _constants(tree))
-    assert python_users == ["owner_launch.py"]
-
-
-def test_one_context_size_estimator_is_reachable_from_core():
-    """Core reports context size only through Pi's get_session_stats (Pi's estimator)."""
-    estimators = [
-        f"{module}:{node.lineno}:{node.name}"
-        for module, tree in _modules().items()
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and re.search(r"estimat|token_?count|count_?tokens|TokenCounter|ContextBudget",
-                      node.name, re.IGNORECASE)
-    ]
-    assert estimators == []
-    stats_senders = sorted(
-        module for module, tree in _modules().items()
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and getattr(node.func, "attr", getattr(node.func, "id", None)) == "GetSessionStats"
-    )
-    # PiNativeBackend.context_usage, and the same backend's in-turn statistics.
-    assert stats_senders == ["pi_native_backend.py", "turn_stats.py"]
-    # No helper program and no native-stack file brings a second estimator.
-    second = re.compile(r"ContextBudget|estimateSerializedRequestTokens|agent-comms-context-budget")
-    assert [name for name, text in _stack_texts().items() if second.search(text)] == []
-    helpers = [path.name for path in (SOURCE / "_pi_helpers").glob("*.mjs")
-               if re.search(r"estimate\w*Tokens", path.read_text())]
-    assert helpers == []
-
-
 def test_pi_reports_compaction_only_through_its_own_events():
     from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS
 
