@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Self, cast
 
-from ..field_codec import NullMember, RecordMember, SubclassUnion
+from ..field_codec import NullMember, RecordMember, SubclassUnion, compile_decoder
 from ..goal_states import GoalState
+
+if TYPE_CHECKING:
+    from ..goal_management import Goals
+    from ..threads import Thread
 
 
 class NoWakeText(NullMember):
@@ -37,3 +42,14 @@ class WakeWorkContext(RecordMember):
     tags: tuple[str, ...]
     original_assignment: WakeText
     current_goal: WakeGoalValue
+
+    @classmethod
+    def from_thread(cls, thread: Thread, goals: Goals) -> Self:
+        text = compile_decoder(WakeText)
+        return cls(
+            name=thread.name,
+            title=cast(WakeText, text.decode(thread.title)),
+            tags=tuple(sorted(thread.tags)),
+            original_assignment=cast(WakeText, text.decode(thread.task)),
+            current_goal=thread.goal.wake_context(goals, thread.incarnation),
+        )

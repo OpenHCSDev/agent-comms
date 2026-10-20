@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import FieldCodec
@@ -17,15 +18,15 @@ from agent_comms.presentation import SentMessageOutcome
 
 from ..bus_publication import CommittedDelivery
 from ..threads import Thread
-from .wake_values import WakeWorkContext
 from ..turn_context import (
     InstructionFile,
     InstructionSegment,
-    OwnerProvenance,
     NextContextTurn,
+    OwnerProvenance,
     WireProvenance,
 )
 from ..wake_policy import WakePolicy
+from .wake_values import WakeWorkContext
 
 
 @dataclass(frozen=True, kw_only=True)
