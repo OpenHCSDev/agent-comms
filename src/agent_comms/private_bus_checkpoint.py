@@ -636,8 +636,12 @@ class ClaimCommits(CheckpointTable, TypedTable):
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Apply this original in the caller's existing prefix transaction."""
         try:
-            projected = self.transition.project(ResourceClaims.claims_for(db, self.transition.resources))
-            self.transition.require_new_operation(lambda operation: self.operation_used(db, operation))
+            projected = self.transition.project(
+                ResourceClaims.claims_for(db, self.transition.resources)
+            )
+            self.transition.require_new_operation(
+                lambda operation: self.operation_used(db, operation)
+            )
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
         inserted = super().insert(db)
