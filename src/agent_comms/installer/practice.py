@@ -16,7 +16,7 @@ from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.locked_store import RegistryFile
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import SharedLock
+from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
 from agent_comms.wire_log import WireLog
@@ -79,7 +79,9 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     saved = bus_files(root)
     databases = {name for name in saved if CoordinationStore.is_database(root / name)}
     into.mkdir(mode=0o700)
-    locked_copies = ((log.locked(), (log.path, log.metadata_path)),
+    # The log's own file lock, never WireLog.locked(): that checks the index with the
+    # target's code, which refuses a bus whose carries have not run yet.
+    locked_copies = ((_store_lock(log.path), (log.path, log.metadata_path)),
                      (registry.locked(mode=SharedLock()),
                       (registry.path, PrivateRegistryGuard.path_in(root))))
     for lock, paths in locked_copies:

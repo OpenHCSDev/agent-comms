@@ -9,6 +9,7 @@ import os
 import shutil
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -486,6 +487,36 @@ def test_copied_root_rebuilds_unsealed_index_rows(tmp_path: Path) -> None:
     assert [row.message.seq for row in _page(
         copied, RecordedThreadIncarnation("fixture", 17002.0).lookup
     )[1]] == [first.seq]
+
+
+def test_sealed_index_with_a_stale_schema_is_rebuilt_from_the_bus(tmp_path: Path) -> None:
+    from agent_comms.checkpoint_seals import FinalSeal
+    from agent_comms.private_bus_checkpoint import (
+        CheckedPrefix, CheckpointSchema, DeclaredCheckpointSchema, _connect,
+    )
+    from agent_comms.typed_table import SQLiteTableName
+
+    comms, _ = _root(tmp_path)
+    first = publish_initial(comms, "sender", "Alice", "kept through the rebuild")
+    log = comms.bus.log
+    path = log.path.with_name("private_bus_checkpoint.sqlite3")
+    # An older runtime's index: one declared index missing, one table it no longer declares,
+    # sealed by that runtime over the file as it wrote it.
+    with sqlite3.connect(path) as db:
+        db.execute("DROP INDEX delivery_sources_1_idx")
+        db.execute("CREATE TABLE retired_rows (offset INTEGER)")
+    with _store_lock(log.path), closing(_connect(path, readonly=True)) as db:
+        marker = log.private_marker_unlocked()
+        marker.seal_with(FinalSeal.capture(CheckedPrefix.read_witness(db), path))
+        log.write_metadata_unlocked(marker)
+
+    lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
+    assert [row.message.seq for row in _page(comms, lookup)[1]] == [first.seq]
+    with closing(_connect(path, readonly=True)) as db:
+        assert isinstance(CheckpointSchema.of(db), DeclaredCheckpointSchema)
+        assert "retired_rows" not in {table.name for table in SQLiteTableName.stored(db)}
+    second = publish_initial(comms, "sender", "Alice", "after the rebuild")
+    assert [row.message.seq for row in _page(comms, lookup)[1]] == [first.seq, second.seq]
 
 
 def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch) -> None:
