@@ -7,6 +7,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import ClassVar
 
+from .child_process import ProcessState
 from .comms import Comms
 from .standing_rules import StandingRule
 from .thread_execution import ExternalThreadExecution
@@ -15,11 +16,33 @@ from .threads import Thread
 
 
 @dataclass
-class CommanderReview:
-    """One commander's last observed violations and its next review position."""
+class HeartbeatReview:
+    """Heartbeat observations of one owner process and its commander rules."""
 
+    process: ProcessState
     violations: frozenset[StandingRule]
     turn: int = 0
+
+    def wake_restarted(
+        self, comms: Comms, sender: str, unit: Thread, commanders: tuple[Thread, ...]
+    ) -> None:
+        if self.process == unit.process_identity:
+            return
+        orders = tuple(
+            todo
+            for commander in commanders
+            for todo in comms.goals.todos.held_by(commander.incarnation, unit.name)
+            if todo.pending and todo.held().owner_identity == unit.incarnation
+        )
+        # Record before publication: a failed append must never replay a wake.
+        self.process = unit.process_identity
+        if orders:
+            identities = ", ".join(
+                sorted(order.id for todo in orders for order in todo.order.declarations)
+            )
+            comms.messaging.send(
+                sender, unit.name, f"Restarted holding {identities}; continue them from your branch"
+            )
 
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
         rules = StandingRule.broken(comms, commander.name)
@@ -46,7 +69,7 @@ class CommanderReview:
 @dataclass
 class CommanderHeartbeat:
     sender: ClassVar[str] = "commander-heartbeat"
-    reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
+    reviews: dict[ThreadIncarnation, HeartbeatReview] = field(default_factory=dict)
 
     @classmethod
     def register(cls, comms: Comms) -> None:
@@ -59,28 +82,44 @@ class CommanderHeartbeat:
             )
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Borrow the bus only in run_worker; stopped/replaced commanders retire their review."""
+        """Observe process changes in run_worker; inbox wakes derive from current held orders."""
         with opened_wire() as comms:
             self.register(comms)
+            threads = comms.registry.all_threads()
             commanders = tuple(
                 thread
-                for thread in comms.registry.all_threads().values()
+                for thread in threads.values()
                 if thread.process_alive
                 and any(
                     goal.order.open_requests(goal, comms.goals, thread.incarnation)
                     for goal in thread.goal
                 )
             )
-            live = {thread.incarnation for thread in commanders}
+            for commander in commanders:
+                comms.goals.todos.reconcile_merges(
+                    commander.incarnation, comms.registry.storage_rule
+                )
+            commanding = {thread.incarnation for thread in commanders}
+            # Baseline all declared owners, including stopped ones. This distinguishes
+            # a later process start from merely receiving a first order in the same process.
+            # Keep the old process through a stopped gap, even if its commander also stops.
+            retained = {thread.incarnation for thread in threads.values()}
             self.reviews = {
-                owner: review for owner, review in self.reviews.items() if owner in live
+                owner: review for owner, review in self.reviews.items() if owner in retained
             }
-            for thread in commanders:
-                comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry.storage_rule)
+            for thread in threads.values():
                 if thread.incarnation not in self.reviews:
-                    # A restart observes the live rules as its baseline, not another alert.
-                    self.reviews[thread.incarnation] = CommanderReview(
-                        frozenset(StandingRule.broken(comms, thread.name))
+                    # Initial observation, including connector startup, only establishes a baseline.
+                    self.reviews[thread.incarnation] = HeartbeatReview(
+                        thread.process_identity,
+                        (
+                            frozenset(StandingRule.broken(comms, thread.name))
+                            if thread.incarnation in commanding
+                            else frozenset()
+                        ),
                     )
-                else:
-                    self.reviews[thread.incarnation].wake(comms, self.sender, thread)
+                elif thread.process_alive:
+                    review = self.reviews[thread.incarnation]
+                    review.wake_restarted(comms, self.sender, thread, commanders)
+                    if thread.incarnation in commanding:
+                        review.wake(comms, self.sender, thread)
