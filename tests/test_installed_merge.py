@@ -120,6 +120,76 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert 'OVERDUE:' not in capsys.readouterr().out
 
 
+def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
+        commander, commander_script, checkout, tmp_path, monkeypatch, capsys):
+    import sys
+    from agent_comms.commander.cli import main
+    from agent_comms.maintenance_barrier import (
+        InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
+    )
+    from agent_comms.todos import TodoStore
+
+    comms, _ = commander
+    script, _ = commander_script
+    todo, unit = checkout
+    commit(unit)
+    git(unit, 'switch', '-q', 'main')
+    git(unit, 'merge', '-q', '--ff-only', 'fix/p1')
+    sha = git(unit, 'rev-parse', 'HEAD')
+    repo = Repo(checkout=unit, github=todo.repo)
+    script = script.model_copy(update={'repos': (repo,)})
+    script.write(tmp_path)
+    merge = MergedPullRequest(1, 'fix/p1', sha, merge=sha, merged_at=500,
+                              updated_at=500, orders=(todo.order.id,))
+    lookups = []
+
+    def listed(self, repo, state, order):
+        lookups.append(state)
+        return (merge,) if state == 'merged' else ()
+
+    def read_must_not_write(self):
+        pytest.fail('Reading commander orders opened the order store for writing')
+
+    monkeypatch.setattr(PullRequests, 'read', listed)
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    hold = barrier.begin(MaintenanceOperator.current())
+    hold = barrier.advance(hold, PausedPhase)
+    hold = barrier.advance(hold, InstallingPhase)
+    try:
+        with monkeypatch.context() as reading:
+            reading.setattr(TodoStore, 'writing', read_must_not_write)
+            assert script.todos() == (todo,)
+            assert script.held_orders() == (todo,)
+            assert lookups == [], 'An order read looked up pull requests'
+            reading.setattr(sys, 'argv', [
+                'agent-comms-commander', '--root', str(comms.root), 'order', 'board',
+            ])
+            main()
+            assert f'| {todo.id}:' in capsys.readouterr().out
+            assert comms.goals.todos.get(todo.id) == todo
+    finally:
+        barrier.clear(hold)
+
+    class TickComplete(Exception):
+        pass
+
+    def next_tick(seconds):
+        raise TickComplete
+
+    lookups.clear()
+    monkeypatch.setattr(time, 'sleep', next_tick)
+    with pytest.raises(TickComplete):
+        script.overdue()
+    closed = comms.goals.todos.get(todo.id)
+    assert lookups == ['merged'], 'Merge reconciliation did not run exactly once'
+    assert closed.state is DoneTodoState and closed.assignment is None
+    assert closed.revision == todo.revision + 1
+    assert isinstance(closed.order, MergedProblemOrder)
+    assert closed.order.sha == sha
+    assert script.todos() == ()
+    assert 'OVERDUE:' not in capsys.readouterr().out
+
+
 def test_new_revision_is_not_closed_from_an_old_merge_observation(
         commander, commander_script, checkout, monkeypatch):
     comms, _ = commander
