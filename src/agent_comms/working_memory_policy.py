@@ -11,11 +11,6 @@ from .message_reference import MessageReference
 
 @dataclass(frozen=True)
 class AnnotationPolicy(DeclaredFamily, affix="AnnotationPolicy"):
-    @classmethod
-    def configured(cls):
-        from .launch_runtime import LaunchRecord
-        return LaunchRecord.current().annotation
-
     @abstractmethod
     def observe(self, worker, session_id, manifest, values): ...
 

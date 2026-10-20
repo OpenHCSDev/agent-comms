@@ -19,7 +19,8 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
-from .launch_runtime import CurrentLaunchRoot, ExplicitLaunchRoot, LaunchRecord
+from .active_route import CurrentLaunchRoot, ExplicitLaunchRoot
+from .launch_runtime import LaunchRecord
 
 
 def _fail(error: BaseException) -> int:

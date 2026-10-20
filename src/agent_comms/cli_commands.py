@@ -63,7 +63,7 @@ from .harness_install import Harness, HarnessInstalled
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
-from .launch_runtime import ArgumentsLaunchChange, CommandLaunchChange, NoLaunchChange
+from .launch_runtime import ArgumentsLaunchChange, CommandLaunchChange, LaunchRecord, NoLaunchChange
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import MessageReference
@@ -1927,7 +1927,6 @@ class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliC
     help = 'Start thread'
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
-        from .launch_runtime import LaunchRecord
         return ctx.owners.start(self.name, record=LaunchRecord.current())
 
 

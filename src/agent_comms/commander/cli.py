@@ -4,6 +4,7 @@ import sys
 from importlib import import_module
 
 import agent_comms.commander as package
+from ..launch_runtime import LaunchRecord
 
 
 def tool_name(module: str) -> str:
@@ -12,7 +13,6 @@ def tool_name(module: str) -> str:
 
 
 def main() -> None:
-    from ..launch_runtime import LaunchRecord
     LaunchRecord.startup(sys.argv)
     modules = (import_module(f'{package.__name__}.{m.name}') for m in pkgutil.iter_modules(package.__path__) if m.name != 'cli')
     tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}

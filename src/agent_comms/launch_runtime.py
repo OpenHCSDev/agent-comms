@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import asyncio
+import logging
+import traceback
 from abc import abstractmethod
 import os
 import sys
@@ -18,6 +20,8 @@ from pydantic import JsonValue
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
+from .private_path import PrivateSocketRole
+from .working_memory_policy import AnnotationPolicy, DisabledAnnotationPolicy
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -294,43 +298,6 @@ class LaunchRoot(DeclaredFamily, affix="LaunchRoot"):
         if not self.path.is_absolute():
             raise ValueError("A launch requires an absolute root")
 
-    @abstractmethod
-    def route(self): ...
-
-    @abstractmethod
-    def write_scope(self): ...
-
-
-class ExplicitLaunchRoot(LaunchRoot):
-    def write_scope(self):
-        from contextlib import nullcontext
-        return nullcontext()
-
-    def route(self):
-        from .active_route import resolve_comms_route
-        return resolve_comms_route(self.path)
-
-
-class CurrentLaunchRoot(LaunchRoot):
-    @classmethod
-    def capture(cls) -> CurrentLaunchRoot:
-        from .active_route import CommsRoute
-        return cls(CommsRoute.current().observe_root())
-
-    @contextmanager
-    def write_scope(self):
-        from .active_route import guard_default_route_write
-        from .route_selection import RouteChanged
-        with guard_default_route_write(self.path):
-            if self.route().observe_root() != self.path:
-                raise RouteChanged("default Comms route changed before write")
-            yield
-
-    def route(self):
-        from .active_route import CommsRoute
-        return CommsRoute.current()
-
-
 @dataclass(frozen=True)
 class NativeOriginPolicy(DeclaredFamily, affix="NativeOriginPolicy"):
     pass
@@ -369,7 +336,6 @@ class FileLaunchDebug(LaunchDebug):
     path: Annotated[Path, PathText]
 
     def configure(self) -> None:
-        import logging
         logging.basicConfig(level=logging.DEBUG, filename=str(self.path) + ".log",
                             format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -381,8 +347,6 @@ class FileLaunchDebug(LaunchDebug):
         return {"observers": [observer]}
 
     async def serve(self, operation):
-        import asyncio
-        import traceback
         async def watchdog():
             while True:
                 await asyncio.sleep(5)
@@ -425,9 +389,6 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
 
     argument: ClassVar[str] = "--comms-launch"
     _current: ClassVar[LaunchRecord]
-
-    def at_root(self, path: Path) -> Self:
-        return replace(self, root_selection=ExplicitLaunchRoot(Path(path).resolve()))
 
     @classmethod
     def from_record(cls, record: LaunchRecord, **specific):
@@ -547,7 +508,6 @@ class ProjectLaunchRecord(NativeOwnerLaunchRecord):
     project_request: dict[str, JsonValue]
 
     def prepare(self, resources) -> ProjectLaunchRecord:
-        from .private_path import PrivateSocketRole
         address = resources.enter_context(PrivateSocketRole.address(self.project_socket))
         return replace(self, project_socket=address)
 
@@ -563,6 +523,3 @@ class AcpLaunchRecord(LaunchRecord):
 
 class RestartQueueLaunchRecord(LaunchRecord):
     pass
-
-
-from .working_memory_policy import AnnotationPolicy, DisabledAnnotationPolicy

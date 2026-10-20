@@ -17,6 +17,8 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
+from .launch_runtime import LaunchRecord
+
 import asyncio
 import json
 import os
@@ -116,10 +118,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
-        from .working_memory_policy import AnnotationPolicy
         from .working_memory_worker import AnnotationWorker
 
-        self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
+        self.annotations = AnnotationWorker(comms, self._runtime, self, LaunchRecord.current().annotation)
         self.cursors = CursorPublication(comms, self._runtime)
         self.turns = TurnRunner(
             comms,
@@ -297,7 +298,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
 
     def _debug_log(self, message: str) -> None:
-        from .launch_runtime import LaunchRecord
         LaunchRecord.current().debug.append(f"[{time.time():.3f}] {message}\n")
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
@@ -487,7 +487,6 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .launch_runtime import LaunchRecord
 
     record = LaunchRecord.startup(sys.argv)
     with record.route().hold_client_route():

@@ -37,6 +37,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRecord, LaunchRuntime
+from agent_comms.active_route import at_root
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -370,7 +371,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
-        record = LaunchRecord.current().at_root(Path(self.binding.root))
+        record = at_root(LaunchRecord.current(), Path(self.binding.root))
         with record.arguments() as arguments:
             child = await AttachedChild.start((
                 str(record.runtime.interpreter.with_name('agent-comms')), *arguments,

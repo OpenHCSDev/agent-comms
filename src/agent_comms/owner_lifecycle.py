@@ -16,12 +16,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .owner_restart import RestartThreadSelection
 
-from .active_route import resolve_comms_route
+from .active_route import at_root, resolve_comms_route
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .launch_runtime import (
+    OwnerLaunchRecord,
     AnySourceInterpreter,
     ArgumentsLaunchChange,
     CommandLaunchChange,
@@ -436,8 +437,7 @@ class OwnerLifecycle:
         env = record.runtime.environment(environment,
                                          configuration=record.configuration)
         agent_bin = self.require_launch_authority().prepare_owner(thread, record.agent_bin, record.runtime)
-        from .launch_runtime import OwnerLaunchRecord
-        record = OwnerLaunchRecord.from_record(record.at_root(self.launch_authority.child_root),
+        record = OwnerLaunchRecord.from_record(at_root(record, self.launch_authority.child_root),
                          agent_bin=agent_bin, thread=initial_input.launch(thread.launch()))
         owned: Thread | None = None
 

@@ -19,7 +19,8 @@ from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .launch_runtime import LaunchRecord
+from .launch_runtime import AcpLaunchRecord, LaunchRecord
+from .active_route import at_root
 from dataclasses import replace
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .maintenance_barrier import MaintenanceBarrier
@@ -92,9 +93,8 @@ class AcpIngress:
 
     def _project_launch(self) -> LaunchRecord:
         """Use the captured route for this client's explicit child record."""
-        from .launch_runtime import AcpLaunchRecord
         return AcpLaunchRecord.from_record(
-            LaunchRecord.current().at_root(self.selection.root_selection.path))
+            at_root(LaunchRecord.current(), self.selection.root_selection.path))
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],

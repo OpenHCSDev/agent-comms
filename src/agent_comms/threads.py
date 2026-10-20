@@ -14,7 +14,8 @@ from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .cli_result import ThreadToolCatalogResult
-from .launch_runtime import LaunchRecord
+from .launch_runtime import LaunchRecord, NativeOwnerLaunchRecord, ThreadLaunch
+from .active_route import at_root
 from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
@@ -49,7 +50,6 @@ from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .launch_runtime import ThreadLaunch
 
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
@@ -168,8 +168,7 @@ class Thread(ThreadProvenance):
         """Project this captured thread and checked project request into its child's record."""
         from .runtime_requests import ProjectRuntimeRequest
 
-        from .launch_runtime import NativeOwnerLaunchRecord
-        record = NativeOwnerLaunchRecord.from_record(LaunchRecord.current().at_root(Path(root)),
+        record = NativeOwnerLaunchRecord.from_record(at_root(LaunchRecord.current(), Path(root)),
                          thread=self.launch())
         return ProjectRuntimeRequest.for_native(snapshot, self).launch(record)
 
@@ -187,7 +186,6 @@ class Thread(ThreadProvenance):
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
-        from .launch_runtime import ThreadLaunch
 
         return ThreadLaunch(self.name)
 

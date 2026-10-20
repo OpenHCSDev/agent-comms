@@ -7,6 +7,8 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+from .launch_runtime import ProjectLaunchRecord
+
 import asyncio
 import json
 from abc import abstractmethod
@@ -180,7 +182,6 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
     def launch(self, record):
         from .runtime import socket_path
 
-        from .launch_runtime import ProjectLaunchRecord
         return ProjectLaunchRecord.from_record(record, thread=record.require_thread(),
                        project_socket=socket_path(record.root_selection.path, self.binding.process.pid),
                        project_request=self.to_wire())

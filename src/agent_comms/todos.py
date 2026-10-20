@@ -7,6 +7,8 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+from .launch_runtime import LaunchRuntime
+
 import calendar
 import json
 import re
@@ -77,7 +79,6 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         return "delivered work"
 
     async def run(self, check, *command):
-        from .launch_runtime import LaunchRuntime
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120,
                                       runtime=LaunchRuntime.running())
         if result.outcome != ExitedOutcome(0):

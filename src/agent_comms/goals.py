@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .launch_runtime import LaunchRuntime
+
 import json
 import os
 import re
@@ -317,7 +319,6 @@ class OrderCheck:
 
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
-        from .launch_runtime import LaunchRuntime
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
                                     timeout=self.timeout, runtime=LaunchRuntime.running())
 

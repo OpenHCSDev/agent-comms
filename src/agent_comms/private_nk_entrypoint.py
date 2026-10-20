@@ -7,6 +7,8 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
+from .launch_runtime import LaunchRuntime
+
 from abc import ABC, abstractmethod
 import shutil
 from dataclasses import dataclass
@@ -26,7 +28,6 @@ if TYPE_CHECKING:
     from .acp_extension import CursorScope
     from .active_route import CommsRoute
     from .cursor_publication import CursorPublication
-    from .launch_runtime import LaunchRuntime
     from .threads import Thread
 
 

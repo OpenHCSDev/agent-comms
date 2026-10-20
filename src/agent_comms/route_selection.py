@@ -4,13 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .active_route import CommsRoute
+from .active_route import CommsRoute, RouteChanged
 from .launch_runtime import LaunchRecord, LaunchRoot
-
-
-class RouteChanged(ValueError):
-    """The selected route was replaced; reopen against the current one."""
-
 
 
 def current_root() -> Path:

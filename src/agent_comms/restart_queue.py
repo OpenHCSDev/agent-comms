@@ -26,7 +26,9 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .active_route import at_root
 from .launch_runtime import (
+    RestartQueueLaunchRecord,
     CommandLaunchChange,
     EnvironmentLaunchChange,
     ExactSourceInterpreter,
@@ -286,8 +288,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
 
 def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
-    from .launch_runtime import RestartQueueLaunchRecord
-    record = RestartQueueLaunchRecord.from_record(LaunchRecord.current().at_root(root),
+    record = RestartQueueLaunchRecord.from_record(at_root(LaunchRecord.current(), root),
                      runtime=target.launch_runtime, configuration=target.runtime,
                      agent_bin=target.agent_bin)
     with record.arguments() as arguments:

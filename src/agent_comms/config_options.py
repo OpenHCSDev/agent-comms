@@ -32,6 +32,7 @@ from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable, NativePiRpcLaunch
 from .native_package import VerifiedNativePackage
 from .launch_runtime import LaunchRecord
+from .active_route import at_root
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch
 
@@ -317,7 +318,7 @@ class SessionConfigOptions(ConfigOptions):
         super().__init__(
             agent_bin,
             agent_args,
-            LaunchRecord.current().at_root(comms.root),
+            at_root(LaunchRecord.current(), comms.root),
             partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
