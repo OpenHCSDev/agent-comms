@@ -72,9 +72,10 @@ class BusPageRow(PageIndexTable, TypedTable):
         if len(raw) > max_bytes:
             raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
         try:
-            record = WireRecord.public_from_wire(FieldCodec.parse(raw))
+            value = FieldCodec.parse(raw)
         except ValueError as error:
             raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
+        record = WireRecord.public_from_wire(value)
         messages = record.messages()
         if len(messages) != 1:
             raise StaleBusPageIndexError("Indexed bus row is not a message.")

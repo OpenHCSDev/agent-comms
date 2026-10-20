@@ -1,10 +1,15 @@
 """Boundary declarations reject malformed records without inventing another shape."""
 from dataclasses import replace
 import hashlib
+import io
+import json
 
 import pytest
 
 from agent_comms.channel_coding_tools import CodingToolRequest
+from agent_comms.bus_page_index import BusPageRow
+from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.messages import InfoKind, Message
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
@@ -75,6 +80,14 @@ def test_native_source_receipt_checks_bytes_without_installing(tmp_path):
             FieldCodec.decode(NativeSourceDeclaration, {**payload, **changed})
 
 
+def test_invalid_stored_message_is_not_misreported_as_a_stale_disposable_index():
+    message = Message('sender', 'target', 'body', InfoKind, timestamp=0, seq=1)
+    raw = (json.dumps({**message.to_wire(), 'unexpected': True}) + '\n').encode()
+    row = BusPageRow(1, 0, 'sender', 'target', 0, False, ())
+    with pytest.raises(StoredHistoryUnreadable):
+        row.record(io.BytesIO(raw), max_bytes=len(raw))
+
+
 def test_raw_shape_guard_reuses_the_existing_overlay_detector():
     from debt_ratchet import RawRecordShapes
 
@@ -82,4 +95,4 @@ def test_raw_shape_guard_reuses_the_existing_overlay_detector():
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
     assert RawRecordShapes.count(raw, 'src/example.py') == 1
     assert RawRecordShapes.count(typed, 'src/example.py') == 0
-    assert RawRecordShapes.count(raw, 'src/agent_comms/field_codec.py') == 0
+    assert RawRecordShapes.count(raw, 'src/agent_comms/field_codec.py') == 1

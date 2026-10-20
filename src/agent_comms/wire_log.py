@@ -165,16 +165,7 @@ class WireSnapshot(ObservedPath):
             lines.pop(0)
         for line in reversed(lines):
             if line.endswith(b"\n") and line.strip():
-                yield from reversed(self.messages(json.loads(line)))
-
-    @staticmethod
-    def messages(record: Mapping) -> tuple[Message, ...]:
-        from .errors import StoredHistoryUnreadable
-
-        try:
-            return WireRecord.public_from_wire(record).messages()
-        except MalformedRecord as error:
-            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+                yield from reversed(WireRecord.public_from_wire(json.loads(line)).messages())
 
     def messages_for_references(self, references):
         """Resolve exact public identities, including rows without a wake cohort."""
@@ -386,7 +377,8 @@ class OpenedWireSnapshot(WireSnapshot):
         for record, raw_size in _iter_jsonl_stream(
             self.stream, boundary=boundary, label="wire snapshot"
         ):
-            yield from WireRecord.public_page_records(record, raw_size, self.metadata)
+            decoded = WireRecord.public_from_wire(record)
+            yield from decoded.page_records(raw_size, self.metadata)
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:

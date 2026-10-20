@@ -499,7 +499,8 @@ class HistoryArchive(DurableFile):
 
                 previous = 0
                 for record, size in _iter_jsonl_records(WireLog.path_in(stage)):
-                    for message, _ in WireRecord.public_page_records(record, size, marker):
+                    decoded = WireRecord.public_from_wire(record)
+                    for message, _ in decoded.page_records(size, marker):
                         if message.seq <= previous:
                             raise ValueError("Historical source has nonascending sequences")
                         previous = message.seq

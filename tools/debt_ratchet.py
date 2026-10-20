@@ -613,12 +613,10 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
         return spelling.found
 
 class RawRecordShapes(PerFileMeasure):
-    """Reuse the overlay's raw-shape detector outside its existing codec owner."""
+    """Reuse the overlay's raw-shape detector for every production file."""
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        if filename.endswith(FieldCodec.__module__.replace(".", "/") + ".py"):
-            return 0
         text = source.decode()
         module = AuditModule(filename, text, ast.parse(text, filename), filename)
         package = AuditPackage(AuditRepository(Path.cwd()), "", filename, (module,), ())

@@ -67,21 +67,15 @@ class WireRecord(ABC):
     def public_from_wire(cls, value: object) -> WireRecord:
         """Display decoding preserves public messages and validates silent rows."""
         from .bus_publication import has_private_wire_fields
-        if not isinstance(value, Mapping):
-            raise MalformedRecord("Bus row must be an object")
-        if "observation" in value:
-            return DeferredObservationWireRecord.decode(value)
-        owner = RedactedPublicWireRecord if has_private_wire_fields(value) else PublicWireRecord
-        return owner(Message.from_wire(value))
-
-    @classmethod
-    def public_page_records(cls, value: object, raw_size: int,
-                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
         try:
-            record = cls.public_from_wire(value)
+            if not isinstance(value, Mapping):
+                raise MalformedRecord("Bus row must be an object")
+            if "observation" in value:
+                return DeferredObservationWireRecord.decode(value)
+            owner = RedactedPublicWireRecord if has_private_wire_fields(value) else PublicWireRecord
+            return owner(Message.from_wire(value))
         except MalformedRecord as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
-        yield from record.page_records(raw_size, metadata)
 
     def page_records(self, raw_size: int, metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
         """Silent facts consume physical bytes, never message/display budgets."""
