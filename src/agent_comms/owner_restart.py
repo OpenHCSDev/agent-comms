@@ -18,6 +18,7 @@ from .launch_runtime import (
     LaunchRecord,
     LaunchRuntime,
     RestartEnvironment,
+    RestoredRuntime,
 )
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
@@ -127,14 +128,14 @@ class OwnerRestartHandoff:
 
     def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
         """Restore EACH acquired launch unchanged under its authentic decoder."""
-        runtime = LaunchRuntime.running()
+        runtime = RestoredRuntime.running()
         if any(
             owner.launch.record.runtime.interpreter != runtime.interpreter for owner in self.owners
         ):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.record, environment=source.environment,
+            thread, replace(source.record, runtime=runtime), environment=source.environment,
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:

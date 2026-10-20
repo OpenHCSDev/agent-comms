@@ -515,7 +515,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                 str(record.runtime.interpreter.with_name('agent-comms')), *arguments,
                 '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
                 '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                '--acknowledgment', ExplicitWatchAcknowledgment.declared_name),
                 stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime,
                 pass_fds=arguments.pass_fds)
         try:

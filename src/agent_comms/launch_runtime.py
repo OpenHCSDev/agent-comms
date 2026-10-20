@@ -68,6 +68,15 @@ class LaunchRuntime:
             raise ValueError("Target interpreter is unavailable")
 
 
+class RestoredRuntime(LaunchRuntime):
+    """Original-process recovery preserves its acquired import environment."""
+
+    def environment(
+        self, source: Mapping[str, str], *, configuration: RestartEnvironment | None = None,
+    ) -> dict[str, str]:
+        return dict(source)
+
+
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
     """An inherited Python search path or its explicit removal."""
 
