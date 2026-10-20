@@ -24,6 +24,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.commander import rotate
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, option
@@ -186,11 +187,9 @@ class ObserveProofCommand(ProofCommand):
 
     def apply(self, project: Path) -> int:
         root = self.root.resolve()
-        config = CommanderConfig.installed()
-        if config.root != root:
-            raise ValueError("Observe requires the separately configured proof commander")
-        comms = Comms(root)
-        commander = comms.registry.require(config.commander)
+        context = CommanderContext.read_root(root)
+        comms = context.comms
+        commander = comms.registry.require(context.commander)
         problem = f"P{time.time_ns()}"
         unit = f"unit-{problem.lower()}-r0"
         token = f"ROTATION_REPLY_{uuid4().hex}"
@@ -235,7 +234,7 @@ class ObserveProofCommand(ProofCommand):
             ("git", "-C", str(project), "rev-parse", "HEAD"), text=True
         )
         print(f"SOURCE {source.strip()}", flush=True)
-        for line in rotate.broken_rules():
+        for line in rotate.broken_rules(context):
             print(line, flush=True)
         assigned = comms.goals.todos.get(problem)
         received_order = FieldCodec.decode(PendingProblemOrder, FieldCodec.encode(assigned.order))
@@ -249,7 +248,7 @@ class ObserveProofCommand(ProofCommand):
         )
         (root.parent / "order.json").write_text(json.dumps(FieldCodec.encode(assigned), indent=2))
         before = comms.registry.all_threads()
-        for line in rotate.broken_rules():
+        for line in rotate.broken_rules(context):
             print(line, flush=True)
         assert comms.registry.all_threads().keys() == before.keys(), "duplicate unit"
         after = FieldCodec.decode(
