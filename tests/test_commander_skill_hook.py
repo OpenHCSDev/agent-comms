@@ -72,6 +72,12 @@ def test_packaged_rule_has_a_reason(path):
     assert RuleFile.read(path).why
 
 
+def test_packaged_descriptions_do_not_repeat_rule_kind():
+    for path in CommanderConfig.packaged_rules_files():
+        metadata, _ = RuleFile.document(path)
+        assert not metadata["description"].startswith("HARD RULE:"), path.name
+
+
 def test_failure_catalog_has_fifteen_evidenced_members():
     members = sorted(PostmortemFailure.members_with(PostmortemFailure), key=lambda member: member.number)
     assert [member.number for member in members] == list(range(1, 16))

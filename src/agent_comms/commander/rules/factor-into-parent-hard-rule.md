@@ -1,6 +1,6 @@
 ---
 name: factor-into-parent-hard-rule
-description: "HARD RULE: siblings keep only irreducible differences; anything shared moves into the parent, and residue shared across different parents becomes a capability mixin"
+description: "siblings keep only irreducible differences; anything shared moves into the parent, and residue shared across different parents becomes a capability mixin"
 type: hard-rule
 ---
 

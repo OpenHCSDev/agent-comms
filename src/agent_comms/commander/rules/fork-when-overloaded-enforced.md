@@ -1,6 +1,6 @@
 ---
 name: fork-when-overloaded-enforced
-description: "HARD RULE: fork a backlog slice and pass --fork NAME"
+description: "fork a backlog slice and pass --fork NAME"
 type: hard-rule
 ---
 
