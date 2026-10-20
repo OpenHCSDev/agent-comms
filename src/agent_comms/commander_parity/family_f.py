@@ -44,6 +44,7 @@ class ConfigurationComparison(ParityComparison):
         current = CommanderConfig.read(CommanderConfig.path())
         native = CommanderConfig.read_root(current.root)
         registered = Comms(native.root).registry.require(native.commander)
+        native.require_commander(registered)
         return cls(current, native, registered.incarnation, registered.project_path)
 
 
@@ -86,7 +87,11 @@ class TransferComparison(ParityComparison):
     @classmethod
     def read(cls) -> ParityComparison:
         config = CommanderConfig.read(CommanderConfig.path())
-        store = Comms(config.root).goals.todos
+        comms = Comms(config.root)
+        store = comms.goals.todos
+        registered = frozenset(
+            thread.incarnation for thread in comms.registry.all_threads().values()
+        )
         with store.snapshot() as db:
             history = tuple(Todo.stream(db))
         for todo in history:
@@ -98,6 +103,7 @@ class TransferComparison(ParityComparison):
                     other.assignment
                     for other in history
                     if other.assignment is not None
+                    and other.assignment.owner_identity in registered
                     and other.assignment.owner != assignment.owner
                     and other.assignment.generation != assignment.generation
                 ),
