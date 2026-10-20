@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import builtins
 import asyncio
+import io
 import json
 import os
 import signal
@@ -13,9 +14,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -174,7 +176,7 @@ class ReceivingMonitor(MonitorEvidence):
                 or any(part.sender != message.sender for part in parts)):
             with bridge.db:
                 replace(delivery, monitor=MismatchedMonitor('Observed parts do not equal the original message')).upsert(bridge.db)
-            print(f'Monitor parts mismatch; message remains pending: {delivery.id}', file=sys.stderr, flush=True)
+            bridge.log(f'Monitor parts mismatch; message remains pending: {delivery.id}')
             return
         await replace(delivery, monitor=record).finish(bridge, DeliveredOutcome)
 
@@ -480,6 +482,28 @@ class IncomingFrame(ABC):
         return (f'Comms in · {self.message.sender} ({origin})\n'
                 f'{self.message.body}\nMessage ID: {self.message.message_id}')
 
+class BridgeLog(io.TextIOBase):
+    """The bridge process's stderr, including tracebacks and partial print writes."""
+
+    def __init__(self, stream: TextIO):
+        self.stream = stream
+        self.at_line_start = True
+
+    def write(self, text: str) -> int:
+        for line in text.splitlines(keepends=True):
+            if self.at_line_start:
+                self.stream.write(datetime.now().astimezone().isoformat(timespec='milliseconds') + ' ')
+            self.stream.write(line)
+            self.at_line_start = line.endswith('\n')
+        return len(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+    def fileno(self) -> int:
+        return self.stream.fileno()
+
+
 class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
@@ -527,6 +551,10 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         return '\n'.join((f'Comms out · {message.sender} → {message.target}',
                           message.body, f'Message ID: {message.message_id}', *result.notices))
 
+    @staticmethod
+    def log(text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
+
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
@@ -543,12 +571,13 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         result = await self.deliver(message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)
         await delivery.finish(self, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}', file=sys.stderr, flush=True)
+        self.log(f'{result.declared_name}: {message.message_id} from {message.sender}')
 
     async def watch(self) -> None:
         await self.prepare_delivery()
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
-        await self.comms.bus.when_open(self.watch_child)
+        self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
+        while True:
+            await self.comms.bus.when_open(self.watch_child)
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
@@ -561,6 +590,11 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)
+            outcome = await child.wait()
+            if outcome.interrupted:
+                self.log(f'Core watch PID {child.pid} {outcome.summary}; '
+                         'reopening its subscription, retaining delivery attempts.')
+                return
             await raise_child_exit(child, '')
         finally:
             await child.stop()
@@ -580,7 +614,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
                 ).format()
             )
-            print(failure, file=sys.stderr, flush=True)
+            self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
 
@@ -752,10 +786,11 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         print(self.encode(self.sent_text(result)), flush=True)
 
     async def report_failure(self, text: str) -> None:
-        print(text, file=sys.stderr, flush=True)
+        self.log(text)
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:
+    sys.stderr = BridgeLog(sys.stderr)
     os.umask(0o077)
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
