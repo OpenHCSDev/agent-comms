@@ -12,14 +12,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Literal, Self, TypeVar
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, NullMember, WireValue, boundary_decoder
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
@@ -245,6 +245,23 @@ class StallWatcherIncarnation(BirthlessIncarnation):
         return "Core's stall watcher"
 
 
+@dataclass(frozen=True, slots=True)
+class NoThreadText(NullMember):
+    """No title or original assignment was supplied for this thread."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @classmethod
+    @boundary_decoder
+    def from_input(cls, value: ThreadText | None) -> ThreadText:
+        return cls() if value is None else value
+
+
+ThreadText = str | NoThreadText
+NO_THREAD_TEXT = NoThreadText()
+
+
 @dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
     """Recorded thread identity, without permission to own a process or start a turn."""
@@ -254,7 +271,7 @@ class ThreadProvenance:
     worktree: str
     created_at: float = field(metadata={"wire_required": True})
     session_file: str | None = None
-    title: str | None = None
+    title: ThreadText = field(default_factory=NoThreadText)
     backend: type[AgentBackend] = field(
         default_factory=AgentBackend.for_new_threads, metadata={"wire_omit_default": True},
     )
@@ -267,7 +284,7 @@ class ThreadProvenance:
 
     @property
     def display_title(self) -> str:
-        return self.name if self.title is None else self.title
+        return self.title or self.name
 
     @staticmethod
     def require_name(name: str) -> None:

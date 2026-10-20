@@ -3,21 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Self
 
-from ..field_codec import NullMember, RecordMember, SubclassUnion, compile_decoder
+from ..field_codec import NullMember, RecordMember, SubclassUnion
 from ..goal_states import GoalState
+from ..thread_identity import ThreadText
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
     from ..threads import Thread
-
-
-class NoWakeText(NullMember):
-    """A title or original assignment that was not supplied."""
-
-
-WakeText = str | NoWakeText
 
 
 class WakeGoalValue(SubclassUnion):
@@ -38,18 +32,17 @@ class WakeGoalContext(RecordMember, WakeGoalValue):
 @dataclass(frozen=True)
 class WakeWorkContext(RecordMember):
     name: str
-    title: WakeText
+    title: ThreadText
     tags: tuple[str, ...]
-    original_assignment: WakeText
+    original_assignment: ThreadText
     current_goal: WakeGoalValue
 
     @classmethod
     def from_thread(cls, thread: Thread, goals: Goals) -> Self:
-        text = compile_decoder(WakeText)
         return cls(
             name=thread.name,
-            title=cast(WakeText, text.decode(thread.title)),
+            title=thread.title,
             tags=tuple(sorted(thread.tags)),
-            original_assignment=cast(WakeText, text.decode(thread.task)),
+            original_assignment=thread.task,
             current_goal=thread.goal.wake_context(goals, thread.incarnation),
         )

@@ -23,6 +23,7 @@ from agent_comms.thread_identity import (
     AgentThreadRole,
     ClaimedIdentity,
     GenerationCounter,
+    NoThreadText,
     RecordedThreadIncarnation,
     ThreadRole,
     TurnIdentity,
@@ -36,6 +37,25 @@ def registry_with_owner(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     registry.register(registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
+
+
+def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
+    comms = Comms(tmp_path)
+    for name, title, task in (
+        ("untitled", NoThreadText(), NoThreadText()),
+        ("named", "A title", "An assignment"),
+    ):
+        thread = comms.registry.new_thread(
+            name, frozenset({"team"}), str(tmp_path), title=title, task=task,
+        )
+        comms.registry.declare(thread)
+        encoded = json.dumps(FieldCodec.encode(thread), sort_keys=True, separators=(",", ":"))
+        saved = Comms(tmp_path).registry.require(name)
+        assert json.dumps(FieldCodec.encode(saved), sort_keys=True, separators=(",", ":")) == encoded
+        assert saved.title == title and saved.task == task
+        assert FieldCodec.encode(saved.wake_context(comms.goals))["title"] == FieldCodec.encode(title)
+        assert FieldCodec.encode(saved.wake_context(comms.goals))["original_assignment"] == FieldCodec.encode(task)
+        assert ("PI_TASK" in saved.launch().encode()) == bool(task)
 
 
 def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):

@@ -53,7 +53,7 @@ from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
-from .thread_identity import AgentThreadRole, ThreadRole
+from .thread_identity import AgentThreadRole, NoThreadText, ThreadRole
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
 
@@ -186,7 +186,7 @@ class ThreadManagement:
             tags,
             str(project),
             session_file=str(session_path),
-            title=snapshot.title,
+            title=NoThreadText.from_input(snapshot.title),
             model=model,
         )
         with _store_lock(self._wire_lock_path):
