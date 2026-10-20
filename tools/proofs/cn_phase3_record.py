@@ -11,12 +11,10 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import time
 from dataclasses import replace
 from pathlib import Path
 
-from agent_comms import cli as comms_cli
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -50,22 +48,7 @@ RESULTS = ROOT.parent / "cn-phase3-record-results.jsonl"
 
 
 def cli[Caller: ToolCaller](caller: str, tool: ToolRequest[Caller]) -> str:
-    arguments = FieldCodec.encode(tool)
-    del arguments[tool.family_discriminator]
-    command = [
-        sys.executable,
-        "-m",
-        comms_cli.__name__,
-        "--root",
-        str(ROOT),
-        "tool",
-        "--from",
-        caller,
-        "--tool",
-        tool.declared_name,
-        "--arguments",
-        json.dumps(arguments),
-    ]
+    command = tool.cli_command(ToolCaller.from_actor(caller)).argv(ROOT)
     result = subprocess.run(
         command,
         capture_output=True,
