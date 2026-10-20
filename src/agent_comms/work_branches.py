@@ -201,7 +201,7 @@ query($owner: String!, $name: String!, $after: String) {
             yield from connection.nodes
             pages.extend(connection.page_info.following)
 
-    def _worktrees(self) -> dict[str, tuple[str, ...]]:
+    def worktrees(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> worktree paths that have it checked out."""
         checked: dict[str, list[str]] = {}
         path = None
@@ -270,7 +270,7 @@ query($owner: String!, $name: String!, $after: String) {
         ):
             for linked in issue.linked_branches.nodes:
                 links.setdefault(linked.ref.name, []).append(IssueBranchLink(issue.number))
-        worktrees = self._worktrees()
+        worktrees = self.worktrees()
         branches = []
         for branch, oid in refs.items():
             if oid not in commits:
