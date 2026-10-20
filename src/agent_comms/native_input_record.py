@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, fields
 from typing import Annotated, ClassVar, Literal
 
 from .coordination_contracts import validate_execution_id
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, UnrecordedNativeContext
 from .coordination_tables.participants import OwnerGenerations
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
@@ -272,7 +272,7 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     recorded = False
 
     def require_recorded(self) -> NativeInputReference:
-        raise IdentityConflict("Native input has no recorded context")
+        raise UnrecordedNativeContext("Native input has no recorded context")
 
     def require_recorded_input(self, owner, db) -> None:
         """An unrecorded context grants no committed-input identity."""

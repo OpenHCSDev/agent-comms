@@ -26,6 +26,7 @@ from agent_comms.coordination_errors import (
     RecoveryBlocked,
     StaleFence,
     StaleRevision,
+    UnrecordedNativeContext,
 )
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -316,7 +317,7 @@ class RecoveryMonitorCapability:
                         session.path, source.input_id, evidence=evidence,
                         session_entry_start=source.require_context_proof().session_entry_start,
                     )
-                except NativePiUnavailable:
+                except (NativePiUnavailable, UnrecordedNativeContext):
                     # No conclusive context proof never means the input was unsent.
                     terminal = PendingStopReason
                 else:
