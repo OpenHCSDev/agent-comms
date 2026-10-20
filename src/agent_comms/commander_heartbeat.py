@@ -32,8 +32,7 @@ class CommanderReview:
             orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
             lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
             self.turn += 1
-        lines.extend(f"RULE {rule.line()}" for rule in rules if rule not in self.violations)
-        lines.extend(f"NO LONGER CURRENT: {rule.line()}" for rule in self.violations - found)
+        lines.extend(StandingRule.heartbeat_changes(self.violations, rules))
         if not found:
             lines.append("Standing rules clear.")
         # A publication can fail after append. Remember the attempted set before sending;

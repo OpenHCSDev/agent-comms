@@ -472,6 +472,10 @@ class RequestDirective:
     seq: int
     deadline: float
 
+    @property
+    def due_time(self) -> str:
+        return time.strftime("%H:%M", time.localtime(self.deadline))
+
     def original(self, goals: Goals) -> Message:
         source: CheckedRead
         with goals.bus.log.checked_read() as source:
