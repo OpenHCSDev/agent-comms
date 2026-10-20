@@ -33,7 +33,6 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
 from delivery_owner_fixture import canonical_agent
 
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def facts(metadata, kind):

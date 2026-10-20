@@ -26,7 +26,6 @@ from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def _private_comms(tmp_path):

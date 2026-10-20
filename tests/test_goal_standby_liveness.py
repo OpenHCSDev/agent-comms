@@ -24,7 +24,6 @@ from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
 
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def _thread(comms, name, worktree):

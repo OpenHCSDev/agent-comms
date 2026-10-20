@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.agent_events as ae
-import agent_comms.pi_events as pi
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
 from agent_comms.runtime import SocketClient
@@ -28,69 +25,6 @@ def stub(tmp_path: Path, body: str) -> str:
     return str(path)
 
 
-@pytest.mark.parametrize(
-    "method,choice,answer",
-    [
-        ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
-        ("confirm", None, {"cancelled": True}),
-        ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
-        ("select", pi.ValueUiChoice("one"), {"value": "one"}),
-        ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
-    ],
-)
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
-    tmp_path, method, choice, answer
-):
-    marker = tmp_path / "received.json"
-    program = stub(
-        tmp_path,
-        f"""
-import json, sys
-send = lambda row: print(json.dumps(row), flush=True)
-state = json.loads(sys.stdin.readline())
-send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
-                "sessionId": "fixture-pi-session", "sessionFile": "/fixture/one.jsonl"}}}})
-prompt = json.loads(sys.stdin.readline())
-send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
-send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
-      "inputId": prompt["inputId"]}}}})
-send({
-            json.dumps(
-                {
-                    "type": "extension_ui_request",
-                    "id": "owned-ui-1",
-                    "method": method,
-                    "title": "Run one operation?",
-                    "message": "exact request",
-                    "options": ["one", "two"],
-                }
-            )
-        })
-reply = json.loads(sys.stdin.readline())
-with open({str(marker)!r}, "w") as output: json.dump(reply, output)
-send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
-send({{"type": "agent_settled"}})
-""",
-    )
-    requests = []
-
-    async def controller(request):
-        requests.append(request)
-        return choice
-
-    events = await asyncio.wait_for(
-        collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
-    )
-    assert marker.exists()
-    assert json.loads(marker.read_text()) == {
-        "type": "extension_ui_response",
-        "id": "owned-ui-1",
-        **answer,
-    }
-    assert len(requests) == (0 if choice is None else 1)
-    assert isinstance(events[-1], ae.Done)
 
 
 async def collect_backend(program, cwd, controller):

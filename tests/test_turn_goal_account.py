@@ -12,7 +12,6 @@ from agent_comms.goals import Goal, ReportedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 
-pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 @pytest.fixture
