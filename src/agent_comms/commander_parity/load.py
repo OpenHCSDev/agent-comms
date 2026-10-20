@@ -18,11 +18,13 @@ OBSERVE_CAPACITY = """
 import contextlib, io, json, sys
 import agent_comms.commander.capacity as capacity
 from agent_comms.commander.cli import main
-from agent_comms.commander.config import CommanderConfig
 measured = []
+contexts = []
 def observe(frame, event, value):
     if event == 'return' and frame.f_code is capacity.Load.of.__func__.__code__:
         measured.append(value)
+    if event == 'call' and frame.f_code is capacity.main.__code__:
+        contexts.append(frame.f_locals['ctx'])
 output = io.StringIO()
 sys.setprofile(observe)
 try:
@@ -30,9 +32,9 @@ try:
         main()
 finally:
     sys.setprofile(None)
-if len(measured) != 1:
-    raise ValueError('Capacity must use exactly one native load measurement')
-config = CommanderConfig.installed()
+if len(measured) != 1 or len(contexts) != 1:
+    raise ValueError('Capacity must use exactly one native measurement and selected context')
+config = contexts[0]
 print(json.dumps(dict(current=output.getvalue(), native=str(measured[0]),
                       source=capacity.__file__, root=str(config.root),
                       commander=config.commander)))
