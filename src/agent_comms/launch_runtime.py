@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from abc import abstractmethod
@@ -10,6 +9,8 @@ from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
+
+from pydantic import BaseModel
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -72,6 +73,13 @@ class ProofBuildMismatchError(ValueError):
     """A retained proof does not identify the currently installed pair."""
 
 
+class InstalledBuildManifest(BaseModel):
+    """Commit fields in the installer's build.json; unrelated build details remain there."""
+
+    core_commit: str
+    toad_commit: str
+
+
 class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
     @abstractmethod
     def recorded(self) -> RecordedBuildIdentity: ...
@@ -109,11 +117,12 @@ class RecordedBuildIdentity(BuildIdentity):
         runtime.require_available()
         # The installer records both source commits for this exact runtime. A wheel's
         # direct_url.json names its local archive, not the commit it was built from.
-        build = json.loads((runtime.prefix / "build.json").read_text())
+        build = InstalledBuildManifest.model_validate_json(
+            (runtime.prefix / "build.json").read_bytes()
+        )
         return FieldCodec.decode(
             cls,
-            {"kind": cls.declared_name, "core": build["core_commit"],
-             "toad": build["toad_commit"]},
+            {"kind": cls.declared_name, "core": build.core_commit, "toad": build.toad_commit},
         )
 
     def require_installed(self) -> None:
