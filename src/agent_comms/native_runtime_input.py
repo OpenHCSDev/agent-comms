@@ -15,11 +15,19 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_errors import StaleFence, IdentityConflict
+from .coordination_errors import IdentityConflict, StaleFence
 from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
-from .selected_triage import SelectedTriage, RecordedTriageText
+from .native_input_record import (
+    NativeInputContext,
+    NativeInputExecution,
+    NativeInputLocation,
+    NativeInputPosition,
+    NativeInputRecord,
+    RecordedNativePosition,
+    UnrecordedNativePosition,
+)
+from .selected_triage import RecordedTriageText, SelectedTriage
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -40,13 +48,13 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[6] = field(default=6, kw_only=True)
+    version: Literal[7] = field(default=7, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         """Create this owner's current declarations on an explicitly fresh store."""
-        from .coordinated_runtime_schema import _schema, _digest
+        from .coordinated_runtime_schema import _digest, _schema
 
         schema = _schema()
         for statement in schema.values():
@@ -113,13 +121,14 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def require_context_proof(self) -> NativeContextProof:
         """Recover the original committed acknowledgement, never manufacture it from a path."""
-        from .native_pi import NativeContextProof
+        from .native_pi import NativeContextRecord
 
-        reference = self.reference.require_recorded()
-        return NativeContextProof(
-            reference.input_id, reference.session_id, self.session_entry_id,
-            reference.request_generation, self.llm_context_digest, self.committed_at_ms,
+        self.reference.require_recorded()
+        values = {item.name: getattr(self, item.name)
+                  for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
+        return FieldCodec.construct(NativeContextRecord, values).at(
             self.require_session_identity().path,
+            session_entry_start=self.session_entry_start.offset,
         )
 
     @property
@@ -177,7 +186,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """
         from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
-
         from .transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
@@ -229,6 +237,13 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_id: str | None = None
     session_file: str | None = None
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
+    session_entry_start: NativeInputPosition = field(
+        default_factory=UnrecordedNativePosition,
+        metadata={
+            "sql": NativeInputLocation.position_column,
+            "native_context": RecordedNativePosition,
+        },
+    )
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
@@ -244,9 +259,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND {sent_owner_claimed_generation} IS NOT NULL)",
-        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+        "(session_entry_id IS NULL AND session_entry_start IS NULL AND request_generation IS NULL "
+        "AND llm_context_digest IS NULL "
         "AND committed_at_ms IS NULL) OR "
-        "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
+        "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 "
+        "AND session_entry_start IS NOT NULL AND request_generation>0 "
         "AND length(llm_context_digest)=64 AND committed_at_ms>0 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
@@ -272,6 +289,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
             session_entry_id=context.session_entry_id,
+            session_entry_start=RecordedNativePosition(context.session_entry_start),
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
             committed_at_ms=context.committed_at_ms,

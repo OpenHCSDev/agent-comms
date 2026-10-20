@@ -466,7 +466,7 @@ class TrackedTurnSession(TurnSession):
             self.prompt_state = self.prompt_state.start(event)
             async with self.cursor_delivery.reading() as source_reads:
                 await Coordination.run_worker(lambda:
-                    source_reads.for_source(self.active_session_file).observe()
+                    source_reads.for_source(self.active_session_file).observe(event)
                 )
             await self.following.open(self)
 

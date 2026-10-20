@@ -142,13 +142,17 @@ def read_historical_native_inputs(
                     (wire_root_id, recipient_lookup, source_seq),
                 )
             )
-            rows = [
-                (source, NativeRuntimeInput.one(db, input_id=source.input_id)) for source in sources
-            ]
-            if any(row is None for _source, row in rows):
-                raise IdentityConflict("historical native input disappeared inside its snapshot")
+            rows = []
+            for source in sources:
+                row = NativeRuntimeInput.one(db, input_id=source.input_id)
+                if not row:
+                    raise IdentityConflict(
+                        "historical native input disappeared inside its snapshot"
+                    )
+                rows.append((source, row))
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")
+        source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))
         with expected_prompt_bindings(store, (row.input_id for _source, row in rows)) as bindings:
             rows.sort(key=lambda item: item[1].execution.proof_order)
         evidence: list[HistoricalNativeInput] = []

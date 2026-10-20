@@ -10,28 +10,65 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from typing import Annotated, ClassVar, Literal
 
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .declared_family import DeclaredFamily
-from .coordination_errors import IdentityConflict
 from .coordination_contracts import validate_execution_id
-
+from .coordination_errors import IdentityConflict
 from .coordination_tables.participants import OwnerGenerations
-from .typed_table import TextStorage
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
+from .typed_table import Column, IntegerStorage, TextStorage
 
 
 @dataclass(frozen=True, slots=True)
 class NativeInputCommit:
     """Original emitted input identity shared with its assembled context."""
 
-    input_id: str = field(metadata={"wire_name": "inputId"})
+    input_id: Annotated[str, Id128Text] = field(metadata={
+        "wire_name": "inputId",
+        "sql": Column(
+            primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"
+        ),
+    })
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
 
-    @classmethod
-    def from_event(cls, event):
-        emitted = FieldCodec.encode(event)
-        return FieldCodec.decode(cls, {key: emitted[key]
-                                       for _, key in FieldCodec.record_fields(cls)})
+    @property
+    def input_commit(self) -> NativeInputCommit:
+        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
+
+
+@dataclass(frozen=True)
+class NativeInputLocation(NativeInputCommit):
+    """Emitted byte placement; only the original runtime input row persists it."""
+
+    # SQL permits an uncommitted row; the emitted offset remains a required int.
+    position_column: ClassVar[Column] = Column(
+        check="session_entry_start>0", nullable=True, storage=IntegerStorage,
+    )
+    session_entry_start: int = field(kw_only=True, metadata={
+        "wire_name": "sessionEntryStart", "sql": position_column,
+    })
+
+
+class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
+    """Decode the original SQL placement once: uncommitted NULL or a byte offset."""
+
+    @property
+    def offset(self) -> int:
+        raise IdentityConflict("Native input has no committed byte placement")
+
+
+@dataclass(frozen=True)
+class UnrecordedNativePosition(NativeInputPosition, JsonShapeMember):
+    value: None = None
+
+
+@dataclass(frozen=True)
+class RecordedNativePosition(NativeInputPosition, JsonShapeMember):
+    value: int
+
+    @property
+    def offset(self) -> int:
+        return self.value
 
 
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
@@ -50,6 +87,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         annotation, native acknowledgement or another source-membership declaration.
         """
         from dataclasses import replace
+
         from .transcript_routes import InputDisplay
 
         return entry.events(replace(
@@ -342,7 +380,7 @@ class NativeInputContext:
             try:
                 for item in fields(self):
                     if item.metadata.get("native_context"):
-                        FieldCodec.decode(type(None), getattr(self, item.name))
+                        FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, item.name)))
             except MalformedRecord as error:
                 raise IdentityConflict("Native unrecorded context group is partial") from error
             return UnrecordedNativeInputReference()
