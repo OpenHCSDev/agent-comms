@@ -68,7 +68,8 @@ def test_views_wait_for_native_work_but_never_block_cutover(commander, monkeypat
         accepted(todo) if todo.order.serves in required else todo
         for todo in todos
     )
-    assert CutoverPhase.ready(native_done)
+    # Native source completion alone cannot bypass the independent parity gate.
+    assert not CutoverPhase.ready(native_done)
     assert StoryPhase.ready(native_done)
     assert CommanderPagePhase.ready(native_done)
     assert not SkillPhase.ready(native_done)

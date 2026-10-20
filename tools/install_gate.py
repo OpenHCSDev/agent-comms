@@ -18,6 +18,7 @@ import os
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tarfile
@@ -317,11 +318,24 @@ class RouteDocument:
             raise GateError(f"Snapshot route version {self.version} is not supported")
 
 
-@dataclass(frozen=True)
-class Machine:
-    name: str
-    root: str
-    transport: tuple[str, ...] = ()
+class Machine(DeclaredFamily, affix="Machine"):
+    name: ClassVar[str]
+    hostname: ClassVar[str]
+    address: ClassVar[str]
+
+    @property
+    @abstractmethod
+    def root(self) -> str: ...
+
+    @property
+    def transport(self) -> tuple[str, ...]:
+        if self.hostname == socket.gethostname():
+            return ()
+        return ("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", self.address)
+
+    def command(self, *command: str) -> tuple[str, ...]:
+        transport = self.transport
+        return (*transport, shlex.join(command)) if transport else command
 
     def capture(self, destination: Path, log: Path) -> SnapshotCopy:
         destination.mkdir(mode=0o700)
@@ -340,8 +354,7 @@ class Machine:
             "-",
             self.root,
         )
-        if self.transport:
-            command = (*self.transport, shlex.join(command))
+        command = self.command(*command)
         # The producer has no writable mounts, including SQLite SHM and temp.
         with ExitStack() as resources:
             errors = resources.enter_context(log.open("wb"))
@@ -380,6 +393,34 @@ class Machine:
         if not (destination / "bus").is_dir():
             raise GateError(f"{self.name} snapshot has no bus")
         return context
+
+
+class Laptop(Machine):
+    name = "laptop"
+    hostname = "ts"
+    address = "ts@192.168.2.18"
+
+    @property
+    def root(self) -> str:
+        document = FieldCodec.decode(
+            RouteDocument,
+            FieldCodec.parse(
+                run(
+                    *self.command(
+                        "sh", "-c", 'cat "$HOME/.local/state/agent-comms/active-route.json"'
+                    )
+                )
+            ),
+        )
+        document.require_current()
+        return str(document.selection.root)
+
+
+class Desktop(Machine):
+    name = "desktop"
+    hostname = "desktop"
+    address = "ts@192.168.2.11"
+    root = "/var/tmp/agent-comms-live-20260927-wzjtqhza"
 
 
 def storage_floor() -> float:
@@ -998,23 +1039,7 @@ class GateArguments(argparse.Namespace):
 def run_machines(
     args: GateArguments, target: Target, report: Path, results: dict[str, MachineResult]
 ) -> dict[str, MachineResult]:
-    machines = (
-        Machine("laptop", str(Path.home() / ".agent-comms")),
-        Machine(
-            "desktop",
-            "/var/tmp/agent-comms-live-20260927-wzjtqhza",
-            (
-                "ssh",
-                "-i",
-                str(Path.home() / ".ssh/openhcs_laptop_ed25519"),
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
-                "ts@192.168.2.11",
-            ),
-        ),
-    )
+    machines = tuple(host() for host in Machine.members_with(Machine))
     results.update((machine.name, UnfinishedMachineResult()) for machine in machines)
     with tempfile.TemporaryDirectory(dir=Path.home() / "wt", prefix="install-gate-") as directory:
         work = Path(directory)
