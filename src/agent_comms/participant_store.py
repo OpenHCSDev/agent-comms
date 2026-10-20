@@ -181,22 +181,10 @@ class ParticipantStore:
         *,
         expected_generation: int,
     ) -> Applied[ParticipantSnapshot]:
-        """Rename the same owner without revoking its running attempts."""
-        if not isinstance(owner_thread, str) or not 1 <= len(owner_thread) <= MAX_IDENTIFIER_CHARS:
-            raise ValueError("owner thread must be bounded and nonempty")
-        with self.session.writing() as db:
-            person = self.get(lookup)
-            if not person.committed:
-                raise IdentityConflict("uncommitted participant cannot own a generation")
-            if person.participant_generation != expected_generation:
-                raise StaleRevision("owner generation changed")
-            OwnerGenerations.update(
-                db,
-                where="owner_lookup=? AND generation=?",
-                parameters=(lookup, expected_generation),
-                owner_thread=owner_thread,
-            )
-            return Applied(self.get(lookup))
+        return self._update_owner(
+            lookup, owner_thread,
+            expected_generation=expected_generation, new_generation=expected_generation,
+        )
 
     def advance_generation(
         self,
@@ -204,6 +192,19 @@ class ParticipantStore:
         owner_thread: str,
         *,
         expected_generation: int,
+    ) -> Applied[ParticipantSnapshot]:
+        return self._update_owner(
+            lookup, owner_thread,
+            expected_generation=expected_generation, new_generation=expected_generation + 1,
+        )
+
+    def _update_owner(
+        self,
+        lookup: str,
+        owner_thread: str,
+        *,
+        expected_generation: int,
+        new_generation: int,
     ) -> Applied[ParticipantSnapshot]:
         if not isinstance(owner_thread, str) or not 1 <= len(owner_thread) <= MAX_IDENTIFIER_CHARS:
             raise ValueError("owner thread must be bounded and nonempty")
@@ -218,6 +219,6 @@ class ParticipantStore:
                 where="owner_lookup=? AND generation=?",
                 parameters=(lookup, expected_generation),
                 owner_thread=owner_thread,
-                generation=expected_generation + 1,
+                generation=new_generation,
             )
             return Applied(self.get(lookup))

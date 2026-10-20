@@ -96,10 +96,6 @@ class OwnerGenerations(CoordinatorTable, TypedTable):
     )
     generation: int = dataclass_field(metadata={"sql": Column(check="generation > 0")})
 
-    def same_generation(self, other: OwnerGenerations) -> bool:
-        """A name change does not change the durable owner or its generation."""
-        return self.owner_lookup == other.owner_lookup and self.generation == other.generation
-
     @classmethod
     def references(cls):
         return (ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),)
