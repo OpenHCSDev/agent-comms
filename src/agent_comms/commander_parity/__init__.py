@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -43,6 +43,7 @@ class ParityRow(
     current: ClassVar[str]
     native: ClassVar[str]
     phases: ClassVar[tuple[type[PlanPhase], ...]]
+    comparison: ClassVar[Callable[[], ParityComparison]] = UnverifiedParity
 
     @classmethod
     def compare(cls, todos: Iterable[Todo]) -> ParityComparison:
@@ -51,7 +52,7 @@ class ParityRow(
     @classmethod
     def verify(cls) -> ParityComparison:
         """Run this declared workflow now; a run is not durable cutover authority."""
-        return UnverifiedParity()
+        return cls.comparison()
 
     @classmethod
     def rows(cls) -> tuple[type[ParityRow], ...]:

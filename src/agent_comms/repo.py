@@ -17,10 +17,10 @@ class Repo(BaseModel):
     github: str
     source: str = "src"
 
-    def contains(self, sha: str) -> bool:
-        """Only a successful ancestry proof in this installed checkout permits closure."""
+    def contains(self, sha: str, revision: str = "HEAD") -> bool:
+        """Prove ancestry in the requested fetched revision without moving the checkout."""
         result = subprocess.run(
-            ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, "HEAD"),
+            ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, revision),
             capture_output=True,
             timeout=60,
         )

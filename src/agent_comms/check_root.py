@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .attempt_recovery import RecoveryMonitorCapability
+from .candidate_maintenance import drain_candidate_catchup
 from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms
@@ -74,6 +75,7 @@ class CheckRoot:
                 ):
                     copied.owners.stop(thread.name)
         finally:
+            drain_candidate_catchup(root)
             RecoveryMonitorCapability.retire_check_root(root)
 
     def _populate(self, copied: Comms) -> None:

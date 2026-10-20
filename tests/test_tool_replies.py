@@ -19,7 +19,8 @@ from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
-    CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
+    CommsEditGoalTool, CommsFleetStoryTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
+    CommsOrderStoryTool,
     CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
@@ -103,6 +104,8 @@ def scenario(comms: Comms, project, monkeypatch):
         OrderCheck(str(comms.root), "printf 1", CountCheckResult(1))),
         "why": "The recorded check counted the wrong file"}, lead
     yield CommsOrderWorkTool, {"problem": "P1"}, lead
+    yield CommsOrderStoryTool, {"order_id": comms.goals.todos.get("P1").order.checked().id}, lead
+    yield CommsFleetStoryTool, {"thread": "lead"}, lead
     (comms.root / "installed-evidence").write_text("Verified installed path")
     yield CommsOrderDoneTool, {"problem": "P1", "order_id": comms.goals.todos.get("P1").order.id,
         "delivery": FieldCodec.encode(OperationDelivery()),

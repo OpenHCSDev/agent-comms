@@ -57,6 +57,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
 
+    def chronology(self) -> tuple[int, float]:
+        """Undated facts sort after recorded events, without inventing a timestamp."""
+        return (1, 0.0)
+
     def since(self, timestamp: float) -> bool:
         return False
 
@@ -106,6 +110,9 @@ class RecordedEventTime(EventTime):
 
     def require_recorded(self, label: str) -> None:
         pass
+
+    def chronology(self) -> tuple[int, float]:
+        return (0, self.at)
 
     def since(self, timestamp: float) -> bool:
         return self.at >= timestamp
