@@ -8,13 +8,15 @@ import json
 import shlex
 import sys
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..change_report import FileLine
 from ..child_process import CountPrinted, ExitedOutcome
-from ..commander.order import OrderFile, deadline
+from ..commander.order import OrderFile
+from ..recorded_time import RecordedEventTime
 from ..field_codec import FieldCodec
 from ..goal_actions import CreateProblemGoalAction
 from ..goals import CountCheckResult, OrderCheck
@@ -232,7 +234,7 @@ class NativeDeletionPath(DeletionPath):
                     request=document.order.request(
                         run.commander.comms.registry.require(run.commander.commander), ("P1",)
                     ),
-                    deadline=deadline(run.due),
+                    deadline=RecordedEventTime(time.time()).at_clock(run.due),
                     commander=run.commander.commander,
                 ),
             )

@@ -38,5 +38,5 @@ def test_unmerged_query_row_has_no_merge_fields():
     row = FieldCodec.decode(ListedPullRequest, FieldCodec.encode(original))
     request = row.parsed()
     assert isinstance(request, UnmergedPullRequest)
-    assert tuple(request.merged_commits_since(0)) == ()
+    assert tuple(request.merged_commits(0)) == ()
     assert FieldCodec.decode(ListedPullRequest, FieldCodec.encode(row)) == row

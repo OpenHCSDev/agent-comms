@@ -48,7 +48,6 @@
 | 15 | Standing rules broken right now | `rotate.py broken_rules` | `StandingRule` members derive violations on read | `control_plane` |
 | 16 | Rule review | `rules.py`; `rules.jsonl`; maximum age | Rule instruction segments in the commander's turn context, with provenance | `control_plane` |
 | 17 | Load and forking | `agent-comms-commander capacity`: load and live fork reports; ten-minute beat age | Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy | `control_plane` |
-| 18 | Growth alarm | `StandingRule.broken` growth delivery (formerly `growth_watch.py`) | `commander.standing.MergeGrowth.violations`: captured first-parent growth | `control_plane` |
 | 19 | Storage hygiene | `StandingRule.broken` storage delivery (formerly `storage.py`) | `UnitStorage.violations`, `DiskLow.violations`; live `StorageRule` thresholds | `control_plane` |
 | 20 | Commander reaches units only through orders | `send_guard.py` (PreToolUse hook) | Harness hook checking Core order tools | `control_plane` |
 | 21 | Paths, repositories, commander identity | `CommanderConfig` from `commander.json` | Core project and registry configuration | `cutover` |

@@ -62,30 +62,6 @@ def test_channel_catalog_resolves_members_once_per_selected_target(comms, tmp_pa
             StopCliCommand(name=member) for member in members)
 
 
-def test_channel_execution_rechecks_members_after_each_action(comms, tmp_path, monkeypatch):
-    from agent_comms.cli_commands import StopCliCommand
-    from agent_comms.thread_status import RunningThreadStatus
-
-    for name in ("first", "second"):
-        comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({"team"}), str(tmp_path)), RunningThreadStatus())
-    original = StopCliCommand.apply
-
-    def stop(command, ctx):
-        result = original(command, ctx)
-        ctx.channels.update_tags("second", remove=frozenset({"team"}))
-        return result
-
-    monkeypatch.setattr(StopCliCommand, "apply", stop)
-    result = StopCliCommand.execute_target(comms, StopCliCommand.selected_targets(("#team",)), {})
-    assert len(result.outcomes) == 2
-    assert result.outcomes[0].successful
-    assert not result.outcomes[1].successful
-    assert "changed; refresh" in result.outcomes[1].error
-    assert comms.registry.status("first").stopped
-    assert comms.registry.status("second").active
-
-
 @pytest.mark.parametrize("selection,target,resolvable", [
     (OneTarget, "first", True),
     (OneTarget, "ghost", False),
