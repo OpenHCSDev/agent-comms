@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade a retained bus and the checkout that runs it, in one command.
 
-    python tools/upgrade_bus.py --installer UNIT --rehearsal-dir PATH
+    python tools/upgrade_bus.py --installer UNIT --spill-dir PATH
         [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
 
 ``--checkout`` is the installation to upgrade (by default, the one holding
@@ -262,8 +262,8 @@ def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
 
 
 def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions,
-             rehearsal_dir: Path) -> dict:
-    with tempfile.TemporaryDirectory(dir=rehearsal_dir, prefix=f".{root.name}.rehearsal.") as scratch:
+             spill_dir: Path) -> dict:
+    with tempfile.TemporaryDirectory(dir=spill_dir, prefix=f".{root.name}.rehearsal.") as scratch:
         copy = Path(scratch) / root.name
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
@@ -289,7 +289,7 @@ def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...]
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
-            rehearsal_dir: Path) -> dict:
+            spill_dir: Path) -> dict:
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     run("git", "-C", checkout, "fetch", "-q", "origin")
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
@@ -312,7 +312,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
             staged = Stack(revisions.tree(target))
             staged.relock()
             install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
-                                 installer, rehearsal_dir)
+                                 installer, spill_dir)
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
                       "rehearsal": install.rehearsal()}
             if rehearse_only:
@@ -336,16 +336,16 @@ class Install(ABC):
     staged: Stack
     revisions: Revisions
     installer: str
-    rehearsal_dir: Path
+    spill_dir: Path
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
            installed: Stack, staged: Stack, revisions: Revisions, installer: str,
-           rehearsal_dir: Path) -> Install:
+           spill_dir: Path) -> Install:
         unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, pending, installed, staged, revisions,
-                      installer, rehearsal_dir)
+                      installer, spill_dir)
 
     @abstractmethod
     def rehearsal(self) -> dict: ...
@@ -356,11 +356,11 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.pending, self.staged, self.revisions, self.rehearsal_dir)
+        return rehearse(self.root, self.pending, self.staged, self.revisions, self.spill_dir)
 
     def live(self) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
-                    self.installed, self.staged, self.revisions, self.installer)
+                    self.installed, self.staged, self.revisions, self.installer, self.spill_dir)
 
 
 class UnchangedInstall(Install):
@@ -377,7 +377,8 @@ class UnchangedInstall(Install):
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-         installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> dict:
+         installed: Stack, staged: Stack, revisions: Revisions, installer: str,
+         spill_dir: Path) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     before_stop(root, pending, staged, revisions)
@@ -391,7 +392,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         staged.owners(root, "stop", running)
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
-                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+                spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         maintenance.clear(held)
         installed.owners(root, "start", running)
@@ -462,9 +463,9 @@ def main() -> None:
     parser.add_argument("--installer", required=True,
                         help="The unit running this install; the plan names it")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
-    parser.add_argument("--rehearsal-dir", required=True,
+    parser.add_argument("--spill-dir", required=True,
                         type=lambda value: Path(value).expanduser().resolve(),
-                        help="Explicit parent directory for the disposable bus copy in either mode")
+                        help="Explicit parent directory for rehearsal copies and live backups")
     args = parser.parse_args()
     if not args.rehearse and os.getsid(0) != os.getpid():
         raise SystemExit(detached_live(
@@ -474,7 +475,7 @@ def main() -> None:
         signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse,
-                                 args.rehearsal_dir), indent=2))
+                                 args.spill_dir), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(error.output)
 

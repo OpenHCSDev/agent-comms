@@ -553,7 +553,8 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     monkeypatch.setattr(upgrade_bus.HostService, "restart_running", staticmethod(lambda python: []))
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
     stack = Installed(tmp_path / "checkout")
-    result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None, "worker")
+    result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
+                              "worker", comms.root.parent)
     assert result["stopped_and_started"] == names
     assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
@@ -637,7 +638,8 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
-        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None, "worker")
+        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
+                         "worker", comms.root.parent)
     assert datum.read_text() == "changed before failure"
     assert comms.root.stat().st_ino == original_inode
     assert not any("reset" in command for command in commands)
@@ -715,7 +717,7 @@ def rehearsed(stack: Stack, root: Path) -> dict:
 
 def installed_live(stack: Stack, root: Path) -> dict:
     from upgrade_bus import live
-    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker")
+    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker", root.parent)
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
