@@ -136,7 +136,7 @@ def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
                 {"type": "text", "text": "After reasoning."},
             ],
         }
-    ).transcript_events(TranscriptProjection(position="assistant"), transcript_records.at)
+    ).transcript_events(TranscriptProjection(position="assistant"), transcript_records.timestamp.at.timestamp())
     assert [(event.declared_name, event.text) for event in events] == [
         ("assistant", "## Summary\n\n**Bold text**\n\n- First\n- Second\n"),
         ("thinking", "separate reasoning"),
