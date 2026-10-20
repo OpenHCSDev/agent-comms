@@ -290,8 +290,12 @@ with PracticeCopy(
         finally:
             # The staged reader can own background work on the copied bus;
             # finish it before the installed reader retires the directory.
-            drain_candidate_catchup(into)
-            child.communicate(input="\n", timeout=60)
+            try:
+                drain_candidate_catchup(into)
+            finally:
+                _, error = child.communicate(input="\n", timeout=60)
+                if child.returncode:
+                    raise UpgradeRefused(f"Installed practice copy did not retire: {error}")
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
