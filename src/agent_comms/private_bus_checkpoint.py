@@ -611,6 +611,7 @@ class CheckedRead:
         )
         return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
+    @boundary_decoder
     def keyed_message(self, intent: PublicationIntents) -> Message | None:
         """The sealed key filters absence; the original delivery proves the message."""
         self.require_current()
