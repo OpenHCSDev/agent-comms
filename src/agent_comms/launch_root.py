@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, PathText
+from .field_codec import FieldCodec, PathText, boundary_decoder
 
 
 class UnstartedLaunch:
@@ -35,6 +35,7 @@ class LaunchRoot:
         return UnstartedLaunch()
 
     @classmethod
+    @boundary_decoder
     def current(cls) -> LaunchRoot:
         if isinstance(cls._current, UnstartedLaunch):
             # Import here: the route owner also imports LaunchRoot for explicit selection.
