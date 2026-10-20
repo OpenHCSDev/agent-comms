@@ -40,7 +40,9 @@ from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, UnorderedSteps
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
-from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import (
+    Backup, RestoreSpace, SavedFile, UpgradeRefused, bus_files, transcripts_held,
+)
 from upgrade_bus import (
     Revisions,
     Stack,
@@ -320,7 +322,7 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
         steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
     finally:
         revisions.close()
-    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3}
+    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3, "restore_bytes": 0}
     assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
     assert CarryLedger(root).applied() == ("carry_probe",)
 
@@ -337,7 +339,8 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
         opened.execute("BEGIN IMMEDIATE")
         opened.execute("ROLLBACK")
         assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
-        assert carried(tmp_path, before, [{"rewritten": []}]) == {"identical": 1, "rewritten": 0}
+        assert carried(tmp_path, before, [{"rewritten": []}]) == {
+            "identical": 1, "rewritten": 0, "restore_bytes": 0}
         opened.execute("UPDATE todo SET id = 2")
         with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
             carried(tmp_path, before, [{"rewritten": []}])
@@ -462,7 +465,9 @@ def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_pat
     before = bus_files(root)
     carried(root, before, [run_step("carry_registry_version", root)])
     applied = run_step("carry_registry_version", root, "--apply")
-    assert carried(root, before, [applied]) == {"identical": len(before) - 3, "rewritten": 3}
+    result = carried(root, before, [applied])
+    assert result['identical'] == len(before) - 3 and result['rewritten'] == 3
+    assert result['restore_bytes'] > 0
     assert run_step("carry_registry_version", root, "--apply")["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.goal.to_wire() is None
@@ -514,14 +519,11 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     carried_bus = []
 
     class Installed(Stack):
+        def running_owners(self, root):
+            assert not calls  # Never rediscover a possibly changed owner set.
+            return names
+
         def cli(self, root, *arguments):
-            if arguments == ("threads",):
-                assert not calls  # Never rediscover a possibly changed owner set.
-                return {"threads": [
-                    *({"name": name, "role": "agent", "status": "running"} for name in names),
-                    {"name": "idle", "role": "agent", "status": "stopped"},
-                    {"name": "human", "role": "human", "status": "running"},
-                ]}
             command, flag, name = arguments
             assert flag == "--name" and name in names
             if command == "stop":
@@ -554,11 +556,105 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     monkeypatch.setattr(upgrade_bus.PlannedInstallDeadline, "plan", lambda self, root: None)
     stack = Installed(tmp_path / "checkout")
     result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
-                              "worker", comms.root.parent)
+                              "worker", comms.root.parent, 0)
     assert result["stopped_and_started"] == names
     assert sorted(calls) == sorted((command, name) for command in ("stop", "start") for name in names)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
     assert commands[0] == ("git", "-C", stack.checkout, "merge", "--ff-only", "-q", "new")
+
+
+def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms):
+    from agent_comms.child_process import ProcessIdentity
+
+    process = ProcessIdentity.capture(os.getpid())
+    native = comms.registry.declare(replace(comms.registry.new_thread(
+        'native-copy', frozenset(), str(comms.root)), process_identity=process))
+    external = comms.registry.declare(comms.registry.new_thread(
+        'cli-inbox-copy', frozenset(), str(comms.root), execution=ExternalThreadExecution))
+    with comms.registry.external_process(external.name, process):
+        assert Stack(REPO).running_owners(comms.root) == [native.name]
+        native.execution.require_native()
+        with pytest.raises(ValueError, match='no native prompt transport'):
+            external.execution.require_native()
+
+
+def test_restore_space_refuses_before_conversion_or_stop(comms, monkeypatch):
+    from types import SimpleNamespace
+
+    import upgrade_bus
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Touched conversion or owner control before space admission')
+
+    monkeypatch.setattr(upgrade_bus.shutil, 'disk_usage', lambda root: SimpleNamespace(free=1))
+    monkeypatch.setattr(upgrade_bus, 'before_stop', forbidden)
+    monkeypatch.setattr(upgrade_bus.Stack, 'running_owners', forbidden)
+    assert RestoreSpace.measure(1024, comms.root.parent).needed == 1024 + 1024**3
+    with pytest.raises(UpgradeRefused, match='Restore needs'):
+        upgrade_bus.live(REPO, comms.root, 'old', 'new', (), Stack(REPO), Stack(REPO),
+                         None, 'worker', comms.root.parent, 1024)
+    assert not MaintenanceBarrier(comms.root / 'registry.json').marker_path.exists()
+
+
+def test_bus_files_reads_metadata_without_contents(tmp_path, monkeypatch):
+    datum = tmp_path / 'saved.txt'
+    datum.write_text('original')
+    before = bus_files(tmp_path)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Read file contents during metadata comparison')
+
+    monkeypatch.setattr(Path, 'read_bytes', forbidden)
+    monkeypatch.setattr(CoordinationStore, 'digest', forbidden)
+    assert bus_files(tmp_path) == before
+    replacement = tmp_path / 'replacement'
+    replacement.write_text('replaced')
+    stamp = datum.stat()
+    os.utime(replacement, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    replacement.replace(datum)
+    after = bus_files(tmp_path)
+    assert after[datum.name].size == before[datum.name].size
+    assert after[datum.name].mtime_ns == before[datum.name].mtime_ns
+    assert after[datum.name].inode != before[datum.name].inode
+
+
+def test_restore_only_changed_members_and_preserves_unchanged_identity(tmp_path):
+    root = tmp_path / 'bus'
+    root.mkdir()
+    (root / 'same').write_text('unmodified')
+    (root / 'changed').write_text('original')
+    (root / 'missing').write_text('was here')
+    backup = Backup.take(root, tmp_path / 'absent-route', (root,), tmp_path / 'backup')
+    same = SavedFile.at(root / 'same')
+    (root / 'changed').write_text('new material')
+    (root / 'missing').unlink()
+    (root / 'extra').write_text('extra material')
+    backup.restore()
+    assert (root / 'changed').read_text() == 'original'
+    assert (root / 'missing').read_text() == 'was here'
+    assert not (root / 'extra').exists()
+    assert SavedFile.at(root / 'same') == same
+    failed, = tmp_path.glob('.bus.failed-*')
+    assert (failed / 'changed').read_text() == 'new material'
+    assert (failed / 'extra').read_text() == 'extra material'
+    assert backup.files().keys() == bus_files(root).keys()
+
+
+def test_selective_restore_preserves_saved_sqlite_wal_rows(tmp_path):
+    root = tmp_path / 'bus'
+    root.mkdir()
+    database = root / 'data.sqlite3'
+    with closing(sqlite3.connect(database)) as writer:
+        writer.execute('PRAGMA journal_mode=WAL')
+        writer.execute('CREATE TABLE data (value TEXT)')
+        writer.execute("INSERT INTO data VALUES ('original')")
+        writer.commit()
+        backup = Backup.take(root, tmp_path / 'absent-route', (root,), tmp_path / 'backup')
+        writer.execute("UPDATE data SET value = 'changed'")
+        writer.commit()
+    backup.restore()
+    with closing(sqlite3.connect(database)) as reader:
+        assert reader.execute('SELECT value FROM data').fetchone() == ('original',)
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path):
@@ -618,9 +714,8 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
     commands = []
 
     class Installed(Stack):
-        def cli(self, root, *arguments):
-            assert arguments == ("threads",)
-            return {"threads": []}
+        def running_owners(self, root):
+            return []
 
         def relock(self):
             pass
@@ -638,7 +733,7 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
     stack = Installed(tmp_path / "checkout")
     with pytest.raises(RuntimeError, match="carry failed after writing"):
         upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
-                         "worker", comms.root.parent)
+                         "worker", comms.root.parent, datum.stat().st_size)
     assert datum.read_text() == "before"
     failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
     assert (failed / "kept.txt").read_text() == "changed before failure"
@@ -677,14 +772,11 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
         backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
                              (comms.root,), comms.root.parent / 'backup')
         assert bridge_publishes(comms.root).endswith("database is locked")
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
-        backup.restore()  # the carry aborted
-        failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
-        assert bridge_publishes(failed).endswith("database is locked")
+        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0, "restore_bytes": 0}
+        backup.restore()  # unchanged files stay in place under the hold
+        assert bridge_publishes(comms.root).endswith("database is locked")
     assert bridge_publishes(comms.root) == "wrote"
-    name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
     assert backup.files() == before
-    assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
 def test_practice_preserves_old_maintenance_format_until_before_stop(tmp_path):
@@ -747,7 +839,7 @@ def rehearsed(stack: Stack, root: Path) -> dict:
 
 def installed_live(stack: Stack, root: Path) -> dict:
     from upgrade_bus import live
-    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker", root.parent)
+    return live(stack.checkout, root, "old", "new", (), stack, stack, None, "worker", root.parent, 0)
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
@@ -774,8 +866,8 @@ def test_a_step_writing_the_transcript_store_runs_after_the_hold(comms, tmp_path
         return [ToolCallIndex.carry(root, apply=True).report(ToolCallIndex.name(), True)]
 
     class Installed(Stack):
-        def cli(self, root, *arguments):
-            return {"threads": []}
+        def running_owners(self, root):
+            return []
 
         def relock(self):
             pass
@@ -817,4 +909,4 @@ def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, mon
         ActivityLog.at(comms.root).emit(Activity.create(unit.name, ActivityState.THINKING))
         with pytest.raises(sqlite3.OperationalError, match="locked"):
             transcript.finish(turn_id="turn", item_id="during", events=())
-        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
+        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0, "restore_bytes": 0}

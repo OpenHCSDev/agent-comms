@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
 
@@ -51,15 +53,60 @@ class UpgradeRefused(Exception):
         return "Installer failed without a declared refusal; private traceback retained on host"
 
 
-def bus_files(root: Path) -> dict[str, str]:
-    """Hash saved data once per SQLite store, ignoring runtime files and locks."""
-    paths = [path for path in sorted(set(root.rglob("*")) - RuntimeFile.paths_in(root))
-             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")]
-    stores = {path for path in paths if CoordinationStore.is_database(path)}
-    companions = {companion for store in stores for companion in CoordinationStore.files(store)[1:]}
-    return {str(path.relative_to(root)): CoordinationStore.digest(path) if path in stores
-            else hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in paths if path not in companions}
+@dataclass(frozen=True)
+class SavedFile:
+    size: int
+    mtime_ns: int
+    inode: int
+
+    @classmethod
+    def at(cls, path: Path) -> Self:
+        observed = path.stat()
+        return cls(observed.st_size, observed.st_mtime_ns, observed.st_ino)
+
+    def matches_extraction(self, copied: SavedFile) -> bool:
+        """Extraction allocates a new inode and tar loses nanosecond mtime; compare size only."""
+        return self.size == copied.size
+
+
+def bus_files(root: Path) -> dict[str, SavedFile]:
+    """Read saved file identity and modification metadata, never contents."""
+    excluded = RuntimeFile.paths_in(root)
+    saved = {}
+    for path in root.rglob("*"):
+        if path in excluded or path.name.endswith((".lock", "-shm", "-journal")):
+            continue
+        observed = path.lstat()
+        # Empty WAL files appear on a read-only SQLite open; they hold no committed frames.
+        if path.name.endswith("-wal") and observed.st_size == 0:
+            continue
+        if stat.S_ISREG(observed.st_mode):
+            saved[str(path.relative_to(root))] = SavedFile(
+                observed.st_size, observed.st_mtime_ns, observed.st_ino)
+    return saved
+
+
+@dataclass(frozen=True)
+class RestoreSpace:
+    bytes: int
+    free: int
+    seconds: float
+
+    @property
+    def needed(self) -> int:
+        return self.bytes + max(self.bytes // 10, 1024**3)
+
+    @classmethod
+    def measure(cls, rewritten_bytes: int, filesystem: Path) -> Self:
+        started = time.perf_counter()
+        free = shutil.disk_usage(filesystem).free
+        return cls(rewritten_bytes, free, time.perf_counter() - started)
+
+    def require(self) -> None:
+        if self.free < self.needed:
+            raise UpgradeRefused(
+                f"Restore needs {self.needed} bytes on the bus filesystem; "
+                f"only {self.free} bytes are free")
 
 
 @contextmanager
@@ -84,10 +131,11 @@ def transcripts_held(root: Path) -> Iterator[None]:
 
 
 @dataclass
-class Backup:
+class ResourceBackup[Contents](ABC):
     root: Path
     route: Path
     path: Path
+    contents: ClassVar[type]
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
@@ -103,22 +151,19 @@ class Backup:
         contents = backup.capture(files)
         if route.exists():
             shutil.copy2(route, path / 'active-route.json')
-        _atomic_write_text(path / 'files.json', json.dumps(contents, indent=1), fsync_parent=True)
+        _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1),
+                           fsync_parent=True)
         return backup
 
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
-        with tarfile.open(self.path / 'bus.tar', 'w') as archive:
-            for path in files:
-                archive.add(path, str(Path(self.root.name) / path.relative_to(self.root)))
-        with (self.path / 'bus.tar').open('rb') as ready:
-            os.fsync(ready.fileno())
-        return bus_files(self.root)
+    @abstractmethod
+    def capture(self, files: tuple[Path, ...]) -> dict[str, Contents]: ...
 
-    def files(self) -> dict[str, str]:
-        return json.loads((self.path / 'files.json').read_text())
+    def files(self) -> dict[str, Contents]:
+        return FieldCodec.decode(dict[str, self.contents],
+                                 FieldCodec.parse((self.path / 'files.json').read_text()))
 
-    def original(self) -> bool:
-        return self.files() == bus_files(self.root)
+    @abstractmethod
+    def original(self) -> bool: ...
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -135,24 +180,94 @@ class Backup:
         if (self.path / 'active-route.json').exists():
             shutil.copy2(self.path / 'active-route.json', self.route)
 
+    @abstractmethod
+    def restore(self) -> None: ...
+
+
+@dataclass
+class Backup(ResourceBackup[SavedFile]):
+    """Whole-bus archive with selective per-file restoration."""
+    contents: ClassVar[type] = SavedFile
+
+    def capture(self, files: tuple[Path, ...]) -> dict[str, SavedFile]:
+        with tarfile.open(self.path / 'bus.tar', 'w') as archive:
+            for path in files:
+                archive.add(path, str(Path(self.root.name) / path.relative_to(self.root)))
+        with (self.path / 'bus.tar').open('rb') as ready:
+            os.fsync(ready.fileno())
+        return bus_files(self.root)
+
+    def original(self) -> bool:
+        return self.files() == bus_files(self.root)
+
     def restore(self) -> None:
-        """Extract beside the bus, then swap; failed extraction keeps the bus intact."""
-        staged = Path(tempfile.mkdtemp(dir=self.root.parent, prefix=f'.{self.root.name}.restore.'))
-        with tarfile.open(self.path / 'bus.tar') as archive:
-            archive.extractall(staged, filter='tar')
-        failed = self.root.with_name(f'.{self.root.name}.failed-{self.path.name}')
-        with transcripts_held(staged / self.root.name):
-            os.rename(self.root, failed)
-            os.rename(staged / self.root.name, self.root)
-            staged.rmdir()
-            if not self.original():
+        """Stage only changed saved files beside targets; leave unchanged files in place."""
+        saved = self.files()
+        current = bus_files(self.root)
+        changed = {name for name in saved if saved[name] != current.get(name)}
+        extra = current.keys() - saved.keys()
+        RestoreSpace.measure(sum(saved[name].size for name in changed), self.root.parent).require()
+        staged: dict[str, Path] = {}
+        try:
+            with tarfile.open(self.path / 'bus.tar') as archive:
+                for name in sorted(changed):
+                    target = self.root / name
+                    if not target.parent.resolve().is_relative_to(self.root.resolve()):
+                        raise UpgradeRefused(f'Restore target escapes bus: {name}')
+                    member = archive.getmember(str(Path(self.root.name) / name))
+                    if not member.isfile():
+                        raise UpgradeRefused(f'Restore member is not a regular file: {name}')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
+                    stage = Path(temporary)
+                    staged[name] = stage
+                    with os.fdopen(descriptor, 'wb') as output:
+                        source = archive.extractfile(member)
+                        if not source:
+                            raise UpgradeRefused(f'Cannot read restore member: {name}')
+                        with source:
+                            shutil.copyfileobj(source, output)
+                        output.flush()
+                        os.fchmod(output.fileno(), member.mode)
+                        os.fsync(output.fileno())
+                    if not saved[name].matches_extraction(SavedFile.at(stage)):
+                        raise UpgradeRefused(
+                            f'Restore size differs for {name}; original bus is intact')
+            failed = self.root.with_name(f'.{self.root.name}.failed-{self.path.name}')
+            failed.mkdir(mode=0o700)
+            for name in sorted(changed | extra):
+                target = self.root / name
+                if target.exists():
+                    retained = failed / name
+                    retained.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(target, retained)
+                if name in staged:
+                    os.replace(staged[name], target)
+            # SQLite rebuilds its shared-memory index from the restored database/WAL.
+            for name in changed | extra:
+                database = self.root / (name[:-4] if name.endswith('-wal') else name)
+                if not database.exists() or not CoordinationStore.is_database(database):
+                    continue
+                transient = CoordinationStore.files(database)[2]
+                if transient.exists():
+                    retained = failed / transient.relative_to(self.root)
+                    retained.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(transient, retained)
+            copied = bus_files(self.root)
+            if saved.keys() != copied.keys() or any(
+                not original.matches_extraction(copied[name]) for name, original in saved.items()
+            ):
                 raise UpgradeRefused(f'The restored bus differs; failed data is at {failed}')
-        self.restore_route()
-        print(f'Restored the bus; failed data is kept at {failed}', file=sys.stderr)
+            self.restore_route()
+            print(f'Restored changed files; failed data is kept at {failed}', file=sys.stderr)
+        finally:
+            for stage in staged.values():
+                stage.unlink(missing_ok=True)
 
 
-class StoreBackup(Backup):
+class StoreBackup(ResourceBackup[str]):
     """Snapshot declared databases through SQLite; restore only the selected files."""
+    contents: ClassVar[type] = str
 
     @property
     def data_root(self) -> Path:
