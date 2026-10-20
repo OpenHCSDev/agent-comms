@@ -245,7 +245,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
 
 
 @pytest.mark.asyncio
-async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
+async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch, native_runtime_package):
     with TemporaryDirectory(prefix="ac-acp-public-selected-", dir="/var/tmp") as dirname:
         base = Path(dirname)
         base.chmod(0o700)
@@ -278,6 +278,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         source_root = Path(__file__).resolve().parents[1]
         env["PYTHONPATH"] = f"{source_root / 'src'}:{source_root / 'tests'}"
         env.update(
+            AC_TEST_NATIVE_MANIFEST=str(native_runtime_package.path.parents[3] / "pi-native.sha256"),
             AGENT_COMMS_ROOT=str(root),
             AGENT_COMMS_THREAD="beta",
             PYTHONDONTWRITEBYTECODE="1",
