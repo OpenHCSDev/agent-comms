@@ -19,6 +19,7 @@ from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
 from agent_comms.coordinator import Coordination
 from agent_comms.transcript_updates import TurnTranscriptUpdate
+from agent_comms.turn_lease import NoFinishedTurn
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -270,7 +271,7 @@ async def test_stale_settlement_preserves_replacement_turn(
 
     monkeypatch.setattr(owner, "_emit_event", emit)
     await owner.turns.settle_turn("session", lease)
-    assert released == [None]
+    assert released == [NoFinishedTurn()]
     assert comms.registry.require("bot").turn_lease == replacement
     assert observed[0].active.turn_generation == replacement.identity.generation
 

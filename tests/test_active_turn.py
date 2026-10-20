@@ -34,8 +34,10 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     view = comms.views.thread_views()[0]
     assert view.thread.turn_record.executing and view.presentation.status.working
     current = comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
-    assert current.state is ActivityState.THINKING
+    assert current.state is ActivityState.STARTING
     assert current.detail == "Long-running work"
+    comms.agents.observe_native_phase(first, ModelWaitPhase())
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).state is ActivityState.THINKING
 
     comms.agents.transition_turn(first, ToolRunningPhase(tools=(("call", "bash"),)))
     assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Working · bash"
