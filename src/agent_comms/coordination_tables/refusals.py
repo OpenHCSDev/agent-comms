@@ -15,7 +15,7 @@ from agent_comms.coordination_session import CoordinationSession
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.store_files import SharedLock, _store_lock
-from agent_comms.typed_table import Column, DurableTables, Index, TypedTable
+from agent_comms.typed_table import Column, DurableTables, Index, SharedFileTables, TypedTable
 
 from ..locked_store import RegistryFile
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SendRefusal(CoordinatorTable, TypedTable, DurableTables):
+class SendRefusal(CoordinatorTable, TypedTable, SharedFileTables, DurableTables):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
     id: int = field(metadata={"sql": Column(primary_key=True)})
@@ -38,8 +38,8 @@ class SendRefusal(CoordinatorTable, TypedTable, DurableTables):
     def install(cls, store: Coordination) -> None:
         """Explicit upgrade operation; ordinary reads and writes never repair schema."""
         with store.session.writing() as db:
-            if cls.stored_member_schema(db):
-                cls.require_member_schema(db)
+            if cls.stored_schema(db):
+                cls.require_schema(db)
             else:
                 cls.create(db)
 
@@ -51,7 +51,7 @@ class SendRefusal(CoordinatorTable, TypedTable, DurableTables):
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,
             ):
-                cls.require_member_schema(db)
+                cls.require_schema(db)
                 # SQLite allocates this attempt's identity. The text is exactly
                 # the refusal returned to the caller, not a page's summary.
                 cls.insert_values(
@@ -74,7 +74,7 @@ class SendRefusal(CoordinatorTable, TypedTable, DurableTables):
 
     @classmethod
     def capture(cls, db: sqlite3.Connection, sender: str, target: str, limit: int):
-        cls.require_member_schema(db)
+        cls.require_schema(db)
         filters = {name: value for name, value in (("sender", sender), ("target", target)) if value}
         return tuple(cls.select(db, order_by=("id",), descending=True, limit=limit, **filters))
 

@@ -1,21 +1,16 @@
 """Read existing SQLite declarations without opening a writer or repairing state."""
 from __future__ import annotations
 
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-import sqlite3
 
 from .cli_result import CliResult
 from .coordination_database import CoordinationStore
 from .declared_family import UnknownFamilyMember
 from .field_codec import FieldCodec
-from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
-
-
-@dataclass(frozen=True)
-class _StoredTable(TypedRow):
-    name: str
+from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
 
 
 @dataclass(frozen=True)
@@ -54,28 +49,19 @@ class StoreSchemaReport:
     @classmethod
     def read(cls, db: sqlite3.Connection, path: Path) -> StoreSchemaReport:
         """Decode the caller's already-open snapshot; never acquire another one."""
-        actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
-        tables = _StoredTable.read(db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-        expected = {}
-        compared = set()
+        expected: dict[str, str] = {}
+        stored: list[SQLiteSchemaObject] = []
         unknown = []
-        for table in tables:
+        for table in SQLiteTableName.stored(db):
             try:
                 owner = TypedTable.member_named(table.name)
             except UnknownFamilyMember:
                 unknown.append(table.name)
                 continue
-            declarations = owner.schema_objects()
-            expected.update(declarations)
-            compared.update(declarations)
+            expected.update(owner.schema_objects())
             # Extra triggers or indexes attached to a known table also differ.
-            compared.update(row.name for row in _StoredTable.read(db.execute(
-                "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-                (table.name,))))
-        changes = SQLiteSchemaObject.differences(
-            [item for item in actual if item.name in compared], expected)
+            stored.extend(owner.stored_objects(db))
+        changes = SQLiteSchemaObject.differences(stored, expected)
         return cls(str(path), changes, tuple(sorted(unknown)))
 
 

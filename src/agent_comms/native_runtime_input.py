@@ -15,7 +15,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
@@ -28,15 +28,33 @@ from .native_input_record import (
     UnrecordedNativePosition,
 )
 from .selected_triage import RecordedTriageText, SelectedTriage
-from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
+from .typed_table import (
+    Column,
+    DurableTables,
+    IntegerStorage,
+    PrefixedTables,
+    TypedRow,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable:
+class NativeRuntimeTable(PrefixedTables, DurableTables):
     """Capability identifying the native-runtime schema's declared tables."""
+
+    __slots__ = ()
+    name_prefixes = ("native_runtime_", "current_native_cursor")
+    schema_error = PublicationActivationBlocked
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        # Importing it declares the family's last table.
+        from . import triage_native_sources  # noqa: F401
+
+        return super().schema_rows()
 
 
 @dataclass(frozen=True)
@@ -50,16 +68,6 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
     version: Literal[7] = field(default=7, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
-
-    @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        """Create this owner's current declarations on an explicitly fresh store."""
-        from .coordinated_runtime_schema import _digest, _schema
-
-        schema = _schema()
-        for statement in schema.values():
-            db.execute(statement)
-        cls(singleton=1, ddl_digest=_digest(schema)).insert(db)
 
     @classmethod
     def trigger_bodies(cls) -> dict[str, str]:
