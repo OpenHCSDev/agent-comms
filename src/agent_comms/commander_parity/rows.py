@@ -13,6 +13,7 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .wording import OrderWordingComparison, PlainWordsComparison
 
 
 class CreateProblemParityRow(ParityRow):
@@ -86,6 +87,10 @@ class PlainWordsParityRow(ParityRow):
     native = "`PlainText`"
     phases = (RecordPlanePhase,)
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return PlainWordsComparison.read()
+
 
 class OrderWordingParityRow(ParityRow):
     number = 10
@@ -93,6 +98,10 @@ class OrderWordingParityRow(ParityRow):
     current = "`order.py`"
     native = "`OrderText` on every order action"
     phases = (RecordPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return OrderWordingComparison.read()
 
 
 class OrderWorkParityRow(ParityRow):
