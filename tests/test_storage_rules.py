@@ -11,7 +11,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    StorageProjection, shell_storage_effects,
+    StorageDenied, StorageProjection, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -80,6 +80,35 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     assert rule.checkouts_of(thread) == (home,)
     comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
+
+
+def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path):
+    base = tmp_path / 'checkouts'
+    home, current, other = base / 'worker', base / 'worker--P1', base / 'worker--P2'
+    home.mkdir(parents=True)
+    subprocess.run(('git', 'init', '-q', str(home)), check=True)
+    subprocess.run(('git', '-C', str(home), '-c', 'user.name=P356',
+                    '-c', 'user.email=p356@example.invalid', 'commit', '-q',
+                    '--allow-empty', '-m', 'seed'), check=True)
+    for checkout in (current, other):
+        subprocess.run(('git', '-C', str(home), 'worktree', 'add', '-q', str(checkout)), check=True)
+    project_link = tmp_path / 'current-project'
+    project_link.symlink_to(current, target_is_directory=True)
+    comms = Comms(tmp_path / 'wire')
+    comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
+    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(project_link)))
+    assert thread.project_path == current
+    with pytest.raises(StorageDenied, match='agent-comms set-project worker') as refused:
+        comms.registry.decide_storage('worker', shell_storage_effects(
+            f'git worktree remove {project_link}', home))
+    assert str(current) in str(refused.value)
+    assert str(home) in str(refused.value)
+    assert current.is_dir()
+    comms.registry.decide_storage('worker', shell_storage_effects(
+        f'git worktree remove {other}', home))
+    subprocess.run(('git', '-C', str(home), 'worktree', 'remove', str(other)), check=True)
+    assert not other.exists()
+    assert current.is_dir()
 
 
 @pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync',
