@@ -10,6 +10,7 @@ from typing import ClassVar, Self
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
+from .recorded_time import EventTime
 
 
 def one_line(text: str, limit: int) -> str:
@@ -25,7 +26,7 @@ class ReplacementEdit:
 @dataclass(frozen=True)
 class EditCall:
     id: str
-    at: float
+    at: EventTime
     thread: str
     path: str
     hunks: tuple[ReplacementEdit, ...]
@@ -67,7 +68,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         except (MalformedRecord, SelectedToolDenied):
             return None
 
-    def edit_calls(self, call_id: str, at: float, thread: str, problem: str) -> tuple[EditCall, ...]:
+    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
 
     def reads(self) -> str:

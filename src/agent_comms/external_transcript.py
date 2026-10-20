@@ -23,6 +23,7 @@ from .field_codec import FieldCodec
 from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
+from .tool_declaration import ToolDeclaration
 from .transcript_events import TranscriptEvent, TurnDigest, ToolStartTranscript
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptRecord, TranscriptSource
 from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
@@ -212,7 +213,8 @@ class ExternalEventRow(TypedTable):
         judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
         placeholders = lambda values: ",".join("?" for _ in values)
         since = todo.order.at.recorded_at("An order")
-        where = f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) AND e.timestamp>=?'
+        where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
+                 'AND (e.timestamp>=? OR e.timestamp IS NULL)')
         parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
         if judged:
             where += f' AND e.call_id NOT IN ({placeholders(judged)})'
@@ -364,14 +366,17 @@ class StoreRead(TranscriptSource):
     def unjudged(self, todo):
         where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
         with closing(self.connection.execute(
-            'SELECT event FROM (SELECT e.event, e.seq, e.ordinal, '
+            'SELECT timestamp,call_id,json_extract(event,\'$.tool\') FROM '
+            '(SELECT e.event, e.timestamp, e.call_id, e.seq, e.ordinal, '
             'row_number() OVER (PARTITION BY e.call_id ORDER BY e.seq DESC,e.ordinal DESC) AS latest '
             f'FROM "{ExternalEventRow.declared_name}" e WHERE {where}) '
             'WHERE latest=1 ORDER BY seq DESC,ordinal DESC', parameters)) as rows:
-            for encoded, in rows:
-                event = FieldCodec.decode(TranscriptEvent, FieldCodec.parse(encoded))
-                yield from event.edit_calls(todo.held().owner, todo.id,
-                                            todo.order.at.recorded_at("An order"))
+            for timestamp, call_id, encoded in rows:
+                identity = FieldCodec.decode(str, call_id)
+                tool = FieldCodec.decode_bound(ToolDeclaration, FieldCodec.parse(encoded),
+                                               call_id=identity)
+                yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
+                                           todo.held().owner, todo.id)
 
     def unjudged_count(self, todo) -> int:
         where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
