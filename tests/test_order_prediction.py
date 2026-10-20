@@ -1,8 +1,6 @@
 """Forecast acceptance uses the shared copied-bus lifecycle, real Git and native owners."""
 
 import json
-import sys
-from pathlib import Path
 
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_parity.prediction import PredictionCase
@@ -26,7 +24,7 @@ def test_order_reviewed_twice_then_closed_retains_last_prediction_on_a_copied_bu
             name, frozenset({"comms"}), str(tmp_path), execution=ExternalThreadExecution,
         ))
     CommanderConfig(
-        commander="lead", root=source.root, cli=Path(sys.executable).parent / "agent-comms",
+        commander="lead", root=source.root,
         state=tmp_path / "state", board=tmp_path / "board.md",
         narrative=tmp_path / "narrative.md", repos=(), worktrees=tmp_path / "wt",
         scratch=tmp_path / "scratch", disk=tmp_path,
