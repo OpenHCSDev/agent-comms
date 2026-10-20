@@ -471,6 +471,9 @@ class Commander(CommanderContext):
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
         location.require_exists(checkout)
+        if checkout.is_dir():
+            self.comms.goals.todos.require_recurrence_declaration(
+                document.order, location, checkout, document.slop, time.time())
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
         self.send(unit, due, document, new=(pid, document.defect),

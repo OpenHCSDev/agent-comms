@@ -1151,33 +1151,41 @@ class HierarchyText(OrderWords):
 class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
 
+    @classmethod
+    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
+        return False
+
+
+class DeclarationDerivation(Derivation):
+    sentence = "the declaration derives it"
+
+    @classmethod
+    def declaration_elsewhere(cls, by: FileLine, where: FileLine, root: Path) -> bool:
+        return not by.same_file(where, root)
+
 
 class NominalKeyDerivation(Derivation, declared_name="nominal-key"):
     sentence = "the nominal key identifies it"
 
 
-class SubclassDerivation(Derivation):
+class SubclassDerivation(DeclarationDerivation):
     sentence = "the subclass derives it"
 
 
-class MixinDerivation(Derivation):
+class MixinDerivation(DeclarationDerivation):
     sentence = "the mixed-in capability derives it"
 
 
-class BaseMethodDerivation(Derivation, declared_name="base-method"):
+class BaseMethodDerivation(DeclarationDerivation, declared_name="base-method"):
     sentence = "the base method derives it"
 
 
-class InitSubclassDerivation(Derivation, declared_name="init-subclass"):
+class InitSubclassDerivation(DeclarationDerivation, declared_name="init-subclass"):
     sentence = "subclass initialization derives it"
 
 
-class MetaclassDerivation(Derivation):
+class MetaclassDerivation(DeclarationDerivation):
     sentence = "the metaclass derives it"
-
-
-class DeclarationDerivation(Derivation):
-    sentence = "the declaration derives it"
 
 
 class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
@@ -1341,6 +1349,9 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+        return False
+
     def instructions(self) -> tuple[str, ...]:
         return ()
 
@@ -1356,6 +1367,9 @@ class UnlocatedProblemFinding(ProblemFinding):
 @dataclass(frozen=True)
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
+
+    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+        return any(self.where.same_file(location, root) for location in locations)
 
     def instructions(self) -> tuple[str, ...]:
         return (f"Where: {self.place()}",)
@@ -1497,6 +1511,10 @@ class FoldedProblemOrder(ProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
+
+    def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
+        return (any(self.owner.same_file(location, root) for location in locations)
+                or self.finding.on_files(locations, root))
 
     def checked(self) -> CheckedProblemOrder:
         return self
@@ -2655,6 +2673,20 @@ class Todo(TypedTable):
         return tuple({order.id: order for order in (*self.order_history, *additional)
                       if order.id not in current}.values())
 
+    def recurrence(
+        self, locations: tuple[FileLine, ...], root: Path, now: float,
+    ) -> tuple[str, ...]:
+        recent = tuple(order for order in self.order_history
+                       if order.at.since(now - 7 * 86400)
+                       and order.at.recorded_at("An earlier order") <= now
+                       and order.on_files(locations, root))
+        if not recent:
+            return ()
+        previous = max(recent, key=lambda order: order.at.chronology())
+        age = now - previous.at.recorded_at("An earlier order")
+        finding = ''.join(f'; {line}' for line in previous.finding.instructions())
+        return (f'{self.id}: {previous.owner.to_wire()} ({age:.0f}s old){finding}',)
+
     @property
     def held_order_ids(self) -> tuple[str, ...]:
         return tuple(order.id for order in self.order_history)
@@ -3078,6 +3110,19 @@ class TodoStore(TypedStore):
         return self._open(
             "creator=? AND creator_created=? AND json_extract(assignment,'$.owner')=?",
             (commander.name, commander.wire_birth, unit))
+
+    def require_recurrence_declaration(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+        slop: tuple[Slop, ...], now: float,
+    ) -> None:
+        previous = tuple(line for todo in self.list(Repo.of(root).github)
+                         for line in todo.recurrence((order.owner, where), root, now))
+        if previous and not any(
+            item.derive.declaration_elsewhere(item.by, where, root) for item in slop
+        ):
+            raise TodoError('\n'.join((*previous,
+                'the same file broke again, name the fact written in more than one place '
+                'and the declaration that replaces the copies.')))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))

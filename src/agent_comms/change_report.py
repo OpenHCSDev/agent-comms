@@ -31,6 +31,9 @@ class FileLine(WireValue):
         if type(self.line) is not int or self.line < 1:
             raise ValueError(f"FileLine line must be a positive line number: {self.line!r}")
 
+    def same_file(self, other: FileLine, root: Path) -> bool:
+        return (root / self.file).resolve() == (root / other.file).resolve()
+
     def require_exists(self, root: Path) -> None:
         path = root / self.file
         if path.is_file():
