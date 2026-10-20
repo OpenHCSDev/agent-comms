@@ -142,7 +142,7 @@ class DeletionPath(ABC):
             "Repair the caller but leave one obsolete family site",
         )
         refused = run.invoke_command(
-            cls.delivery_command(run, before, partial), env=run.python_environment()
+            cls.delivery_command(run, before, partial), cwd=repository, env=run.python_environment()
         )
         after_refusal = run.commander.comms.goals.todos.get(before.id)
         remaining = count.recorded(partial, str(repository))
@@ -152,7 +152,9 @@ class DeletionPath(ABC):
             "Delete the last obsolete family declaration",
         )
         accepted = run.invoke_command(
-            cls.delivery_command(run, before, complete), env=run.python_environment()
+            cls.delivery_command(run, before, complete),
+            cwd=repository,
+            env=run.python_environment(),
         )
         after_acceptance = run.commander.comms.goals.todos.get(before.id)
         zero = count.recorded(complete, str(repository))
