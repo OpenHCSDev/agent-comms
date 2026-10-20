@@ -752,6 +752,21 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
         done.state.require_open(done)
 
 
+def test_strike_cli_uses_explicit_problem_and_citation_not_reason_text(
+        commander, commander_script, monkeypatch):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1', owner='worker', deadline=time.time() + 3600)
+    create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
+    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body, answers=(): 'sent')
+    citation = FileLine(__file__, 1)
+    reason = 'P1 scratch path mentioned while P2 failed the promised delivery review'
+    commander_order.StrikeVerb.parse(
+        ['strike', 'worker', 'P2', citation.to_wire(), '--why', reason], '').run(script)
+    assert comms.goals.todos.get('P1').strikes == ()
+    assert comms.goals.todos.get('P2').strikes[0].evidence == (citation,)
+
+
 def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_module(
         commander, commander_script, monkeypatch, tmp_path):
     """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
