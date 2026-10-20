@@ -1296,7 +1296,7 @@ class InstallCliCommand(CliCommand):
         config = CommanderConfig(
             commander=self.commander, root=ctx.root,
             state=home / ".local/state/agent-comms/commander",
-            repos=tuple(Repo.of(repo) for repo in self.repos or (self.project,)),
+            repos=tuple(Repo.of(repo) for repo in self.repos or (self.checkout,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
