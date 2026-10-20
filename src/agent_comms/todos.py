@@ -50,6 +50,7 @@ from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .maintenance_barrier import MaintenanceBarrier
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
+from .private_bus_checkpoint import PublicMessages
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .repo import Repo
 from .repository_name import RepositoryName
@@ -2393,7 +2394,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
 
     def prepare(self, goals, current):
         with goals.bus.log.opened_wire_snapshot() as opened, goals.bus.log.checked_read() as source:
-            message = source.message_by_id(self.peer, public=opened)
+            message = PublicMessages.message_by_id(source, opened, self.peer)
         if message is None:
             raise ValueError("The peer order message does not exist.")
         if (message.sender == self.actor.name or

@@ -39,8 +39,8 @@ def test_carry_rebuilds_message_indexes_and_seal(tmp_path):
     assert result.changed == 2
     assert set(result.rewritten) == {'private_bus_checkpoint.sqlite3', 'bus_meta.json'}
     assert PrivateMessageIds.carry(comms.root, apply=False).changed == 0
-    with bus.checked_read() as source:
-        assert source.message_by_id(original.message_id) == original
+    with bus.opened_wire_snapshot() as opened, bus.checked_read() as source:
+        assert PublicMessages.message_by_id(source, opened, original.message_id) == original
         for table in (DeliverySources, PublicMessages):
             plan = tuple(source.connection.execute(
                 f'EXPLAIN QUERY PLAN SELECT * FROM {table.declared_name} '

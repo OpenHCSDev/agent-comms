@@ -58,9 +58,10 @@ from cutover.backup import (
 )
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
-from install_gate import PracticeCopy, prepare_runtime_home
+from install_gate import PracticeMeasurement, prepare_runtime_home
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
+from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
@@ -248,6 +249,43 @@ publish_active_route(ActiveRoute(root, marker.root_id))
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
+    @contextmanager
+    def practice_copy(self, root: Path, into: Path):
+        """Let the installed reader create and hold an old-format copy until carry finishes.
+
+        The staged reader cannot open the old sealed index before its carry runs.
+        The installed source holds the copy's lifetime; only the staged source
+        reads it after the carry. No live bus row is rewritten by rehearsal.
+        """
+        worker = """import json, sys
+from dataclasses import asdict
+from pathlib import Path
+from agent_comms.comms import Comms
+from install_gate import PracticeCopy
+with PracticeCopy(source=Comms(Path(sys.argv[1])), into=Path(sys.argv[2])).open() as (_, measurement):
+    print(json.dumps(asdict(measurement)), flush=True)
+    sys.stdin.readline()
+"""
+        child = subprocess.Popen(
+            [str(self.python), "-c", worker, str(root), str(into)],
+            cwd=self.checkout, env=self.environment(self.checkout / "tools"),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            assert child.stdout is not None
+            ready = child.stdout.readline()
+            if not ready:
+                assert child.stderr is not None
+                raise UpgradeRefused(f"Installed practice copy failed: {child.stderr.read()}")
+            measurement = FieldCodec.decode(PracticeMeasurement, FieldCodec.parse(ready))
+            yield Comms(into), measurement
+        finally:
+            if child.poll() is None:
+                # The staged reader can own background work on the copied bus;
+                # finish it before the installed reader retires the directory.
+                drain_candidate_catchup(into)
+                child.communicate(input="\n", timeout=60)
+
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         selected = run(self.python, "-c", """import json, sys
@@ -343,13 +381,14 @@ def carry_all(
     return results
 
 
-def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> dict:
+def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
+             installed: Stack) -> dict:
     source = Comms(root)
     parent = source.registry.storage_rule.initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
-        PracticeCopy(source=source, into=Path(scratch) / "bus").open() as (copied, measurement),
+        installed.practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
         prepare_runtime_home(home)
@@ -448,7 +487,7 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.staged, self.revisions, self.installer)
+        return rehearse(self.root, self.staged, self.revisions, self.installer, self.installed)
 
     def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
