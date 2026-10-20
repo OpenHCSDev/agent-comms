@@ -35,7 +35,7 @@ from .native_input_owner import GoalLaunchOwner
 from .registration import Registration
 
 if TYPE_CHECKING:
-    from .agent_events import GoalChanged
+    from .agent_events import GoalChange
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
@@ -352,16 +352,16 @@ class Goals:
     def goal_execution(self, name: str) -> ThreadGoalExecution:
         return self._goal_snapshot(name).execution
 
-    def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChanged | None:
+    def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
         """Announce a durable change through S1's event vocabulary.
 
         Existing registry/history and wait persistence are the cross-process
         authority. Each observer supplies its last successfully published view.
         """
-        from .agent_events import GoalChanged
+        from .agent_events import GoalChanged, GoalUnchanged
 
         current = self.goal_snapshot(name)
-        return GoalChanged(current) if previous.changed_by(current) else None
+        return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 
     def goal_snapshot(self, name: str) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""

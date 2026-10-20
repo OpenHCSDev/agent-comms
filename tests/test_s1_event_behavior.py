@@ -236,11 +236,10 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     # Public goal synchronization follows observed events and leaves the actual
     # goal snapshot current; no assertion about collaborator call counts.
     assert execution.session_id in runner.goals.publications
-    assert (
+    assert isinstance(
         comms.goals.goal_changed(
             execution.thread_name, runner.goals.publication(execution.session_id).snapshot
-        )
-        is None
+        ), ae.GoalUnchanged,
     )
     assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
     if not value.successful:

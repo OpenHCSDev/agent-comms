@@ -239,7 +239,4 @@ class GoalScheduler:
             event = await Coordination.run_worker(partial(
                 self.comms.goals.goal_changed, thread_name, record.snapshot,
             ))
-            if event is None:
-                return
-            await self.effects._emit_event(session_id, event)
-            record.snapshot = event.snapshot
+            record.snapshot = await event.publish(self.effects, session_id, record.snapshot)
