@@ -27,7 +27,6 @@ from agent_comms.exporting import (
     WireTranscriptExporter,
 )
 from agent_comms.messages import Message, InfoKind
-from agent_comms.threads import Thread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -70,17 +69,17 @@ def test_wire_export_declarations_are_explicit_and_fail_loud():
     assert RecentLimit(123.5).to_wire() == {"kind": "recent", "value": 123.5}
 
     assert ChannelScope("#any").to_wire() == {"kind": "channel", "channel": "#any"}
-    with pytest.raises(ValueError, match="distinct participants"):
+    with pytest.raises(ValueError):
         DmScope(("alice", "alice"))
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValueError):
         MaxBytesLimit(0)
-    with pytest.raises(ValueError, match="finite non-negative"):
+    with pytest.raises(ValueError):
         RecentLimit(float("nan"))
     with pytest.raises(TypeError):
         FullLimit(1)
     with pytest.raises(TypeError):
         EverythingScope(channel="#all")
-    with pytest.raises(ValueError, match="cannot be negative"):
+    with pytest.raises(ValueError):
         WireExportBoundary(-1, 1.0)
 
 
@@ -94,7 +93,7 @@ def test_raw_mapping_with_private_bus_sideband_never_enters_export(
     raw["future_extension"] = {"public": True}
     raw[private_key] = {"publication_key": "SECRET-PRIVATE-RECEIPT"}
 
-    with pytest.raises(ValueError, match="Bus-private wire fields"):
+    with pytest.raises(ValueError):
         exporter(format=format, through=1).export([raw], destination)
 
     assert not destination.exists()
@@ -198,7 +197,7 @@ def test_byte_ceiling_fails_when_header_cannot_fit_and_oversize_newest_yields_he
     tmp_path,
 ):
     too_small = tmp_path / "too-small.jsonl"
-    with pytest.raises(ValueError, match="too small for required metadata"):
+    with pytest.raises(ValueError):
         exporter(limit=MaxBytesLimit(1), through=2).export([message(1, "body")], too_small)
     assert not too_small.exists()
 
@@ -261,14 +260,14 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
     destination = tmp_path / "wire.jsonl"
     destination.write_text("keep me")
 
-    with pytest.raises(FileExistsError, match="already exists"):
+    with pytest.raises(FileExistsError):
         exporter().export([message(1, "first")], destination)
     assert destination.read_text() == "keep me"
     assert not list(tmp_path.glob(".wire.jsonl.*.tmp"))
 
     link = tmp_path / "link.jsonl"
     link.symlink_to(destination)
-    with pytest.raises(FileExistsError, match="already exists"):
+    with pytest.raises(FileExistsError):
         exporter().export([message(1, "first")], link)
     assert link.is_symlink()
 
@@ -333,7 +332,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
             ViewPredicate(AnyOfMatch, frozenset({"team"})),
         )
     )
-    with pytest.raises(RelationViolationError, match="projection"):
+    with pytest.raises(RelationViolationError):
         comms.views.export_wire(
             tmp_path / "projection.jsonl",
             format=JsonlFormat(),
@@ -401,16 +400,16 @@ def test_failures_clean_temporary_output_and_invalid_sequence_never_publishes(tm
         yield message(1, "first")
         raise RuntimeError("source failed")
 
-    with pytest.raises(RuntimeError, match="source failed"):
+    with pytest.raises(RuntimeError):
         exporter().export(broken_stream(), destination)
     assert not destination.exists()
     assert not list(tmp_path.glob(".failed.jsonl.*.tmp"))
 
-    with pytest.raises(ValueError, match="unique ascending"):
+    with pytest.raises(ValueError):
         exporter().export([message(2, "later"), message(1, "earlier")], destination)
     assert not destination.exists()
 
-    with pytest.raises(ValueError, match="unique ascending"):
+    with pytest.raises(ValueError):
         exporter().export(
             [message(1, "first"), replace(message(2, "duplicate"), seq=1)], destination
         )

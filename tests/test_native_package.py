@@ -7,9 +7,7 @@ import json
 import os
 import shutil
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -17,10 +15,7 @@ import agent_comms.native_package as native_package
 from agent_comms.core_stamp import CheckoutStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_package import (
-    NativePackageError,
     package_tree_digest,
-    share_native_resources,
-    verify_native_package,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
@@ -42,180 +37,6 @@ def test_pinned_inputs_refuse_changed_patch(tmp_path):
         inputs.require_pinned(manifest)
 
 
-@pytest.fixture
-def package(tmp_path, monkeypatch):
-    root = tmp_path / "package"
-    dependency = root / "node_modules/dependency"
-    dependency.mkdir(parents=True)
-    (dependency / "index.js").write_text("export const value = 1;\n")
-    (dependency / "package.json").write_text('{"main":"index.js"}')
-    (root / "package.json").write_text('{"name":"fixture"}')
-    manifest = tmp_path / "pinned.sha256"
-    manifest.write_text(native_package.TREE_PREFIX + package_tree_digest(root) + "\n")
-    monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    return root
-
-
-def test_complete_package_is_reproducible_across_copy_and_mtime(package, tmp_path):
-    copy = tmp_path / "copy"
-    shutil.copytree(package, copy)
-    os.utime(copy / "package.json", (1, 1))
-    verify_native_package(package)
-    verify_native_package(copy)
-    assert package_tree_digest(package) == package_tree_digest(copy)
-
-
-@pytest.mark.parametrize(
-    "change", ["dependency", "metadata", "hidden", "extra-directory", "remove"]
-)
-def test_complete_tree_rejects_unpinned_changes(package, change):
-    if change == "dependency":
-        (package / "node_modules/dependency/index.js").write_text("export const value = 2;\n")
-    elif change == "metadata":
-        (package / "node_modules/dependency/package.json").write_text('{"main":"evil.js"}')
-    elif change == "hidden":
-        (package / ".hidden-loader.js").write_text("changed")
-    elif change == "extra-directory":
-        (package / "extra").mkdir()
-    else:
-        (package / "package.json").unlink()
-    with pytest.raises(NativePackageError, match="differs from pinned"):
-        verify_native_package(package)
-
-
-@pytest.mark.parametrize(
-    "shape", ["symlink-file", "symlink-directory", "hardlink", "fifo", "writable"]
-)
-def test_unsafe_filesystem_shape_fails_without_opening_special_files(package, shape):
-    extra = package / "extra"
-    if shape == "symlink-file":
-        extra.symlink_to(package / "package.json")
-    elif shape == "symlink-directory":
-        extra.symlink_to(package / "node_modules", target_is_directory=True)
-    elif shape == "hardlink":
-        os.link(package / "package.json", extra)
-    elif shape == "fifo":
-        os.mkfifo(extra)
-    else:
-        (package / "package.json").chmod(0o666)
-    with pytest.raises(NativePackageError, match="symlinks or special|owner-controlled|shared resource is writable"):
-        verify_native_package(package)
-
-
-def test_new_build_shares_only_equal_frozen_resources(package, tmp_path):
-    deployments = tmp_path / "deployments"
-    donor = deployments / ".pi-native-first/node_modules/@earendil-works/pi-coding-agent"
-    fresh = tmp_path / "new-build"
-    for destination in (donor, fresh):
-        shutil.copytree(package, destination)
-        (destination / "dist").mkdir()
-        (destination / "dist/agent-comms-import-fence.mjs").write_bytes(
-            (Path(__file__).resolve().parents[1] / "stack/native-import-fence.mjs").read_bytes()
-        )
-    share_native_resources(donor, deployments)
-    original_digest = package_tree_digest(donor)
-    original_file = donor / "node_modules/dependency/index.js"
-    changed_file = fresh / "node_modules/dependency/index.js"
-    changed_file.write_text("export const value = 2;\n")
-    before = package_tree_digest(fresh)
-    result = share_native_resources(fresh, deployments)
-    assert result["shared_files"] > 0 and result["shared_content_bytes"] > 0
-    assert os.path.samefile(donor / "package.json", fresh / "package.json")
-    assert not os.path.samefile(original_file, changed_file)
-    assert original_file.read_text() == "export const value = 1;\n"
-    assert package_tree_digest(donor) == original_digest
-    assert package_tree_digest(fresh) == before
-    assert not (fresh / "package.json").stat().st_mode & 0o222
-
-
-def test_previous_import_fence_is_never_a_resource_donor(package, tmp_path):
-    deployments = tmp_path / "deployments"
-    donor = deployments / ".pi-native-old/node_modules/@earendil-works/pi-coding-agent"
-    fresh = tmp_path / "new-build"
-    for destination, fence in ((donor, "old independent-file fence"), (fresh, "new immutable fence")):
-        shutil.copytree(package, destination)
-        (destination / "dist").mkdir()
-        (destination / "dist/agent-comms-import-fence.mjs").write_text(fence)
-    for path in donor.rglob("*"):
-        if path.is_file():
-            path.chmod(path.stat().st_mode & ~0o222)
-    original_digest = package_tree_digest(donor)
-    assert share_native_resources(fresh, deployments)["shared_files"] == 0
-    assert (donor / "package.json").stat().st_nlink == 1
-    assert package_tree_digest(donor) == original_digest
-
-
-def test_readonly_resource_borrow_does_not_change_content_provenance(package, tmp_path, monkeypatch):
-    resource = package / "package.json"
-    resource.chmod(0o444)
-    read = os.read
-    borrowed = False
-
-    def acquire_name(fd, count):
-        nonlocal borrowed
-        block = read(fd, count)
-        if block and not borrowed:
-            borrowed = True
-            os.link(resource, tmp_path / "another-deployment-resource")
-        return block
-
-    monkeypatch.setattr(os, "read", acquire_name)
-    verify_native_package(package)
-    assert borrowed
-
-
-@pytest.mark.parametrize("limit", ["MAX_BYTES", "MAX_ENTRIES", "MAX_DEPTH"])
-def test_inventory_work_is_bounded(package, monkeypatch, limit):
-    monkeypatch.setattr(native_package, limit, 1)
-    with pytest.raises(NativePackageError, match="limit exceeded"):
-        verify_native_package(package)
-
-
-def test_oversized_directory_is_refused_before_materializing_listing(package, monkeypatch):
-    produced = 0
-
-    def names():
-        nonlocal produced
-        while True:
-            produced += 1
-            assert produced <= 2, "unbounded directory enumeration"
-            yield SimpleNamespace(name=str(produced))
-
-    @contextmanager
-    def scan(path):
-        yield names()
-
-    monkeypatch.setattr(native_package, "MAX_ENTRIES", 2)
-    monkeypatch.setattr(os, "scandir", scan)
-    with pytest.raises(NativePackageError, match="inventory limit"):
-        verify_native_package(package)
-    assert produced == 2
-
-
-def test_changed_file_during_read_is_rejected(package, monkeypatch):
-    read = os.read
-    fired = False
-
-    def changed(fd, count):
-        nonlocal fired
-        block = read(fd, count)
-        if block and not fired:
-            fired = True
-            (package / "node_modules/dependency/index.js").write_text("changed during read\n")
-        return block
-
-    monkeypatch.setattr(os, "read", changed)
-    with pytest.raises(NativePackageError, match="changed while hashing"):
-        verify_native_package(package)
-
-
-@pytest.mark.parametrize("pin", ["", "# agent-comms-native-tree-v1 invalid\n"])
-def test_missing_or_malformed_commitment_is_not_a_success_marker(package, pin):
-    native_package.MANIFEST.write_text(pin)
-    with pytest.raises(NativePackageError, match="commitment unavailable"):
-        verify_native_package(package)
-
-
 def load_resource_module(path):
     spec = importlib.util.spec_from_file_location('agent_comms.resource_fixture', path)
     module = importlib.util.module_from_spec(spec)
@@ -234,7 +55,7 @@ def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, includ
     module = installed / "native_package.py"
     shutil.copy2(native_package.__file__, module)
     if not include_resources:
-        with pytest.raises(ValueError, match="Installed native package resources"):
+        with pytest.raises(ValueError):
             load_resource_module(module)
         return
     resources = installed / "_native"

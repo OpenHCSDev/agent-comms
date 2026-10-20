@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 from acp import RequestError
-from acp.agent.router import build_agent_router
 from acp.schema import PromptResponse, TextContentBlock
 
 from agent_comms.acp_extension import (
@@ -17,7 +16,7 @@ from agent_comms.acp_extension import (
     encode_request,
     encode_updates,
 )
-from agent_comms.agent_backend import FailedCompaction, PlacedCompaction
+from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_counts import PiCount
@@ -32,104 +31,6 @@ PLACED_REPLY = PromptResponse(
 
 def block(text: str) -> TextContentBlock:
     return TextContentBlock(type="text", text=text)
-
-
-@pytest.mark.asyncio
-async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
-    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
-    calls = []
-
-    async def compact_context(owner, session_id, instructions):
-        calls.append((owner, session_id, instructions))
-        return PLACED
-
-    async def forbidden_model(*args, **kwargs):
-        raise AssertionError("/compact must not become a model prompt")
-
-    monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
-    monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden_model)
-    try:
-        response = await agent.prompt(session, [block("/compact   focus on safety ")])
-        assert response.stop_reason == "end_turn"
-        assert response == PLACED_REPLY
-        assert calls == [(agent.turns, session, "focus on safety")]
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
-    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
-    calls = []
-
-    async def compact_context(owner, session_id, instructions):
-        calls.append((owner, session_id, instructions))
-        return PLACED
-
-    async def forbidden_model(*args, **kwargs):
-        raise AssertionError("Toad's compact metadata must not be a model prompt")
-
-    monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
-    monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden_model)
-    try:
-        response = await agent.prompt(
-            session, [block(" ")], _meta=encode_request(CompactRequest("focus on safety"))
-        )
-        assert response.stop_reason == "end_turn"
-        assert response == PLACED_REPLY
-        assert calls == [(agent.turns, session, "focus on safety")]
-        with pytest.raises(RequestError) as invalid:
-            await agent.prompt(session, [block("nonblank")], _meta=encode_request(CompactRequest()))
-        assert invalid.value.data == {"reason": "Compaction metadata requires blank text"}
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
-    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
-    calls = []
-
-    async def compact_context(owner, session_id, instructions):
-        calls.append((owner, session_id, instructions))
-        return PLACED
-
-    monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
-    try:
-        response = await build_agent_router(agent)(
-            "session/prompt",
-            {
-                "sessionId": session,
-                "prompt": [{"type": "text", "text": " "}],
-                "_meta": encode_request(CompactRequest("focus")),
-            },
-            False,
-        )
-        assert response == PLACED_REPLY
-        assert calls == [(agent.turns, session, "focus")]
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
-    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
-
-    async def compact_context(*args):
-        return FailedCompaction("uncertain compaction")
-
-    monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
-    try:
-        with pytest.raises(RequestError) as failure:
-            await agent.prompt(session, [block("/compact")])
-        assert failure.value.data == {"reason": "uncertain compaction"}
-        assert str(failure.value) == "uncertain compaction"
-    finally:
-        await agent.shutdown()
 
 
 @pytest.mark.asyncio

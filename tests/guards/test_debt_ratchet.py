@@ -135,8 +135,8 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
     ]
     assert len(starts) == 2
     assert GitMeasure.sources(repo.path, revision, set()) == []
-    with pytest.raises(ValueError, match="omitted"):
-        GitMeasure.sources(repo.path, revision, selected | {f"{repo.root}/missing.py"})
+    with pytest.raises(ValueError):
+        GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 
 def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):

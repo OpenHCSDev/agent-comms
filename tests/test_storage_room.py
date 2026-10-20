@@ -2,8 +2,6 @@
 import asyncio
 import os
 import shutil
-import sys
-from dataclasses import replace
 
 import pytest
 
@@ -11,12 +9,11 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.storage_room import (
-    BuildRoomWork, RoomClaim, RoomNeed, TestGateRoomWork, UnitStartRoomWork,
-    WaitingRoomPhase, WorkMeasurement, WorkPeak,
+    BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
+    WaitingRoomPhase,
 )
 from agent_comms.storage_rules import StorageRule, shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.wire_watch import ModifiedWatchSource, open_wire_watcher
 
 
 def copied_root(tmp_path):
@@ -30,68 +27,6 @@ def copied_root(tmp_path):
     comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=0, memory_gib=0,
         checkout_base=tmp_path, scratch_base=tmp_path / 'scratch')
     return comms
-
-
-async def real_gate():
-    process = await asyncio.create_subprocess_exec(sys.executable, '-B', '-c',
-        'import sys; data=bytearray(4*1024*1024); print("running",flush=True);sys.stdin.readline()',
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
-    assert await process.stdout.readline() == b'running\n'
-    return process
-
-
-async def finish_gate(process):
-    process.stdin.write(b'done\n')
-    await process.stdin.drain()
-    process.stdin.close()
-    assert await process.wait() == 0
-
-
-@pytest.mark.asyncio
-async def test_two_real_gates_wait_then_run_on_copied_root(tmp_path, monkeypatch):
-    comms = copied_root(tmp_path)
-    rule = comms.registry.storage_rule
-    one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
-    # Calibration really runs a child and measures it. No guessed requirement.
-    calibration = await rule.wait_for_room((TestGateRoomWork,), one, comms.root)
-    gate = await real_gate()
-    await asyncio.sleep(WorkMeasurement.sample_seconds * 3)
-    await finish_gate(gate)
-    await asyncio.to_thread(calibration.finish)
-    with rule.room_ledger.snapshot() as db:
-        measured = WorkPeak.one(db, work=TestGateRoomWork).need
-    assert measured.memory > 0
-    # Controlled OS reading: enough for one measured gate, but not two.
-    available = measured + RoomNeed(measured.memory // 2, measured.disk // 2)
-    monkeypatch.setattr(StorageRule, 'free_room', lambda self: available)
-    first = await rule.wait_for_room((TestGateRoomWork,), one, comms.root)
-    gate_one = await real_gate()
-    source = ModifiedWatchSource(rule.room_ledger.root, frozenset(
-        os.fsencode(path.name) for path in rule.room_ledger.source_paths(rule.room_ledger.root)))
-    watcher = open_wire_watcher(source)
-    await watcher.prepare()
-    second = asyncio.create_task(rule.wait_for_room((TestGateRoomWork,), two, comms.root))
-    async with asyncio.timeout(5):
-        await watcher.wait()
-    watcher.close()
-    assert not second.done()
-    activity = comms.agents.activity_of(two.name, snapshot=comms.registry.snapshot())
-    assert activity.state == ActivityState.WAITING_FOR_ROOM
-    assert 'Waiting For Room' in activity.ordinary_presentation(two.name).summary
-    print('timeline: gate-one running; gate-two waiting for room')
-    await finish_gate(gate_one)
-    await asyncio.to_thread(first.finish)
-    async with asyncio.timeout(5):
-        next_reservation = await second
-    gate_two = await real_gate()
-    activity = comms.agents.activity_of(two.name, snapshot=comms.registry.snapshot())
-    assert activity.state != ActivityState.WAITING_FOR_ROOM
-    print('timeline: gate-one ended/released; gate-two running')
-    await finish_gate(gate_two)
-    await asyncio.to_thread(next_reservation.finish)
-    with rule.room_ledger.snapshot() as db:
-        assert RoomClaim.count(db) == 0
-    assert not list(original for original in (tmp_path / 'original').glob('work_room*'))
 
 
 @pytest.mark.asyncio

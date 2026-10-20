@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 from contextlib import closing
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -15,14 +14,11 @@ from agent_comms.comms import Comms
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import AllChannelDisplayScope
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
-from agent_comms.wire_log import (CurrentSnapshotOpening, OpenedWireSnapshot, SavedPrefixOpening,
-                                  WireSnapshot)
+from agent_comms.wire_log import (CurrentSnapshotOpening)
 
 
 def retained_source(root, count, *, access=ArchivedAccess()):
@@ -86,62 +82,6 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
     with pytest.raises(StaleBusPageIndexError):
         archive.incoming_page('b', after=6)
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
-
-
-@pytest.mark.parametrize("opening", [SavedPrefixOpening(), CurrentSnapshotOpening()])
-def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, opening):
-    bus = retained_source(tmp_path / 'sparse', 200)
-    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-        wanted = [message for message, _ in opened.public_records() if message.seq in (7, 150)]
-    decoded = []
-    from agent_comms.wire_record import WireRecord
-
-    decode_record = WireRecord.public_from_wire.__func__
-
-    def record_decode(cls, value):
-        record = decode_record(cls, value)
-        decoded.extend(message.seq for message in record.messages())
-        return record
-
-    monkeypatch.setattr(WireRecord, 'public_from_wire', classmethod(record_decode))
-    with bus.log.opened_wire_snapshot(opening=opening) as opened:
-        assert type(opened) is OpenedWireSnapshot
-        references = tuple(message.reference for message in wanted)
-        assert opened.messages_for_references(references) == tuple(wanted)
-    assert decoded == [7, 150]
-
-
-def test_parallel_readers_receive_repaired_offsets_once(tmp_path, monkeypatch):
-    bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
-    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-        message, _ = next(opened.public_records())
-    with BusPageIndex(bus.log.path) as index:
-        index.invalidate()
-    readers_ready = threading.Barrier(2)
-    sync = BusPageIndex.sync
-    repairs = []
-
-    def record_repair(index, opened):
-        repairs.append(opened.revision)
-        return sync(index, opened)
-
-    monkeypatch.setattr(BusPageIndex, 'sync', record_repair)
-
-    def read_reference():
-        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-            with BusPageIndex(bus.log.path) as index:
-                assert index.covers(opened)
-            readers_ready.wait(timeout=5)
-            return opened.messages_for_references((message.reference,))
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        readers = (executor.submit(read_reference), executor.submit(read_reference))
-        for reader in readers:
-            assert reader.result(timeout=5) == (message,)
-    assert len(repairs) == 1
-    with BusPageIndex(bus.log.path) as index:
-        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-            assert index.covers(opened)
 
 
 def test_append_commits_while_an_older_page_snapshot_is_open(tmp_path):

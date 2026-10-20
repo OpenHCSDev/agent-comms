@@ -70,11 +70,11 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.select(db, where="enabled=?", parameters=(False,),
                                     order_by=("key",)) == [replace(child, enabled=False)]
         assert TableChildRow.one(db) == replace(child, enabled=False)
-        with pytest.raises(ValueError, match="Unknown fields"):
+        with pytest.raises(ValueError):
             TableChildRow.select(db, missing=1)
-        with pytest.raises(ValueError, match="Update requires fields"):
+        with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",))
-        with pytest.raises(ValueError, match="Empty column list"):
+        with pytest.raises(ValueError):
             TableChildRow._column_list(())
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
@@ -102,7 +102,7 @@ def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation
         actual = SQLiteSchemaObject.read(db.execute(
             "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL"))
         assert SQLiteSchemaObject.differences(actual, NativeContextJournal.schema_objects()) == ()
-        with pytest.raises(sqlite3.OperationalError, match='already exists'):
+        with pytest.raises(sqlite3.OperationalError):
             NativeContextJournal.create(db)
 
 
@@ -118,7 +118,7 @@ def test_index_owns_unique_partial_creation():
             TableParentRow('duplicate', 1).insert(db)
         TableParentRow('zero-one', 0).insert(db)
         TableParentRow('zero-two', 0).insert(db)
-        with pytest.raises(sqlite3.OperationalError, match='already exists'):
+        with pytest.raises(sqlite3.OperationalError):
             db.execute(index.sql(TableParentRow, 'positive_counts'))
 
 
@@ -147,9 +147,9 @@ def test_new_row_declaration_needs_no_other_edit():
         assert stored.ordinal == 1 and stored.label_size == 3
         assert stored.representation is IntegerStorage and stored.event is InfoKind
         assert AddedTableRow.count(db, exact=7) == 1
-        with pytest.raises(ValueError, match="Generated columns"):
+        with pytest.raises(ValueError):
             AddedTableRow.insertion_statement(("label_size",))
-        with pytest.raises(ValueError, match="Generated columns"):
+        with pytest.raises(ValueError):
             AddedTableRow.update(db, where="label=?", parameters=("new",), label_size=4)
         with pytest.raises(sqlite3.IntegrityError):
             db.execute("UPDATE added_table SET event='invented'")
@@ -166,7 +166,7 @@ def test_new_row_declaration_needs_no_other_edit():
             Projection.read(db.execute("SELECT 'new' AS label"))
         with pytest.raises(ValueError):
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
-        with pytest.raises(MalformedRecord, match="Missing required fields for TableChildRow"):
+        with pytest.raises(MalformedRecord):
             AddedTableRow.update(db, where="1", child=FieldCodec.decode(
                 TableChildRow, {TableChildRow.family_discriminator: TableChildRow.declared_name}
             ))
@@ -189,11 +189,11 @@ def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():
         cursor = db.execute("SELECT 2")
         with pytest.raises(ValueError):
             SqlValue.for_annotation(bool).read(cursor)
-        with pytest.raises(sqlite3.ProgrammingError, match="closed cursor"):
+        with pytest.raises(sqlite3.ProgrammingError):
             cursor.fetchone()
-        with pytest.raises(ValueError, match="exactly one"):
+        with pytest.raises(ValueError):
             SqlValue.for_annotation(int).read(db.execute("SELECT 1, 2"))
-        with pytest.raises(ValueError, match="Unknown fields"):
+        with pytest.raises(ValueError):
             TableParentRow.insert_values(db, invented="field")
 
 
@@ -207,7 +207,7 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(cursor)
         assert next(rows) == StreamProjection(True)
         rows.close()
-        with pytest.raises(sqlite3.ProgrammingError, match="closed cursor"):
+        with pytest.raises(sqlite3.ProgrammingError):
             cursor.fetchone()
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):

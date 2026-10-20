@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
-from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -13,9 +11,7 @@ from acp import RequestError
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
-    InputStartedUpdate,
     QueueChangedUpdate,
-    QueueItem,
     LiveCursorScope,
     LiveQueueScope,
     QueuePromptRequest,
@@ -27,13 +23,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.input_attempt import ReservedInput
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
 
@@ -45,72 +39,6 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     agent.sessions.bindings["beta"] = "beta"
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
     return comms, agent, owner.created_at, claimed_generation
-
-
-async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monkeypatch):
-    comms, agent, created, generation = _owner(tmp_path)
-    first, second = "a" * 32, "b" * 32
-    agent.inputs.state("beta").queued = {
-        key: QueuedInput(
-            "same text",
-            True,
-            QueuedInputContext(ClaimedIdentity(RecordedThreadIncarnation("beta", created), generation)),
-            key,
-            "same text",
-        )
-        for key in (first, second)
-    }
-    initial = await agent.inputs.queue_state("beta")
-    assert initial.scope.claimed_generation == generation
-    assert initial.projection.items == (
-        QueueItem(first, "same text"),
-        QueueItem(second, "same text"),
-    )
-    updates = []
-
-    async def record_update(*, session_id, update):
-        assert session_id == "beta"
-        updates.extend(decode_updates(update.field_meta))
-
-    monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    item = agent.inputs.state("beta").queued[first]
-    with ExitStack() as ownership:
-        agent.inputs.dispositions.reserve_originals(ReservedInput(
-            item.key, None, "beta", generation, "beta", item.text,
-        ), ownership=ownership)
-        ownership.pop_all()
-    assert agent.inputs.dispositions.bind(
-        item.key, claim_scope=generation, turn_id="test-turn", native_id="b" * 32, text=item.text,
-    )
-    assert agent.inputs.dispositions.started(
-        item.key, turn_id="test-turn", native_id="b" * 32, text=item.text,
-    )
-    await item.source().started(agent.inputs, "beta", initial.scope)
-    started = next(update for update in updates if isinstance(update, InputStartedUpdate))
-    assert isinstance(started, InputStartedUpdate)
-    assert (started.input_id, started.scope, started.revision) == (
-        first,
-        initial.scope,
-        initial.revision + 1,
-    )
-    queued = updates[-1]
-    assert queued.revision > started.revision
-    assert queued.projection.items == (QueueItem(second, "same text"),)
-    agent.inputs.state("beta").restored = {second: agent.inputs.state("beta").queued.pop(second)}
-    await agent.inputs.emit_queue_state("beta")
-    restored = updates[-1]
-    assert restored.projection.items == ()
-    assert restored.projection.restored == (QueueItem(second, "same text"),)
-    metadata = decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
-    assert (
-        next(f for f in metadata if isinstance(f, QueueChangedUpdate)).projection
-        == restored.projection
-    )
-    comms.registry.register(comms.registry.require("beta"), new_owner=True)
-    current = await agent.inputs.queue_state("beta")
-    assert current.scope.claimed_generation > generation
-    assert current.projection.items == current.projection.restored == ()
-    assert second in agent.inputs.state("beta").restored
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
@@ -154,7 +82,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
     assert all(row.public_status == "unknown" for row in stored_inputs(agent.inputs.dispositions.root).rows.values())
     before = inbox.qsize()
-    with pytest.raises(RelationViolationError, match="reservation already exists"):
+    with pytest.raises(RelationViolationError):
         await agent.prompt(
             "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
         )

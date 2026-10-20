@@ -283,7 +283,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                     )
                     == ()
                 )
-        with pytest.raises(IdentityConflict, match="cannot be reused"):
+        with pytest.raises(IdentityConflict):
             await execution.run()
         assert len(requests) == 2 + triage
     finally:

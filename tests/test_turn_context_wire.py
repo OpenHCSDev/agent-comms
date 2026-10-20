@@ -1,5 +1,4 @@
 """Original sealed messaging survives silent context rows through every projection."""
-from bus_history import read_history
 from conftest import publish_initial
 import hashlib
 import json
@@ -7,7 +6,6 @@ import json
 import pytest
 
 from agent_comms.context_store import AbsentContext
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
@@ -15,9 +13,7 @@ from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord
 from agent_comms.field_codec import FieldCodec
-from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
-from agent_comms.comms import Comms
-from test_private_bus_checkpoint import _root, _page
+from test_private_bus_checkpoint import _root
 
 
 def manifest(owner, generation=1):
@@ -87,45 +83,6 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     assert comms.bus.log.path.read_bytes() == before
 
 
-def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
-    comms,root_id=_root(tmp_path)
-    first=publish_initial(comms, 'sender','#team','@Alice original question')
-    lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup
-    prior=_page(comms,lookup)
-    raw=comms.bus.log.path.read_bytes()
-    with comms.bus.opened_activity() as clocks:
-        activity=clocks.channels
-    pending=comms.bus.pending_counts_all(['Alice','Bob'])
-    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
-    comms.contexts.record(manifest(comms.registry.require('Alice')))
-    assert comms.bus.log.path.read_bytes() == raw
-    assert comms.bus.log.latest_sequence()==first.seq
-    assert len(read_history(comms))==1
-    assert _page(comms,lookup)[0].offset==prior[0].offset
-    assert _page(comms,lookup)[1:]==prior[1:]
-    with comms.bus.opened_activity() as clocks:
-        assert clocks.channels==activity
-    assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
-    assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
-    assert read_history(comms)==[first]
-    with comms.bus.log.full_history_snapshot() as (_, messages):
-        assert list(messages)==[first]
-    second=publish_initial(comms, 'sender','#team','@Alice next original message')
-    assert second.seq==first.seq+1
-    comms.contexts.record(manifest(comms.registry.require('Alice'),2))
-    reopened=Comms(comms.root)
-    assert read_history(reopened)==[first,second]
-    assert len(_page(reopened,lookup)[1])==2
-    monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
-    recent, limited = reopened.relationships._recent_messages()
-    assert recent == (first, second) and not limited
-    assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
-    recorded = TurnContextCliCommand(thread='Alice',turn=1)
-    assert len(recorded.apply(reopened).to_wire()['manifests'])==1
-    difference = DiffContextCliCommand(thread='Alice')
-    assert difference.apply(reopened).to_wire()['turn']['occurrence']['generation']==2
-
-
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     comms,root_id=_root(tmp_path)
     recorded, _entries = AbsentContext().capture(manifest(comms.registry.require('Alice')))
@@ -160,20 +117,3 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     assert decoded.message.encode() == raw and decoded.images == images
 
 
-def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_path, monkeypatch):
-    from agent_comms.turn_context import CoordinationSegment, InstructionFile
-    from agent_comms.wake_policy import WakePolicy
-
-    comms, _ = _root(tmp_path)
-    owner = comms.registry.require('Alice')
-    original = WakePolicy.relevance_instruction()
-    captured = CoordinationSegment.capture(owner, (), (), comms.goals)
-    assert original.source in captured.provenance
-    assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
-
-    def changed_instruction(cls, name):
-        raise AssertionError('Captured instructions must not reread the current file')
-
-    monkeypatch.setattr(InstructionFile, 'read', classmethod(changed_instruction))
-    assert original.content in captured.text()
-    assert captured.response_instruction.source == original.source

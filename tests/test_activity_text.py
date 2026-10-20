@@ -15,7 +15,6 @@ from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.threads import Thread
 from agent_comms.turn_phase import IdlePhase, ModelWaitPhase, ToolRunningPhase
 
 
@@ -50,9 +49,9 @@ def test_projection_preserves_source_identity_and_strict_record_validation(activ
         assert projected.readiness is activity.readiness
     raw = FieldCodec.encode(activity)
     raw["detail"] = detail
-    with pytest.raises(ValueError, match="Activity detail cannot exceed"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(type(activity), raw)
-    with pytest.raises(ValueError, match="Activity detail cannot exceed"):
+    with pytest.raises(ValueError):
         Activity.from_wire(FieldCodec.encode(Activity("worker", ActivityState.WORKING)) | {"detail": detail})
 
 

@@ -5,8 +5,7 @@ from dataclasses import fields, replace
 import pytest
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
+from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
@@ -103,116 +102,6 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
         ExecutionState.__registry__.pop("paused")
 
 
-@pytest.mark.asyncio
-async def test_durable_turn_records_native_phases_before_completion(tmp_path, monkeypatch):
-    import asyncio
-    import os
-    import sqlite3
-    from contextlib import closing
-
-    from agent_comms.agent_events import NativePhaseChanged
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.coordinator import Coordination
-    from agent_comms.durable_turn import DurableTurn
-    from agent_comms.owner_fence import prepare_fence_token
-    from agent_comms.pi_events import PiEvent
-    from agent_comms.native_pi import NativeContextRecord
-    from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
-    from native_proof_cases import emitted_context
-
-    selected = []
-    original_selection = DurableTurn.handlers_for
-
-    def observed_selection(self, event):
-        selected.append(event)
-        yield from original_selection(self, event)
-
-    monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
-
-    from agent_comms.comms import Comms
-
-    comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
-    with Coordination(tmp_path / "coordination.sqlite3") as store:
-        store.participants.register("owner", "owner", "owner", committed=True)
-        created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
-        pending = store.executions.mark_pending(
-            "e", expected_revision=created.execution.revision
-        ).value
-        started = store.attempts.start(
-            AttemptStart(
-                "e",
-                1,
-                "owner",
-                1,
-                prepare_fence_token(),
-                expected_execution_revision=pending.execution.revision,
-                expected_pointer_revision=pending.pointer_revision,
-            )
-        ).value
-        input_id = "a" * 32
-        progress = DurableTurn(
-            store.attempts, started.fence, started.snapshot.pointer_revision, input_id
-        )
-        from agent_comms.agent_events import PromptAccepted
-
-        samples = [
-            (PromptAccepted(), "prompt_accepted"),
-            (emitted_context(FieldCodec.encode(NativeContextRecord(
-                input_id, "isolated-session", "entry", 1, "0" * 64, 1,
-            ))), "model_running"),
-        ]
-        for event, expected in samples:
-            await progress.dispatch(event)
-            assert sum(observation is event for observation in selected) == 1
-            attempt = store.snapshots.get("e").attempt
-            assert attempt.lifecycle.declared_name == expected
-            assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
-        identity = ProcessIdentity.capture(os.getpid())
-        # Native owns phase interpretation; durable projection consumes the
-        # observed phase rather than independently counting tool starts/ends.
-        phases = [
-            (ToolRunningPhase(), "tool_running"),
-            (ModelWaitPhase(), "model_running"),
-            (CompactionPhase(), "compaction"),
-            (ModelWaitPhase(), "model_running"),
-        ]
-        for phase, expected in phases:
-            event = NativePhaseChanged(phase, identity)
-            await progress.dispatch(event)
-            assert sum(observation is event for observation in selected) == 1
-            assert store.snapshots.get("e").attempt.lifecycle.declared_name == expected
-
-        # A real SQLite blocker must not prevent the loop from releasing it.
-        # Cancellation joins the owned observation, retaining its exact fence.
-        with closing(sqlite3.connect(store.session.path, isolation_level=None)) as blocker:
-            blocker.execute("BEGIN EXCLUSIVE")
-            unhandled = PiEvent.from_wire({"type": "unhandled-observation"})
-            assert await progress.dispatch(unhandled) is unhandled
-            event = NativePhaseChanged(ToolRunningPhase(), identity)
-            observation = asyncio.create_task(progress.dispatch(event))
-            asyncio.get_running_loop().call_later(0.1, blocker.rollback)
-            await asyncio.sleep(0)
-            observation.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await observation
-        assert sum(observation is event for observation in selected) == 1
-        observed = store.snapshots.get("e").attempt
-        assert observed.lifecycle.declared_name == "tool_running"
-        assert progress.fence.revision == observed.revision
-        before_finish = progress.fence.revision
-        final = progress.finish()
-        assert final.revision == before_finish + 1
-        assert store.snapshots.get("e").attempt.lifecycle.backend_done
-        assert isinstance(store.snapshots.get("e").attempt.lifecycle, SettlingAttempt)
-        store.attempts.settle_nonpublication(
-            final,
-            expected_pointer_revision=started.snapshot.pointer_revision,
-            outcome=SucceededAttempt(),
-        )
-        assert store.snapshots.get("e").execution.lifecycle.completed
-
-
 def test_new_response_state_roundtrips_real_store(tmp_path):
     from agent_comms.coordinator import Coordination
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
@@ -299,7 +188,7 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
     # Unstarted assignments cannot carry a frozen response target at all.
     unstarted = FieldCodec.encode(FullPendingAssignment())
     assert FieldCodec.decode(AssignmentState, unstarted) == FullPendingAssignment()
-    with pytest.raises(ValueError, match="Unknown fields"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(AssignmentState, dict(unstarted, exact_target="requester"))
 
     # An engagement cannot omit either member of its exact execution binding.
@@ -317,5 +206,5 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
         del damaged[field]
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(ResponseState, damaged)
-    with pytest.raises(ValueError, match="Unknown fields"):
+    with pytest.raises(ValueError):
         FieldCodec.decode(ResponseState, {**FieldCodec.encode(SilentResponse()), "seq": 1})

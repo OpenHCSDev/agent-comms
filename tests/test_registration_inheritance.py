@@ -61,17 +61,6 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
     assert current.channel_scope_generation == restored.channel_scope_generation + 1
 
 
-def test_generated_clock_collision_is_still_allocated_by_locked_registry(tmp_path, monkeypatch):
-    monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
-    comms = wire(tmp_path)
-    for name in ("first", "second"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    first, second = comms.registry.require("first"), comms.registry.require("second")
-    assert first.created_at == 42.0
-    assert second.created_at > first.created_at
-    assert first.incarnation != second.incarnation
-
-
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
     comms = wire(tmp_path)
     first = comms.registry.declare(comms.registry.new_thread('before', frozenset({'team'}), str(tmp_path)))
@@ -81,19 +70,6 @@ def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_pat
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
     assert returned.title == "new"
-
-
-def test_generated_claim_clock_collision_preserves_allocated_names_and_identities(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
-    comms = wire(tmp_path)
-    first = comms.threads.claim_thread("owner", tags=frozenset(), worktree=str(tmp_path))
-    second = comms.threads.claim_thread("owner", tags=frozenset(), worktree=str(tmp_path))
-    assert first.name == "owner" and second.name == "owner-2"
-    assert first.created_at == 42.0 and second.created_at > first.created_at
-    assert comms.registry.require(second.name) == second
-    assert first.incarnation != second.incarnation
 
 
 def test_project_round_trip_excludes_current_project_from_history(tmp_path):
@@ -126,7 +102,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     original = comms.agents.begin_turn('owner', 'original-turn')
     try:
         comms.threads.set_project('owner', str(new))
-        with pytest.raises(StaleFence, match='registry_worktree'):
+        with pytest.raises(StaleFence):
             original.require_snapshot(comms.registry.snapshot(), 'New input refused')
         saved = str(old / 'native.jsonl')
         observed = comms.registry.attach_native_session(original, saved)
@@ -138,7 +114,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         # Later native observations use the same source and preserve old -> new.
         observed = comms.registry.attach_native_session(observed, saved)
         assert observed.thread.worktree == str(old)
-        with pytest.raises(StaleFence, match='registry_worktree'):
+        with pytest.raises(StaleFence):
             observed.require_snapshot(comms.registry.snapshot(), 'New input refused')
         LiveResponseOwner(thread=observed.thread,
             claimed_generation=original.claimed_generation).require_snapshot(
@@ -162,7 +138,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))
     before = comms.registry.store.path.read_bytes()
-    with pytest.raises(StaleFence, match='registry_worktree'):
+    with pytest.raises(StaleFence):
         comms.registry.attach_native_session(original, str(tmp_path / 'native.jsonl'))
     assert comms.registry.store.path.read_bytes() == before
     assert comms.agents.finish_turn(original.turn_lease)

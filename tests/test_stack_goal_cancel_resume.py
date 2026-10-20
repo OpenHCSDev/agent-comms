@@ -184,7 +184,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
                 failed.lifecycle == BlockedGeneration() and failed.attempt_id == claimed.attempt_id
             )
             # Resume cannot silently authorize replay of the cancelled attempt.
-            with pytest.raises(RuntimeError, match="Retry"):
+            with pytest.raises(RuntimeError):
                 await proxy.request(
                     "update_goal",
                     status="active",

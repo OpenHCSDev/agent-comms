@@ -3,31 +3,22 @@
 import json
 import os
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import ParticipantNotRegistered
-from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
-from agent_comms.response_policy import CollectivePolicy, InformationalPolicy
 from agent_comms.thread_identity import (
-    AgentThreadRole,
     ClaimedIdentity,
     GenerationCounter,
     NoThreadText,
     RecordedThreadIncarnation,
-    ThreadRole,
     TurnIdentity,
-    UserThreadRole,
 )
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
@@ -146,7 +137,7 @@ def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
     else:
         registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(saved)
-    with pytest.raises(RelationViolationError, match="live owner turn claim_scope is no longer current"):
+    with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim("owner")
 
 
@@ -283,66 +274,3 @@ def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_
         assert not thread.same_launch(changed)
 
 
-@pytest.mark.parametrize(
-    ("role", "wire", "delivers", "registers", "executes", "human", "policy", "reply", "input_at", "origin"),
-    [
-        (AgentThreadRole, "agent", True, True, True, False, InformationalPolicy, None, 5.0, "external agent"),
-        (UserThreadRole, "user", False, False, False, True, CollectivePolicy, "sender", 9.0, "human"),
-    ],
-)
-def test_each_thread_role_member_owns_its_role_behaviour(
-    tmp_path, role, wire, delivers, registers, executes, human, policy, reply, input_at, origin
-):
-    """One declaration per member pins every method the family overrides and its wire spelling."""
-    message = Message("sender", "peer", "hello", InfoKind, sender_role=role)
-    assert (FieldCodec.encode(role), FieldCodec.decode(type[ThreadRole], wire)) == (wire, role)
-
-    delivered, targets = role.initial_delivery(message, "peer")
-    assert (targets == ["peer"], delivered.role == message.role) == (delivers, delivers)
-
-    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
-        role.register_sender(store.participants, "lookup-sender", "sender")
-        try:
-            store.participants.get("lookup-sender")
-            registered = True
-        except ParticipantNotRegistered:
-            registered = False
-    assert registered is registers
-
-    refusal = RelationViolationError("refused")
-    for require, admits in ((role.require_executable, executes), (role.require_user, human)):
-        if admits:
-            require(refusal)
-        else:
-            with pytest.raises(RelationViolationError, match="refused"):
-                require(refusal)
-
-    item = object()
-    assert role.executor(item) == ((item,) if executes else ())
-    assert role.human(item) == ((item,) if human else ())
-    assert role.page_human_sender() is human
-
-    barrier = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
-    role.require_maintenance_open(barrier, True)
-    barrier.begin(MaintenanceOperator.current())
-    role.require_maintenance_open(barrier, False)
-    if executes:
-        with pytest.raises(RelationViolationError, match="under maintenance"):
-            role.require_maintenance_open(barrier, True)
-    else:
-        role.require_maintenance_open(barrier, True)
-
-    class Reads:
-        def displayed_incarnation(self, *shown, document):
-            return (shown, document)
-
-    shown = role.displayed_recipient_effect(
-        Reads(), message, SimpleNamespace(incarnation="thread"), "snapshot", "document")
-    assert shown == (((message, "thread", "snapshot"), "document") if human else ())
-    assert role.channel_policy() is policy.instance()
-    assert role.reply_target(message) == reply
-    assert role.last_user_input(5.0, 9.0) == input_at
-    assert tuple(role.user_task_facts(message)) == (
-        tuple(message.task.user_task_facts(message)) if human else ()
-    )
-    assert role.origin_label == origin

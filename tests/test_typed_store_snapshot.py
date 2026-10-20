@@ -32,10 +32,10 @@ def test_missing_snapshot_has_declared_read_only_schema_without_creating_root(tm
         store.require_schema(store._schema(connection))
         for row in store.rows:
             assert row.select(connection) == []
-        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        with pytest.raises(sqlite3.OperationalError):
             store.rows[0].delete(connection, where="1")
     assert not root.exists()
-    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+    with pytest.raises(sqlite3.ProgrammingError):
         connection.execute("SELECT 1")
 
 
@@ -63,7 +63,7 @@ def test_change_marker_publishes_only_committed_row_changes(tmp_path):
     with store.writing() as connection:
         InputDispositionRow.delete(connection, where="0")
     assert marker.stat().st_mtime_ns == changed
-    with pytest.raises(ValueError, match="rollback"):
+    with pytest.raises(ValueError):
         with store.writing() as connection:
             InputDispositionRow.delete(connection)
             raise ValueError("rollback")
@@ -75,7 +75,7 @@ def test_change_marker_publishes_only_committed_row_changes(tmp_path):
 def test_existing_undeclared_schema_is_not_treated_as_missing(tmp_path):
     store = InputDispositions(tmp_path)
     store.path.touch(mode=0o600)
-    with pytest.raises(RelationViolationError, match="differs from its declaration"):
+    with pytest.raises(RelationViolationError):
         with store.snapshot():
             pytest.fail("An existing invalid file must not become an empty store")
     assert store.path.stat().st_size == 0

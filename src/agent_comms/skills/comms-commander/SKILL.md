@@ -31,7 +31,7 @@ Then `agent-comms-commander rules review` and answer each drawn rule.
 - **Fork a backlog slice when it helps; nothing refuses orders for load.** `capacity` reports load and live forks. A gate that refuses the commander's own orders and posts under load stops command exactly when the fleet needs it (2026-10-20).
 - **Hate jargon.** One jargon list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts, and Core answers any commanded unit message using it with a correction on its open orders when the message is published.
 
-- **Answer the owner and claude-ai on the bus, the same tick.** A reply only on the owner's screen is not an answer.
+- **Answer the owner once, in the session, the same tick.** The session's output already reaches the owner and #comms; the same answer repeated on the bus is noise. Tristan, 2026-10-20: "dn't message inboth i gt teh messages regardless".
 - **Memory files point at this skill; they never restate its rules.** A paraphrase drifts from the file and gets read instead of it.
 
 ## Why a dictator
@@ -118,14 +118,15 @@ Update the board row, move on. One line per unit touched.
 ## Merging
 
 - **One merger, and it is not the commander.** A merge fork judges each PR when it is pushed and runs the batches; the commander orders units. Only the merger merges.
-- **One integration run for every ready branch.** Units push and run only the tests they wrote or touched, never the full suite or the ratchets. The merger merges every ready head onto fresh main, runs the suite and both ratchets once, and installs once. Per-PR full gates are serial waste (owner, 2026-10-20).
+- **The merge queue runs the ratchets; nobody else does.** Units and forks push and run only the tests they wrote or touched, never the full suite or the ratchets. A ready PR that merges cleanly enqueues itself (`gh pr merge N --merge`); the queue groups them. Install once after the landings. Per-PR full gates are serial waste (owner, 2026-10-20).
+- **Conflicting PRs land as one batch, never one by one.** When several PRs conflict with main, the merger merges every head into one branch from fresh main, resolves each conflict once, and enqueues one PR; landing them in sequence makes each one conflict again. Tristan, 2026-10-20: "why in order? why not batch?"
 - **A failing PR drops out and the rest land in the same run.** A batch is never abandoned in silence: every landing and every drop is posted to #comms with its time and reason.
-- **Units never merge main into their branches.** The batch merges each head onto fresh main; the merger resolves trivial conflicts itself and sends only a real conflict back.
+- **A conflict is resolved, never sent back.** A lone conflicting PR is resolved by whoever holds it; several go to the merger's batch.
 - **The PR owns its state.** Ready is out of draft with both ratchets and the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
 - **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay until one shared record replaces it.
 
 ## Orders
 
-Each order has: the defect in one plain sentence, the outcome the owner will see when it is fixed (the intent, so the letter cannot drift from it), why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the proofs that do not count, the checks, a deadline for the first pushed commit, and the exact reply line, which includes an `Assumed:` list. One message per unit. Next tick, read the diff.
+Each order has: the defect in one plain sentence, the outcome the owner will see when it is fixed (the intent, so the letter cannot drift from it), why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the proofs that do not count, the checks, for a bus unit a counted deadline for the first pushed commit (rules/deadlines.md), and the exact reply line, which includes an `Assumed:` list. One message per unit. Next tick, read the diff.
 
 Never replay unknown or failed inputs, edit another unit's worktree, or wait on one unit while others need orders.

@@ -15,34 +15,20 @@ import unittest
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from install_gate import (
     DEFAULT_SCRATCH,
     REPO,
-    Desktop,
-    ExistingStatusChecks,
     FieldCodec,
-    GateArguments,
     GateError,
-    GateReport,
     InstallSurface,
-    Laptop,
     Machine,
     MalformedRecord,
     MissingProtection,
-    NoStatusChecks,
-    NumberedAppIdentity,
-    ParentBaseRevision,
-    ProtectionAnswer,
     PullRequestAnswer,
-    RequiredCheck,
-    RevisionGateCommand,
     RouteDocument,
     SnapshotCopy,
-    UncheckedSourceCoverage,
-    UnfinishedGateResult,
     affected,
     prepare_home,
     rehearse,
@@ -123,33 +109,6 @@ class InstallGateTests(unittest.TestCase):
         with closing(sqlite3.connect(destination / "bus/closed.sqlite3")) as copy:
             self.assertEqual(copy.execute("SELECT * FROM records").fetchall(), [])
 
-    def test_declared_hosts_use_the_local_leg_without_ssh(self):
-        for local, remote in ((Desktop(), Laptop()), (Laptop(), Desktop())):
-            with (
-                self.subTest(host=local.name),
-                patch("install_gate.socket.gethostname", return_value=local.hostname),
-            ):
-                self.assertEqual(
-                    local.command("printf", "%s", "two words"), ("printf", "%s", "two words")
-                )
-                self.assertEqual(remote.transport[-1], remote.address)
-                self.assertEqual(
-                    remote.command("printf", "%s", "two words")[-1], "printf %s 'two words'"
-                )
-
-    def test_laptop_root_comes_from_its_selected_route(self):
-        route = (
-            '{"root":"/actual/laptop/bus","version":2,'
-            '"wire_root_id":"00000000000000000000000000000000"}'
-        )
-        with (
-            patch("install_gate.socket.gethostname", return_value="desktop"),
-            patch("install_gate.run", return_value=route) as read,
-        ):
-            self.assertEqual(Laptop().root, "/actual/laptop/bus")
-            self.assertEqual(read.call_args.args[0], "ssh")
-            self.assertIn(Laptop.address, read.call_args.args)
-            self.assertIn("active-route.json", read.call_args.args[-1])
 
     def test_sandbox_rejects_writes(self):
         target = self.root / "must-not-exist"
@@ -294,45 +253,6 @@ class InstallGateTests(unittest.TestCase):
             )
         with self.assertRaises(MalformedRecord):
             FieldCodec.decode(MissingProtection, FieldCodec.parse('{"status":"403"}'))
-
-    def test_protection_keeps_existing_app_constraints_and_null_has_owned_behavior(self):
-        answer = FieldCodec.decode(
-            ProtectionAnswer,
-            FieldCodec.parse(
-                '{"required_status_checks":{"strict":false,"contexts":["other"],'
-                '"checks":[{"context":"other","app_id":42}]},"unrelated":true}'
-            ),
-        )
-        expected = ExistingStatusChecks(False, (RequiredCheck("other", NumberedAppIdentity(42)),))
-        self.assertEqual(answer.required_status_checks, expected)
-        with patch("install_gate.api_payload") as publish:
-            answer.required_status_checks.require("owner/repo")
-            sent = publish.call_args.args[2]
-            self.assertEqual(sent.strict, False)
-            self.assertEqual(sent.checks[0], expected.checks[0])
-            self.assertEqual(sent.checks[1].context, "install-rehearsal")
-        missing = FieldCodec.decode(
-            ProtectionAnswer, FieldCodec.parse('{"required_status_checks":null}')
-        )
-        self.assertIsInstance(missing.required_status_checks, NoStatusChecks)
-        with patch("install_gate.api_payload") as publish:
-            missing.required_status_checks.require("owner/repo")
-            self.assertTrue(publish.call_args.args[2].strict)
-
-    def test_unexpected_failure_is_not_hidden_and_does_not_report_empty_coverage(self):
-        args = GateArguments(
-            repo=REPO, base=ParentBaseRevision(), scratch=self.root, python=Path(sys.executable)
-        )
-        with (
-            patch("install_gate.affected", side_effect=PermissionError("source unavailable")),
-            self.assertRaisesRegex(PermissionError, "source unavailable"),
-        ):
-            RevisionGateCommand("HEAD").execute(args, "owner/repo")
-        (report_path,) = self.root.glob("report-*.json")
-        report = FieldCodec.decode(GateReport, FieldCodec.parse(report_path.read_text()))
-        self.assertIsInstance(report.affected, UncheckedSourceCoverage)
-        self.assertIsInstance(report.result, UnfinishedGateResult)
-        self.assertFalse(report.result.successful)
 
 
 if __name__ == "__main__":

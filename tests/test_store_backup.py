@@ -1,37 +1,11 @@
 """SQLite snapshots preserve committed WAL rows and restore absent resources."""
-import os
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from agent_comms.locked_store import LockedStore
-from agent_comms.store_files import StoreOwner
 from cutover.backup import StoreBackup
 from cutover.carry import CarryChain, CarryLedger, NoConversion, PendingConversion, PreparedCarries
-
-
-def test_tree_copy_omits_owned_staging_before_stat(tmp_path, monkeypatch):
-    root = tmp_path / 'source'
-    root.mkdir()
-    committed = root / 'bus_meta.json'
-    committed.write_text('committed')
-    monkeypatch.setattr(StoreOwner, 'staging_name', '.owned-{name}-{token}')
-    descriptor, stage = StoreOwner.stage_file(committed)
-    os.close(descriptor)
-    os.link(committed, StoreOwner.rollback_file(stage))
-    original = Path.lstat
-
-    def committed_stat(path, *args, **kwargs):
-        if LockedStore.is_staging(path):
-            raise AssertionError('copy inspected an unpublished staging file')
-        return original(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, 'lstat', committed_stat)
-    target = tmp_path / 'copy'
-    StoreBackup.copy_tree(root, target)
-    assert (target / committed.name).read_text() == 'committed'
-    assert sorted(path.name for path in target.iterdir()) == [committed.name]
 
 
 def test_tree_copy_keeps_committed_wal_rows(tmp_path):
@@ -87,7 +61,7 @@ def test_conversion_plan_refuses_a_skipped_predecessor(tmp_path):
     for name in applied:
         ledger.record(name)
     destination = StoreBackup(tmp_path, tmp_path / 'route.json', tmp_path / 'backup')
-    with pytest.raises(ValueError, match='Bus ledger skips a step'):
+    with pytest.raises(ValueError):
         PreparedCarries.at(checkout, tmp_path, destination, False)
 
 

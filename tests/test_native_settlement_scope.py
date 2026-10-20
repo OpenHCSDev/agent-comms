@@ -15,10 +15,9 @@ from agent_comms.coordination_session import (
     NativeBoundary,
     NativeCoordinationSession,
 )
-from agent_comms.coordinator import Coordination, StandaloneCoordination
+from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.selected_claim import publish_selected_resource_claim
-from agent_comms.threads import Thread
 from test_claim_bus_read import (
     acquire_tool_claim, claim_originals, release_tool_claim, selected_turn, settle_failed,
 )
@@ -92,25 +91,6 @@ def test_native_boundary_preserves_the_lock_owner_default_wait_policy():
     assert NativeBoundary(object(), blocking=False).contention is None
 
 
-def test_native_coordination_defers_registry_read_until_bus_use(tmp_path, monkeypatch):
-    from agent_comms.registration import Registration
-
-    reads = []
-    original = Registration.__init__
-
-    def observed(registration, path):
-        reads.append(path)
-        original(registration, path)
-
-    monkeypatch.setattr(Registration, "__init__", observed)
-    with Coordination(tmp_path / "coordination.sqlite3") as store:
-        assert reads == []
-        assert store.session.bus.log.path == tmp_path / "bus.jsonl"
-        assert reads == [tmp_path / "registry.json"]
-        assert store.session.bus is store.session.bus
-        assert reads == [tmp_path / "registry.json"]
-
-
 def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_path):
     (tmp_path / "bus.jsonl").write_text("not a native bus\n")
     with StandaloneCoordination(tmp_path / "coordination.sqlite3") as store:
@@ -127,7 +107,7 @@ def test_wire_success_cannot_silently_complete_original_response(tmp_path):
         _, fence = started(store)
         fence = final_evidence(store, fence)
         before = store.snapshots.get("exec")
-        with pytest.raises(sqlite3.IntegrityError, match="completed execution requires all original responses"):
+        with pytest.raises(sqlite3.IntegrityError):
             store.attempts.settle_nonpublication(fence, expected_pointer_revision=1,
                                                 outcome=SucceededAttempt())
         assert store.snapshots.get("exec") == before

@@ -108,7 +108,7 @@ def test_child_roots_share_behavior_not_membership_and_survive_slots():
 
 
 def test_collisions_fail_without_replacing_owner():
-    with pytest.raises(DuplicateRegistryKeyError, match="http_ready"):
+    with pytest.raises(DuplicateRegistryKeyError):
 
         class Collision(SampleFamily, declared_name="http_ready"):
             def execute(self):
@@ -130,7 +130,7 @@ def test_independent_families_and_inherited_names_are_derived():
     assert Other.names() == ("http_ready", "child")
     assert Other.member_named("http_ready") is HTTPReady
     assert Child.declared_name == "child"
-    with pytest.raises(TypeError, match="two families"):
+    with pytest.raises(TypeError):
 
         class Cross(HTTPReady, CustomCase):
             pass

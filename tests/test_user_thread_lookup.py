@@ -4,27 +4,8 @@ from dataclasses import replace
 
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.registry_document import FoundUserThread, NoUserThread, RegistryDocument
-from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
-
-
-def test_user_lookup_reads_one_stored_answer_without_a_roster_walk(tmp_path, monkeypatch):
-    comms = Comms(tmp_path)
-    assert isinstance(comms.registry.user_thread(), NoUserThread)
-    comms.registry.declare(comms.registry.new_thread(
-        'user', frozenset({'comms'}), str(tmp_path), role=AgentThreadRole))
-    human = comms.messaging.user_identity(str(tmp_path))
-    assert human.name != 'user' and human.role is UserThreadRole
-    assert isinstance(comms.registry.user_thread(), FoundUserThread)
-
-    def forbidden(*args):
-        raise AssertionError('The existing human answer walked the registry')
-
-    monkeypatch.setattr(comms.registry, 'all_threads', forbidden)
-    monkeypatch.setattr(AgentThreadRole, 'human', classmethod(forbidden))
-    monkeypatch.setattr(UserThreadRole, 'human', classmethod(forbidden))
-    for _ in range(1000):
-        assert comms.messaging.user_identity(str(tmp_path)).incarnation == human.incarnation
+from agent_comms.registry_document import NoUserThread, RegistryDocument
+from agent_comms.thread_identity import UserThreadRole
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):

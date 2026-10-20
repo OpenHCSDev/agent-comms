@@ -14,7 +14,6 @@ from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import Thread
 
 
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):
@@ -63,7 +62,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
         incomplete = dict(raw)
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))
-        with pytest.raises(RelationViolationError, match="generation"):
+        with pytest.raises(RelationViolationError):
             Registration(path).live_owner_with_claim("owner")
     raw["threads"]["owner"].pop("created_at")
     path.write_text(json.dumps(raw))

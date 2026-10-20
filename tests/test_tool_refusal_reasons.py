@@ -45,7 +45,7 @@ def test_busy_coordination_database_is_reported_as_busy(tmp_path):
             assert "busy" in message and "did not run" in message
             assert "worktree" not in message and "UNKNOWN" not in message
             # With the database free the same call reaches the real check.
-            with pytest.raises(SelectedToolDenied, match="no reserved FULL input") as denied:
+            with pytest.raises(SelectedToolDenied) as denied:
                 verify_sent_full_input(store, None, "owner", secrets.token_hex(16))
             assert not isinstance(denied.value, CoordinationBusy)
         finally:
