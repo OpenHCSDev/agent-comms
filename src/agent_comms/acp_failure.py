@@ -38,6 +38,9 @@ class FailureSource(DeclaredFamily, affix="FailureSource"):
     def for_publication(self, text: str, sensitive: bool) -> FailureSource:
         return self
 
+    def require_native(self) -> NativeMessageFailureSource:
+        raise ValueError("Provider retry ended without its native failure message")
+
 
 @dataclass(frozen=True)
 class UnrecordedFailureSource(FailureSource):
@@ -49,6 +52,9 @@ class UnrecordedFailureSource(FailureSource):
 @dataclass(frozen=True)
 class NativeMessageFailureSource(FailureSource):
     message: AssistantMessage
+
+    def require_native(self) -> NativeMessageFailureSource:
+        return self
 
     @property
     def retained_in_history(self) -> bool:

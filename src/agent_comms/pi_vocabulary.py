@@ -117,6 +117,7 @@ class FailedPiStop(FinishedPiStop):
 
     @classmethod
     async def apply(cls, session, message):
+        session.output.record_native_failure(message)
         if not cls.interrupted(session):
             session.output.record_failure(cls.declared_failure(message))
         async for event in super().apply(session, message):
@@ -150,13 +151,11 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
             # A refusal the recovery is re-requesting is interim evidence; the
             # recovery's own end event reports the final outcome.
             return
-        from .acp_failure import NativeMessageFailureSource
-
         for diagnostic in message.diagnostics:
             session.watchdog.phase = diagnostic.turn_phase(session.watchdog.phase)
         error = session.output.error(
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
-            message.diagnostics, source=NativeMessageFailureSource(message),
+            message.diagnostics, source=session.output.native_failure_source,
         )
         if not cls.interrupted(session):
             yield error
