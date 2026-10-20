@@ -77,6 +77,16 @@ CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
+@dataclass(frozen=True)
+class RehearsalFiles:
+    """The rehearsal's named rewrite set and the restore reservation it requires."""
+
+    identical: int
+    rewritten: int
+    names: list[str]
+    restore_bytes: int
+
+
 def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
     print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
     completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
@@ -102,9 +112,9 @@ def carried(root: Path, before: dict[str, SavedFile], steps: list[dict],
     outside = sorted(changed - expected) if expected is not None else []
     if outside:
         raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
-    return {"identical": len(before.keys() - changed), "rewritten": len(changed),
-            "names": sorted(changed),
-            "restore_bytes": sum(before[name].size for name in physical & before.keys())}
+    return asdict(RehearsalFiles(
+        identical=len(before.keys() - changed), rewritten=len(changed), names=sorted(changed),
+        restore_bytes=sum(before[name].size for name in physical & before.keys())))
 
 
 @dataclass(frozen=True)
@@ -453,8 +463,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
          spill_dir: Path, rehearsal_files: dict) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    restore = RestoreSpace.measure(rehearsal_files['restore_bytes'], root.parent)
-    expected = set(rehearsal_files['names'])
+    files = RehearsalFiles(**rehearsal_files)
+    restore = RestoreSpace.measure(files.restore_bytes, root.parent)
+    expected = set(files.names)
     selected = tuple(root / name for name in sorted(expected | {CarryLedger.name})) if pending else ()
     restore.require()
     stopping = before_stop(root, pending, staged, revisions)

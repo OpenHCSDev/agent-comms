@@ -561,7 +561,7 @@ def test_upgrade_stops_and_starts_exactly_the_captured_set_concurrently(comms, t
     started = time.perf_counter()
     result = upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
                               "worker", comms.root.parent,
-                              {"names": [], "restore_bytes": 0})
+                              {"identical": 0, "rewritten": 0, "names": [], "restore_bytes": 0})
     assert time.perf_counter() - started < 120
     assert result["backup"] is None and result["backup_bytes"] == 0
     assert result["stopped_and_started"] == names
@@ -600,7 +600,8 @@ def test_restore_space_refuses_before_conversion_or_stop(comms, monkeypatch):
     with pytest.raises(UpgradeRefused, match='Restore needs'):
         upgrade_bus.live(REPO, comms.root, 'old', 'new', (), Stack(REPO), Stack(REPO),
                          None, 'worker', comms.root.parent,
-                         {"names": ["store.sqlite3"], "restore_bytes": 1024})
+                         {"identical": 0, "rewritten": 1, "names": ["store.sqlite3"],
+                          "restore_bytes": 1024})
     assert not MaintenanceBarrier(comms.root / 'registry.json').marker_path.exists()
 
 
@@ -704,7 +705,8 @@ def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monk
     with pytest.raises(RuntimeError, match="carry failed after writing"):
         upgrade_bus.live(stack.checkout, comms.root, "old", "new", (object(),), stack, stack, None,
                          "worker", comms.root.parent,
-                         {"names": ["kept.txt"], "restore_bytes": datum.stat().st_size})
+                         {"identical": 0, "rewritten": 1, "names": ["kept.txt"],
+                          "restore_bytes": datum.stat().st_size})
     assert datum.read_text() == "before"
     assert not any("reset" in command for command in commands)
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
@@ -813,7 +815,8 @@ def installed_live(stack: Stack, root: Path) -> dict:
     path = ExternalTranscript.path_in(root)
     return live(stack.checkout, root, "old", "new", (object(),), stack, stack, None,
                 "worker", root.parent,
-                {"names": [str(path.relative_to(root))], "restore_bytes": path.stat().st_size})
+                {"identical": 0, "rewritten": 1, "names": [str(path.relative_to(root))],
+                 "restore_bytes": path.stat().st_size})
 
 
 @pytest.mark.parametrize("install", [rehearsed, installed_live])
