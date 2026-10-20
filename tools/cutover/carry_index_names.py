@@ -1,16 +1,12 @@
-"""Reconcile declared index identities in every present TypedStore, never table data."""
+"""Reconcile declared index identities across bus stores, never table data."""
 
 import sqlite3
 from contextlib import closing
 from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.typed_table import (
-    SQLiteSchemaDifference,
-    SQLiteSchemaObject,
-    TypedStore,
-    _identifier,
-)
+from agent_comms.schema_report import StoreSchemaReport
+from agent_comms.typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedStore, _identifier
 
 from .carry import Carried, Carry
 
@@ -18,41 +14,49 @@ from .carry import Carried, Carry
 class IndexNames(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return tuple(store.path_in(root) for store in TypedStore.declarations()
-                     if store.path_in(root).is_file())
+        return tuple(sorted(root.rglob("*.sqlite3")))
 
     @staticmethod
-    def changes(store: type[TypedStore], db: sqlite3.Connection) -> tuple[SQLiteSchemaDifference, ...]:
-        changes = SQLiteSchemaObject.differences(TypedStore._schema(db), store.declared_schema())
+    def changes(
+        path: Path, db: sqlite3.Connection, stores: dict[Path, type[TypedStore]],
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        if owner := stores.get(path):
+            report = StoreSchemaReport.for_store(db, path, owner)
+        else:
+            report = StoreSchemaReport.read(db, path)
+            # A retired/unowned file with no current index declaration is not
+            # permission to invent a schema or alter its saved data.
+            if not report.index_names:
+                return ()
         stored_indexes = {item.name for item in SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL "
             "AND name NOT LIKE 'sqlite_%'"))}
-        declared_indexes = store.declared_indexes()
-        if any((change.stored is not None and change.name not in stored_indexes)
-               or (change.declared is not None and change.name not in declared_indexes)
-               for change in changes):
-            raise ValueError(f"{store.filename} differs outside its declared indexes")
-        return changes
+        if report.undeclared_tables or any(
+            (change.stored is not None and change.name not in stored_indexes)
+            or (change.declared is not None and change.name not in report.index_names)
+            for change in report.differences
+        ):
+            raise ValueError(f"{path.name} differs outside its declared indexes")
+        return report.differences
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        # Preflight the complete set before changing any store. Schema writers are
+        # Preflight every file before changing any store. Schema writers are
         # stopped and the caller holds the wire lock, as for every carry step.
+        stores = {store.path_in(root): store for store in TypedStore.declarations()}
         planned = []
-        for store in TypedStore.declarations():
-            path = store.path_in(root)
-            if path.is_file():
-                with CoordinationStore.observing(path) as db:
-                    changes = cls.changes(store, db)
-                if changes:
-                    planned.append((store, path, changes))
+        for path in cls.backup_files(root):
+            with CoordinationStore.observing(path) as db:
+                changes = cls.changes(path, db, stores)
+            if changes:
+                planned.append((path, changes))
         changed = 0
         rewritten = []
-        for store, path, changes in planned:
+        for path, changes in planned:
             if apply:
                 with closing(CoordinationStore.writer(path)) as db, db:
                     db.execute("BEGIN IMMEDIATE")
-                    changes = cls.changes(store, db)
+                    changes = cls.changes(path, db, stores)
                     for change in changes:
                         if change.stored is not None:
                             db.execute(f"DROP INDEX {_identifier(change.name)}")

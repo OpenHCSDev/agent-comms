@@ -342,16 +342,18 @@ def test_reads_select_only_the_rows_their_index_names(tmp_path):
                                     parameters).fetchall()
                  for where, parameters in (('"turn_id" = ?', ("turn",)),
                                            ('unresolved = 1 AND "owner" IN (?)', ("owner",)))]
+    unresolved, turn = (index.name(InputDispositionRow) for index in InputDispositionRow.indexes)
     assert [plan[-1][-1].split(" USING ")[1] for plan in plans] == [
-        'INDEX input_disposition_1_idx (turn_id=?)',
-        'INDEX input_disposition_0_idx (owner=? AND unresolved=?)']
+        f'INDEX {turn} (turn_id=?)',
+        f'INDEX {unresolved} (owner=? AND unresolved=?)']
 
 
 def test_stored_row_declaration_owns_the_schema(tmp_path):
     store = InputDispositions(tmp_path)
     store.record_originals()
     with closing(sqlite3.connect(store.path)) as connection:
-        connection.execute('DROP INDEX "input_disposition_1_idx"')
+        turn = InputDispositionRow.indexes[1].name(InputDispositionRow)
+        connection.execute(f'DROP INDEX "{turn}"')
         connection.commit()
     with pytest.raises(RelationViolationError, match="differs from its declaration"):
         store.read(())

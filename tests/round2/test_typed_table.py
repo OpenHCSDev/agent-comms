@@ -110,7 +110,7 @@ def test_index_owns_unique_partial_creation():
     with sqlite3.connect(':memory:') as db:
         TableParentRow.create(db)
         index = Index(('count',), unique=True, where='count > 0')
-        statement = index.sql(TableParentRow, 'positive_counts', if_not_exists=True)
+        statement = index.sql(TableParentRow, if_not_exists=True)
         db.execute(statement)
         db.execute(statement)
         TableParentRow('first', 1).insert(db)
@@ -119,7 +119,7 @@ def test_index_owns_unique_partial_creation():
         TableParentRow('zero-one', 0).insert(db)
         TableParentRow('zero-two', 0).insert(db)
         with pytest.raises(sqlite3.OperationalError, match='already exists'):
-            db.execute(index.sql(TableParentRow, 'positive_counts'))
+            db.execute(index.sql(TableParentRow))
 
 
 def test_new_row_declaration_needs_no_other_edit():
