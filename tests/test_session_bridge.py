@@ -3,19 +3,129 @@ import asyncio
 from contextlib import asynccontextmanager
 import json
 import os
+import signal
+import sys
+from datetime import datetime, timezone
+from html import escape
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeMonitorFrame
 from agent_comms.cli_bridges.monitor import AttachMonitor, EndSession, MonitorService, NoReader, REPLIES, VerifySession
-from agent_comms.cli_bridges.shared import Binding, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
+from agent_comms.cli_bridges.shared import Binding, BridgeLog, DeliveryRow, MONITOR_FRAME, ObservedMonitor, Options, Serve
 from agent_comms.cli_protocol import DeliveredOutcome, EmittedOutcome, UnconfirmedOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms_hooks import ClaudeHook
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+
+def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():
+    import io
+    import traceback
+    output = io.StringIO()
+    log = BridgeLog(output)
+    log.write('partial ')
+    print('line\nnext line', file=log, flush=True)
+    traceback.print_exception(ValueError('terminal failure'), file=log)
+    bodies = []
+    for line in output.getvalue().splitlines():
+        stamp, body = line.split(' ', 1)
+        assert datetime.fromisoformat(stamp).tzinfo is not None
+        bodies.append(body)
+    assert bodies == ['partial line', 'next line', 'ValueError: terminal failure']
+
+
+@pytest.mark.asyncio
+async def test_bridge_survives_its_watch_child_being_signalled(tmp_path, monkeypatch):
+    """Production serve owns a real socket and replaces only its dead Core reader."""
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.launch_runtime import ThreadLaunch
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from test_bus_route_counts_locking import _case
+    from dataclasses import replace
+
+    home = tmp_path.parent / 'home'
+    home.mkdir(exist_ok=True)
+    monkeypatch.setenv('HOME', str(home))
+    endpoint_directory = tmp_path.parent / 'w'
+    monkeypatch.setattr(WatchClaim, 'directory', classmethod(lambda cls: endpoint_directory))
+    comms = _case(tmp_path / 'wire', monkeypatch)
+    recipient = comms.registry.require('recipient')
+    comms.registry.declare(replace(recipient, execution=ExternalThreadExecution))
+    owner = ProcessIdentity.capture(os.getpid())
+    session = 'signal-watch-session'
+    transcript = tmp_path / f'{session}.jsonl'
+    transcript.touch()
+    claim = WatchClaim(session)
+    state = tmp_path / 'state'
+    log_path = tmp_path / 'serve.log'
+    environment = ThreadLaunch.strip(dict(os.environ))
+    environment['PYTHONPATH'] = str(Path(__file__).resolve().parents[1] / 'src')
+
+    def observed(line, record_id):
+        record = dict(type='user', uuid=record_id,
+                      timestamp=datetime.now(timezone.utc).isoformat(), sessionId=session,
+                      promptId='prompt', origin=dict(kind='task-notification'),
+                      message=dict(content='<task-notification><event>' + escape(line)
+                                   + '</event></task-notification>'))
+        with transcript.open('a') as output:
+            output.write(json.dumps(record) + '\n')
+
+    def watch_process():
+        children = Path(f'/proc/{bridge.pid}/task/{bridge.pid}/children').read_text().split()
+        assert len(children) == 1, children
+        return ProcessIdentity.capture(int(children[0]))
+
+    # Only the socket locator is controlled: the normal HOME-based path exceeds
+    # sockaddr_un under the mandated persistent scratch directory.
+    driver = ('import sys\nfrom pathlib import Path\n'
+              'from agent_comms_hooks.watch import WatchClaim\n'
+              'directory = Path(sys.argv.pop(1))\n'
+              'WatchClaim.directory = classmethod(lambda cls: directory)\n'
+              'from agent_comms.cli_bridges.claude import main\nmain()\n')
+    command = (sys.executable, '-c', driver, str(endpoint_directory), 'serve',
+               '--root', str(comms.root), '--bus-thread', 'recipient', '--session', session,
+               '--state', str(state), '--owner', json.dumps(FieldCodec.encode_record(owner)),
+               '--transcript', str(transcript))
+    with log_path.open('wb') as log:
+        bridge = ParentedProcess.launch(command, env=environment, output=log)
+        try:
+            async with asyncio.timeout(20):
+                while not claim.socket_path.exists():
+                    assert bridge.alive(), log_path.read_text()
+                    await asyncio.sleep(0.01)
+            await asyncio.to_thread(VerifySession(owner=owner).exchange, claim)
+            async with reader(claim) as (stream, writer, probe):
+                observed(probe.model_dump_json(), 'probe')
+                async with asyncio.timeout(20):
+                    first_line = (await stream.readline()).decode().strip()
+                first = ClaudeMonitorFrame.decode_line(first_line)
+                assert first.body == 'first'
+                observed(first_line, 'first-part')
+                child = watch_process()
+                child.signal(signal.SIGTERM)
+                await asyncio.wait_for(child.wait_exited(), 10)
+                await asyncio.to_thread(VerifySession(owner=owner).exchange, claim)
+                comms.messaging.send('sender', 'recipient', 'after signal')
+                async with asyncio.timeout(20):
+                    after_line = (await stream.readline()).decode().strip()
+                after = ClaudeMonitorFrame.decode_line(after_line)
+                assert after.body == 'after signal' and after.id != first.id
+                observed(after_line, 'after-part')
+                assert bridge.alive() and watch_process() != child
+                await no_line(stream)
+            with Binding.open(state) as db:
+                assert len(DeliveryRow.select(db)) == 2
+        finally:
+            await asyncio.to_thread(bridge.close)
+    lines = log_path.read_text().splitlines()
+    assert any('SIGTERM' in line and 'reopening its subscription' in line for line in lines)
+    for line in lines:
+        assert datetime.fromisoformat(line.split(' ', 1)[0]).tzinfo is not None
 
 
 @pytest_asyncio.fixture
