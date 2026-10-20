@@ -21,6 +21,8 @@ class NativeRunState {
     started() { return new NothingProduced(this.owner); }
     produced() { return this; }
     finished() { return this; }
+    enter() { return this; }
+    published() {}
     close() {}
     cancel() { this.close(); }
 }
@@ -51,17 +53,24 @@ class RecoveringNothingProduced extends NothingProduced {
     terminal(message) {
         // A clean provider stop completes recovery. Whether its text answers
         // the selected task belongs to Core's TrackedTerminal, not this run.
-        const success = message?.stopReason === 'stop';
-        this.owner.finishRetry(success, success ? undefined :
-            (message?.errorMessage || 'Provider retry closed before completing'), this.attempt - 1);
-        return super.terminal();
+        return message?.stopReason === 'stop'
+            ? new RecoveredProviderRequest(this.owner, this.attempt)
+            : new FailedProviderRequest(this.owner, this.attempt,
+                message?.errorMessage || 'Provider retry closed before completing');
     }
-    close() { this.owner.state = this.terminal(); }
+    close(message) {
+        this.owner.state = this.terminal(message);
+        this.owner.state.published();
+    }
 }
 
 /** Both completed states use the next request's own production and retry window. */
 class OutputProduced extends NativeRunState {}
 class ClosedNothingProduced extends NativeRunState {}
+
+class RecoveredProviderRequest extends ClosedNothingProduced {
+    published() { this.owner.finishRetry(true, undefined, this.attempt - 1); }
+}
 
 class RefusedNothingProduced extends RecoveringNothingProduced {
     constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
@@ -80,12 +89,9 @@ class RefusedNothingProduced extends RecoveringNothingProduced {
 }
 
 /** Typed terminal state after the provider used every owned re-request. */
-class FailedProviderRequest extends NativeRunState {
+class FailedProviderRequest extends ClosedNothingProduced {
     constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
-    enter() {
-        this.owner.finishRetry(false, this.reason, this.attempt - 1);
-        return this;
-    }
+    published() { this.owner.finishRetry(false, this.reason, this.attempt - 1); }
 }
 
 class BackoffNothingProduced extends RefusedNothingProduced {
@@ -95,9 +101,9 @@ class BackoffNothingProduced extends RefusedNothingProduced {
     }
     get retrying() { return true; }
     cancel() { this.controller.abort(); }
-    close() {
+    close(message) {
         this.controller.abort();
-        super.close();
+        super.close(message);
     }
     async recover(message) {
         const delayMs = this.owner.budget.delay(this.attempt);
@@ -106,7 +112,7 @@ class BackoffNothingProduced extends RefusedNothingProduced {
             if (error.name !== 'AbortError') throw error;
             // Retirement already closed the window if it aborted this wait.
             if (this.owner.state === this) {
-                this.owner.state = this.terminal({ errorMessage: 'Retry cancelled' });
+                this.close({ errorMessage: 'Retry cancelled' });
             }
             return false;
         }
@@ -131,7 +137,8 @@ export class InactiveNativeTurnRun {
     get tracked() { return false; }
     get retrying() { return false; }
     include() { return this; }
-    observe() {}
+    observe() { return this; }
+    published() {}
     stream(original, ...request) { return original(...request); }
     willRetry() { return false; }
     async recover() { return false; }
@@ -186,6 +193,7 @@ export class NativeTurnRun {
             }
             this.state = this.state.finished(event.message);
         }
+        return this.state;
     }
     stream(original, model, context, options) {
         return original(model, context,

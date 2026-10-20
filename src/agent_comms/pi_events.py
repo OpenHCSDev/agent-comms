@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
+from .acp_failure import UnrecordedFailureSource
 from . import turn_phase as phases
 from .tool_declaration import ToolDeclaration
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -312,7 +313,8 @@ class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
             yield event
 
     def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
-        return (session.output.error("Provider retry attempts were exhausted."),)
+        return (session.output.error(session.output.declared_failure.text,
+                                     source=session.output.native_failure_source),)
 
     def to_wire(self):
         return {
@@ -427,7 +429,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             will_retry=self.will_retry is True,
         )
         if self.error_message is not None:
-            yield session.output.error(self.error_message)
+            yield session.output.error(self.error_message, source=UnrecordedFailureSource())
         if self.will_retry:
             session.request_retried()
             session.output.final_assistant_stop = False

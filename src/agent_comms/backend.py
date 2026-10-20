@@ -39,6 +39,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from .agent_backend import TurnInbox
+from .acp_failure import UnrecordedFailureSource
 from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
@@ -617,7 +618,8 @@ class TurnSession(NativeSession):
         self.tool_socket.tool_finished(event, self.command.input_id)
 
     def reject_prompt(self, response):
-        error = self.output.error(str(response.error or "Prompt was rejected"))
+        error = self.output.error(str(response.error or "Prompt was rejected"),
+                                  source=UnrecordedFailureSource())
         yield self.watchdog.state(
             "failed", "prompt_rejected", 0, phase=ShutdownPhase()
         )

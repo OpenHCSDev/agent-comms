@@ -260,8 +260,11 @@ def extend_native_run(core):
     replace_once(session, '    _nativeRunHadTrackedInput = false;',
                  '    _nativeRun = InactiveNativeTurnRun.shared;')
     replace_once(session, '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;',
-        '        this._nativeRun.observe(event, this._nativeInputClaims);\n'
+        '        const nativeState = this._nativeRun.observe(event, this._nativeInputClaims);\n'
         '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;')
+    replace_once(session, '                this._lastAssistantMessage = event.message;',
+                 '                nativeState.published();\n'
+                 '                this._lastAssistantMessage = event.message;')
     replace_once(session, '''            // The newest user turn controls retry policy, even when it is
             // queued behind a completed tracked turn in the same agent loop.
             this._nativeRunHadTrackedInput = this._nativeInputClaims.has(event.message.inputId);
