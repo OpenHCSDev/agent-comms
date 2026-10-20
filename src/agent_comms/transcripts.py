@@ -68,8 +68,11 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None: ...
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return (self.session_file == other.session_file and other.offset <= self.offset
-                and other.wire.within(self.wire))
+        return other.within(self)
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return (self.session_file == other.session_file and self.offset <= other.offset
+                and self.wire.within(other.wire))
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -88,6 +91,26 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
 
     def with_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
         return self.at_offset(prefix.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class UnreadTranscriptCursor(TranscriptCursor):
+    """No source has been read; this is not a source position or a read mark."""
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def within(self, other: TranscriptCursor) -> bool:
+        return False
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return self
+
+    def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
+        return self
+
+    def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None:
+        """Nothing has been drawn, so there is nothing to acknowledge."""
 
 
 @dataclass(frozen=True, slots=True)
