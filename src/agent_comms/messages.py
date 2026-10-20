@@ -26,6 +26,7 @@ from .field_codec import (
     projected,
 )
 from .mentions import ThreadMention
+from .message_provenance import HistoryProvenance, NoHistoryProvenance
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -335,6 +336,8 @@ class Message:
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
+    wire_view: ClassVar[str] = "wire"
+
     sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
     target: str = field(metadata={"wire_name": "to", "wire_order": 3})
     body: str = field(metadata={"wire_name": "text", "wire_order": 6})
@@ -458,9 +461,13 @@ class Message:
     history_source = None
 
     @property
+    def history_provenance(self) -> HistoryProvenance:
+        return NoHistoryProvenance()
+
+    @property
     def display_metadata(self) -> dict:
-        """Live messages carry no historical provenance decoration."""
-        return {}
+        """Both public renderers encode the same declared provenance value."""
+        return self.history_provenance.metadata()
 
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)}

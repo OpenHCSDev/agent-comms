@@ -7,6 +7,7 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from math import isfinite
+from typing import cast
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
@@ -28,6 +29,20 @@ class GeneratedTimestamp(FieldRepresentation):
     @classmethod
     def encode(cls, value: object) -> object:
         raise TypeError("A generated timestamp is read from its event, never written")
+
+
+class EventTimeWire(GeneratedTimestamp):
+    """Public timestamp scalars retain the existing recorded/absent owner."""
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return cast(EventTime, value).wire_value()
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.alternatives_schema("anyOf", [
+            FieldCodec.value_schema(float), FieldCodec.value_schema(type(None)),
+        ])
 
 
 @dataclass(frozen=True)
@@ -88,11 +103,17 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         self.require_recorded("A delivery")
 
     @abstractmethod
+    def wire_value(self) -> object: ...
+
+    @abstractmethod
     def continued_from(self, original_at: float): ...
 
 
 @dataclass(frozen=True)
 class UnrecordedEventTime(EventTime):
+    def wire_value(self) -> object:
+        return None
+
     def continued_from(self, original_at):
         return RecordedEventTime(original_at)
 
@@ -100,6 +121,9 @@ class UnrecordedEventTime(EventTime):
 @dataclass(frozen=True)
 class RecordedEventTime(EventTime):
     at: float
+
+    def wire_value(self) -> object:
+        return self.at
 
     def __post_init__(self):
         if type(self.at) not in (int, float) or not isfinite(self.at):
