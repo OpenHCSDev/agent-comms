@@ -195,13 +195,14 @@ class RuntimePublication:
             os.close(descriptor)
 
     def publish_links(self) -> None:
-        """Move declarations and the pointer, without killing unrelated processes."""
+        """Refresh the declared installation, including an already-current runtime."""
         current = StoppedOwnerInstallation.current_pointer()
-        if self.published():
-            raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
+        selected = self.runtime.resolve(strict=True)
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
-        replace_link(current, self.runtime)
+        replace_link(current, selected)
+        for harness in Harness.present(Path.home()):
+            harness.configure()
 
 
 @dataclass(frozen=True)
@@ -263,8 +264,7 @@ class StoppedPublication:
             if StatusCliCommand().run(comms, output):
                 raise RuntimeError('Converted bus status failed: ' + output.getvalue())
             print('Converted bus status: ' + output.getvalue().strip(), flush=True)
-            if not publication.published():
-                publication.publish_links()
+            publication.publish_links()
         stopped = StoppedOwnerBatch.accept(comms.owners, wire_descriptor, self.handoff)
         comms.owners.maintenance.clear_stopped(self.maintenance_hold, wire_descriptor)
         fcntl.flock(route_descriptor, fcntl.LOCK_UN)
@@ -275,6 +275,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument('--check', action='store_true')
+    actions.add_argument('--refresh', action='store_true',
+                         help='Refresh this installed runtime\'s declared launchers and harness config')
     actions.add_argument('--complete-stopped', type=int, nargs=2, metavar=('WIRE_FD', 'ROUTE_FD'))
     options = parser.parse_args()
     if options.complete_stopped is not None:
@@ -284,6 +286,9 @@ def main() -> None:
         print(json.dumps(FieldCodec.encode(result)))
         return
     publication = RuntimePublication.installed()
+    if options.refresh:
+        publication.publish_links()
+        return
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')

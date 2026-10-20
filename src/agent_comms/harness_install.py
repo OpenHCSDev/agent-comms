@@ -101,9 +101,11 @@ class Harness(DeclaredFamily, affix="Harness"):
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:
-        """Installed links of every harness, which a runtime publication moves to the new runtime."""
+        """Refresh present harnesses and retain links of previously installed harnesses."""
+        available = {type(harness) for harness in cls.present(home)}
         return {link: target for member in cls.members_with(cls)
-                for link, target in member(home).links().items() if link.is_symlink()}
+                for link, target in member(home).links().items()
+                if member in available or link.is_symlink()}
 
 
 @dataclass(frozen=True)

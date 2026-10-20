@@ -122,6 +122,11 @@ class Stack:
     def prepare_native(self) -> None:
         run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout)
 
+    def publish(self) -> None:
+        """The selected interpreter owns console metadata and harness declarations."""
+        run(self.python, "-m", "tools.publish_runtime", "--refresh", cwd=self.checkout,
+            env=self.environment(self.checkout))
+
     def environment(self, *paths: Path) -> dict:
         """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
         return {**os.environ, "HOME": str(self.home),
@@ -358,6 +363,7 @@ class UnchangedInstall(Install):
         return {"unchanged": self.target}
 
     def live(self) -> dict:
+        self.installed.publish()
         PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
         return {"unchanged": self.target}
 
@@ -391,6 +397,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.relock()
         installed.prepare_native()
         passed = carry_and_read(root, backup.files(), pending, staged, installed, revisions, [])
+        installed.publish()
         maintenance.clear(held)
         services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
