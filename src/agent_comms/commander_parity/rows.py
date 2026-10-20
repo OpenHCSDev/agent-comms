@@ -11,9 +11,16 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .lifecycle import (
+    AssignOrderCase,
+    BuildBoundProofCase,
+    CreateProblemCase,
+    InstalledEvidenceCase,
+    StrikeLimitCase,
+    verify_order_progress,
+)
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
-from .lifecycle import AssignOrderCase, BuildBoundProofCase, CreateProblemCase, InstalledEvidenceCase, StrikeLimitCase, verify_order_progress
 
 
 class CreateProblemParityRow(ParityRow):
@@ -23,9 +30,7 @@ class CreateProblemParityRow(ParityRow):
     native = "`CommsTodoCreateTool`"
     phases = (OneOrderOwnerPhase,)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return CreateProblemCase.read()
+    comparison = CreateProblemCase.read
 
 
 class AssignOrderParityRow(ParityRow):
@@ -35,9 +40,7 @@ class AssignOrderParityRow(ParityRow):
     native = "`CommsOrderTool`, `CommsTodoTool` assignment and release"
     phases = (OneOrderOwnerPhase,)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return AssignOrderCase.read()
+    comparison = AssignOrderCase.read
 
 
 class DeliveredCommitParityRow(ParityRow):
@@ -55,9 +58,7 @@ class InstalledEvidenceParityRow(ParityRow):
     native = "`CommsProblemCloseTool`"
     phases = (OneOrderOwnerPhase,)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return InstalledEvidenceCase.read()
+    comparison = InstalledEvidenceCase.read
 
 
 class BoardParityRow(ParityRow):
@@ -83,9 +84,7 @@ class StrikeLimitParityRow(ParityRow):
     native = "`Strike` rows, author-declared `StrikeLimit`, one `comms_fire`"
     phases = (RecordPlanePhase,)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return StrikeLimitCase.read()
+    comparison = StrikeLimitCase.read
 
 
 class VerdictParityRow(ParityRow):
@@ -295,9 +294,7 @@ class BuildBoundProofParityRow(ParityRow):
     native = "Build run records runtime and Core/Toad revisions; close requires delivered commit"
     phases = (RecordPlanePhase,)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return BuildBoundProofCase.read()
+    comparison = BuildBoundProofCase.read
 
 
 class DeletionTargetParityRow(ParityRow):
@@ -333,9 +330,7 @@ class OrderProgressParityRow(ParityRow):
     )
     phases = (OneOrderOwnerPhase, ControlPlanePhase)
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return verify_order_progress()
+    comparison = staticmethod(verify_order_progress)
 
 
 class MultipleCommandersParityRow(ParityRow):
