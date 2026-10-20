@@ -47,12 +47,13 @@ async def backend_events(owner, task, cwd, env_extra=None, *, session_file=None,
                          tool_mode=NoSelectedTools(), images=(), context_contributions=(),
                          request_observer=NO_REQUEST_OBSERVER, **policy):
     """Launch fields are assembled by PiNativeBackend.run_turn, never by a test."""
-    from agent_comms.pi_native_backend import PiSessionFile
-    thread = replace(owner.comms.registry.require('native-fixture'), worktree=str(cwd))
-    if session_file is not None:
-        thread = thread.with_runtime(PiSessionFile(str(session_file)))
+    thread = replace(owner.comms.registry.require('native-fixture'),
+                     worktree=str(cwd), session_file=session_file)
     delivery = TurnDelivery(
-        worktree=str(cwd), environment=dict(env_extra or {}),
+        worktree=str(cwd), environment={
+            **thread.native_environment(owner.comms.root, owner.comms.registry.snapshot(), str(cwd)),
+            **dict(env_extra or {}),
+        },
         inbox=steering_queue if steering_queue is not None else TurnInbox(),
         finish_event=finish_event if finish_event is not None else asyncio.Event(),
         send_boundary=send_boundary, interrupt_boundary=interrupt_boundary,
@@ -70,6 +71,10 @@ async def backend_events(owner, task, cwd, env_extra=None, *, session_file=None,
     with LaunchRoot.from_path(owner.comms.root).selected(), patch.object(backend, 'stream_agent_events', configured):
         async with aclosing(owner.run_turn(thread, content, delivery)) as stream:
             async for event in stream:
+                if finish_event is None:
+                    from agent_comms.agent_events import StreamSettled
+                    if isinstance(event, StreamSettled):
+                        delivery.finish_event.set()
                 yield event
 
 

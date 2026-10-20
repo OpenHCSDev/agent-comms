@@ -80,3 +80,26 @@ async def test_new_command_uses_existing_correlation_and_cleans_pending(ending, 
         server.close()
         await server.wait_closed()
         await asyncio.gather(*peers)
+
+
+@pytest.mark.parametrize('response_id,command,data', [
+    ('foreign', 'get_available_models', {'models': []}),
+    ('owned', 'get_state', {}),
+])
+async def test_unowned_response_cannot_consume_pending_command(response_id, command, data):
+    from agent_comms.field_codec import MalformedRecord
+    from agent_comms.pi_commands import GetAvailableModels
+
+    channel = PiRpcChannel(asyncio.StreamReader())
+    request = GetAvailableModels(id='owned')
+    future = channel.track(request)
+    try:
+        response = channel.decode_record((json.dumps({
+            'type': 'response', 'id': response_id, 'command': command,
+            'success': True, 'data': data,
+        }) + '\n').encode(), strict=True)
+        with pytest.raises(MalformedRecord, match='no pending command'):
+            channel.correlate(response)
+        assert not future.done()
+    finally:
+        channel.pending.cancel_all()

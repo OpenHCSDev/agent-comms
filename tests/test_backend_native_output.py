@@ -1,41 +1,22 @@
-"""Actual Pi output ownership, including tool recovery and retained image privacy."""
+"""Actual Pi terminal evidence, no-tool authority and retained image privacy."""
 
-import asyncio
 import json
-import os
+
+import pytest
 
 import agent_comms.agent_events as events
 from agent_comms.image_inputs import ImageInput
-from agent_comms.native_session_prepare import NativeSessionPreparation
+from agent_comms.native_tool_call import SelectedToolDenied
 
 
 async def test_actual_native_cold_preparation_retains_without_admitting_input(native_backend):
     owner = native_backend
     observed = []
 
-    async def observe(state, info):
+    async def observe(thread, state, info):
         observed.append((state, info))
 
-    state = await NativeSessionPreparation.open(
-        owner.persistent,
-        "pi",
-        [
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--offline",
-            "--no-extensions",
-            "--no-tools",
-        ],
-        package=owner.package,
-        worktree=str(owner.project),
-        root=owner.root,
-        session_directory=owner.root,
-        environment=dict(os.environ),
-        session_file=str(owner.session),
-        observe=observe,
-    )
+    state = await owner.prepare(observe)
     assert observed == [(state, observed[0][1])]
     assert state.session_file == str(owner.session) and state.session_id
     assert state.is_streaming is False and state.is_compacting is False
@@ -43,65 +24,14 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 0
 
 
-async def test_actual_native_tool_failure_cannot_replace_turn_output(native_backend, monkeypatch):
+async def test_actual_no_tool_turn_rejects_provider_tool_call(native_backend):
     owner = native_backend
-    ordinary = owner.provider.handle
-
-    async def tool_then_answer(reader, writer):
-        if owner.provider.posts:
-            await ordinary(reader, writer)
-            return
-        try:
-            header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
-            length = next(
-                int(line.split(b":", 1)[1])
-                for line in header.split(b"\r\n")
-                if line.lower().startswith(b"content-length:")
-            )
-            await reader.readexactly(length)
-            owner.provider.posts += 1
-            chunk = {
-                "id": "chatcmpl-tool",
-                "object": "chat.completion.chunk",
-                "created": 1,
-                "model": "fixture",
-                "choices": [
-                    {
-                        "index": 0,
-                        "finish_reason": "tool_calls",
-                        "delta": {
-                            "tool_calls": [
-                                {
-                                    "index": 0,
-                                    "id": "unavailable-tool",
-                                    "type": "function",
-                                    "function": {"name": "unavailable_tool", "arguments": "{}"},
-                                }
-                            ]
-                        },
-                    }
-                ],
-            }
-            body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
-            writer.write(
-                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
-                + str(len(body)).encode()
-                + b"\r\nConnection: close\r\n\r\n"
-                + body
-            )
-            await writer.drain()
-        finally:
-            writer.close()
-            await writer.wait_closed()
-
-    monkeypatch.setattr(owner.provider, "handle", tool_then_answer)
-    result = await owner.run("Recover from one unavailable tool and answer")
-    ends = [event for event in result if isinstance(event, events.ToolEnd)]
-    assert len(ends) == 1 and not ends[0].ok, result
-    assert result[-1].ok and result[-1].text == owner.provider.text, result[-1]
-    assert len(owner.starts) == len(owner.saved_inputs()) == 1
-    assert owner.provider.posts == 2
-    print("native_tool_output", repr(result), flush=True)
+    owner.provider.tool_call = ("unavailable_tool", {})
+    with pytest.raises(SelectedToolDenied, match="Native tools are disabled"):
+        await owner.run("No model tool is authorized for this input")
+    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
+    assert not owner.persistent.available
+    assert all(not child.alive() for child in owner.children)
 
 
 async def test_actual_native_retained_image_failure_redacts_provider_text(native_backend):

@@ -44,6 +44,15 @@ class NativeBackendFixture:
         self.children = []
         self.observed = []
 
+    async def prepare(self, observe):
+        from dataclasses import replace
+        from agent_comms.launch_root import LaunchRoot
+        self.persistent.observe = observe
+        thread = replace(self.persistent.comms.registry.require('native-fixture'),
+                         worktree=str(self.project), session_file=str(self.session))
+        with LaunchRoot.from_path(self.root).selected():
+            return await self.persistent.prepare(thread)
+
     async def author_history(self):
         """The SDK authors saved rows; no provider or acknowledgement is invented."""
         package = str(self.package.path)

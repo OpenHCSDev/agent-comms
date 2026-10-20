@@ -77,7 +77,8 @@ async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner)
 
 def stub(tmp_path: Path, body: str) -> str:
     path = tmp_path / "pi-rpc-stub"
-    path.write_text(f"#!{sys.executable}\n" + body)
+    path.write_text(f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {str(Path(__file__).parent)!r})\n"
+                    "from pi_stub_protocol import next_prompt, answer_state, answer_stats\n" + body)
     path.chmod(0o755)
     return str(path)
 
@@ -106,7 +107,7 @@ state = json.loads(sys.stdin.readline())
 send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
       "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
                 "sessionId": "fixture-pi-session", "sessionFile": "/fixture/one.jsonl"}}}})
-prompt = json.loads(sys.stdin.readline())
+prompt = next_prompt()
 send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
       "inputId": prompt["inputId"]}}}})
@@ -124,8 +125,11 @@ send({
         })
 reply = json.loads(sys.stdin.readline())
 with open({str(marker)!r}, "w") as output: json.dump(reply, output)
-send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+send({{"type": "message_end", "message": {{"role": "assistant", "content": [], "stopReason": "stop"}}}})
 send({{"type": "agent_settled"}})
+answer_state({{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
+              "sessionId": "fixture-pi-session", "sessionFile": "/fixture/one.jsonl"}})
+answer_stats({{}})
 """,
     )
     requests = []
@@ -269,11 +273,11 @@ preflight = json.loads(sys.stdin.readline())
 send({{"id":preflight["id"],"type":"response","command":"get_state","success":True,
       "data":{{"nativeInputProofCapability":{json.dumps(CAPABILITY)},
               "sessionId":"fixture-session"}}}})
-prompt = json.loads(sys.stdin.readline())
+prompt = next_prompt()
 send({{"id":prompt["id"],"type":"response","command":"prompt","success":True}})
 send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
       "inputId":prompt["inputId"]}}}})
-send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"message_end","message":{{"role":"assistant","content":[],"stopReason":"stop"}}}})
 send({{"type":"agent_settled"}})
 acknowledgement = {input_receipt!r}
 acknowledgement["inputId"] = prompt["inputId"]
@@ -365,7 +369,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(sav
         assert result["_meta"]["answer"]["confirmed"] is True
         assert len(calls[0]) == 1 and not calls[1]
         assert calls[0][0]["session_id"] == session_id
-        assert calls[0][0]["options"][0]["kind"] == "allow_once"
+        assert calls[0][0]["options"][0].kind == "allow_once"
         # No subscriber may borrow another attachment's controller token.
         saved = proxies[1]._controller_token
         for absent_or_invalid in (None, "0" * 64):

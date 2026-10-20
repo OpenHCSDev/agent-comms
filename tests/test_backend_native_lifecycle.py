@@ -307,7 +307,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             bus_message = await Coordination.run_worker(partial(
                 wire.messaging.send, "sender", session, "P71_BUS_MUST_SURVIVE",
             ))
-            bus_key = InputDispositions.bus_key(bus_message, owner)
+            bus_key = InputDispositions.bus_key(bus_message.message, owner)
             await wait_for(lambda: stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_native_binding)
             bus = stored_inputs(agent.inputs.dispositions.root).lookup(bus_key)
             bus_item = next(item for item in agent.inputs.state(session).queued.values()
