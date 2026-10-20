@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
-from contextlib import closing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime
 from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
@@ -69,14 +67,15 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
 
     @classmethod
-    @abstractmethod
     def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
-        """The newest original tool-call time in this execution's saved history."""
+        """The registered runtime owns the original history source."""
+        return thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
 
     @classmethod
-    @abstractmethod
     def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
-        """Whether an original tool call met an order's first-call deadline."""
+        return thread.runtime.history_source(root, thread.incarnation).tool_call_between(
+            since, through,
+        )
 
     @classmethod
     def require_native(cls) -> None:
@@ -128,33 +127,6 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 class NativeThreadExecution(ThreadExecution):
     @classmethod
-    def _tool_call_times(cls, thread: Thread) -> Generator[float]:
-        from .native_transcript import NativeTranscript
-
-        if not thread.session_file:
-            return
-        try:
-            with closing(NativeTranscript(Path(thread.session_file)).tail()) as entries:
-                for entry in entries:
-                    if any(message.assistant and message.tool_calls
-                           for message in entry.messages):
-                        yield entry.timestamp.at.timestamp()
-        except FileNotFoundError:
-            return
-
-    @classmethod
-    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
-        with closing(cls._tool_call_times(thread)) as times:
-            return next(
-                (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
-            )
-
-    @classmethod
-    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
-        with closing(cls._tool_call_times(thread)) as times:
-            return any(since <= timestamp <= through for timestamp in times)
-
-    @classmethod
     def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
         return command.available_for(status, process=process)
 
@@ -199,18 +171,6 @@ class NativeThreadExecution(ThreadExecution):
 
 
 class ExternalThreadExecution(ThreadExecution):
-    @classmethod
-    def last_tool_call(cls, comms: Comms, thread: Thread) -> EventTime:
-        from .external_transcript import ExternalTranscript
-
-        return ExternalTranscript(comms.root, thread.incarnation).last_tool_call()
-
-    @classmethod
-    def tool_call_between(cls, root: Path, thread: Thread, since: float, through: float) -> bool:
-        from .external_transcript import ExternalTranscript
-
-        return ExternalTranscript(root, thread.incarnation).tool_call_between(since, through)
-
     @classmethod
     def require_external(cls) -> None:
         pass

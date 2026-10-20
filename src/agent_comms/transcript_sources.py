@@ -26,6 +26,7 @@ from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
+from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TurnDigest, UserTranscript
 
@@ -312,6 +313,13 @@ class TranscriptSource:
     """
 
     start = 0
+
+    def last_tool_call(self) -> EventTime:
+        """A source without original producer tool times cannot prove activity."""
+        return UnrecordedEventTime()
+
+    def tool_call_between(self, since: float, through: float) -> bool:
+        return False
 
     def has_records(self, through: int) -> bool:
         return through > 0

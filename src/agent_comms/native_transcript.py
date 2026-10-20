@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,6 +21,7 @@ from .field_codec import MalformedRecord
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
 
 
@@ -183,6 +184,26 @@ class StoredRecord(NativeRecord):
 class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
+
+    def _tool_call_times(self) -> Generator[float]:
+        try:
+            with closing(self.tail()) as entries:
+                for entry in entries:
+                    if any(message.assistant and message.tool_calls
+                           for message in entry.messages):
+                        yield entry.timestamp.at.timestamp()
+        except FileNotFoundError:
+            return
+
+    def last_tool_call(self) -> EventTime:
+        with closing(self._tool_call_times()) as times:
+            return next(
+                (RecordedEventTime(timestamp) for timestamp in times), UnrecordedEventTime(),
+            )
+
+    def tool_call_between(self, since: float, through: float) -> bool:
+        with closing(self._tool_call_times()) as times:
+            return any(since <= timestamp <= through for timestamp in times)
 
     @contextmanager
     def reading(self):
