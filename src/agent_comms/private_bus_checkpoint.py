@@ -1125,7 +1125,8 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = _index_row(db, offset, raw, record, through_seq)
+                        through_seq = _index_row(db, offset, raw, record, through_seq,
+                                                 marker.claimed_after_seq)
 
                     with db:
                         for _ in bus.verified_records_unlocked(marker, on_row=collect):
@@ -1212,7 +1213,8 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         with db:
             sequence = prior.through_seq
             for offset, raw, record in additions:
-                sequence = _index_row(db, offset, raw, record, sequence)
+                sequence = _index_row(db, offset, raw, record, sequence,
+                                      marker.claimed_after_seq)
             if sequence != expected.through_seq:
                 raise RelationViolationError("Indexed tail differs from its sealed sequence.")
             cls.from_witness(expected).upsert(db)
@@ -1278,9 +1280,9 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
 
 
 def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
-               record: WireRecord, previous_sequence: int) -> int:
+               record: WireRecord, previous_sequence: int, claimed_after_seq: int) -> int:
     sequence = record.sequence_after(previous_sequence)
-    for row in record.checkpoint_rows(offset, len(raw), previous_sequence):
+    for row in record.checkpoint_rows(offset, len(raw), previous_sequence, claimed_after_seq):
         row.insert(db)
     return sequence
 
