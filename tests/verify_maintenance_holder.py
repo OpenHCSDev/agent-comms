@@ -25,7 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import DeadHolderReleasedPhase, MaintenanceState
 from upgrade_bus import Revisions, Stack, copy_bus, detached_live, live
 
-SCRATCH = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p281-live-proof")
+SCRATCH = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p281-live-proof-v2")
 BUS = SCRATCH / "copy"
 
 
