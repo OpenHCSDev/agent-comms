@@ -189,10 +189,11 @@ class CommittedDelivery(MessageWireRecord):
     def require_claim(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int,
+                        claimed_after_seq: int):
         from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
-        yield from super().checkpoint_rows(offset, length, previous_sequence)
+        yield from super().checkpoint_rows(offset, length, previous_sequence, claimed_after_seq)
         if self.acknowledgement is not None:
             yield ResponseKeys(self.acknowledgement.publication_key)
         yield DeliverySources(self.message.seq, self.message.message_id,
