@@ -28,10 +28,9 @@ class ToolCallIndex(StoreCarry):
                     raise ValueError(
                         "External transcript differs outside its allowed declared indexes"
                     )
-                if apply:
-                    # Membership above admits only names validated by the declaration.
-                    db.execute(f'DROP INDEX IF EXISTS "{change.name}"')
-                    db.execute(change.declared)
+                # The store transaction owns dry-run rollback, including these DDL writes.
+                db.execute(f'DROP INDEX IF EXISTS "{change.name}"')
+                db.execute(change.declared)
         return cls.carried(root, len(changes), {"indexes": len(changes)}, apply=apply)
 
 

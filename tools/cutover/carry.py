@@ -376,7 +376,9 @@ class CarryChain:
                 for name, source in pending.items() if Step.holds_carry(source, parents)
             }
             if not declared:
-                raise ValueError(f"{sorted(pending)} holds no Carry step; every carry_* module is a step of the chain")
+                raise ValueError(
+                    f"{sorted(pending)} holds no Carry step; "
+                    "every carry_* module is a step of the chain")
             known.update(declared)
             parents.update({step.declaration: step.family for step in declared.values()})
             pending = {name: source for name, source in pending.items() if name not in declared}
