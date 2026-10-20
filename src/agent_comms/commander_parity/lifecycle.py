@@ -30,6 +30,7 @@ from ..field_codec import FieldCodec
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
 from ..progress_claims import WorkingClaim
+from ..recorded_time import RecordedEventTime
 from ..todos import (
     ApplicationOrderRun,
     DeliveredProblemOrder,
@@ -297,7 +298,9 @@ class AssignOrderCase(CreateProblemCase):
             run.worker, "The copied workflow is released before its next native assignment."
         )
         document = replace(OrderFile.read(run.document.read_text()), problems=(before.id,))
-        run.commander.send(run.worker, run.due, document, clean=True)
+        run.commander.send(
+            run.worker, RecordedEventTime.from_clock(run.due), document, clean=True
+        )
         return before, run.commander.comms.goals.todos.get(before.id)
 
     @classmethod

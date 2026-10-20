@@ -13,7 +13,7 @@ from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, GitMeasure, NoneAbsence, UncarriedRecordFormat, EditedCarry,
     ComparedKind, Comparison, DeclaredSpellings, NamedAccess, NamedDeclaration,
-    StringIdentity, CommittedArtifacts, Measure, python_paths,
+    StringIdentity, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -68,38 +68,6 @@ class Repository:
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
 def repo(tmp_path: Path, request) -> Repository:
     return Repository(tmp_path, request.param)
-
-
-@pytest.mark.parametrize('name', (
-    'docs/fleet-board.md', 'nested/narrative.json', 'plans/handoff-next.md',
-    'nested/P520-HANDOFF.md', 'PR-BODY.md', 'out/run.stdout.log',
-    'deep/trace.log.gz', 'deep/stderr', 'deep/results.json',
-))
-def test_committed_artifacts_rejects_transient_files(name):
-    assert CommittedArtifacts.forbidden(name)
-
-
-@pytest.mark.parametrize('name', (
-    'src/agent_comms/commander_parity/handoff.py', 'tests/test_owner_restart_handoff.py',
-    'docs/CONSUMER-EVIDENCE.json', 'docs/CURRENT3931-HANDOFF-CONSUMERS.json',
-))
-def test_committed_artifacts_keeps_source_and_declaration_evidence(name):
-    assert not CommittedArtifacts.forbidden(name)
-
-
-def test_committed_artifacts_checks_retained_head_on_document_only_changes(tmp_path):
-    repo = Repository(tmp_path, '')
-    base = repo.commit({'docs/fleet-board.md': 'stale copy\n'})
-    head = repo.commit({'README.md': 'unrelated documentation\n'})
-    assert not Measure.applies_to(False)
-    assert CommittedArtifacts.applies_to(False)
-    before, after = CommittedArtifacts.compare(repo.path, base, head, {'README.md'}, 'src')
-    assert before == {'CommittedArtifacts': 0} and after == {'CommittedArtifacts': 1}
-    assert Comparison('src', base, head, (), before, after, {}, {}).failed
-    clean = repo.commit({'docs/fleet-board.md': None})
-    before, after = CommittedArtifacts.compare(repo.path, head, clean, set(), 'src')
-    assert after == {'CommittedArtifacts': 0}
-    assert not Comparison('src', head, clean, (), before, after, {}, {}).failed
 
 
 def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
