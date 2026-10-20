@@ -252,8 +252,7 @@ def carry_all(
     return results
 
 
-def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions,
-             installer: str) -> dict:
+def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> dict:
     source = Comms(root)
     parent = source.registry.storage_rule.initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -271,6 +270,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied.root):
             before = bus_files(copied.root)
+        pending = CarryChain.at(revisions.repo, git(stack.checkout, "rev-parse", "HEAD")).pending(
+            copied.root)
         stopping = before_stop(copied.root, pending, stack, revisions)
         report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
         return {**report, "copy": asdict(measurement)}
@@ -354,7 +355,7 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.pending, self.staged, self.revisions, self.installer)
+        return rehearse(self.root, self.staged, self.revisions, self.installer)
 
     def live(self) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,

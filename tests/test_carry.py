@@ -706,7 +706,7 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
 
     monkeypatch.setattr(upgrade_bus.PracticeCopy, "open", refused_copy)
     with pytest.raises(RuntimeError, match="copy refused"):
-        upgrade_bus.rehearse(root, (), Stack(tmp_path), None, "worker")
+        upgrade_bus.rehearse(root, Stack(tmp_path), None, "worker")
     assert len(destinations) == 1
     assert list((requested / "worker").iterdir()) == []
     assert root.is_dir()
@@ -714,7 +714,7 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
 
 def rehearsed(stack: Stack, root: Path) -> dict:
     from upgrade_bus import rehearse
-    return rehearse(root, (), stack, None, "worker")
+    return rehearse(root, stack, None, "worker")
 
 
 def installed_live(stack: Stack, root: Path) -> dict:
