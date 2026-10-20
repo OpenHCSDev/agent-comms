@@ -304,19 +304,21 @@ def carry_parents(source: bytes) -> dict[str, type[Carry]]:
             parent_name(base) in names for base in node.bases
         ):
             continue
-        methods = [method for method in node.body
-                   if isinstance(method, ast.FunctionDef) and method.name == "precedes"]
+        methods: list[ast.stmt] = [
+            method for method in node.body
+            if isinstance(method, ast.FunctionDef) and method.name == Carry.precedes.__name__
+        ]
         if node.name == Carry.__name__:
             if not methods:
                 raise ValueError("Target Carry declares no ordering behavior")
             node.bases = [ast.Name(id=Carry.__name__, ctx=ast.Load())]
         node.body = methods or [ast.Pass()]
-        node.decorator_list = [ast.Name(id="_declared_parent", ctx=ast.Load())]
+        node.decorator_list = [ast.Name(id=declared.__name__, ctx=ast.Load())]
         declarations.append(node)
         names.add(node.name)
     tree = ast.fix_missing_locations(ast.Module(body=declarations, type_ignores=[]))
     exec(compile(tree, str(STEPS / "carry.py"), "exec"),
-         {"Carry": Carry, "_declared_parent": declared})
+         {Carry.__name__: Carry, declared.__name__: declared})
     if Carry.__name__ not in parents:
         raise ValueError("Target tree declares no Carry family")
     return parents
