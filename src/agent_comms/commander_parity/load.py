@@ -11,7 +11,6 @@ from ..field_codec import FieldCodec
 from ..private_path import FileRevision
 from . import ParityComparison, UnverifiedParity
 
-
 # Profile the real return, never replace the measurement, command, bus or reply.
 # Comparing independent reads of a running fleet confuses new edits with drift.
 OBSERVE_CAPACITY = """
@@ -41,7 +40,7 @@ print(json.dumps(dict(current=output.getvalue(), native=str(measured[0]),
 """
 
 
-def state_files(directory: Path) -> tuple[tuple[str, FileRevision], ...]:
+def state_files(directory: Path) -> tuple[tuple[str, FileRevision | None], ...]:
     return tuple(
         (str(path.relative_to(directory)), FileRevision.capture(path))
         for path in sorted(directory.rglob("*"))
@@ -61,8 +60,8 @@ class MeasuredOutput:
 @dataclass(frozen=True)
 class LoadComparison(ParityComparison):
     observation: MeasuredOutput
-    state_before: tuple[tuple[str, FileRevision], ...]
-    state_after: tuple[tuple[str, FileRevision], ...]
+    state_before: tuple[tuple[str, FileRevision | None], ...]
+    state_after: tuple[tuple[str, FileRevision | None], ...]
 
     @property
     def passed(self) -> bool:
