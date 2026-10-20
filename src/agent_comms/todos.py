@@ -7,14 +7,14 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import json
 import re
-import subprocess
 import sqlite3
+import subprocess
 import sys
 import time
-import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -22,27 +22,33 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
-    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    FieldCodec,
+    GitCommitText,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
-from .channel_targets import CommandTarget
-from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
+from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from .plan_phases import OrderPhase, UnplannedPhase
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .standing_rules import UndatedStandingRule
+from .storage_rules import StorageRule
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .plan_phases import OrderPhase, UnplannedPhase
 from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
@@ -675,8 +681,10 @@ class ProgressSource:
         return list(self.pulls.listed(self.todo.repo, state, self.todo))
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
-        points = (*self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
-                  *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded))
+        points = (
+            *self.checkout.checked_commits(self.todo.order.checked(), self.references, *excluded),
+            *self.checkout.commits(self.todo.reference_pattern, self.references, *excluded),
+        )
         return iter(sorted({point.sha: point for point in points}.values(),
                            key=lambda point: point.at, reverse=True)[:1])
 
@@ -2462,8 +2470,9 @@ class Todo(TypedTable):
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:
         return (*self.prior_orders, *self.order.declarations)
 
-    def orders_before(self, following: ProblemOrder,
-                      additional: tuple[CheckedProblemOrder, ...] = ()) -> tuple[CheckedProblemOrder, ...]:
+    def orders_before(
+        self, following: ProblemOrder, additional: tuple[CheckedProblemOrder, ...] = (),
+    ) -> tuple[CheckedProblemOrder, ...]:
         current = {order.id for order in following.declarations}
         return tuple({order.id: order for order in (*self.order_history, *additional)
                       if order.id not in current}.values())

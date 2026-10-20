@@ -965,7 +965,8 @@ class DoneVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "open the problem's PR from this owned source checkout with its immutable order identity"
+    help = ("open the problem's PR from this owned source checkout "
+            "with its immutable order identity")
     pid: str = option("pid")
     title: str = option("--title")
     body_file: str = option("--body-file")

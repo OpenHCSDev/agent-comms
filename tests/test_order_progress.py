@@ -320,11 +320,13 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
 class HeldSource:
     """A source holding an unpushed commit, a pushed commit, an open PR and a merged PR."""
     since = 100.0
+    pushes = ()
 
     def commits(self, *excluded):
-        commits = {('--remotes',): ProgressPoint('a' * 40, 1000.0),
-                   ('origin/HEAD',): ProgressPoint('e' * 40, 1000.0)}
-        yield commits[excluded]
+        yield ProgressPoint('a' * 40, 1000.0)
+
+    def published(self):
+        yield ProgressPoint('e' * 40, 1000.0)
 
     def readings(self):
         return DistanceReadings()
@@ -336,8 +338,12 @@ class HeldSource:
 
 class EmptySource:
     since = 100.0
+    pushes = ()
 
     def commits(self, *excluded):
+        return iter(())
+
+    def published(self):
         return iter(())
 
     def requests(self, state):
@@ -469,6 +475,11 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     todo = create(commander, pid, deadline=1)
     storage = StorageRule(checkout_base=tmp_path / "wt")
     monkeypatch.setattr(script.comms.registry, "storage_rule", storage)
+    reused = storage.order_checkout("worker", "P999")
+    reused.mkdir(parents=True)
+    git(reused, "init", "-q", "-b", branch)
+    git(reused, "remote", "add", "origin", f"https://github.com/{todo.repo}.git")
+    monkeypatch.chdir(reused)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)
     bodies = []
