@@ -23,6 +23,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Literal
 
@@ -140,10 +141,10 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
         directory.lock_identity = _identity(os.fstat(lock))
-        intent = ObservedPath.at(
-            Path(StoreOwner.snapshot_intent(path).name),
+        intent = ObservedPath.capture(partial(
+            os.stat, StoreOwner.snapshot_intent(path).name,
             dir_fd=directory.fd, follow_symlinks=False,
-        )
+        ))
         if not intent.is_absent():
             raise SidecarCommitUnknown("Private sidecar has an unresolved commit intent; no retry.")
         yield directory

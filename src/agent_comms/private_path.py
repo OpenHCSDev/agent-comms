@@ -10,7 +10,7 @@ import os
 import stat
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,11 +46,14 @@ class FileIdentity:
 
 class ObservedPath(ABC):
     @staticmethod
-    def at(
-        path: Path, *, dir_fd: int | None = None, follow_symlinks: bool = True
-    ) -> ObservedPath:
+    def at(path: Path) -> ObservedPath:
+        return ObservedPath.capture(path.stat)
+
+    @staticmethod
+    def capture(observe: Callable[[], os.stat_result]) -> ObservedPath:
+        """Decode a pathname or pinned-descriptor observation at the boundary."""
         try:
-            observed = os.stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+            observed = observe()
         except FileNotFoundError:
             return AbsentPath()
         return PresentPath(FileIdentity.from_stat(observed))
