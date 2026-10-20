@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from itertools import chain
@@ -388,13 +389,26 @@ class Goals:
         *,
         actor: type = RuntimeInvocable,
     ) -> Result:
+        """Return the exact declaration written by this action."""
+        with self._updating_goal(name, action, actor=actor) as goal:
+            return goal
+
+    def update_goal_snapshot[Result: GoalDeclaration](
+        self, name: str, action: GoalAction[Result], *, actor: type,
+    ) -> GoalSnapshot:
+        """Return this publication and its schedule before another owner can change it."""
+        with self._updating_goal(name, action, actor=actor):
+            return self._goal_snapshot(name)
+
+    @contextmanager
+    def _updating_goal[Result: GoalDeclaration](
+        self, name: str, action: GoalAction[Result], *, actor: type,
+    ) -> Iterator[Result]:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
-            return action.apply(
-                GoalActionContext(self, self.registry.require(name), actor)
-            )
+            yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
 
     def block_goal_after_failed_turn(
         self,

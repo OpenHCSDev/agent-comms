@@ -668,8 +668,8 @@ class CommsGoalTool(ThreadToolRequest):
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},
         )
-        comms.goals.update_goal(name, command, actor=ModelInvocable)
-        return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
+        return GoalProgress.from_snapshot(
+            comms.goals.update_goal_snapshot(name, command, actor=ModelInvocable))
 
 
 @dataclass(frozen=True, kw_only=True)
