@@ -2526,7 +2526,7 @@ class InstallTodo(CloseOrderTodo):
     works: str
     artifact: str
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> InstallTodo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.order.require_installation()
