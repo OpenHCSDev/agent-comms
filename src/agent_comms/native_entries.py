@@ -8,12 +8,16 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, TextIO
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
+
+if TYPE_CHECKING:
+    from .native_pi import NativeContextProof
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
 from .importing import ImportedSessionMetadata
+from .native_input_record import NativeInputLocation
 from .pi_payloads import PiMessage, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
@@ -187,9 +191,11 @@ class NativeEvidenceState(ABC):
     """A read header and the earliest required input position."""
 
     @abstractmethod
-    def read(self, reader): ...
+    def read(self, reader: NativeEvidenceRead) -> SessionEntry: ...
 
-    def observe_inputs(self, reader, inputs):
+    def observe_inputs(
+        self, reader: NativeEvidenceRead, inputs: tuple[NativeInputLocation, ...],
+    ) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         if not inputs:
             raise MalformedRecord('Native input evidence requires a committed byte offset')
         minimum = min(item.session_entry_start for item in inputs)
@@ -198,12 +204,12 @@ class NativeEvidenceState(ABC):
         reader.state = InputNativeEvidence(minimum)
         return reader._observe(reverified=False)
 
-    def reobserve(self, reader):
+    def reobserve(self, reader: NativeEvidenceRead) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         return reader._observe(reverified=True)
 
 
 class UnreadNativeEvidence(NativeEvidenceState):
-    def read(self, reader):
+    def read(self, reader: NativeEvidenceRead) -> SessionEntry:
         header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
         reader.entries = (header,)
         reader.state = HeaderNativeEvidence()
@@ -211,22 +217,24 @@ class UnreadNativeEvidence(NativeEvidenceState):
 
 
 class HeaderNativeEvidence(NativeEvidenceState):
-    def read(self, reader):
+    def read(self, reader: NativeEvidenceRead) -> SessionEntry:
         reader.source.verify()
-        return reader.entries[0]
+        return cast(SessionEntry, reader.entries[0])
 
 
 @dataclass(frozen=True)
 class InputNativeEvidence(HeaderNativeEvidence):
     minimum: int
 
-    def observe_inputs(self, reader, inputs):
+    def observe_inputs(
+        self, reader: NativeEvidenceRead, inputs: tuple[NativeInputLocation, ...],
+    ) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         if any(item.session_entry_start < self.minimum for item in inputs):
             reader._forget()
             return super().observe_inputs(reader, inputs)
         return reader._observe(reverified=False)
 
-    def reobserve(self, reader):
+    def reobserve(self, reader: NativeEvidenceRead) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         reader.header()
         reader.source.start_at(self.minimum)
         reader.state = self
@@ -317,13 +325,13 @@ class NativeEvidenceRead:
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
-    def _accept_header(self, entries):
+    def _accept_header(self, entries: tuple[NativeEntry, ...]) -> SessionEntry:
         if not entries or not isinstance(entries[0], SessionEntry):
             raise MalformedRecord('Native Pi session header is invalid')
         entries[0].require_header()
         return entries[0]
 
-    def header(self):
+    def header(self) -> SessionEntry:
         """Read and decode record one without discarding an existing input index."""
         from .native_pi import NativePiUnavailable
 
@@ -371,14 +379,14 @@ class NativeEvidenceRead:
         self.source.reverify()
         return acquired.reobserve(self)
 
-    def _observe(self, *, reverified: bool):
+    def _observe(self, *, reverified: bool) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         from .native_pi import (
             NativeEvidencePrefixChanged,
             NativePiUnavailable,
         )
 
         try:
-            self.header()
+            header = self.header()
             appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
@@ -399,7 +407,7 @@ class NativeEvidenceRead:
             self.close()
             raise
         self.entries = entries
-        return entries[0], entries
+        return header, entries
 
     def decode_rows(self, rows):
         for row in rows:
@@ -413,10 +421,10 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     Read input evidence from that file without adding a history index or store.
     """
 
-    def observe(self, *inputs):
+    def observe(self, *inputs: NativeInputLocation) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
         return self.state.observe_inputs(self, inputs)
 
-    def read_input(self, location):
+    def read_input(self, location: NativeInputLocation) -> MessageEntry:
         self.observe(location)
         return self.tracked(location.input_id)
 
@@ -446,7 +454,7 @@ class NativeEvidenceScope(ExitStack):
             self.close()
             raise
 
-    def observe_inputs(self, contexts):
+    def observe_inputs(self, contexts: tuple[NativeContextProof, ...]) -> None:
         """Read each source from its first required input before checking any input."""
         for path in {context.session_file for context in contexts}:
             self.for_source(path).observe(*(

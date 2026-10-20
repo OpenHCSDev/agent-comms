@@ -18,17 +18,24 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .coordination_database import CoordinationStore
-from .native_arguments import NativeArguments, SelectedModel
-from .native_session_files import NativeSessionFiles
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .native_arguments import NativeArguments, SelectedModel
 from .native_input_record import NativeInputCommit, NativeInputLocation
-from .private_path import FileIdentity, FileRevision, NativeSessionFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
+from .native_session_files import NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
+from .private_path import (
+    FileIdentity,
+    FileRevision,
+    NativeSessionFileRole,
+    PrivateDirectoryRole,
+    TrustedAncestorRole,
+    fsync_directory,
+)
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -312,7 +319,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return next(iter(rows), None)
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, entry: NativeEntry, *, session_entry_start: int
+        self, session_file: Path, header: SessionEntry, entry: NativeEntry, *,
+        session_entry_start: int,
     ) -> NativeContextProof:
         if self.session_id != header.id or self.session_entry_id != entry.id:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
@@ -341,19 +349,20 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
 
     @classmethod
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, session_entry_start: int,
-        request_generation: int | None = None, evidence: NativeEvidenceRead | None = None,
+        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
+        evidence: NativeEvidenceRead | None = None,
+        session_entry_start: int,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         Id128Text.decode(input_id)
         session_file = Path(session_file).absolute()
         from .native_entries import NativeInputEvidenceRead
 
-        with NativeContextJournal.open_evidence(session_file) as db:
-            row = NativeContextJournal.for_input(db, input_id, request_generation)
-        if row is None:
-            raise NativePiUnavailable("The input has no assembled-context proof")
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
+            with NativeContextJournal.open_evidence(session_file) as db:
+                row = NativeContextJournal.for_input(db, input_id, request_generation)
+            if row is None:
+                raise NativePiUnavailable("The input has no assembled-context proof")
             location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
                                            session_entry_start=session_entry_start)
             entry = evidence.read_input(location)

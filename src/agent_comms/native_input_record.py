@@ -10,12 +10,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from typing import Annotated, ClassVar, Literal
 
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .declared_family import DeclaredFamily
-from .coordination_errors import IdentityConflict
 from .coordination_contracts import validate_execution_id
-
+from .coordination_errors import IdentityConflict
 from .coordination_tables.participants import OwnerGenerations
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, Id128Text, JsonShapeFamily, JsonShapeMember, MalformedRecord
 from .typed_table import Column, TextStorage
 
 
@@ -46,6 +45,20 @@ class NativeInputLocation(NativeInputCommit):
     })
 
 
+class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
+    """Decode the original SQL placement once: uncommitted NULL or a byte offset."""
+
+
+@dataclass(frozen=True)
+class UnrecordedNativePosition(NativeInputPosition, JsonShapeMember):
+    value: None = None
+
+
+@dataclass(frozen=True)
+class RecordedNativePosition(NativeInputPosition, JsonShapeMember):
+    value: int
+
+
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     """Original triage or attempt identity, never a send/replay capability."""
 
@@ -62,6 +75,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         annotation, native acknowledgement or another source-membership declaration.
         """
         from dataclasses import replace
+
         from .transcript_routes import InputDisplay
 
         return entry.events(replace(
@@ -354,7 +368,7 @@ class NativeInputContext:
             try:
                 for item in fields(self):
                     if item.metadata.get("native_context"):
-                        FieldCodec.decode(type(None), getattr(self, item.name))
+                        FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, item.name)))
             except MalformedRecord as error:
                 raise IdentityConflict("Native unrecorded context group is partial") from error
             return UnrecordedNativeInputReference()

@@ -7,7 +7,7 @@ permission to send and live-context ownership. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -15,13 +15,19 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_errors import StaleFence, IdentityConflict
+from .coordination_errors import IdentityConflict, StaleFence
 from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
-    NativeInputRecord, NativeInputContext, NativeInputExecution, NativeInputLocation,
+    NativeInputContext,
+    NativeInputExecution,
+    NativeInputLocation,
+    NativeInputPosition,
+    NativeInputRecord,
+    RecordedNativePosition,
+    UnrecordedNativePosition,
 )
-from .selected_triage import SelectedTriage, RecordedTriageText
+from .selected_triage import RecordedTriageText, SelectedTriage
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -48,7 +54,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         """Create this owner's current declarations on an explicitly fresh store."""
-        from .coordinated_runtime_schema import _schema, _digest
+        from .coordinated_runtime_schema import _digest, _schema
 
         schema = _schema()
         for statement in schema.values():
@@ -118,7 +124,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .native_pi import NativeContextProof
 
         self.reference.require_recorded()
-        values = {item.name: getattr(self, item.name)
+        values = {item.name: FieldCodec.encode(getattr(self, item.name))
                   for item, _wire in FieldCodec.record_fields(NativeContextProof)}
         values['session_file'] = self.require_session_identity().path
         return FieldCodec.construct(NativeContextProof, values)
@@ -178,7 +184,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """
         from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
-
         from .transcripts import TranscriptRead
 
         with TranscriptRead.publication_source(root) as db:
@@ -230,9 +235,17 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_id: str | None = None
     session_file: str | None = None
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
-    session_entry_start: int | None = field(default=None, metadata=dict(
-        NativeInputLocation.__dataclass_fields__["session_entry_start"].metadata, native_context=int,
-    ))
+    session_entry_start: NativeInputPosition = field(
+        default_factory=UnrecordedNativePosition,
+        metadata={
+            "sql": replace(
+                next(item for item in fields(NativeInputLocation)
+                     if item.name == "session_entry_start").metadata["sql"],
+                nullable=True, storage=IntegerStorage,
+            ),
+            "native_context": RecordedNativePosition,
+        },
+    )
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
@@ -278,7 +291,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
             session_entry_id=context.session_entry_id,
-            session_entry_start=context.session_entry_start,
+            session_entry_start=RecordedNativePosition(context.session_entry_start),
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
             committed_at_ms=context.committed_at_ms,

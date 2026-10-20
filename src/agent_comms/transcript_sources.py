@@ -553,7 +553,10 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         lookup = self.recipient.lookup
         for fragment in fragments:
             fragment = tuple(fragment)
-            selected = tuple(zip(fragment, reader.inputs_for(fragment)))
+            selected = tuple(
+                (record, user.entry if user else None)
+                for record, user in zip(fragment, reader.inputs_for(fragment), strict=True)
+            )
             with TranscriptRead.publication_source(self.root) as db:
                 # Missing coordination remains detached native history. Do not
                 # introduce header failures where no SQL source was selected.
