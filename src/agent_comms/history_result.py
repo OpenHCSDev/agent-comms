@@ -1,68 +1,52 @@
 """History result declarations own their wire keys and target context."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
-
-import agent_comms
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .cli_result import CliResult
-from .field_codec import RecordMember, SubclassUnion, WireForm
-from .message_provenance import HistoryProvenance, NoHistoryProvenance
-from .page_traversal import NoPageCursor, PageCursor
+from .field_codec import FieldCodec
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
-    import agent_comms.messages
+    from .messages import Message
+    from .page_traversal import PageCursor
 
 
 @dataclass(frozen=True)
-class HistoryEntry(RecordMember):
-    message: Annotated[agent_comms.messages.Message, WireForm] = field(
-        metadata={"wire_inline": True})
-    history: HistoryProvenance = field(default_factory=NoHistoryProvenance,
-        metadata={"wire_name": HistoryProvenance.envelope_key, "wire_omit_default": True})
-
-    @classmethod
-    def capture(cls, message: agent_comms.messages.Message) -> Self:
-        return cls(message, message.history_provenance)
-
-
-@dataclass(frozen=True)
-class HistoryPageResult(SubclassUnion, CliResult, ToolResult, affix="HistoryPageResult"):
-    messages: tuple[HistoryEntry, ...]
+class HistoryPageResult(CliResult, ToolResult):
+    messages_key: ClassVar[str] = "messages"
+    messages: tuple[Message, ...]
     has_older: bool
-    before: PageCursor = field(kw_only=True)
 
     @classmethod
-    def target_fields(cls, name: str) -> dict[str, str]:
-        return {}
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
+        return cls(messages, has_older)
 
-    @classmethod
-    def for_target(
-        cls, name: str, messages: tuple[agent_comms.messages.Message, ...], has_older: bool,
-    ) -> Self:
-        return cls(
-            tuple(HistoryEntry.capture(message) for message in messages), has_older,
-            before=messages[-1].view_cursor if messages else NoPageCursor(),
-            **cls.target_fields(name),
-        )
+    @property
+    def before(self) -> PageCursor | None:
+        return self.messages[-1].view_cursor if self.messages else None
+
+    def to_wire(self) -> dict[str, object]:
+        return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
+                "before": FieldCodec.encode(self.before), "has_older": self.has_older}
 
 
-@dataclass(frozen=True)
-class DmHistoryPageResult(RecordMember, HistoryPageResult):
-    messages: tuple[HistoryEntry, ...] = field(metadata={"wire_name": "dm"})
+class DmHistoryPageResult(HistoryPageResult):
+    messages_key = "dm"
 
 
-@dataclass(frozen=True)
-class EverythingHistoryPageResult(RecordMember, HistoryPageResult):
-    messages: tuple[HistoryEntry, ...] = field(metadata={"wire_name": "everything"})
+class EverythingHistoryPageResult(HistoryPageResult):
+    messages_key = "everything"
 
 
 @dataclass(frozen=True)
-class ChannelHistoryPageResult(RecordMember, HistoryPageResult):
+class ChannelHistoryPageResult(HistoryPageResult):
     channel: str
 
     @classmethod
-    def target_fields(cls, name: str) -> dict[str, str]:
-        return {"channel": name}
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
+        return cls(messages, has_older, name)
+
+    def to_wire(self) -> dict[str, object]:
+        return {**super().to_wire(), "channel": self.channel}
