@@ -27,6 +27,7 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
+from .channel_targets import CommandTarget
 from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted
 from .command import Command
 from .declared_family import DeclaredFamily
