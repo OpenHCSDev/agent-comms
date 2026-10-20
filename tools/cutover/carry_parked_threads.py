@@ -21,7 +21,7 @@ class ParkedThreadsCarry(Carry):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        path = CommanderConfig.path()
+        path = CommanderConfig.root_path(root)
         if not path.exists():
             return Carried(0)
         legacy = CommanderParking.model_validate_json(path.read_text())
