@@ -26,7 +26,7 @@ from .field_codec import (
     projected,
 )
 from .mentions import ThreadMention
-from .message_provenance import HistoryMessageProvenance
+from .message_provenance import HistoryProvenance, NoHistoryProvenance
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -461,14 +461,13 @@ class Message:
     history_source = None
 
     @property
-    def history_provenance(self) -> HistoryMessageProvenance | None:
-        return None
+    def history_provenance(self) -> HistoryProvenance:
+        return NoHistoryProvenance()
 
     @property
     def display_metadata(self) -> dict:
         """Both public renderers encode the same declared provenance value."""
-        provenance = self.history_provenance
-        return {} if provenance is None else {"history": FieldCodec.encode(provenance)}
+        return self.history_provenance.metadata()
 
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)}

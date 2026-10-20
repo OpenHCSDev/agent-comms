@@ -17,6 +17,7 @@ from datetime import datetime
 from enum import Enum
 from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
+from inspect import signature
 from pathlib import Path
 from threading import RLock
 from typing_extensions import TypeAliasType
@@ -196,14 +197,13 @@ class FieldPlan:
             yield from self.projected_fields(view)
 
     def projected_fields(self, view: str) -> Iterable[tuple[str, object, Field[object]]]:
-        annotation = FieldCodec.view_annotation(self.annotation, view)
+        annotation = self.value.view_annotation(view)
         yield self.name, annotation, self.view_field(view, annotation, self.view_metadata(view))
 
     def view_metadata(self, view: str) -> dict[str, object]:
         metadata = dict(self.declared.metadata)
         metadata.pop("wire_exclude", None)
-        metadata["wire_name"] = self.setting(f"{view}_name", self.key)
-        return metadata
+        return {**metadata, **option(wire_name=self.setting(f"{view}_name", self.key)).metadata}
 
     def view_field(
         self, view: str, annotation: object, metadata: dict[str, object],
@@ -310,7 +310,9 @@ class MissingNoneFieldPlan(DeclaredFieldPlan):
     def view_field(
         self, view: str, annotation: object, metadata: dict[str, object],
     ) -> Field[object]:
-        return field(default=None, metadata=metadata)
+        declaration = field(metadata=metadata,
+                            default_factory=lambda: self.decoded({}).pop(self.name))
+        return cast(Field[object], declaration)
 
     def omitted(self, value: object) -> bool:
         return value is None or super().omitted(value)
@@ -371,14 +373,11 @@ class InlineFieldPlan(DeclaredFieldPlan):
     metadata_flag = "wire_inline"
 
     def projected_fields(self, view: str) -> Iterable[tuple[str, object, Field[object]]]:
-        _, representation = FieldCodec._representation(self.annotation)
-        return FieldCodec.view_fields(self.inlined, "wire" if representation is not None else view)
+        return _RecordPlan.view_fields(self.inlined, self.value.projection_view(view))
 
     @cached_property
     def inlined(self) -> type:
-        target, representation = FieldCodec._representation(self.annotation)
-        return (cast(type, target) if representation is None
-                else representation.wire_record_as(target))
+        return self.value.inline_record()
 
     @cached_property
     def record(self):
@@ -881,6 +880,10 @@ class Projected(property):
         self.view = view
         self.wire_name = name or getter.__name__
 
+    @property
+    def annotation(self) -> object:
+        return signature(cast(Callable[..., object], self.fget), eval_str=True).return_annotation
+
 
 def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
@@ -896,6 +899,73 @@ def option(*flags: str, default: Any = MISSING, default_factory: Any = MISSING,
     metadata = locals()
     return field(default=metadata.pop("default"), default_factory=metadata.pop("default_factory"),
                  metadata={name: value for name, value in metadata.items() if value is not MISSING})
+
+
+class _SchemaScope(ABC):
+    """A schema request is outside a document or owns its current definitions."""
+
+    current: ClassVar[ContextVar[_SchemaScope]]
+
+    @classmethod
+    def document(cls, build: Callable[[], dict[str, object]]) -> dict[str, object]:
+        return cls.current.get().build(build)
+
+    @abstractmethod
+    def build(self, build: Callable[[], dict[str, object]]) -> dict[str, object]: ...
+
+    def declared(
+        self, target: type, build: Callable[[], dict[str, object]],
+    ) -> dict[str, object]:
+        raise RuntimeError("Schema definitions require an active document")
+
+
+@dataclass(frozen=True)
+class _NoSchemaDefinitions(_SchemaScope):
+    def build(self, build: Callable[[], dict[str, object]]) -> dict[str, object]:
+        owner = _SchemaDefinitions()
+        token = self.current.set(owner)
+        try:
+            schema = build()
+        finally:
+            self.current.reset(token)
+        return owner.complete(schema)
+
+
+@dataclass
+class _SchemaDefinitions(_SchemaScope):
+    """One document registers declaration identities before their traversal."""
+
+    definitions: dict[type, tuple[str, dict[str, object]]] = field(default_factory=dict)
+    referenced: set[type] = field(default_factory=set)
+
+    def build(self, build: Callable[[], dict[str, object]]) -> dict[str, object]:
+        return build()
+
+    def complete(self, schema: dict[str, object]) -> dict[str, object]:
+        definitions = {name: definition for target, (name, definition) in self.definitions.items()
+                       if target in self.referenced}
+        return {**schema, "$defs": definitions} if definitions else schema
+
+    def declared(
+        self, target: type, build: Callable[[], dict[str, object]],
+    ) -> dict[str, object]:
+        if target in self.definitions:
+            self.referenced.add(target)
+            name, _ = self.definitions[target]
+            pointer = quote(name.replace("~", "~0").replace("/", "~1"), safe="")
+            return {"$ref": f"#/$defs/{pointer}"}
+        name = f"{target.__module__}.{target.__qualname__}"
+        while any(name == previous for previous, _ in self.definitions.values()):
+            name += "_"
+        definition: dict[str, object] = {}
+        self.definitions[target] = (name, definition)
+        schema = build()
+        definition.update(schema)
+        return schema
+
+
+_NO_SCHEMA_DEFINITIONS = _NoSchemaDefinitions()
+_SchemaScope.current = ContextVar("field_codec_schema_definitions", default=_NO_SCHEMA_DEFINITIONS)
 
 
 class FieldCodec(Sealed):
@@ -1127,54 +1197,10 @@ class FieldCodec(Sealed):
             ))
         return cls.alternatives_schema("oneOf", alternatives)
 
-    @dataclass
-    class _SchemaDefinitions:
-        """One schema document owns declaration identities and their references."""
-
-        current: ClassVar[ContextVar[FieldCodec._SchemaDefinitions]] = ContextVar(
-            "field_codec_schema_definitions")
-        definitions: dict[type, tuple[str, dict[str, object]]] = field(default_factory=dict)
-        referenced: set[type] = field(default_factory=set)
-
-        @classmethod
-        def document(cls, build: Callable[[], dict[str, object]]) -> dict[str, object]:
-            try:
-                cls.current.get()
-            except LookupError:
-                owner = cls()
-            else:
-                return build()
-            token = cls.current.set(owner)
-            try:
-                schema = build()
-            finally:
-                cls.current.reset(token)
-            definitions = {name: definition
-                           for target, (name, definition) in owner.definitions.items()
-                           if target in owner.referenced}
-            return {**schema, "$defs": definitions} if definitions else schema
-
-        def declared(
-            self, target: type, build: Callable[[], dict[str, object]],
-        ) -> dict[str, object]:
-            if target in self.definitions:
-                self.referenced.add(target)
-                name, _ = self.definitions[target]
-                pointer = quote(name.replace("~", "~0").replace("/", "~1"), safe="")
-                return {"$ref": f"#/$defs/{pointer}"}
-            name = f"{target.__module__}.{target.__qualname__}"
-            while any(name == previous for previous, _ in self.definitions.values()):
-                name += "_"
-            definition: dict[str, object] = {}
-            self.definitions[target] = (name, definition)
-            schema = build()
-            definition.update(schema)
-            return schema
-
     @classmethod
     def record_schema(cls, target: type) -> dict[str, Any]:
         """Named request fields; external tool/CLI selection remains separate."""
-        return cls._SchemaDefinitions.document(lambda: cls._record_schema(target, {}, []))
+        return _SchemaScope.document(lambda: cls._record_schema(target, {}, []))
 
     @classmethod
     def _record_schema(
@@ -1192,12 +1218,12 @@ class FieldCodec(Sealed):
     @classmethod
     def value_schema(cls, annotation: object) -> dict[str, Any]:
         """Derive one complete schema document from the decode declarations."""
-        return cls._SchemaDefinitions.document(lambda: cls._value_schema(annotation))
+        return _SchemaScope.document(lambda: cls._value_schema(annotation))
 
     @classmethod
     def _value_schema(cls, annotation: object) -> dict[str, object]:
         annotation, representation = cls._representation(annotation)
-        definitions = cls._SchemaDefinitions.current.get()
+        definitions = _SchemaScope.current.get()
         if representation is not None:
             schema = definitions.declared(representation.schema_declaration(annotation),
                                           lambda: representation.schema_as(annotation))
@@ -1238,60 +1264,9 @@ class FieldCodec(Sealed):
             return definitions.declared(annotation, lambda: cls.record_schema(annotation))
         raise TypeError(f"No declared JSON schema for {annotation}")
 
-    _views: ClassVar[dict[tuple[type, str], type]] = {}
-    _view_lock: ClassVar[RLock] = RLock()
-
-    @classmethod
-    def view_annotation(cls, annotation: object, view: str) -> object:
-        target, representation = cls._representation(annotation)
-        if representation is not None:
-            return annotation
-        origin, args = get_origin(target), get_args(target)
-        if origin in (Union, types.UnionType):
-            return reduce(or_, (cls.view_annotation(item, view) for item in args))
-        if origin in (list, tuple):
-            projected = tuple(item if item is Ellipsis else cls.view_annotation(item, view)
-                              for item in args)
-            return origin[projected]
-        if isinstance(target, type) and issubclass(target, DeclaredFamily):
-            members = tuple(cls.view_type(member, view) for member in target.members_with(target))
-            return reduce(or_, members) if members else target
-        if isinstance(target, type) and is_dataclass(target):
-            return cls.view_type(target, view)
-        return annotation
-
-    @classmethod
-    def view_fields(cls, record: type, view: str) -> Iterator[tuple[str, object, Field[object]]]:
-        if issubclass(record, DeclaredFamily) and record.decodes_tagged_records():
-            yield record.family_discriminator, Literal[record.declared_name], field()
-        for entry in cls._record_plan(record).bindings:
-            yield from entry.view_fields(view)
-        for name, member in cls._projections(record, view).items():
-            annotation = get_type_hints(member.fget, include_extras=True)["return"]
-            yield name, cls.view_annotation(annotation, view), field(
-                metadata={"wire_name": member.wire_name})
-
     @classmethod
     def view_type(cls, record: type, view: str) -> type:
-        """A public view is a declaration-derived record, never a live producer."""
-        with cls._view_lock:
-            key = record, view
-            if key in cls._views:
-                return cls._views[key]
-            previous = frozenset(cls._views)
-            result = type(f"{record.__name__}_{view}_view", (RecordMember,),
-                          {"__module__": record.__module__})
-            cls._views[key] = result
-            try:
-                declared = tuple(cls.view_fields(record, view))
-                result.__annotations__ = {name: annotation for name, annotation, _ in declared}
-                for name, _, declaration in declared:
-                    setattr(result, name, declaration)
-                return dataclass(frozen=True, kw_only=True)(result)
-            except BaseException:
-                for added in cls._views.keys() - previous:
-                    del cls._views[added]
-                raise
+        return _RecordPlan.view_type(record, view)
 
     @classmethod
     def project(cls, value: object, view: str, annotation: object = None) -> Any:
@@ -1321,36 +1296,9 @@ class FieldCodec(Sealed):
             return [cls.project(item, view, arguments[0] if arguments else None) for item in value]
         return cls.encode(value)
 
-    @dataclass(frozen=True)
-    class _RecordPlan:
-        """A record's field plan, derived once from its declaration."""
-
-        fields: tuple[FieldPlan, ...]
-        bindings: tuple[FieldPlan, ...]
-        required_keys: tuple[str, ...]
-        init_required_keys: tuple[str, ...]
-        accepted_keys: frozenset[str]
-
-        def encoded(self, value, view, encode_value) -> dict[str, object]:
-            result: dict[str, object] = {}
-            for entry in self.bindings:
-                current = entry.current(value)
-                metadata = entry.declared.metadata
-                if not metadata.get(f"{view}_exclude") and not entry.omitted(current):
-                    result.update(entry.encoded(
-                        encode_value(entry, current), key=metadata.get(f"{view}_name", entry.key)
-                    ))
-            return result
-
-        def schema_fields(self, properties, required):
-            for entry in self.fields:
-                properties.update(entry.schema_fields())
-            required.extend(self.init_required_keys)
-            return properties
-
     @classmethod
     @cache
-    def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
+    def _record_plan(cls, record: type) -> _RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
         declared = cls.record_fields(record)
         hints = cls._types(record)
@@ -1373,7 +1321,7 @@ class FieldCodec(Sealed):
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
         ):
             raise TypeError("Conflicting wire field names.")
-        return cls._RecordPlan(
+        return _RecordPlan(
             fields=tuple(wire_fields),
             bindings=entries,
             required_keys=tuple(required_keys),
@@ -1401,6 +1349,85 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
+@dataclass(frozen=True)
+class _RecordPlan:
+    """One record declaration owns its fields and derived public view types."""
+
+    fields: tuple[FieldPlan, ...]
+    bindings: tuple[FieldPlan, ...]
+    required_keys: tuple[str, ...]
+    init_required_keys: tuple[str, ...]
+    accepted_keys: frozenset[str]
+    _views: ClassVar[dict[tuple[type, str], type]] = {}
+    _view_lock: ClassVar[RLock] = RLock()
+
+    def encoded(self, value, view, encode_value) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for entry in self.bindings:
+            current = entry.current(value)
+            metadata = entry.declared.metadata
+            if not metadata.get(f"{view}_exclude") and not entry.omitted(current):
+                result.update(entry.encoded(
+                    encode_value(entry, current), key=metadata.get(f"{view}_name", entry.key)
+                ))
+        return result
+
+    def schema_fields(self, properties, required):
+        for entry in self.fields:
+            properties.update(entry.schema_fields())
+        required.extend(self.init_required_keys)
+        return properties
+
+    @classmethod
+    def view_annotation(cls, target: object, view: str) -> object:
+        origin, args = get_origin(target), get_args(target)
+        if origin in (Union, types.UnionType):
+            return reduce(or_, (compile_decoder(item).view_annotation(view) for item in args))
+        if origin in (list, tuple):
+            projected = tuple(
+                item if item is Ellipsis else compile_decoder(item).view_annotation(view)
+                for item in args)
+
+            return origin[projected]
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            members = tuple(cls.view_type(member, view) for member in target.members_with(target))
+            return reduce(or_, members) if members else target
+        if isinstance(target, type) and is_dataclass(target):
+            return cls.view_type(target, view)
+        return target
+
+    @classmethod
+    def view_fields(cls, record: type, view: str) -> Iterator[tuple[str, object, Field[object]]]:
+        if issubclass(record, DeclaredFamily) and record.decodes_tagged_records():
+            yield record.family_discriminator, Literal[record.declared_name], field()
+        for entry in FieldCodec._record_plan(record).bindings:
+            yield from entry.view_fields(view)
+        for name, member in FieldCodec._projections(record, view).items():
+            yield (name, compile_decoder(member.annotation).view_annotation(view),
+                   option(wire_name=member.wire_name))
+
+    @classmethod
+    def view_type(cls, record: type, view: str) -> type:
+        with cls._view_lock:
+            key = record, view
+            if key in cls._views:
+                return cls._views[key]
+            previous = frozenset(cls._views)
+            result = type(f"{record.__name__}_{view}_view", (RecordMember,),
+                          {"__module__": record.__module__})
+            cls._views[key] = result
+            try:
+                declared = tuple(cls.view_fields(record, view))
+                result.__annotations__ = {name: annotation for name, annotation, _ in declared}
+                for name, _, declaration in declared:
+                    setattr(result, name, declaration)
+                return dataclass(frozen=True, kw_only=True)(result)
+            except BaseException:
+                for added in cls._views.keys() - previous:
+                    del cls._views[added]
+                raise
+
+
 @dataclass(frozen=True, slots=True)
 class ValueDecoder[T](ABC):
     """One annotation owns its wire conversion, draft projection and choice domain."""
@@ -1415,6 +1442,15 @@ class ValueDecoder[T](ABC):
             cls._by_origin[origin] = cls
         for annotation in cls.__dict__.get("annotations", ()):
             cls._by_annotation[annotation] = cls
+
+    def view_annotation(self, view: str) -> object:
+        return _RecordPlan.view_annotation(self.target, view)
+
+    def inline_record(self) -> type:
+        return cast(type, self.target)
+
+    def projection_view(self, view: str) -> str:
+        return view
 
     @classmethod
     def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[T]:
@@ -1583,6 +1619,16 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+
+    def view_annotation(self, view: str) -> object:
+        return self.target
+
+    def inline_record(self) -> type:
+        return self.representation.wire_record_as(self.structural.target)
+
+    def projection_view(self, view: str) -> str:
+        return "wire"
+
     def encode(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
 

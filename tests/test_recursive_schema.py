@@ -101,6 +101,9 @@ def test_schema_failure_releases_its_document_and_new_members_are_discovered():
     after = FieldCodec.value_schema(RecursiveChoice)
     assert len(after['oneOf']) == len(before['oneOf']) + 1
     assert not any('BrokenReply' in name for name in after['$defs'])
+    from agent_comms.field_codec import _SchemaScope
+    with pytest.raises(RuntimeError, match='active document'):
+        _SchemaScope.current.get().declared(str, lambda: {})
 
 
 def assert_native_validation(package, schema, value, invalid):
@@ -163,7 +166,8 @@ def test_history_result_members_preserve_declared_wire_shapes(native_runtime_pac
                                             EverythingHistoryPageResult, HistoryPageResult)
     from agent_comms.message_provenance import HistoryMessageProvenance
     from agent_comms.messages import Message, MessageKind
-    from agent_comms.page_traversal import HistoryCursor
+    from agent_comms.page_traversal import HistoryCursor, NoPageCursor
+    from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
     from agent_comms.recorded_bus import NoRecordedBus
 
     message = Message(sender='lead', target='worker', body='hello',
@@ -180,7 +184,12 @@ def test_history_result_members_preserve_declared_wire_shapes(native_runtime_pac
         assert type(received) is member
         assert FieldCodec.encode(received) == expected
 
-    provenance = HistoryMessageProvenance('/original', 'a' * 32, NoRecordedBus(), None, 1.0)
+    empty = DmHistoryPageResult.for_target('worker', (), False)
+    assert isinstance(empty.before, NoPageCursor)
+    assert FieldCodec.encode(empty) == {'dm': [], 'before': None, 'has_older': False}
+    assert FieldCodec.encode(FieldCodec.decode(HistoryPageResult, FieldCodec.encode(empty))) == FieldCodec.encode(empty)
+    provenance = HistoryMessageProvenance('/original', 'a' * 32, NoRecordedBus(),
+                                          UnrecordedEventTime(), RecordedEventTime(1.0))
     archived = DmHistoryPageResult(
         (replace(DmHistoryPageResult.for_target('worker', (message,), False).messages[0],
                  history=provenance),), False, before=HistoryCursor('archive', 3))
