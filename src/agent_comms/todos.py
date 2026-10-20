@@ -2735,6 +2735,12 @@ class Todo(TypedTable):
         """An undelivered order remains past due until its result is recorded."""
         return self.pending and self.deadline.recorded_at("An order deadline") < now
 
+    def reissued_deadline(self, at: float) -> EventTime:
+        """Restart the original completion window at this reissue's recorded time."""
+        window = (self.deadline.recorded_at("An order deadline")
+                  - self.order.checked().at.recorded_at("An order"))
+        return RecordedEventTime(at + window)
+
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
