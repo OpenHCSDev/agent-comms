@@ -87,6 +87,7 @@ class BridgeStateTable(DurableTables):
     """
 
     __slots__ = ()
+    filename = 'delivery.sqlite3'
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,7 @@ class Binding(BridgeStateTable, TypedTable):
     @contextmanager
     def open(cls, state: Path):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with closing(CoordinationStore.writer(state / 'delivery.sqlite3')) as db:
+        with closing(CoordinationStore.writer(state / BridgeStateTable.filename)) as db:
             db.execute('PRAGMA synchronous=FULL')
             with SQLiteFile.write_transaction(db):
                 if not BridgeStateTable.stored_schema(db):

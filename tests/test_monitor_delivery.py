@@ -12,7 +12,7 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
+    BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch,
 )
 from agent_comms.errors import RelationViolationError
@@ -192,14 +192,62 @@ _OLD_DELIVERY_FILE = (
 )
 
 
-def test_old_delivery_index_set_is_refused_not_kept(tmp_path):
-    path = tmp_path / 'delivery.sqlite3'
+_OLD_DELIVERY_ROWS = (
+    ('binding', ('/root', 'viewer', 'session')),
+    ('delivery', ('m1', '{"seq":7}\n', 'unconfirmed', '{"kind":"receiving","total":1}')),
+    ('delivery', ('m2', '{"seq":8}\n', 'emitted', '{"kind":"unrecorded"}')),
+    ('observed_part', ('m1', 1, 'peer', 'part one', 'record-1', 12.5)),
+)
+
+
+def _old_delivery_file(state):
+    path = state / BridgeStateTable.filename
     with closing(sqlite3.connect(path)) as db:
         for statement in _OLD_DELIVERY_FILE:
             db.execute(statement)
+        for table, values in _OLD_DELIVERY_ROWS:
+            db.execute(f'INSERT INTO "{table}" VALUES ({",".join("?" for _ in values)})', values)
         db.commit()
+    return path
+
+
+def _stored_rows(path):
+    with closing(sqlite3.connect(path)) as db:
+        return {table: db.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
+                for table in ('binding', 'delivery', 'observed_part')}
+
+
+def test_old_delivery_index_set_is_refused_not_kept(tmp_path):
+    path = _old_delivery_file(tmp_path)
     before = path.read_bytes()
     with pytest.raises(RelationViolationError, match='BridgeStateTable differs'):
         with Binding.open(tmp_path):
             pass
+    assert path.read_bytes() == before
+
+
+def test_cutover_gives_old_file_declared_indexes_and_keeps_every_row(tmp_path, capsys):
+    from tools.cutover.bridge_state_indexes import carry
+
+    path = _old_delivery_file(tmp_path)
+    rows = _stored_rows(path)
+    carry(tmp_path)
+    assert 'index delivery_sequence on delivery' not in capsys.readouterr().out.split(' after:')[1]
+    with Binding.open(tmp_path) as db:
+        assert Binding.bind(db, None) == Binding('/root', 'viewer', 'session')
+    assert _stored_rows(path) == rows
+    carry(tmp_path)
+    assert _stored_rows(path) == rows
+
+
+def test_cutover_refuses_a_table_whose_columns_differ(tmp_path):
+    from tools.cutover.bridge_state_indexes import carry
+
+    path = tmp_path / BridgeStateTable.filename
+    with closing(sqlite3.connect(path)) as db:
+        db.execute('CREATE TABLE "binding" ("root" TEXT NOT NULL) STRICT')
+        db.commit()
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError, match='columns differ'):
+        carry(tmp_path)
     assert path.read_bytes() == before
