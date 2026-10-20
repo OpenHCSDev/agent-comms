@@ -8,7 +8,7 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from contextlib import closing, contextmanager, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
@@ -28,6 +28,7 @@ from agent_comms.coordination_schema import (
 from agent_comms.coordination_tables.metadata import SchemaMeta
 from agent_comms.typed_table import (
     SQLiteUserVersion,
+    StoreWriter,
     TypedRow,
 )
 
@@ -116,9 +117,10 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore:
+class CoordinationStore(StoreWriter):
     """Own SQLite read snapshots and the shared writer busy policy."""
 
+    filename = "coordination.sqlite3"
     writer_timeout = 5.0
     header = b"SQLite format 3\0"
 
@@ -269,7 +271,7 @@ class CoordinationStore:
         self, path: str | os.PathLike[str],
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        self.path = Path(path)
+        super().__init__(Path(path))
         self._prepare_private_file()
         self._connection = self._open_connection(contention)
         try:
@@ -340,8 +342,7 @@ class CoordinationStore:
         # another initializer may have installed the schema since the read.
         # SQLite's executescript() implicitly commits an existing transaction; execute
         # complete trigger-aware statements individually under this one lock.
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
+        with self.writing():
             version = self.schema_version
             if self._empty_schema(version):
                 statement = ""
@@ -356,11 +357,9 @@ class CoordinationStore:
                 self._connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION}")
             else:
                 SchemaMeta.require_current(self._connection, version)
-            self._connection.execute("COMMIT")
-        except BaseException:
-            if self._connection.in_transaction:
-                self._connection.execute("ROLLBACK")
-            raise
+
+    def writing(self) -> AbstractContextManager[sqlite3.Connection]:
+        return StoreWriter.transaction(self, self._connection)
 
     def _empty_schema(self, version: int) -> bool:
         return version == 0 and not _TableName.read(

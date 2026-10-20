@@ -55,7 +55,7 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path, mo
     registry = Registration(tmp_path / "registry.json")
     user = registry.declare(registry.new_thread('human', frozenset(), str(tmp_path), role=UserThreadRole))
     with Coordination(str(path)) as store:
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             SpanAnnotationsRow(label=original, created_at_ms=1).insert(db)
         corrected = store.annotations.correct(original, CommitmentSpan, user.incarnation, registry.snapshot())
     assert isinstance(corrected, HumanLabel)

@@ -238,7 +238,7 @@ class PrivateSendClaim(PromptBoundary):
                     self.prompt.text, blocking=True,
                 ))
             with self.selected.cursor_delivery.measurements.operation("coordinator_exclusive"):
-                db = authority.enter_context(store.session.transaction())
+                db = authority.enter_context(store.session.writing())
             with self.selected.cursor_delivery.measurements.operation("selected_source_check"):
                 self.session.verify_start(identity)
             # From token consumption through COMMIT/fsync, every failure

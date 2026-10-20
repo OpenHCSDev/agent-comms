@@ -222,7 +222,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
             store.participants.register("p", "owner", "owner", committed=True)
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 ExecutionRecord(
                     execution_id="e", origin=ExecutionOrigin.WIRE,
                     lifecycle=QueuedExecution(), owner_thread="owner", owner_lookup="p",
@@ -274,7 +274,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 accepted_at_ms=0,
                 updated_at_ms=0,
             )
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 assignment.insert(db)
             assert store.assignments.get("assignment") == assignment
             assert store.assignments.get("assignment").wake_mode == "full"

@@ -354,7 +354,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
     comms, store, root_id, lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     proof = comms.bus.log.read_delivery_cohort(root_id, sent.seq)
-    with store.session.transaction() as db:
+    with store.session.writing() as db:
         db.execute(
             "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
             "envelope_digest,audience_digest,decisions_digest,member_count,claim_count,"

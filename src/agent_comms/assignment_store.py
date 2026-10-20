@@ -30,7 +30,7 @@ class AssignmentStore:
         self, assignment: WakeAssignment
     ) -> Applied[WakeAssignment] | AlreadyApplied[WakeAssignment]:
         assignment.require_initial_decision()
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             rows = WakeAssignment.read(
                 db.execute(
                     (
@@ -90,7 +90,7 @@ class AssignmentStore:
         *,
         expected_revision: int,
     ) -> Applied[WakeAssignment]:
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             current = self.get(assignment_id)
             if current.revision != expected_revision:
                 raise StaleRevision("claim revision changed")

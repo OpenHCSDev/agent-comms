@@ -37,7 +37,6 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
-from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
@@ -51,6 +50,7 @@ from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsVi
                              NotificationsView, RegistrationsView, RevisionView,
                              SidebarView, StoresView)
 from .runtime_info import RuntimeInfo
+from .storage_room import RoomLedger
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import (
@@ -791,7 +791,7 @@ class WireRevision(ReadState):
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
         *STATUS_SOURCE, BusSourceView)
     bus_routes: tuple[FileRevision, ...] = revision_source(
-        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),  # type: ignore[has-type]
+        lambda views: BusRouteCounts.source_paths(views.bus.log.path.parent),  # type: ignore[has-type]
         StoresView, SidebarView)
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
         *STATUS_SOURCE)
@@ -800,16 +800,17 @@ class WireRevision(ReadState):
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
         *STATUS_SOURCE)
     work_room: tuple[FileRevision, ...] = revision_source(
-        lambda views: views.registry.storage_rule.room_ledger.source_paths(), *STATUS_SOURCE)
+        lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root),
+        *STATUS_SOURCE)
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),
         StoresView, SidebarView)
-    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (GoalWaits.path_in(views.root),),
+    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: GoalWaits.source_paths(views.root),
         *STATUS_SOURCE)
     relationships: tuple[FileRevision, ...] = revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),),
         *STATUS_SOURCE)
-    notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root),
+    notifications: tuple[FileRevision, ...] = revision_source(lambda views: CoordinationStore.source_paths(views.root),
         *STATUS_SOURCE, NotificationsView)
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root),
         StoresView, ExternalTranscriptsView)

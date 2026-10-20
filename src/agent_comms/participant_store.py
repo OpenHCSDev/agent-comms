@@ -97,7 +97,7 @@ class ParticipantStore:
             if not isinstance(value, str) or not 1 <= len(value) <= MAX_IDENTIFIER_CHARS:
                 raise MalformedRecord("participant identity must be bounded and nonempty")
         primary = alias or lookup
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             existing = Participants.one(self.session._connection, participant_lookup=lookup)
             if existing is not None:
                 snapshot = self.get(lookup)
@@ -126,7 +126,7 @@ class ParticipantStore:
     def commit(
         self, lookup: str
     ) -> Applied[ParticipantSnapshot] | AlreadyApplied[ParticipantSnapshot]:
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             person = self.get(lookup)
             if person.committed:
                 return AlreadyApplied(person)
@@ -149,7 +149,7 @@ class ParticipantStore:
         for value in (alias, display_name):
             if not isinstance(value, str) or not 1 <= len(value) <= MAX_IDENTIFIER_CHARS:
                 raise ValueError("alias and display name must be bounded")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             person = self.get(lookup)
             if person.participant_generation != expected_generation:
                 raise StaleRevision("owner generation changed")
@@ -183,7 +183,7 @@ class ParticipantStore:
     ) -> Applied[ParticipantSnapshot]:
         if not isinstance(owner_thread, str) or not 1 <= len(owner_thread) <= MAX_IDENTIFIER_CHARS:
             raise ValueError("owner thread must be bounded and nonempty")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             person = self.get(lookup)
             if not person.committed:
                 raise IdentityConflict("uncommitted participant cannot own a generation")

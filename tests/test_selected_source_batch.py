@@ -200,7 +200,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
             stage = TriageNativeSend(selected.batch.assignments)
             token_digest = "b" * 64
             input_id = stage.reserve(store, selected.identity, token_digest)
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 reserved = NativeRuntimeInput.one(db, input_id=input_id)
                 reserved.sent_owner_claimed_generation.record(reserved, db, 1, session)
             context = NativeContextProof(

@@ -145,7 +145,7 @@ def bind_expected_prompt(
     _ensure_binding_schema(store)
     path = binding_store_path(store)
     with sidecar_connection(path, PromptBinding) as sidecar:
-        with store.session.transaction() as db:
+        with store.session.writing() as db:
             assert_native_runtime_schema(db)
             assert_cohort_schema(db)
             ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)

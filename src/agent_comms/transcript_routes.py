@@ -3,18 +3,18 @@
 import hashlib
 import os
 import sqlite3
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .field_codec import MalformedRecord
-from .locked_store import RootFile
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .private_path import FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .typed_table import Column, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, SQLiteSchemaObject, StoreWriter, TypedTable
 
 
 class RouteAnnotationTable:
@@ -107,41 +107,25 @@ class _SessionRoutes:
         self.close()
 
 
-@dataclass(frozen=True, slots=True)
-class TranscriptRouteRevision:
-    database: FileRevision | None
-    journal: FileRevision | None
-
-    @classmethod
-    def capture(cls, database: Path) -> TranscriptRouteRevision:
-        """Capture committed route storage; an empty WAL carries no route change."""
-        journal = FileRevision.capture(database.with_name(database.name + "-wal"))
-        return cls(
-            FileRevision.capture(database),
-            journal if journal is not None and journal.size else None,
-        )
-
-
-class TranscriptRoutes(RootFile):
+class TranscriptRoutes(StoreWriter):
     filename = "transcript_routes.sqlite3"
 
     def __init__(self, root: Path):
-        self.database_path = self.path_in(root)
+        super().__init__(self.path_in(root))
         self._initialized = False
 
-    def revision(self) -> TranscriptRouteRevision:
-        """SQLite owns its committed data in the database or its WAL file."""
-        return TranscriptRouteRevision.capture(self.database_path)
+    def revision(self) -> FileRevision | None:
+        return FileRevision.capture(self.source_paths(self.path.parent)[0])
 
     def snapshot(self, destination: Path) -> None:
         """Retain a consistent current annotation store for attached history."""
-        if not self.database_path.exists():
+        if not self.path.exists():
             return
         target = self.path_in(destination)
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
         with (
-            closing(CoordinationStore.read_snapshot(self.database_path)) as source,
+            closing(CoordinationStore.read_snapshot(self.path)) as source,
             closing(CoordinationStore.writer(target)) as output,
         ):
             _assert_schema(source)
@@ -149,18 +133,17 @@ class TranscriptRoutes(RootFile):
             _assert_schema(output)
 
     def _ensure_database(self, *, create: bool = False) -> bool:
-        if self._initialized and self.database_path.is_file():
+        if self._initialized and self.path.is_file():
             return True
-        if not create and not self.database_path.exists():
+        if not create and not self.path.exists():
             return False
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with (
-            _store_lock(self.database_path),
-            closing(CoordinationStore.writer(self.database_path)) as connection,
+            _store_lock(self.path),
+            closing(CoordinationStore.writer(self.path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
-            with connection:
-                connection.execute("BEGIN IMMEDIATE")
+            with self.transaction(connection):
                 if not _schema(connection):
                     for table in TypedTable.members_with(RouteAnnotationTable):
                         table.create(connection)
@@ -168,15 +151,26 @@ class TranscriptRoutes(RootFile):
         self._initialized = True
         return True
 
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        self._ensure_database(create=True)
+        with (
+            _store_lock(self.path),
+            closing(CoordinationStore.writer(self.path)) as connection,
+        ):
+            connection.execute("PRAGMA synchronous=FULL")
+            with self.transaction(connection):
+                yield connection
+
     def for_session(self, session_file: str) -> _SessionRoutes:
-        path = self.database_path if self._ensure_database() else None
+        path = self.path if self._ensure_database() else None
         return _SessionRoutes(path, session_file)
 
     def input_bindings(self) -> dict[str, InputDisplay]:
         """Read typed owner bindings without creating or upgrading a database."""
-        if not self.database_path.exists():
+        if not self.path.exists():
             return {}
-        with closing(CoordinationStore.read_snapshot(self.database_path)) as connection:
+        with closing(CoordinationStore.read_snapshot(self.path)) as connection:
             _assert_schema(connection)
             return {
                 row.native_id: row
@@ -186,15 +180,9 @@ class TranscriptRoutes(RootFile):
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
-        self._ensure_database(create=True)
-        with (
-            _store_lock(self.database_path),
-            closing(CoordinationStore.writer(self.database_path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with connection:
-                for entry_id in entry_ids:
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+        with self.writing() as connection:
+            for entry_id in entry_ids:
+                TranscriptRoute(session_file, entry_id, routing).upsert(connection)
 
     def record_turn_publication(self, registry, log, lease, checkpoint, routing, published):
         """Join a completed native producer to its original committed wire rows.
@@ -251,21 +239,16 @@ class TranscriptRoutes(RootFile):
             self._record_publication(thread.runtime.read_key, ids, final.entry.id, routing, published)
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
-        self._ensure_database(create=True)
-        with _store_lock(self.database_path), closing(
-            CoordinationStore.writer(self.database_path)
-        ) as connection:
-            connection.execute("PRAGMA synchronous=FULL")
-            with connection:
-                final_routing = replace(routing, publications=published)
-                previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
-                if previous is not None:
-                    previous.require_publication(final_routing)
-                for entry_id in entry_ids:
-                    if entry_id == final_id:
-                        continue
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
-                TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
+        with self.writing() as connection:
+            final_routing = replace(routing, publications=published)
+            previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
+            if previous is not None:
+                previous.require_publication(final_routing)
+            for entry_id in entry_ids:
+                if entry_id == final_id:
+                    continue
+                TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+            TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
 
     def record_input_display(
         self,
@@ -281,27 +264,19 @@ class TranscriptRoutes(RootFile):
         digest = (
             hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
         )
-        self._ensure_database(create=True)
-        with (
-            _store_lock(self.database_path),
-            closing(CoordinationStore.writer(self.database_path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with connection:
-                # Serialize the read/first-write boundary across processes and threads.
-                connection.execute("BEGIN IMMEDIATE")
-                previous = InputDisplay.one(connection, native_id=native_id)
-                if previous is None:
-                    InputDisplay(native_id, display_text, routing, digest).insert(connection)
-                elif digest is not None:
-                    if previous.sent_text_digest is not None:
-                        if (previous.sent_text_digest, previous.routing) != (digest, routing):
-                            raise RelationViolationError("Native input routing cannot be rebound.")
-                    else:
-                        InputDisplay.update(
-                            connection,
-                            where="native_id=?",
-                            parameters=(native_id,),
-                            routing=routing,
-                            sent_text_digest=digest,
-                        )
+        with self.writing() as connection:
+            previous = InputDisplay.one(connection, native_id=native_id)
+            if previous is None:
+                InputDisplay(native_id, display_text, routing, digest).insert(connection)
+            elif digest is not None:
+                if previous.sent_text_digest is not None:
+                    if (previous.sent_text_digest, previous.routing) != (digest, routing):
+                        raise RelationViolationError("Native input routing cannot be rebound.")
+                else:
+                    InputDisplay.update(
+                        connection,
+                        where="native_id=?",
+                        parameters=(native_id,),
+                        routing=routing,
+                        sent_text_digest=digest,
+                    )

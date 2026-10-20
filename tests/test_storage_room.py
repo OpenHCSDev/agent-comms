@@ -67,7 +67,7 @@ async def test_two_real_gates_wait_then_run_on_copied_root(tmp_path, monkeypatch
     first = await rule.wait_for_room((TestGateRoomWork,), one, comms.root)
     gate_one = await real_gate()
     source = ModifiedWatchSource(rule.room_ledger.root, frozenset(
-        os.fsencode(path.name) for path in rule.room_ledger.source_paths()))
+        os.fsencode(path.name) for path in rule.room_ledger.source_paths(rule.room_ledger.root)))
     watcher = open_wire_watcher(source)
     await watcher.prepare()
     second = asyncio.create_task(rule.wait_for_room((TestGateRoomWork,), two, comms.root))

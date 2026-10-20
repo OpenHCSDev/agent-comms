@@ -230,7 +230,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                         store.session._connection, where="wire_seq=?", parameters=(message.seq,)
                     ) if row.recipient == "beta"
                 )
-                with store.session.transaction():
+                with store.session.writing():
                     ReplayAssessments.accumulate(
                         store.session._connection,
                         assignment.lifecycle.execution_id,

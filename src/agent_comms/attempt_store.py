@@ -71,7 +71,7 @@ class AttemptStore:
 
     def start(self, request: AttemptStart) -> Applied[StartResult] | AlreadyApplied[StartResult]:
         digest = request.digest
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             snapshot = self.snapshots.get(request.execution_id)
             old = AttemptRecord.one(
                 db, execution_id=request.execution_id, owner_token_digest=digest
@@ -120,7 +120,7 @@ class AttemptStore:
     ) -> Applied[StartResult]:
         if not 1 <= duration_ms <= MAX_LEASE_RENEWAL_MS:
             raise ValueError("renewal duration is outside the bounded policy")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
@@ -155,7 +155,7 @@ class AttemptStore:
             raise ValueError("attempt finality and progress must be booleans")
         if phase.terminal:
             raise IdentityConflict("terminal phases require atomic settlement")
-        with self.session.transaction():
+        with self.session.writing():
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
@@ -185,7 +185,7 @@ class AttemptStore:
         if type(replay_safe) is not bool or type(side_effects_possible) is not bool:
             raise ValueError("replay assessment flags must be booleans")
         facts = ReplayFact(facts)
-        with self.session.transaction():
+        with self.session.writing():
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
@@ -245,7 +245,7 @@ class AttemptStore:
         acp_client: ACPClientConnectivity,
     ) -> Applied[RecoverySnapshot]:
         owner, acp_client = OwnerConnectivity(owner), ACPClientConnectivity(acp_client)
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             snapshot, _ = self.require_fence(fence)
             before = snapshot.connectivity
             if (
@@ -280,7 +280,7 @@ class AttemptStore:
             or (sanitized_detail is not None and len(sanitized_detail) > MAX_SANITIZED_DETAIL_CHARS)
         ):
             raise ValueError("invalid recovery audit")
-        with self.session.transaction() as db:
+        with self.session.writing() as db:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")

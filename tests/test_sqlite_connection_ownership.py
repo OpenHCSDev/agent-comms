@@ -79,7 +79,7 @@ async def test_nonwaiting_reader_reports_named_store_busy(tmp_path):
 
     with (
         Coordination(str(path)) as writer,
-        writer.session.transaction(),
+        writer.session.writing(),
         pytest.raises(CoordinationReadUnavailable),
     ):
         await Coordination.run_read_async(path, read, contention=StoreBusy())
@@ -123,7 +123,7 @@ async def test_resident_connections_keep_thread_affinity_and_fresh_snapshots(tmp
         # A separate connection commits between operations. A resident reader
         # must acquire a NEW snapshot, not keep its previous read transaction.
         def rename(store):
-            with store.session.transaction() as db:
+            with store.session.writing() as db:
                 db.execute("UPDATE participants SET display_name = 'Updated' WHERE participant_lookup = 'first'")
         await Coordination.run_worker(lambda: Coordination._run_owned(
             path, rename, system_clock, StoreBusy()))

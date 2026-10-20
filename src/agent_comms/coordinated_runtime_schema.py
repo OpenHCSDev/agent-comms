@@ -50,7 +50,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
 
 def install_native_runtime_schema(store: Coordination) -> None:
     """Explicit fresh schema install. Existing state must match the declared schema."""
-    with store.session.transaction() as db:
+    with store.session.writing() as db:
         present = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",

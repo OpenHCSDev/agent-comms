@@ -87,7 +87,7 @@ class NativeSourceCursor:
         coverage = sources.since(state, source_reads=source_reads)
         proof = coverage.proof
         with (self.store.session.boundary(self.bus, blocking=False, contention=contention) as boundary,
-              self.store.session.transaction() as db):
+              self.store.session.writing() as db):
             if sources.witness_unlocked() != coverage.source_witness:
                 raise IdentityConflict('current cursor canonical source changed before commit')
             identity.require_live(self.bus, boundary.registry, 'current cursor owner or private root changed')
