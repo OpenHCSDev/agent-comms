@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
 from cutover.backup import UpgradeRefused
+from cutover.carry_maintenance_identity import MaintenanceIdentity
 from install_snapshot import SnapshotHome
 
 from agent_comms.active_route import ActiveRoute, CommsRoute
@@ -273,6 +274,7 @@ class PracticeCopy:
         if shutil.disk_usage(self.into.parent).free < storage_floor():
             raise GateError("Insufficient free space before building the retained-tail copy")
         with CheckRoot(self.source, names, self.into).open() as copied:
+            MaintenanceIdentity.copy_to(self.source.root, copied.root)
             size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
             if size > self.max_bytes:
                 raise GateError(

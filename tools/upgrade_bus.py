@@ -307,14 +307,14 @@ def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> 
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
+        target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
+        pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied.root).applied())
+        stopping = before_stop(copied.root, pending, stack, revisions)
         stack.select_route(copied.root)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied.root):
             before = bus_files(copied.root)
-        target = run("git", "-C", stack.checkout, "rev-parse", "HEAD").strip()
-        pending = CarryChain.at(revisions.repo, target).pending(CarryLedger(copied.root).applied())
-        stopping = before_stop(copied.root, pending, stack, revisions)
         report = carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
         return {**report, "copy": asdict(measurement)}
 
@@ -421,6 +421,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
          spill_dir: Path) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
+    stopping = before_stop(root, pending, staged, revisions)
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
@@ -441,7 +442,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Revisions.prepare(checkout)
         staged.prepare_native()
-        stopping = before_stop(root, pending, staged, revisions)
         passed = carry_and_read(root, backup.files(), pending, staged, staged, revisions, stopping)
         staged.publish()
         maintenance.clear(held)

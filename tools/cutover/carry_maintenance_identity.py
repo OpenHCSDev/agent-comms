@@ -7,7 +7,8 @@ There is no legacy reader in the runtime barrier.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, cast
 
@@ -15,10 +16,12 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, Id128Text, compile_decoder
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
+    MaintenanceMarker,
     MaintenanceOperator,
     MaintenanceState,
     ReadyPhase,
 )
+from agent_comms.store_files import _atomic_write_text
 
 from .carry import Carried, Carry
 
@@ -65,6 +68,25 @@ StoredMaintenanceState = IdentifiedState | OldReadyState
 
 
 class MaintenanceIdentity(Carry):
+    @classmethod
+    def copy_to(cls, source: Path, into: Path) -> None:
+        """Keep the source format in practice, changing only its declared root."""
+        original = MaintenanceBarrier(source / "registry.json")
+        copied = MaintenanceBarrier(into / "registry.json")
+        records = (
+            (original.marker_path, copied.marker_path,
+             compile_decoder(MaintenanceMarker | OldMarker)),
+            (original.state_path, copied.state_path,
+             compile_decoder(StoredMaintenanceState)),
+        )
+        for source_path, destination, decoder in records:
+            if source_path.exists():
+                record = decoder.decode(FieldCodec.parse(source_path.read_text()))
+                relocated = replace(record, root=str(into.resolve()))
+                _atomic_write_text(destination, json.dumps(FieldCodec.encode(relocated)),
+                                   fsync_parent=True)
+                destination.chmod(0o600)
+
     @classmethod
     def precedes(cls, later: type[Carry]) -> bool:
         return later is not cls
