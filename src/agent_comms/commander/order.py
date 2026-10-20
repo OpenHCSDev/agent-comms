@@ -23,6 +23,7 @@ import sys
 import time
 from abc import abstractmethod
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Self
@@ -232,10 +233,14 @@ class CommanderContext(CommanderConfig):
 
     def model_copy(self, *, update: Mapping[str, object] | None = None,
                    deep: bool = False) -> Self:
-        """A copied context owns a new binding after Pydantic applies its updates."""
-        copied = super().model_copy(update=update, deep=deep)
-        copied.model_post_init(None)
-        return copied
+        """Copy declared values, never live resources; construction owns the new binding."""
+        values = {name: getattr(self, name) for name in type(self).model_fields}
+        if deep:
+            values = deepcopy(values)
+        changes = update or {}
+        values.update(changes)
+        return type(self).model_construct(
+            _fields_set=self.model_fields_set.union(changes), **values)
 
     @property
     def comms(self) -> Comms:

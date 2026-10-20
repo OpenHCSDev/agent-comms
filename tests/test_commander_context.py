@@ -63,13 +63,14 @@ from agent_comms.commander.order import Commander
 from agent_comms.commander.request import RequestVerb
 context = Commander.read_root(selected)
 assert context.root == context.comms.root == selected
-RequestVerb.parse(['add', 'Selected copy command proof'], '').apply(context)
-assert context.comms.registry.require(context.commander).goal.require().text == 'Selected copy command proof'
+goal = context.comms.registry.require(context.commander).goal.require()
+RequestVerb.parse(['complete', goal.id, '--why', 'Selected copy command proof'], '').apply(context)
+assert context.comms.registry.require(context.commander).goal.require().progress == 'Selected copy command proof'
 ''', str(selected), str(first.root)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert before == {path.relative_to(first.root): path.read_bytes()
                       for path in first.root.rglob('*') if path.is_file()}
-    assert Comms(selected).registry.require(first.commander).goal.require().text == 'Selected copy command proof'
+    assert Comms(selected).registry.require(first.commander).goal.require().progress == 'Selected copy command proof'
 
 
 def test_two_commands_in_one_process_keep_their_explicit_roots(commander_script, tmp_path, capsys):
