@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,6 +16,11 @@ from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, RootModel, TypeAdapter
 
 from agent_comms.launch_runtime import InstalledBuildManifest, LaunchRuntime
+
+
+class RuntimePackage(StrEnum):
+    CORE = "agent-comms"
+    TOAD = "batrachian-toad"
 
 
 @dataclass(frozen=True)
@@ -161,8 +168,6 @@ class RuntimeResolution(InstalledBuildManifest):
 
     @classmethod
     def capture(cls, python: Path, core: str) -> RuntimeResolution:
-        import os
-
         environment = LaunchRuntime(python).environment(os.environ)
         program = """import importlib.metadata as m,json,sys
 from pathlib import Path
@@ -179,9 +184,13 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
 } for d in m.distributions()}))
 """
         packages = TypeAdapter(dict[str, PackageRecord]).validate_json(
-            subprocess.check_output([python, "-c", program, core], env=environment))
-        return cls(core_commit=core,
-                   toad_commit=packages["batrachian-toad"].source.revision(), packages=packages)
+            subprocess.check_output([python, "-c", program, core], env=environment)
+        )
+        return cls(
+            core_commit=core,
+            toad_commit=packages[RuntimePackage.TOAD].source.revision(),
+            packages=packages,
+        )
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name
@@ -194,8 +203,8 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
         }
         # Wheel URLs locate build output, not the source revisions recorded by this owner.
         for name, commit in (
-            ("agent-comms", self.core_commit),
-            ("batrachian-toad", self.toad_commit),
+            (RuntimePackage.CORE, self.core_commit),
+            (RuntimePackage.TOAD, self.toad_commit),
         ):
             result[name] = GitPin(self.packages[name].version, commit)
         return result

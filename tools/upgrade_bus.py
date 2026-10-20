@@ -58,7 +58,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
@@ -185,7 +185,9 @@ publish_active_route(ActiveRoute(root, marker.root_id))
         """Use the artifact's packages; only historical carry helpers select explicit source."""
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
         if paths:
-            environment["PYTHONPATH"] = os.pathsep.join(map(str, paths))
+            imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
+            return replace(RestartEnvironment.inherit(environment),
+                           pythonpath=imports).apply_runtime(environment)
         return environment
 
     def cli(self, root: Path, *arguments: str) -> dict:
