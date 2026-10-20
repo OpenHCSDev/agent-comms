@@ -422,13 +422,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     stopping = before_stop(root, pending, staged, revisions)
-    running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
+    running = [thread["name"] for thread in staged.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        installed.owners(root, "stop", running)
+        staged.owners(root, "stop", running)
         with transcripts_held(root):
             backup = Backup.take(root, ROUTE, (root,),
                 spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
