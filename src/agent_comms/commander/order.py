@@ -327,14 +327,15 @@ class Commander(CommanderContext):
         # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
         # An order's check must fail now (or it proves nothing), and every absolute
         # path:line it cites must exist.
-        if Path(check.directory).is_dir():
-            try:
-                with MalformedRecord.refusing('order.check'):
+        try:
+            with MalformedRecord.refusing('order.check'):
+                order.require_writable()
+                if Path(check.directory).is_dir():
                     ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
                                                     cwd=check.directory, timeout=90))
                     problems += check.result.distance(ran).unproven(check.command, 0)
-            except MalformedRecord as error:
-                problems.append(f'order.check: {error}; fix: supply a focused measurable command')
+        except MalformedRecord as error:
+            problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         for reference in FileLine.scan('\n'.join((document.prose, *edits))):
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
