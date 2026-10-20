@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -11,16 +12,28 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
+from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 
 @pytest.fixture
-def source(tmp_path):
-    root = tmp_path / "source"
+def scratch_root(tmp_path_factory):
+    base = tmp_path_factory.getbasetemp()
+    scratch = StorageRule().scratch_base.resolve()
+    if not base.resolve().is_relative_to(scratch):
+        base = scratch / "pytest"
+        base.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="check-root-", dir=base) as directory:
+        yield Path(directory)
+
+
+@pytest.fixture
+def source(scratch_root):
+    root = scratch_root / "source"
     c = Comms(root)
     c.messaging.initialize_private_initial_protocol()
     for name in ("A", "B", "other"):
-        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(tmp_path)),
+        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(scratch_root)),
                            StoppedThreadStatus())
     c.messaging.send("A", "B", "old history is not a new input")
     c.registry.register(c.registry.require("other"), RunningThreadStatus())
@@ -31,7 +44,7 @@ def source(tmp_path):
 
 
 @pytest.mark.parametrize("timestamp", (None, 1_760_000_000.125))
-def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, tmp_path, timestamp):
+def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, scratch_root, timestamp):
     owner = source.registry.require("B")
     external = ExternalTranscript(source.root, owner.incarnation)
     events = (
@@ -41,7 +54,7 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, t
         NoticeTranscript("not portable conversation", position=3, timestamp=timestamp),
         UserTranscript("", position=4, timestamp=timestamp),
     )
-    root = tmp_path / "external-window"
+    root = scratch_root / "external-window"
     if timestamp is None:
         # Current records require a clock at their storage boundary, before copying.
         with pytest.raises(TypeError):
@@ -63,8 +76,8 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, t
     assert not root.exists()
 
 
-def test_wrapped_nonzero_exit_removes_root_and_is_the_cli_exit(source, tmp_path, capsys):
-    root = tmp_path / "command"
+def test_wrapped_nonzero_exit_removes_root_and_is_the_cli_exit(source, scratch_root, capsys):
+    root = scratch_root / "command"
     status = main(["--root", str(source.root), "check-root", "--threads", "B", "--into", str(root),
                    "--", sys.executable, "-c",
                    "import pathlib,sys; assert pathlib.Path(sys.argv[1]).is_dir(); sys.exit(7)", "{root}"])
