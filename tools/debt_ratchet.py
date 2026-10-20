@@ -1456,10 +1456,8 @@ class UncarriedRecordFormat(Measure):
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
-            for module in {module.split(".")[0] for module in modules}:
-                WheelStamp(revision(repo, ref)).write(
-                    Path(scratch) / package / module / "package_stamp.py"
-                )
+            for stamp in Path(scratch).rglob("package_stamp.py"):
+                WheelStamp(revision(repo, ref)).write(stamp)
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),
