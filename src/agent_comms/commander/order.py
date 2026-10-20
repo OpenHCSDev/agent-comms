@@ -252,9 +252,7 @@ class CommanderContext(CommanderConfig):
         return ThreadCaller(self.commander).invoke(tool, self.comms)
 
     def todos(self):
-        store = self.comms.goals.todos
-        store.reconcile_merges(self.incarnation, self.repos, self.comms.registry.storage_rule)
-        return store.for_commander(self.incarnation)
+        return self.comms.goals.todos.for_commander(self.incarnation)
 
     def read_check(self, line: str) -> OrderCheck:
         if not (check := OrderCheck.parse(line)):
@@ -690,6 +688,8 @@ class Commander(CommanderContext):
         since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
         installs: list[str] = []
         while True:
+            self.comms.goals.todos.reconcile_merges(
+                self.incarnation, self.repos, self.comms.registry.storage_rule)
             now = time.time()
             held = self.held_orders()
             activity = {unit: self.last_activity(unit) for unit in {t.assignment.owner for t in held}}
