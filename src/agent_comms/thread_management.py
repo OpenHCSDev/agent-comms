@@ -559,8 +559,8 @@ class PrivateOwnerRename(ThreadRename):
         coordinator = CoordinationStore.path_in(root)
         if not coordinator.exists() or before.name == new_name:
             return self.registry_renamed()
-        # Validate every deterministic registry/SQL name refusal *before* advancing a committed
-        # private owner's generation. The wire lock excludes cooperating sends until both agree.
+        # Validate registry/SQL name refusals before renaming the private owner.
+        # The wire lock excludes cooperating sends until both agree.
         registry.status(before.name).require_self_rename()
         if registry.snapshot().taken(new_name, owner=before.name):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
@@ -580,26 +580,22 @@ class PrivateOwnerRename(ThreadRename):
                                      generation=generation,
                                      wire_root_id=self.registry_privacy.root_id.hex(),
                                      ).write(root)
-            # An old selected attempt stays fenced in its old generation; never retry or
-            # reassign it after this ownership change.
-            store.participants.advance_generation(
+            store.participants.rename_owner(
                 person.lookup, new_name, expected_generation=generation)
             try:
                 return self.registry_renamed()
             except BaseException as error:
                 # Registry persistence can fail after the SQL CAS. If its atomic snapshot still
-                # names the old owner, make a NEW generation for that owner instead of leaving a
-                # committed coordinator pointing at the new name. Neither generation may inherit
-                # an old native input.
+                # names the old owner, restore that name without revoking its active attempt.
                 uncertain = RelationViolationError(
                     "Private owner rename is uncertain; inspect both authorities.")
                 try:
                     if registry.require(before.name).name == before.name:
-                        store.participants.advance_generation(
-                            person.lookup, before.name, expected_generation=generation + 1)
+                        store.participants.rename_owner(
+                            person.lookup, before.name, expected_generation=generation)
                 except BaseException as compensation:
                     # Ambiguous dual-store failure: the inspection needs both failures.
-                    uncertain.add_note(f"Compensating generation advance failed: {compensation!r}")
+                    raise uncertain from compensation
                 raise uncertain from error
 
     def applied(self, title: str | None) -> RenameThreadResult:

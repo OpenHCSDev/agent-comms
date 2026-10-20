@@ -113,10 +113,11 @@ END"""
             "owner_generation_monotonic": (
                 """ BEFORE UPDATE ON owner_generations
 WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.generation != OLD.generation + 1
- OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
-            AND owner_generation = OLD.generation
-            AND phase NOT IN ({terminal_attempt_names}))
+ OR (NEW.generation != OLD.generation AND (
+     NEW.generation != OLD.generation + 1
+     OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
+                AND owner_generation = OLD.generation
+                AND phase NOT IN ({terminal_attempt_names}))))
 BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'); END"""
             ),
         }
