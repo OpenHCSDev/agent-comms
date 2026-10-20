@@ -35,7 +35,11 @@ def comms(comms):
 
 
 def lines(path, records, tail=""):
-    path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records) + tail)
+    # Codex records have their own timestamp; shared Claude/OpenCode fixtures retain their shape.
+    codex_types = {"session_meta", "turn_context", "compacted", "response_item", "event_msg"}
+    path.write_text("".join(json.dumps(
+        {"timestamp": "2026-10-18T00:00:00Z", **record} if record.get("type") in codex_types else record,
+        ensure_ascii=False) + "\n" for record in records) + tail)
     return path
 
 
@@ -160,14 +164,13 @@ def test_claude_reads_from_its_latest_compaction(tmp_path):
     assert "Most recent user request in the source session:\nObsolete request" in context
 
 
-def test_claude_omits_a_damaged_line_but_fails_on_records_it_does_not_know(tmp_path):
+def test_claude_refuses_damaged_lines_and_records_it_does_not_know(tmp_path):
     source = tmp_path / "s.jsonl"
     source.write_text(json.dumps(claude_prompt("a", "first", origin={"kind": "human"})) + "\n"
                       + '{"type":"user","uuid":"cut{"type":"assistant"}\n'
                       + json.dumps(claude_reply("b", "second")) + "\n")
-    snapshot = read(ClaudeCodeHarness, source)
-    assert bodies(snapshot) == ["first", "second"]
-    assert snapshot.notices == ("A source record that was not valid JSON was omitted.",)
+    with pytest.raises(json.JSONDecodeError):
+        read(ClaudeCodeHarness, source)
     lines(source, [claude_reply("b", "second"), {"type": "a-record-claude-adds-later"}])
     with pytest.raises(ValueError):
         read(ClaudeCodeHarness, source)
@@ -201,13 +204,14 @@ def test_import_subagents_names_each_thread_by_its_id(tmp_path, capsys, comms):
 
 
 def codex_message(role, text):
-    return {"type": "response_item", "payload": {
+    return {"type": "response_item", "timestamp": "2026-10-18T00:00:00Z", "payload": {
         "type": "message", "role": role,
         "content": [{"type": "input_text" if role == "user" else "output_text", "text": text}]}}
 
 
 def codex_meta(identity, project):
-    return {"type": "session_meta", "payload": {"id": identity, "cwd": str(project)}}
+    return {"type": "session_meta", "timestamp": "2026-10-18T00:00:00Z",
+            "payload": {"id": identity, "cwd": str(project)}}
 
 
 def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys, comms):
@@ -264,6 +268,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     # conversation remains outside this prefix-only metadata read.
     session_path = Path(acknowledgement.session_file)
     saved.insert(1, {"type": "model_change", "id": "native-config",
+                     "timestamp": "2026-10-18T00:00:00Z",
                      "provider": "authored", "modelId": "authored"})
     session_path.write_text("".join(json.dumps(record) + "\n" for record in saved)
                             + "not part of the metadata prefix\n")
@@ -297,12 +302,12 @@ def test_codex_instructions_come_from_the_selected_history_and_the_request_from_
 
 def test_codex_items_codex_does_not_declare_are_foreign():
     def item(payload):
-        return ROLLOUT_RECORD.validate_python({"type": "response_item", "payload": payload})
+        return ROLLOUT_RECORD.validate_python({"type": "response_item", "timestamp": "2026-10-18T00:00:00Z", "payload": payload})
 
     assert isinstance(item({"type": "developer", "role": "developer", "content": "x"}).payload, ForeignItem)
     assert isinstance(item({"type": "message", "role": "guardian", "content": "x"}).payload, ForeignItem)
     assert isinstance(item({"type": "reasoning", "encrypted_content": "opaque"}).payload, ForeignItem)
-    assert isinstance(ROLLOUT_RECORD.validate_python({"type": "event_msg", "payload": {}}), ForeignRecord)
+    assert isinstance(ROLLOUT_RECORD.validate_python({"type": "event_msg", "timestamp": "2026-10-18T00:00:00Z", "payload": {}}), ForeignRecord)
 
 
 def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
@@ -393,9 +398,11 @@ def watch_reads(monkeypatch, source, after_end=None):
 
 def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path, monkeypatch):
     source = tmp_path / "large-rollout.jsonl"
-    meta = {"type": "session_meta", "payload": {"id": "child-current", "session_id": "parent-inherited",
+    meta = {"type": "session_meta", "timestamp": "2026-10-18T00:00:00Z",
+            "payload": {"id": "child-current", "session_id": "parent-inherited",
                                                 "cwd": str(tmp_path)}}
-    checkpoint = {"type": "compacted", "payload": {"message": "", "replacement_history": [
+    checkpoint = {"type": "compacted", "timestamp": "2026-10-18T00:00:00Z",
+                  "payload": {"message": "", "replacement_history": [
         {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Retained request"}]},
         {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Retained state"}]},
     ]}}
@@ -585,7 +592,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     acknowledgement = comms.threads.import_thread(
         OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
     thread = comms.registry.require("imported")
-    assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
+    assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
     assert thread.title == "Current task"
     assert source.read_bytes() == before
