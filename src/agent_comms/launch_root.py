@@ -46,7 +46,11 @@ class LaunchRoot:
                 raise RelationViolationError(
                     "No active Comms route is published; --comms-root or --root is required."
                 )
-            return cls.from_path(route.root)
+            # A process may resolve its route and open its wire separately (ACP).
+            # Pin one choice so a route replacement cannot split those operations.
+            selected = cls.from_path(route.root)
+            selected.install()
+            return selected
         return cls._current
 
     def install(self) -> None:
