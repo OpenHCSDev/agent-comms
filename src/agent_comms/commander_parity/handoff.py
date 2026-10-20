@@ -5,12 +5,12 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
 from ..change_report import FileLine
+from ..child_process import ChildOutcome, ChildResult, ExitedOutcome
 from ..commander.config import CommanderConfig
 from ..commander.order import OrderFile, deadline
 from ..field_codec import FieldCodec
@@ -22,12 +22,22 @@ from .lifecycle import LifecycleRun, MeasuredCommander
 
 @dataclass(frozen=True)
 class HandoffComparison(ParityComparison):
-    cases: tuple[tuple[str, int, int, tuple[str, ...], tuple[str, ...], bool], ...]
+    cases: tuple[
+        tuple[str, ChildOutcome, ChildOutcome, tuple[str, ...], tuple[str, ...], bool], ...
+    ]
 
     @property
     def passed(self) -> bool:
         return len(self.cases) == 2 and all(
-            all((expected != 0, actual != 0, bool(reference), reference == refusal, unchanged))
+            all(
+                (
+                    expected == ExitedOutcome(1),
+                    actual == ExitedOutcome(1),
+                    bool(reference),
+                    reference == refusal,
+                    unchanged,
+                )
+            )
             for _, expected, actual, reference, refusal, unchanged in self.cases
         )
 
@@ -50,9 +60,7 @@ class FinishedHandoffCase:
         )
 
     @staticmethod
-    def current(
-        run: LifecycleRun, receiver: str, document: OrderFile, pid: str
-    ) -> subprocess.CompletedProcess[str]:
+    def current(run: LifecycleRun, receiver: str, document: OrderFile, pid: str) -> ChildResult:
         return run.invoke(
             "import sys; from agent_comms.commander.order import Commander, OrderFile; "
             "Commander.model_validate_json(sys.argv[1]).send(sys.argv[2], sys.argv[3], "
@@ -66,9 +74,7 @@ class FinishedHandoffCase:
         )
 
     @staticmethod
-    def native(
-        run: LifecycleRun, receiver: str, document: OrderFile, pid: str
-    ) -> subprocess.CompletedProcess[str]:
+    def native(run: LifecycleRun, receiver: str, document: OrderFile, pid: str) -> ChildResult:
         context = run.commander
         todo = context.comms.goals.todos.get(pid)
         tool = CommsOrderTool(
@@ -134,10 +140,10 @@ class FinishedHandoffCase:
                     cases.append(
                         (
                             label,
-                            reference.returncode,
-                            attempt.returncode,
-                            tuple(reference.stderr.splitlines()[-1:]),
-                            tuple(attempt.stderr.splitlines()[-1:]),
+                            reference.outcome,
+                            attempt.outcome,
+                            tuple(reference.stderr.decode(errors="replace").splitlines()[-1:]),
+                            tuple(attempt.stderr.decode(errors="replace").splitlines()[-1:]),
                             before == cls.state(run, delivered.id, receiver),
                         )
                     )
