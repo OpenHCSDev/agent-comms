@@ -264,6 +264,10 @@ class OrderCheck:
     def __post_init__(self):
         if not self.directory.strip() or not self.command.strip():
             raise ValueError("An order check requires a directory and command.")
+        if any(self.git_command(words) in self.REVISION_COMMANDS
+               for words in self.simple_commands(self.command)):
+            raise ValueError("A check never checks out a revision: Core runs it at the "
+                             "delivered commit and at each branch commit. Drop the checkout.")
 
     def require_directory(self):
         if not Path(self.directory).is_dir():
@@ -281,10 +285,6 @@ class OrderCheck:
         found = cls.LINE.fullmatch(line.strip())
         if not found:
             return None
-        if any(cls.git_command(words) in cls.REVISION_COMMANDS
-               for words in cls.simple_commands(found[2])):
-            raise ValueError("A check line never checks out a revision: Core runs it at the "
-                             "delivered commit and at each branch commit. Drop the checkout.")
         return cls(found[1], found[2], CountCheckResult(int(found[3])))
 
     @classmethod

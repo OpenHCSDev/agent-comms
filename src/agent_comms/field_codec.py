@@ -52,6 +52,9 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     declaration stays a TypeError and is never caught at a data boundary.
     """
 
+    def located(self, name: str, fix: str) -> dict[str, str]:
+        return {name: f"{self}; fix: {fix}"}
+
     @classmethod
     @contextmanager
     def refusing(cls, subject: str) -> Iterator[None]:
@@ -65,6 +68,17 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
             raise
         except ValueError as error:
             raise cls(f"{subject}: {error}") from error
+
+
+class RecordProblems(MalformedRecord):
+    """Sibling failures keep their field paths when enclosing records add theirs."""
+
+    def __init__(self, problems: dict[str, str]):
+        self.problems = problems
+        super().__init__("\n".join(f"{name}: {problem}" for name, problem in problems.items()))
+
+    def located(self, name: str, fix: str) -> dict[str, str]:
+        return {f"{name}.{path}": problem for path, problem in self.problems.items()}
 
 
 def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
@@ -1777,21 +1791,25 @@ class _RecordDecoder(ValueDecoder[Any]):
         )
         return result
 
-    def checked(self, data: object) -> dict:
-        target = self.target
-        plan = FieldCodec._record_plan(target)
-        if not isinstance(data, dict):
-            raise MalformedRecord("Expected a record object.")
+    def problems(self, data: dict) -> dict[str, str]:
+        plan = FieldCodec._record_plan(self.target)
         missing = dict.fromkeys(
             key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
         )
+        schemas: dict[str, object] = {}
         if missing:
-            raise MalformedRecord(
-                f"Missing required fields for {target.__name__}: {', '.join(missing)}"
-            )
-        unknown = data.keys() - plan.accepted_keys
-        if unknown:
-            raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            plan.schema_fields(schemas, [])
+        problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
+                         f"fix: supply {json.dumps(schemas[key])}" for key in missing}
+        problems.update({key: "Unknown fields; fix: remove this field"
+                         for key in data.keys() - plan.accepted_keys})
+        return problems
+
+    def checked(self, data: object) -> dict:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
+        if problems := self.problems(data):
+            raise RecordProblems(problems)
         return data
 
     @property
@@ -1805,15 +1823,22 @@ class _RecordDecoder(ValueDecoder[Any]):
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
-        data = self.checked(data)
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
+        problems = self.problems(data)
         target = self.target
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
             if entry.name not in fields:
                 continue
             key = (target, entry.name)
-            values.update(entry.decoded_selected(data, selections[key], selections)
-                          if key in selections else entry.decoded_bound(data, context))
+            try:
+                values.update(entry.decoded_selected(data, selections[key], selections)
+                              if key in selections else entry.decoded_bound(data, context))
+            except MalformedRecord as error:
+                problems.update(error.located(entry.key, f"supply {entry.annotation}"))
+        if problems:
+            raise RecordProblems(problems)
         return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)
