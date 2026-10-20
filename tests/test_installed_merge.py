@@ -125,7 +125,7 @@ def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
     import sys
     from agent_comms.commander.cli import main
     from agent_comms.maintenance_barrier import (
-        InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
+        InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
     )
     from agent_comms.todos import TodoStore
 
@@ -168,7 +168,7 @@ def test_order_reads_stay_unchanged_during_install_until_one_overdue_pass(
             assert f'| {todo.id}:' in capsys.readouterr().out
             assert comms.goals.todos.get(todo.id) == todo
     finally:
-        barrier.clear(hold)
+        barrier.advance(hold, ReadyPhase)
 
     class TickComplete(Exception):
         pass
