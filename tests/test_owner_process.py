@@ -25,6 +25,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
@@ -164,7 +165,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             client = CommsAgent(comms, agent_bin=GivenBinary(str(package / 'dist' / 'cli.js')), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
-            return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=model))
+            return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=DeclaredModel(model)))
 
     declared_options = asyncio.run(thinking_options())
     thinking = declared_options[0].value
@@ -223,7 +224,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     try:
         for name, arguments, credential in settings:
             goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=model, thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
+            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=DeclaredModel(model), thinking_level=thinking, goal=goal, task=GivenThreadText('retained task ' + name)))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))

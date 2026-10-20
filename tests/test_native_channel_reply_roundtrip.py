@@ -30,6 +30,7 @@ from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_model import DeclaredModel
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
 tmp_path = private_root_fixture
@@ -221,7 +222,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         project.mkdir()
         projects[name] = project
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level=OffThinkingLevel)
+            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     attachment = CommsClient(
