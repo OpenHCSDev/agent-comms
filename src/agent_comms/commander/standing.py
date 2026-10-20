@@ -6,7 +6,7 @@ import subprocess
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
@@ -33,7 +33,7 @@ from .config import CommanderConfig
 @dataclass(frozen=True)
 class Detached(UndatedStandingRule):
     unit: str
-    unread: int
+    unread: int = field(compare=False)
     orders: tuple[str, ...]
 
     @classmethod
@@ -45,9 +45,6 @@ class Detached(UndatedStandingRule):
         away = [unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving]
         unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
         return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
-
-    def wake_key(self) -> str:
-        return f"{self.declared_name}:{self.unit}:{self.orders}"
 
     def line(self) -> str:
         return (f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
@@ -65,9 +62,6 @@ class RequestStalled(UndatedStandingRule):
                      for request, served in goal.order.open_requests(
                          goal, comms.goals, thread.incarnation)
                      if not served)
-
-    def wake_key(self) -> str:
-        return f"{self.declared_name}:{self.goal.id}"
 
     def line(self) -> str:
         return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"

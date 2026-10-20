@@ -27,7 +27,7 @@ def external_commander(comms, name):
     return comms.registry.external_process(name, ProcessIdentity.capture(os.getpid()))
 
 
-async def test_real_rules_publish_once_per_change_and_rotate_units(commander, commander_script):
+async def test_real_rules_publish_once_per_change_and_rotate_units(commander):
     comms, _ = commander
     connector_sender(comms)
     comms.registry.declare(
@@ -89,7 +89,7 @@ async def test_real_rules_publish_once_per_change_and_rotate_units(commander, co
     assert list(comms.bus.inbox("lead")) == changed
 
 
-async def test_each_registered_request_holder_has_independent_wakes(commander, commander_script):
+async def test_each_registered_request_holder_has_independent_wakes(commander):
     comms, _ = commander
     connector_sender(comms)
     comms.registry.declare(
@@ -118,11 +118,13 @@ async def test_each_registered_request_holder_has_independent_wakes(commander, c
 
 def test_changing_measurements_do_not_reannounce_a_rule(commander):
     comms, _ = commander
-    assert (
-        RulesDue("last review was 21 min ago", 100).wake_key()
-        == RulesDue("last review was 26 min ago", 100).wake_key()
-    )
+    assert len({
+        RulesDue("last review was 21 min ago", 100),
+        RulesDue("last review was 26 min ago", 100),
+    }) == 1
+    assert RulesDue("new overdue review", 101) != RulesDue("old overdue review", 100)
     rule = comms.registry.storage_rule
     above = rule.floor_gib + 1
-    assert DiskLow(rule, above).wake_key() == DiskLow(rule, above + 0.1).wake_key()
-    assert DiskLow(rule, rule.floor_gib - 1).wake_key() != DiskLow(rule, above).wake_key()
+    assert len({DiskLow(rule, above), DiskLow(rule, above + 0.1),
+                DiskLow(rule, rule.floor_gib - 1)}) == 1
+    assert DiskLow(replace(rule, cleanup_gib=rule.cleanup_gib + 1), above) != DiskLow(rule, above)

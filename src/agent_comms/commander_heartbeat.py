@@ -16,12 +16,13 @@ from .threads import Thread
 class CommanderReview:
     """One commander's last observed violations and its next review position."""
 
-    violations: dict[str, StandingRule] = field(default_factory=dict)
+    violations: frozenset[StandingRule] = frozenset()
     turn: int = 0
 
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
-        found = {rule.wake_key(): rule for rule in StandingRule.broken(comms, commander.name)}
-        if found.keys() == self.violations.keys():
+        rules = StandingRule.broken(comms, commander.name)
+        found = frozenset(rules)
+        if found == self.violations:
             return
         lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
         owed = comms.goals.todos.held_for_commander(commander.incarnation)
@@ -32,12 +33,11 @@ class CommanderReview:
             lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
             self.turn += 1
         lines.extend(
-            f"RULE {rule.line()}" for key, rule in found.items() if key not in self.violations
+            f"RULE {rule.line()}" for rule in rules if rule not in self.violations
         )
         lines.extend(
             f"NO LONGER CURRENT: {rule.line()}"
-            for key, rule in self.violations.items()
-            if key not in found
+            for rule in self.violations - found
         )
         if not found:
             lines.append("Standing rules clear.")
