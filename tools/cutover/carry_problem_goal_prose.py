@@ -10,7 +10,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 from agent_comms.goal_mentions import bind_goal_mentions
 from agent_comms.goals import Goal, ProblemGoalOrder
@@ -56,7 +56,3 @@ class ProblemGoalProse(Carry):
                 store.save_unlocked(document)
         written = (store.path.name, store.guard_path.name) if changed and apply else ()
         return Carried(changed, {"threads": len(document.threads)}, written)
-
-
-if __name__ == "__main__":
-    ProblemGoalProse.main()

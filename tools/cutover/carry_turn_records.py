@@ -14,7 +14,7 @@ from pathlib import Path
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class TurnRecords(Carry):
@@ -41,7 +41,3 @@ class TurnRecords(Carry):
                 store.save_unlocked(document)
         written = (store.path.name, store.guard_path.name) if idle else ()
         return Carried(len(idle), {"threads": len(threads)}, written)
-
-
-if __name__ == "__main__":
-    TurnRecords.main()

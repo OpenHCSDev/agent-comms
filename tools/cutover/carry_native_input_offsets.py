@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from contextlib import closing
 from pathlib import Path
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 from agent_comms.coordinated_runtime_schema import (
     _digest,
@@ -156,7 +156,3 @@ class NativeInputOffsets(Carry):
                 if db.execute("PRAGMA foreign_key_check").fetchall():
                     raise ValueError("Native offset carry violates original foreign keys")
         return Carried(len(rows), rewritten=("coordination.sqlite3",))
-
-
-if __name__ == "__main__":
-    NativeInputOffsets.main()

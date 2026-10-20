@@ -6,14 +6,10 @@ only the new declared schema.
 
 from __future__ import annotations
 
-from . import carry
+from agent_comms.installer import carry
 
 
 class TodoMessages(carry.TodoColumnCarry):
     """Todo rows gain the empty order-message record; every stored verdict stays as it was."""
 
     column = "messages"
-
-
-if __name__ == "__main__":
-    TodoMessages.main()

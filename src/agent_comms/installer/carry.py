@@ -1,8 +1,9 @@
 """The steps a retained bus is carried through when its durable format changes.
 
-A step is one module beside this one, ``carry_<what>.py``, holding one ``Carry``
-subclass, run as ``python -m cutover.carry_<what> ROOT [--apply]`` with ``src``
-and ``tools`` on the path. Three rules make a step safe to run on any bus at any later time:
+A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Carry``
+subclass. Only ``agent-comms install`` runs it, through ``step_worker`` with the ``src``
+and ``tools`` of the revision its family names, so no step runs outside its chain.
+Three rules make a step safe to run on any bus at any later time:
 
 - It is idempotent: data it already carried reports no change.
 - It runs in the order the main line added it: the first-parent commit that adds its
@@ -20,15 +21,12 @@ reads or writes that file; nothing in ``src/`` depends on it.
 """
 from __future__ import annotations
 
-import argparse
 import ast
 import inspect
-import importlib
 import json
 import os
 import sqlite3
 import subprocess
-import sys
 import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -38,12 +36,12 @@ from pathlib import Path
 from typing import ClassVar, cast
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
 from agent_comms.typed_table import TypedStore
-from .backup import StoreBackup
 
 STEPS = Path("tools/cutover")
+FRAMEWORK = Path("src/agent_comms/installer/carry.py")
+"""This module, whose ``Carry`` headers the chain compiles at each revision."""
 
 
 @dataclass(frozen=True)
@@ -93,9 +91,16 @@ class CarryLedger:
     def record(self, name: str) -> None:
         """Called with the bus's wire lock held."""
         applied = self.applied()
-        if name in applied:
-            return
-        payload = json.dumps({"applied": [*applied, name]}, indent=2) + "\n"
+        if name not in applied:
+            self.write((*applied, name))
+
+    def start(self, chain: CarryChain) -> None:
+        """A bus this chain's revision created is already in its format: every step it
+        declares counts as applied, so none runs on it."""
+        self.write(tuple(step.name for step in chain.steps))
+
+    def write(self, applied: tuple[str, ...]) -> None:
+        payload = json.dumps({"applied": list(applied)}, indent=2) + "\n"
         descriptor, stage = tempfile.mkstemp(dir=self.root, prefix=".carries.", suffix=".json")
         try:
             os.fchmod(descriptor, 0o600)
@@ -140,7 +145,7 @@ class Carry(ABC):
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        raise RuntimeError(f'{cls.name()} needs the full tools/upgrade_bus.py operation')
+        raise RuntimeError(f'{cls.name()} needs the full agent-comms install operation')
 
     @classmethod
     @abstractmethod
@@ -152,29 +157,6 @@ class Carry(ABC):
         """What the running installation needs before its own stop command can read the bus.
         Run with that installation's ``src``; it records nothing in the ledger."""
         return Carried(0)
-
-    @classmethod
-    def main(cls) -> None:
-        from agent_comms.store_files import _store_lock
-
-        parser = argparse.ArgumentParser(description=sys.modules[cls.__module__].__doc__)
-        parser.add_argument("root", type=lambda value: Path(value).expanduser().resolve())
-        parser.add_argument("--apply", action="store_true")
-        parser.add_argument("--before-stop", action="store_true")
-        args = parser.parse_args()
-        with _store_lock(args.root / "wire"):
-            if args.before_stop:
-                result = cls.before_stop(args.root, apply=args.apply)
-            elif args.apply:
-                try:
-                    result = CarryLedger(args.root).apply(
-                        cls.chain(), cls.name(), lambda: cls.carry(args.root, apply=True))
-                except ValueError as error:
-                    raise SystemExit(f"{cls.name()}: {error}") from None
-            else:
-                result = cls.carry(args.root, apply=False)
-        print(json.dumps(result.report(cls.name(), args.apply)))
-
 
 
 class StoreCarry(Carry):
@@ -265,21 +247,6 @@ class Step:
     columns: tuple[str, ...] = ()
     """The todo column this step adds, as its ``column`` declares it."""
 
-    def require_current(self, checkout: Path) -> None:
-        """Check source identity before stopping; no target Core types are imported."""
-        source = checkout / STEPS / f'{self.name}.py'
-        if source.read_bytes() != git(checkout, 'show', f'{self.revision}:{STEPS}/{source.name}'):
-            raise RuntimeError(f'Conversion source changed since planning: {source}')
-
-    def current(self, checkout: Path) -> type[Carry]:
-        """Load current checkout tools, never a second Core source tree."""
-        self.require_current(checkout)
-        source = checkout / STEPS / f'{self.name}.py'
-        module = importlib.import_module(f'.{self.name}', __package__)
-        if Path(module.__file__).resolve() != source.resolve():
-            raise RuntimeError('Conversion was loaded from a different checkout')
-        return getattr(module, self.declaration)
-
     @staticmethod
     def declared_columns(source: bytes) -> tuple[str, ...]:
         """The ``column`` a step module's class declares, read without importing it."""
@@ -359,7 +326,7 @@ def carry_parents(source: bytes) -> dict[str, type[Carry]]:
         declarations.append(node)
         names.add(node.name)
     tree = ast.fix_missing_locations(ast.Module(body=declarations, type_ignores=[]))
-    exec(compile(tree, str(STEPS / "carry.py"), "exec"),
+    exec(compile(tree, str(FRAMEWORK), "exec"),
          {Carry.__name__: Carry, declared.__name__: declared})
     if Carry.__name__ not in parents:
         raise ValueError("Target tree declares no Carry family")
@@ -395,7 +362,7 @@ class CarryChain:
         """The steps in the tree in the order the main line added them, and every step
         its history added and later deleted."""
         known = {}
-        parents = carry_parents(git(repo, "show", f"{revision}:{STEPS}/carry.py"))
+        parents = carry_parents(git(repo, "show", f"{revision}:{FRAMEWORK}"))
         tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
         pending = {
             path.removesuffix(".py"): git(repo, "show", f"{revision}:{STEPS}/{path}")
@@ -499,13 +466,13 @@ class CarryChain:
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
         """A step applies to a bus that already records it or whose next pending step it is.
         Otherwise the bus first runs the pending steps through this one, as
-        ``tools/upgrade_bus.py`` does; a ledger that pending() refuses stays refused."""
+        ``agent-comms install`` does; a ledger that pending() refuses stays refused."""
         if name in applied:
             return
         pending = [step.name for step in self.pending(applied)]
         if pending[:1] != [name]:
             ahead = pending[: pending.index(name) + 1] if name in pending else pending
-            raise ValueError(f"the bus must first run {ahead}; run tools/upgrade_bus.py")
+            raise ValueError(f"the bus must first run {ahead}; run agent-comms install")
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
         """The steps a bus still needs. A recorded step must be kept or retired. A bus may
@@ -524,172 +491,6 @@ class CarryChain:
             ):
                 raise ValueError("Bus ledger skips a step that a later recorded step runs after")
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
-
-
-class PreparedCarries(ABC):
-    """A resolved conversion choice owns its saved data and its failure behavior."""
-
-    @classmethod
-    def at(cls, checkout: Path, root: Path, destination: StoreBackup,
-           published: bool) -> PreparedCarries:
-        revision = git(checkout, 'rev-parse', 'HEAD').decode().strip()
-        chain = CarryChain.at(checkout, revision)
-        # Only a pending conversion can have left a publication backup. There
-        # is no empty snapshot whose missing ledger could mean an empty history.
-        source = (destination.data_root
-                  if not published and destination.path.exists() else root)
-        steps = chain.pending(CarryLedger(source).applied())
-        for step in steps:
-            step.require_current(checkout)
-        if not steps:
-            return NoConversion(root)
-        return PendingConversion(chain, steps, destination, checkout)
-
-    @abstractmethod
-    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
-        """The conversion declaration owns whether writers must stop first."""
-
-    @property
-    @abstractmethod
-    def data_root(self) -> Path: ...
-
-    @abstractmethod
-    def capture(self) -> PreparedCarries: ...
-
-    @abstractmethod
-    def apply(self, root: Path) -> None: ...
-
-    @abstractmethod
-    def original(self) -> bool: ...
-
-    @abstractmethod
-    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None: ...
-
-    @abstractmethod
-    def retire(self) -> None: ...
-
-    def cleanup(self, published: bool) -> bool:
-        if published:
-            return True
-        if not self.original():
-            return False
-        self.retire()
-        return True
-
-
-@dataclass(frozen=True)
-class NoConversion(PreparedCarries):
-    root: Path
-
-    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
-        from agent_comms.launch_runtime import LaunchRuntime
-        from agent_comms.restart_queue import enqueue
-        from agent_comms.errors import RelationViolationError
-        from agent_comms.owner_lifecycle import OwnerRestartSelection
-
-        with resources:
-            # No data or route changes: existing readers can keep their shared lock.
-            with comms.route.hold_client_route():
-                print('Acquired shared route lock for unchanged-format switch', flush=True)
-                publication.publish_links()
-            publication.release_if_safe(self, comms.owners.maintenance, hold)
-            # Existing exact-incarnation queue owns idle admission and settlement.
-            for original in OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
-                try:
-                    enqueue(comms, original,
-                            launch_runtime=LaunchRuntime(publication.runtime / 'bin/python'))
-                except RelationViolationError:
-                    if OwnerRestartSelection.live((original,), comms.registry.snapshot()):
-                        raise
-                    # A selected process stopped while its queue request arrived.
-
-    @property
-    def data_root(self) -> Path:
-        return self.root
-
-    def capture(self) -> PreparedCarries:
-        return self
-
-    def apply(self, root: Path) -> None:
-        pass
-
-    def original(self) -> bool:
-        return True
-
-    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None:
-        pass
-
-    def retire(self) -> None:
-        pass
-
-
-@dataclass(frozen=True)
-class PendingConversion(PreparedCarries):
-    chain: CarryChain
-    steps: tuple[Step, ...]
-    backup: StoreBackup
-    checkout: Path
-
-    def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
-        import time
-        from agent_comms.restart_refusals import OwnerBusyRefusal
-        from agent_comms.owner_lifecycle import OwnerRestartSelection
-
-        deadline = time.monotonic() + timeout
-        previous_busy = ()
-        while True:
-            snapshot = comms.registry.snapshot()
-            busy = []
-            for original in OwnerRestartSelection.live(intent.owners, snapshot):
-                thread = original.require_current(snapshot)
-                try:
-                    comms.owners.require_restart_idle(thread)
-                except OwnerBusyRefusal:
-                    busy.append(thread.name)
-            if not busy:
-                break
-            if time.monotonic() >= deadline:
-                raise TimeoutError('Active turns still running: ' + ', '.join(busy))
-            if tuple(busy) != previous_busy:
-                print('Waiting for active turns: ' + ', '.join(busy), flush=True)
-                previous_busy = tuple(busy)
-            time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-        publication.publish_stopped(self, comms, intent, hold, resources)
-
-    @property
-    def data_root(self) -> Path:
-        return self.backup.data_root if self.backup.path.exists() else self.backup.root
-
-    def capture(self) -> PreparedCarries:
-        root = self.backup.root
-        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
-            for step in self.steps for path in step.current(self.checkout).backup_files(root)))))
-        backup = StoreBackup.take(root, self.backup.route, files, self.backup.path)
-        print(f'Backed up selected stores: {backup.path}', flush=True)
-        return replace(self, backup=backup)
-
-    def apply(self, root: Path) -> None:
-        ledger = CarryLedger(root)
-        for step in self.steps:
-            conversion = step.current(self.checkout)
-            result = ledger.apply(self.chain, step.name,
-                lambda conversion=conversion: conversion.carry(root, apply=True))
-            print(json.dumps(result.report(step.name, True)), flush=True)
-            if conversion.carry(root, apply=False).changed:
-                raise RuntimeError(f'{step.name} did not finish its conversion')
-
-    def original(self) -> bool:
-        return not self.backup.path.exists() or self.backup.original()
-
-    def restore_if_unpublished(self, published: Callable[[], bool], restoring: Callable) -> None:
-        if not published():
-            with restoring():
-                self.backup.restore()
-                self.backup.retire()
-
-    def retire(self) -> None:
-        if self.backup.path.exists():
-            self.backup.retire()
 
 
 class TodoColumnCarry(TodoRows):

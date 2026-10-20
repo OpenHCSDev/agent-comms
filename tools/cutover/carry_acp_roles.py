@@ -7,7 +7,7 @@ from pathlib import Path
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import AcpThreadRole
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class AcpRoles(Carry):
@@ -34,7 +34,3 @@ class AcpRoles(Carry):
                 store.save_unlocked(document)
         files = (store.path.name, store.guard_path.name) if old else ()
         return Carried(len(old), {"threads": len(document.threads)}, files)
-
-
-if __name__ == "__main__":
-    AcpRoles.main()

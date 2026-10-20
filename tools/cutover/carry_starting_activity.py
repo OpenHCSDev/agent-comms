@@ -5,7 +5,7 @@ use the carry chain's stopped-owner backup path instead of a gradual restart.
 """
 from pathlib import Path
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class StartingActivity(Carry):
@@ -17,7 +17,3 @@ class StartingActivity(Carry):
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         return Carried(0)
-
-
-if __name__ == "__main__":
-    StartingActivity.main()

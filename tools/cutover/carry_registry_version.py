@@ -7,7 +7,7 @@ holds every old reader stopped.
 from pathlib import Path
 
 from agent_comms.registry_store import RegistryStore
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class RegistryVersion(Carry):
@@ -22,7 +22,3 @@ class RegistryVersion(Carry):
         if not store.convert_format(apply=apply):
             return Carried(0)
         return Carried(1, rewritten=tuple(path.name for path in store.written))
-
-
-if __name__ == "__main__":
-    RegistryVersion.main()

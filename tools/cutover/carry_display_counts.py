@@ -1,7 +1,7 @@
 """Discard schema 5 display indexes: read positions no longer belong in them."""
 from pathlib import Path
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class DisplayCounts(Carry):
@@ -13,7 +13,3 @@ class DisplayCounts(Carry):
             for path in paths:
                 path.unlink()
         return Carried(len(paths), rewritten=tuple(path.name for path in paths))
-
-
-if __name__ == "__main__":
-    DisplayCounts.main()

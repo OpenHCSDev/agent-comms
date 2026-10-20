@@ -17,8 +17,8 @@ from agent_comms.external_transcript import DraftRow, ExternalEventRow, External
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import TranscriptEvent
 
-from . import carry
-from .carry import Carried
+from agent_comms.installer import carry
+from agent_comms.installer.carry import Carried
 
 
 def located(encoded, item_id):
@@ -106,7 +106,3 @@ class ExternalPositions(carry.StoreCarry):
                     stage.with_name(stage.name + suffix).unlink(missing_ok=True)
         return Carried(changed, {"positions": positions, "events": events_count},
                        (path.name,) if apply else ())
-
-
-if __name__ == "__main__":
-    ExternalPositions.main()

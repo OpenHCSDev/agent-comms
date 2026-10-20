@@ -12,7 +12,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import CheckedProblemOrder, MergedProblemOrder, Todo, TodoStore
 from agent_comms.typed_table import TypedRow
 
-from .carry import Carried, StoreCarry
+from agent_comms.installer.carry import Carried, StoreCarry
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,3 @@ class MergedOrders(StoreCarry):
         return Carried(
             len(saved), {"merged_orders": len(saved)}, (path.name,) if apply and saved else ()
         )
-
-
-if __name__ == "__main__":
-    MergedOrders.main()

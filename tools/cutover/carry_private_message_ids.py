@@ -17,7 +17,7 @@ from agent_comms.private_bus_checkpoint import CheckedPrefix, CheckpointTable
 from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
 from agent_comms.wire_log import WireLog
 
-from .carry import Carried, Carry
+from agent_comms.installer.carry import Carried, Carry
 
 
 class PrivateMessageIds(Carry):
@@ -57,7 +57,3 @@ class PrivateMessageIds(Carry):
             {"indexes": 2},
             tuple(str(path.relative_to(root)) for path in cls.backup_files(root)) if apply else (),
         )
-
-
-if __name__ == "__main__":
-    PrivateMessageIds.main()

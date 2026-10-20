@@ -106,6 +106,8 @@ class ActiveRoute(CommsRoute):
     def published_launch(cls) -> LaunchRoot:
         match read_active_route():
             case ActiveRoute() as route:
+                if not route.root.is_dir():
+                    raise ValueError("active comms route root is missing")
                 route.observe_root()
                 return LaunchRoot.from_path(route.root)
             case _:
@@ -132,9 +134,14 @@ class ActiveRoute(CommsRoute):
             route = FieldCodec.decode(cls, record)
         except MalformedRecord as error:
             raise MalformedRecord(f"active comms route {path} is invalid: {error}") from error
-        if not route.root.is_dir():
-            raise ValueError("active comms route root is missing")
         return route
+
+    def selects_its_root(self) -> bool:
+        """Whether the root still exists and carries the marker this route was published for."""
+        from .wire_log import WireLog
+
+        return self.root.is_dir() and WireLog(
+            WireLog.path_in(self.root)).read_metadata_unlocked().wire_root_id == self.wire_root_id
 
     def observe_root(self) -> Path:
         from .wire_log import WireLog
@@ -352,21 +359,47 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
 
 
 def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None) -> Path:
-    """The owner's explicit repair of an old-version or unreadable route file.
+    """The owner's explicit repair of a route file that selects no bus: an old version,
+    unreadable, or naming a root that is gone or was replaced.
 
-    The old file is kept beside the new one under a backup name; a readable or
-    absent route is refused, so a live route is still only ever installed once.
+    The old file is kept beside the new one under a backup name; a route still selecting
+    its bus, or an absent one, is refused, so a live route is still only ever installed once.
     """
     with _route_directory(route, path) as (path, directory):
         try:
             current = read_active_route(path)
         except MalformedRecord:
-            backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
-            _publish_active_route_locked(route, path, directory, backup=backup)
-            return backup
-        raise ValueError(
-            f"active comms route {path} is readable and selects {current.root}; it is not replaced"
-            if current is not None else f"active comms route {path} is absent; nothing to replace")
+            current = None
+        else:
+            if current is None or current.selects_its_root():
+                raise ValueError(
+                    f"active comms route {path} is readable and selects {current.root}; "
+                    "it is not replaced" if current is not None
+                    else f"active comms route {path} is absent; nothing to replace")
+        return _replace_active_route_locked(route, path, directory)
+
+
+def route_new_bus(route: ActiveRoute, path: Path | None = None) -> str:
+    """Install's route to a bus it just created: the first route, or the replacement of
+    one that selects no bus. A route still selecting its own bus is kept and reported."""
+    with _route_directory(route, path) as (path, directory):
+        try:
+            current = read_active_route(path)
+        except MalformedRecord:
+            current = None
+        else:
+            if current is None:
+                _publish_active_route_locked(route, path, directory)
+                return f"published {path}"
+            if current.selects_its_root():
+                return f"kept {path}: it selects {current.root}"
+        return f"replaced {path}; old route kept at {_replace_active_route_locked(route, path, directory)}"
+
+
+def _replace_active_route_locked(route: ActiveRoute, path: Path, directory: int) -> Path:
+    backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
+    _publish_active_route_locked(route, path, directory, backup=backup)
+    return backup
 
 
 @contextmanager

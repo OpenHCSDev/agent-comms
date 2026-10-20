@@ -17,7 +17,6 @@ from .active_route import ActiveRoute, resolve_comms_route
 from .cli_bridges.shared import SendArguments
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
-from .comms import client_wire
 from .coordination_errors import CoordinationError
 from .launch_root import LaunchRoot
 
@@ -65,8 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         route = resolve_comms_route(args.root)
         with LaunchRoot.from_path(route.root).selected():
             command = CliCommand.member_named(args.command).from_arguments(args)
-            with client_wire(route) as comms:
-                return command.run(comms, sys.stdout)
+            return command.execute(route, sys.stdout)
     except KeyboardInterrupt:
         return 130
     except (ValueError, OSError, CoordinationError) as exc:

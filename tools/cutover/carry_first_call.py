@@ -14,7 +14,7 @@ from typing import get_args, get_origin, get_type_hints
 from agent_comms.todos import ProblemOrder, Todo
 from agent_comms.typed_table import TypedRow
 
-from . import carry
+from agent_comms.installer import carry
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,3 @@ class FirstCalls(carry.TodoRows):
                 )
             changed += len(saved)
         return cls.carried(root, changed, {"first_call_keys": changed}, apply=apply)
-
-
-if __name__ == "__main__":
-    FirstCalls.main()

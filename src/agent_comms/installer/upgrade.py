@@ -1,55 +1,51 @@
-#!/usr/bin/env python3
-"""Upgrade a retained bus and the checkout that runs it, in one command.
+"""Upgrade a retained bus and the checkout that runs it: what ``agent-comms install`` runs.
 
-    python tools/upgrade_bus.py --installer UNIT --spill-dir PATH
-        [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
+``agent-comms install`` checks out the target revision and runs this package from that
+revision's ``src`` (``python -m agent_comms.installer``), so its steps are the
+target's. The target's stack is built into its own runtime, relocked to the latest
+OpenHCSDev mains, and must import Toad and the ACP client. The bus ledger
+(``carries.json``) names the carry steps still pending; each runs from the revision
+that declares it (``agent_comms.installer.carry``). Every run first rehearses on a
+copy of the bus: the steps, then ``who``, ``threads`` and ``history`` reads, and
+every file no step names as rewritten must be unchanged by saved-file size,
+nanosecond mtime and inode. ``--rehearse`` stops there.
 
-``--checkout`` is the installation to upgrade (by default, the one holding
-this file); run the command from the target revision so its steps are known.
-
-The target revision's stack is built in a temporary worktree, relocked to the
-latest OpenHCSDev mains, and must import Toad and the ACP client. The bus
-ledger (``carries.json``) names the carry steps still pending; each runs from
-the revision that declares it (``tools/cutover/carry.py``). Every run first
-rehearses on a copy of the bus: the steps, then ``who``, ``threads`` and
-``history`` reads, and every file no step names as rewritten must be
-unchanged by saved-file size, nanosecond mtime and inode. The rehearsal
-prepares native Pi in the staged stack exactly as the live phase does. ``--rehearse`` stops there.
-
-A live run then stops the running agent owners with the installed CLI, backs
-up only files the rehearsal changed, moves the checkout,
-relocks and syncs its stack, prepares native Pi, carries the bus, reads it
-back, and starts only the owners it stopped. A failure after the backup
-keeps maintenance held and preserves the bus, checkout and backup for forward
-repair. It never resets live main or replaces a possibly changed bus. Nothing
-is sent and no input is replayed: owners start by the normal start path.
+A live run then stops the running agent owners with the installed CLI, backs up only
+files the rehearsal changed, moves the checkout, prepares native Pi, carries the bus,
+reads it back, publishes the built runtime and starts only the owners it stopped. A
+failure after the backup restores the original runtime and data. Nothing is sent and
+no input is replayed: owners start by the normal start path.
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, TextIO, cast
+from typing import Annotated
 
-# This file's tree is the target revision: the tool and every step it runs import that
-# tree's src, never the src the checkout being upgraded has installed.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-import publish_runtime
-from cutover.backup import (
+import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
+from agent_comms.active_route import ActiveRoute, route_new_bus
+from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.history_result import EverythingHistoryPageResult
+from agent_comms.storage_rules import StorageRule
+from agent_comms.host_services import HostService
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
+from agent_comms.installer import publication, step_worker
+from agent_comms.installer.backup import (
     NoBackup,
     RestoreSpace,
     SavedFile,
@@ -58,25 +54,11 @@ from cutover.backup import (
     bus_files,
     transcripts_held,
 )
-from cutover import practice_copy_worker
-from cutover.carry import Carried, Carry, CarryChain, CarryLedger, Step, TodoColumnCarry
-from cutover.runtime_resolution import RuntimeResolution
-from install_gate import PracticeMeasurement, prepare_runtime_home
-
-import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
-from agent_comms.candidate_maintenance import drain_candidate_catchup
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
-from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import _store_lock
+from agent_comms.installer.carry import Carried, Carry, CarryChain, CarryLedger, Step, TodoColumnCarry
+from agent_comms.installer.practice import practice_copy, prepare_runtime_home
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.todos import PlannedInstallDeadline
 
-REPO = Path(__file__).resolve().parents[1]
 HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
@@ -210,7 +192,7 @@ class Stack:
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
         run(
-            self.python, publish_runtime.__file__, "--refresh",
+            self.python, "-m", publication.__name__,
             cwd=self.checkout, env=self.environment(),
         )
 
@@ -240,43 +222,6 @@ class Stack:
             raise UpgradeRefused(f"agent-comms {' '.join(arguments)}: "
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
-
-    @contextmanager
-    def practice_copy(
-        self, root: Path, into: Path
-    ) -> Iterator[tuple[Path, PracticeMeasurement]]:
-        """Let the installed reader create and hold an old-format copy until carry finishes.
-
-        The staged reader cannot open the old sealed index before its carry runs.
-        The installed source holds the copy's lifetime; only the staged source
-        reads it after the carry. No live bus row is rewritten by rehearsal.
-        """
-        child = subprocess.Popen(
-            [str(self.python), str(practice_copy_worker.__file__), str(root), str(into)],
-            cwd=self.checkout, env=self.environment(Path(__file__).resolve().parent),
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-        try:
-            # PIPE was supplied for both streams; Popen's optional annotations
-            # do not describe this constructed child.
-            ready = cast(TextIO, child.stdout).readline()
-            if not ready:
-                raise UpgradeRefused(
-                    f"Installed practice copy failed: {cast(TextIO, child.stderr).read()}"
-                )
-            measurement = FieldCodec.decode(PracticeMeasurement, FieldCodec.parse(ready))
-            yield into, measurement
-        finally:
-            # The staged reader can own background work on the copied bus;
-            # finish it before the installed reader retires the directory.
-            try:
-                drain_candidate_catchup(into)
-            finally:
-                _, error = child.communicate(input="\n", timeout=60)
-        if child.returncode:
-            raise UpgradeRefused(
-                f"Installed practice copy did not retire: {error}"
-            ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
     def call_step(self, step: Step, root: Path, revisions: Revisions,
                   method: str, **arguments: bool) -> str:
@@ -334,17 +279,29 @@ class Revisions:
     def prepare(path: Path) -> None:
         run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
 
+    def path(self, revision: str) -> Path:
+        return self.scratch / f"tree-{revision[:12]}"
+
+    def add(self, revision: str) -> Path:
+        """Check ``revision`` out; the launcher adds the target's tree before running it."""
+        path = self.path(revision)
+        run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
+        return path
+
     def tree(self, revision: str) -> Path:
         if revision not in self.trees:
-            path = self.scratch / f"tree-{revision[:12]}"
-            run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
-            self.trees[revision] = path
-        path = self.trees[revision]
+            self.trees[revision] = self.staged(self.add(revision))
+        return self.trees[revision]
+
+    def adopt(self, revision: str) -> None:
+        """Own the tree the launcher added, so this run stages and removes it."""
+        self.trees[revision] = self.staged(self.path(revision))
+
+    def staged(self, path: Path) -> Path:
         self.prepare(path)
         # A historical regular cutover package cannot discover a worker from a
         # second PYTHONPATH entry. Stage this transport helper, not new Core.
-        worker = Path(__file__).resolve().parent / "cutover" / "step_worker.py"
-        shutil.copy2(worker, path / "tools" / "cutover" / worker.name)
+        shutil.copy2(step_worker.__file__, path / "tools" / "cutover" / "step_worker.py")
         return path
 
     def close(self) -> None:
@@ -387,13 +344,12 @@ def carry_all(
     return results
 
 
-def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str,
-             installed: Stack) -> dict:
+def rehearse(root: Path, stack: Stack, revisions: Revisions, installer: str) -> dict:
     parent = StorageRule.load(root).initial_roots(installer).scratch
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
-        installed.practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
+        practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
         prepare_runtime_home(home)
@@ -428,38 +384,41 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[Step
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
-            spill_dir: Path) -> dict:
+            retire: bool, spill_dir: Path, scratch: Path) -> dict:
+    """``scratch`` holds the target's worktree the launcher runs this source from; this
+    run owns it and removes it with every other revision tree it adds."""
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
-    run("git", "-C", checkout, "fetch", "-q", "origin")
-    target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
-    if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]).returncode:
-        raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-    if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
-        raise UpgradeRefused("The checkout has local changes")
-    applied = CarryLedger(root).applied()
+    revisions = Revisions(checkout, scratch)
     try:
-        pending = CarryChain.at(checkout, target).pending(applied)
-    except ValueError as error:
-        raise UpgradeRefused(str(error)) from None
-    installed = Stack(checkout)
-    installed.require_uv()
-    if not rehearse_only and not installed.python.exists():
-        raise UpgradeRefused(f"No installed stack at {installed.python}")
-    with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
-        revisions = Revisions(checkout, Path(scratch))
+        revisions.adopt(target)
+        if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
+                           target]).returncode:
+            raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
+        if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
+            raise UpgradeRefused("The checkout has local changes")
+        chain = CarryChain.at(checkout, target)
+        member = Install.member(root, retire)
         try:
-            staged = Stack.build(revisions.tree(target))
-            install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
-                                 installer, spill_dir)
-            rehearsal = install.rehearsal()
-            report = {"from": current, "to": target, "pending": [step.name for step in pending],
-                      "rehearsal": rehearsal}
-            if rehearse_only:
-                return report
-            report["live"] = install.live(rehearsal)
+            pending = member.pending(root, chain)
+        except ValueError as error:
+            raise UpgradeRefused(str(error)) from None
+        installed = Stack(checkout)
+        installed.require_uv()
+        if not rehearse_only and not installed.python.exists():
+            raise UpgradeRefused(f"No installed stack at {installed.python}")
+        staged = Stack.build(revisions.tree(target))
+        install = member.of(checkout, root, current, target, chain, pending, installed, staged,
+                            revisions, installer, spill_dir)
+        rehearsal = install.rehearsal()
+        report = {"from": current, "to": target, "pending": [step.name for step in pending],
+                  "rehearsal": rehearsal}
+        if rehearse_only:
             return report
-        finally:
-            revisions.close()
+        report["live"] = install.live(rehearsal)
+        return report
+    finally:
+        revisions.close()
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 @dataclass(frozen=True)
@@ -470,6 +429,7 @@ class Install(ABC):
     root: Path
     current: str
     target: str
+    chain: CarryChain
     pending: tuple[Step, ...]
     installed: Stack
     staged: Stack
@@ -477,15 +437,29 @@ class Install(ABC):
     installer: str
     spill_dir: Path
 
+    @staticmethod
+    def member(root: Path, retire: bool) -> type[Install]:
+        """What exists at ``root`` decides how much of an install it needs."""
+        if retire:
+            return RetiringInstall
+        if WireLog(WireLog.path_in(root)).fresh():
+            return FreshInstall
+        return Install
+
     @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-           installed: Stack, staged: Stack, revisions: Revisions, installer: str,
-           spill_dir: Path) -> Install:
+    def pending(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+        return chain.pending(CarryLedger(root).applied())
+
+    @classmethod
+    def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
+           pending: tuple[Step, ...], installed: Stack, staged: Stack, revisions: Revisions,
+           installer: str, spill_dir: Path) -> Install:
+        """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        return member(checkout, root, current, target, pending, installed, staged, revisions,
-                      installer, spill_dir)
+        return member(checkout, root, current, target, chain, pending, installed, staged,
+                      revisions, installer, spill_dir)
 
     @abstractmethod
     def rehearsal(self) -> dict: ...
@@ -496,7 +470,7 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.staged, self.revisions, self.installer, self.installed)
+        return rehearse(self.root, self.staged, self.revisions, self.installer)
 
     def live(self, rehearsal: dict) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
@@ -515,6 +489,53 @@ class UnchangedInstall(Install):
         self.installed.publish()
         PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
         return {"unchanged": self.target}
+
+
+class FreshInstall(Install):
+    """Nothing was ever written at the root: no carry, rehearsal, hold or owner to restart.
+    The target's source creates the bus already in its format and routes to it."""
+
+    @classmethod
+    def pending(cls, root: Path, chain: CarryChain) -> tuple[Step, ...]:
+        return ()
+
+    @classmethod
+    def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
+           pending: tuple[Step, ...], installed: Stack, staged: Stack, revisions: Revisions,
+           installer: str, spill_dir: Path) -> Install:
+        return cls(checkout, root, current, target, chain, pending, installed, staged,
+                   revisions, installer, spill_dir)
+
+    def rehearsal(self) -> dict:
+        return {"fresh": str(self.root)}
+
+    def live(self, rehearsal: dict) -> dict:
+        run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
+        Revisions.prepare(self.checkout)
+        self.staged.prepare_native()
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
+        CarryLedger(self.root).start(self.chain)
+        self.staged.publish()
+        route = route_new_bus(ActiveRoute(self.root.absolute(), root_id))
+        services = HostService.restart_running(self.staged.python)
+        PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
+        return {"created": str(self.root), "route": route, "services": services}
+
+
+class RetiringInstall(FreshInstall):
+    """The bus at the root is runtime state the target cannot carry: its owners stop, it
+    moves aside intact, and a fresh bus takes its place."""
+
+    def rehearsal(self) -> dict:
+        return {"retire": str(self.root), **super().rehearsal()}
+
+    def live(self, rehearsal: dict) -> dict:
+        running = self.installed.running_owners(self.root)
+        self.installed.owners(self.root, "stop", running)
+        retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
+        self.root.rename(retired)
+        return {"retired": str(retired), "stopped": running, **super().live(rehearsal)}
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
@@ -588,65 +609,3 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     return {"stopped_and_started": running, **passed, "services": services,
             "restore_space": {"needed": restore.needed, **asdict(restore)},
             **backup.report()}
-
-
-def detached_live(command: tuple[str, ...], root: Path) -> int:
-    """The live installer is a new session, not the monitor's owned child group.
-
-    Its output descriptors belong to files, not a caller that may disappear.
-    Deliberately do not borrow a turn-owned child lifetime or use Popen's cleanup
-    context: retiring the observer must not terminate this independent install.
-    """
-    logs = root.parent / f".{root.name}.installer-{Id128Text.mint()}"
-    logs.mkdir(mode=0o700)
-    output, errors = logs / "result.json", logs / "stderr.log"
-    with output.open("xb") as stdout, errors.open("xb") as stderr:
-        process = subprocess.Popen(
-            command, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-            start_new_session=True,
-        )
-    print(f"upgrade-bus: detached installer pid={process.pid}; diagnostics {errors}",
-          file=sys.stderr, flush=True)
-    code = process.wait()
-    if code:
-        print(f"upgrade-bus: detached installer failed ({code}); see {errors}", file=sys.stderr)
-    else:
-        print(output.read_text(), end="")
-    return code
-
-
-def stopped(signum: int, frame: object) -> None:
-    """A stop signal runs the same abort as a failure; a second one cannot cut that abort short."""
-    for each in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(each, signal.SIG_IGN)
-    raise SystemExit(f"upgrade-bus: stopped by {signal.Signals(signum).name}")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO)
-    parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
-                        default=Path.home() / ".agent-comms")
-    parser.add_argument("--to", default="origin/main")
-    parser.add_argument("--installer", required=True,
-                        help="The unit running this install; the plan names it")
-    parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
-    parser.add_argument("--spill-dir", required=True,
-                        type=lambda value: Path(value).expanduser().resolve(),
-                        help="Explicit parent directory for rehearsal copies and live backups")
-    args = parser.parse_args()
-    if not args.rehearse and os.getsid(0) != os.getpid():
-        raise SystemExit(detached_live(
-            (sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]), args.root,
-        ))
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(signum, stopped)
-    try:
-        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse,
-                                 args.spill_dir), indent=2, default=asdict))
-    except UpgradeRefused as error:
-        raise SystemExit(error.output)
-
-
-if __name__ == "__main__":
-    main()

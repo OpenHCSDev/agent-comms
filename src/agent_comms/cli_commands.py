@@ -23,7 +23,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
 
-from .active_route import ActiveRoute, replace_unreadable_active_route
+from .active_route import ActiveRoute, CommsRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
@@ -37,7 +37,7 @@ from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, S
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
-from .comms import Comms
+from .comms import Comms, client_wire
 from .config_options import (
     ConfigOptions,
     ModelConfigOption,
@@ -725,6 +725,12 @@ class CliCommand(
         json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Open the bus this command reads, then run it; a command that must act before
+        the bus opens overrides this."""
+        with client_wire(route) as comms:
+            return self.run(comms, output)
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:

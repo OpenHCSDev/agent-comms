@@ -27,7 +27,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalEventRow, ExternalTranscript
 from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
-from .carry import Carried, StoreCarry
+from agent_comms.installer.carry import Carried, StoreCarry
 
 TRANSCRIPTS = Path.home() / ".claude" / "projects"
 CALL = re.compile(r'"(?:id|tool_use_id)":"(toolu_\w+)"')
@@ -103,7 +103,3 @@ class ExternalEventTimes(StoreCarry):
         return Carried(
             len(undated), {"events": len(undated)}, (path.name,) if apply and undated else ()
         )
-
-
-if __name__ == "__main__":
-    ExternalEventTimes.main()

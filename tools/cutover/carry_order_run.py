@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from . import carry
-from .carry import Carried
+from agent_comms.installer import carry
+from agent_comms.installer.carry import Carried
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, ProblemOrder, Todo
@@ -63,7 +63,3 @@ class OrderRuns(carry.TodoRows):
                         order=FieldCodec.decode(ProblemOrder, order),
                     )
         return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
-
-
-if __name__ == "__main__":
-    OrderRuns.main()
