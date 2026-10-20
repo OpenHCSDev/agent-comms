@@ -98,16 +98,28 @@ class VirtualSource(BaseModel):
         raise ValueError("A virtual project is not an installed distribution")
 
 
+class DeclaredVersion(RootModel[str]):
+    def matches(self, selected: str) -> bool:
+        return self.root == selected
+
+
+class DynamicVersion(BaseModel):
+    """uv omits an editable project's dynamically supplied version from the lock."""
+
+    def matches(self, selected: str) -> bool:
+        return True
+
+
 class LockedPackage(BaseModel):
     name: str
-    version: str
+    version: DeclaredVersion | DynamicVersion = Field(default_factory=DynamicVersion)
     source: RegistrySource | GitSource | EditableSource | VirtualSource
     markers: list[str] = Field(default_factory=list, alias="resolution-markers")
 
     def selects(self, name: str, version: str) -> bool:
         return (
             canonicalize_name(self.name) == name
-            and self.version == version
+            and self.version.matches(version)
             and (not self.markers or any(Marker(marker).evaluate() for marker in self.markers))
         )
 
