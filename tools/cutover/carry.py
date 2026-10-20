@@ -36,7 +36,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, overload
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
@@ -241,6 +241,22 @@ class TodoRows(StoreCarry):
     def converted(cls, db: sqlite3.Connection) -> Mapping[str, int]:
         """Convert an open store; the family owns absence, validation and commit."""
 
+    @overload
+    @classmethod
+    @contextmanager
+    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        """Published steps retain their original optional-connection interface."""
+        ...
+
+    @overload
+    @classmethod
+    @contextmanager
+    def todo_rows(
+        cls, root: Path, *, apply: bool, convert: Callable[[sqlite3.Connection], object]
+    ) -> Iterator[object]:
+        """New steps use the conversion callback, not the yielded connection."""
+        ...
+
     @classmethod
     @contextmanager
     def todo_rows(
@@ -249,8 +265,8 @@ class TodoRows(StoreCarry):
         *,
         apply: bool,
         convert: Callable[[sqlite3.Connection], object] = lambda db: (),
-    ):
-        """Yield the store_transaction owner's connection type; preserve old context bodies."""
+    ) -> Iterator[object]:
+        """Old steps use the context body; new steps supply conversion at the same boundary."""
         with cls.store_transaction(root, apply=apply) as db:
             yield db
             if db is not None:
