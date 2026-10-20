@@ -186,10 +186,8 @@ def test_codex_rollout_projects_the_enclosing_record_clock():
     assert update.events[0].timestamp == datetime.fromisoformat('2026-10-19T18:00:00Z').timestamp()
 
 
-def test_malformed_shell_words_remain_visible_to_the_install_rule():
-    from agent_comms.commander.send_guard import InstallCommand, simple_commands
+def test_malformed_shell_words_refuse_instead_of_reaching_any_rule(tmp_path):
+    from agent_comms.storage_rules import ShellInvocation
 
-    command = 'uv pip install package "unterminated'
-    words, = simple_commands(command)
-    assert words == tuple(command.split())
-    assert InstallCommand.runs(words)
+    with pytest.raises(ValueError):
+        tuple(ShellInvocation.parse('uv pip install package "unterminated', tmp_path))
