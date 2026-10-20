@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, FieldRepresentation
+from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .pi_counts import PiCount
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -152,8 +152,6 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
     def measured(cls, total: PiCount) -> PiCount:
         # Pi measures context from its last message that neither errored nor
         # aborted; a failed request's billed total is not the session's context.
-        from .pi_counts import UnreportedCount
-
         return UnreportedCount()
 
     @classmethod
