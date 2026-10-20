@@ -29,7 +29,7 @@ from ..tools import (
     TodoList,
     UnjudgedEdits,
 )
-from ..work_branches import WorkBranches
+from ..work_branches import WorkBranch, WorkBranches
 from . import ParityComparison, UnverifiedParity
 
 
@@ -52,8 +52,10 @@ class ReadComparison(ParityComparison):
 def observe[T](
     code: CodeType,
     current: Callable[[], object],
-    native: Callable[[T], object],
+    native: Callable[[tuple[T, ...]], object],
     owner: str,
+    *,
+    expected: int = 1,
 ) -> ParityComparison:
     """Observe the real native return used by the current path without replacing either.
 
@@ -77,11 +79,13 @@ def observe[T](
         monitoring.set_local_events(tool, code, 0)
         monitoring.register_callback(tool, monitoring.events.PY_RETURN, None)
         monitoring.free_tool_id(tool)
-    if len(results) != 1:
+    if not results or len(results) != expected:
         return UnverifiedParity(
-            f"{owner}: expected one live native return, observed {len(results)}"
+            f"{owner}: expected {expected} live owner returns, observed {len(results)}"
         )
-    return ReadComparison(owner, FieldCodec.encode(rendered), FieldCodec.encode(native(results[0])))
+    return ReadComparison(
+        owner, FieldCodec.encode(rendered), FieldCodec.encode(native(tuple(results)))
+    )
 
 
 @dataclass(frozen=True)
@@ -148,7 +152,8 @@ class BoardComparison:
                 BoardVerb().run(context)
             return BoardFacts.rendered(output.getvalue())
 
-        def native(listed: TodoList) -> tuple[BoardFacts, ...]:
+        def native(observed: tuple[TodoList, ...]) -> tuple[BoardFacts, ...]:
+            listed = observed[0]
             if any(todo.holder and todo.holder not in names for todo in listed.todos):
                 raise ValueError("A board holder is absent from the live native fleet")
             return BoardFacts.native_rows(listed)
@@ -167,23 +172,26 @@ class BranchComparison:
         context = Commander.read(Commander.path())
         if not context.repos:
             return UnverifiedParity("CommsWorkBranchesTool has no configured repository to invoke")
-        current: list[JsonValue] = []
-        native: list[JsonValue] = []
-        for repo in context.repos:
-            current.append(
-                FieldCodec.encode(
-                    WorkBranches(repo.checkout).read(context.comms.registry.snapshot())
-                )
+
+        def current() -> tuple[tuple[WorkBranch, ...], ...]:
+            return tuple(
+                CommsWorkBranchesTool(checkout=str(repo.checkout), unlinked_only=False)
+                .apply(context.comms, ThreadCaller(context.commander))
+                .branches
+                for repo in context.repos
             )
-            reply = CommsWorkBranchesTool(
-                checkout=str(repo.checkout),
-                unlinked_only=False,
-            ).apply(context.comms, ThreadCaller(context.commander))
-            native.append(FieldCodec.encode(reply.branches))
-        return ReadComparison(
-            "CommsWorkBranchesTool / current Git and forge branch reader",
+
+        def native(
+            readings: tuple[tuple[WorkBranch, ...], ...],
+        ) -> tuple[tuple[WorkBranch, ...], ...]:
+            return readings
+
+        return observe(
+            WorkBranches.read.__code__,
             current,
             native,
+            "CommsWorkBranchesTool / actual consumed Git and forge branch records",
+            expected=len(context.repos),
         )
 
 
@@ -242,8 +250,8 @@ class UnjudgedComparison:
     def read(cls) -> ParityComparison:
         context = Commander.read(Commander.path())
 
-        def native(reply: UnjudgedEdits) -> tuple[EditCall, ...]:
-            return reply.edits
+        def native(observed: tuple[UnjudgedEdits, ...]) -> tuple[EditCall, ...]:
+            return observed[0].edits
 
         return observe(
             CommsUnjudgedTool.apply.__code__,
