@@ -791,7 +791,7 @@ class WireRevision(ReadState):
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
         *STATUS_SOURCE, BusSourceView)
     bus_routes: tuple[FileRevision, ...] = revision_source(
-        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),
+        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),  # type: ignore[has-type]
         StoresView, SidebarView)
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
         *STATUS_SOURCE)
