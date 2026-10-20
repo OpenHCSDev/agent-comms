@@ -127,11 +127,11 @@ class OrderRead[Result](TranscriptRead[Result]):
             holder = comms.registry.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
                 raise ToolRefusedError(f"Order {todo.id} holder incarnation no longer exists")
-            yield cls(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
+            yield cls(comms.root, holder, TurnsSince(todo.order.checked().at.recorded_at("An order")), todo)
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
-        since = self.todo.order.at.recorded_at("An order")
+        since = self.todo.order.checked().at.recorded_at("An order")
         edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, self.todo.id, since)

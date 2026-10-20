@@ -31,8 +31,12 @@ class Repo(BaseModel):
     @staticmethod
     def git(checkout: Path, *args: str) -> str:
         return subprocess.run(
-            ["git", "-C", str(checkout), *args], capture_output=True, text=True,
-            check=True, timeout=30).stdout
+            ["git", "-C", str(checkout), *args],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:
