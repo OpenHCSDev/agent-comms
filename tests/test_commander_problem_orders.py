@@ -901,7 +901,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and commander_order.struck(current, 'worker') == 0
-    assert 'strike voided on P1' in (tmp_path / 'narrative.md').read_text()
+    assert not (tmp_path / 'narrative.md').exists()
     assert posted[-1][0] == VerdictAudience(('worker', 'lead')) and 'strike voided on P1' in posted[-1][1]
     with pytest.raises(SystemExit, match='no live strike'):
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
@@ -923,8 +923,10 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     withdrawn = comms.goals.todos.get('P1')
     assert script.held_orders() == () and not withdrawn.pending and commander_order.struck(withdrawn, 'worker') == 0
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
-    assert (tmp_path / 'board.md').read_text().count(line) == 1
-    assert line in (tmp_path / 'narrative.md').read_text()
+    assert script.board_text().count(line) == 1
+    assert line in posted[0][1]
+    assert not (tmp_path / 'board.md').exists()
+    assert not (tmp_path / 'narrative.md').exists()
     assert [recipients for recipients, _ in posted] == [VerdictAudience(('worker', 'lead')), VerdictAudience(('worker',))]
     with pytest.raises(ValueError, match='Only an undelivered order'):
         script.withdraw('P1', 'withdrawing the same order twice records nothing new')
@@ -970,8 +972,8 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
     commander_order.FireVerb(unit='worker', why=FIRED).apply(script)
     assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
     assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
-    script.write_board()
-    assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2
+    assert script.board_text().count(f'unassigned: released from worker: {FIRED}') == 2
+    assert not (tmp_path / 'board.md').exists()
 
 
 def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
