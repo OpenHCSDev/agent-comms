@@ -97,9 +97,7 @@ class Thread(ThreadProvenance):
         default=False,
         metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
     )
-    parked: bool = field(default=False, kw_only=True,
-                         metadata={"registration_inheritance": InheritPrevious,
-                                   "wire_omit_default": True})
+    parked: bool = field(default=False, kw_only=True, metadata={"wire_omit_default": True})
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: type[ThreadRole] = field(
@@ -330,13 +328,14 @@ class Thread(ThreadProvenance):
         return replace(self, turn_record=NoTurnRecord())
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
-        """Metadata writers cannot forge channel scope or reset a finished turn."""
+        """Metadata writers cannot change parking, forge scope or reset a finished turn."""
         scope = previous.channel_scope_generation
         if self.tags != previous.tags:
             if scope >= (1 << 63) - 1:
                 raise RelationViolationError("Channel scope generation exhausted")
             scope += 1
-        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
+        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
+                         parked=previous.parked)
         if self.turn_generation != previous.turn_generation:
             result = replace(
                 result, turn_generation=previous.turn_generation,
