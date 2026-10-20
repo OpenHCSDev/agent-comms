@@ -157,7 +157,7 @@ class StoreBackup(Backup):
             with closing(CoordinationStore.read_snapshot(source)) as reader:
                 with closing(sqlite3.connect(target)) as writer:
                     reader.backup(writer)
-            shutil.copymode(source, target)
+            shutil.copystat(source, target)
         else:
             shutil.copy2(source, target)
         return target
