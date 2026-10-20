@@ -100,6 +100,8 @@ def test_reread_is_due_every_hundred_thousand_context_tokens(tmp_path, monkeypat
     assert hook(skill, "SessionStart", usage(250_000))
     assert not hook(reread, "PostToolUse", usage(250_000), usage(349_999))
     assert hook(reread, "PostToolUse", usage(350_000))
+    # Compaction: the context shrinks below the mark, which was set before compaction.
+    assert hook(reread, "PostToolUse", usage(317_202))
     assert hook(skill, "SessionStart", usage(20_000))
     assert not hook(reread, "PostToolUse", usage(119_999))
     assert hook(reread, "PostToolUse", json.dumps({"type": "user", "message": {}}), usage(120_000))
