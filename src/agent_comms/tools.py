@@ -889,8 +889,11 @@ class CommsOrderDoneTool(CommsTodoTool):
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         ProgressClaim.require_claimed(self.claims, "delivered")
-        ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
-        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id)
+        verified = ProgressClaim.require_all(
+            self.delivery.required_claims(self.claims), comms, Path(todo.order.check.directory)
+        )
+        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
+                           verified_claims=verified)
 
 
 @dataclass(frozen=True, kw_only=True)
