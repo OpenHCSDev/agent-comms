@@ -12,6 +12,9 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from uuid import uuid4
+from typing import TYPE_CHECKING
+
+from .commander_heartbeat import CommanderHeartbeat
 
 from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState, SynchronousProcess
 from .turn_lease import NoTurnRecord
@@ -32,11 +35,15 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
-from .store_files import _store_lock
+from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
+    from .messaging import Messaging
 
 _LOG = logging.getLogger(__name__)
 
@@ -235,10 +242,13 @@ class OwnerLifecycle:
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus,
+                 goals: Goals, messaging: Messaging):
         self.root = root
         self.registry = registry
         self.bus = bus
+        self.goals = goals
+        self.messaging = messaging
         self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root)
@@ -267,9 +277,33 @@ class OwnerLifecycle:
             )
             if thread.process_alive:
                 return thread
-            owned = replace(thread, process_identity=identity, turn_record=NoTurnRecord())
-            self.registry.register(owned, new_owner=True)
-            return owned
+            return self._register_owner_unlocked(thread, identity)
+
+    def _register_owner_unlocked(self, previous: Thread, identity: ProcessIdentity) -> Thread:
+        """Commit one owner start, then announce its existing work exactly at that event."""
+        owned = replace(previous, process_identity=identity, turn_record=NoTurnRecord())
+        self.registry.register(owned, new_owner=True)
+        if previous.process_identity.offline():
+            orders = tuple(
+                todo
+                for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
+                for todo in self.goals.todos.held_by(commander.incarnation, owned.name)
+                if todo.pending and todo.held().owner_identity == owned.incarnation
+            )
+            if orders:
+                identities = ", ".join(sorted({
+                    order.id for todo in orders for order in todo.order.declarations
+                }))
+                # All start paths borrow the outer lock's existing release lifetime,
+                # including retained handoffs and parent reservation before child acquire.
+                StoreLock.current_release().callback(self._announce_restart, owned.name, identities)
+        return owned
+
+    def _announce_restart(self, name: str, identities: str) -> None:
+        """Publish once after the outer physical locks and their borrowed scopes end."""
+        CommanderHeartbeat.register(self.registry)
+        self.messaging.send(CommanderHeartbeat.sender, name,
+            f"Restarted holding {identities}; continue them from your branch")
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
@@ -455,8 +489,7 @@ class OwnerLifecycle:
 
         def reserve(identity: ProcessIdentity) -> None:
             nonlocal owned
-            owned = replace(thread, process_identity=identity, turn_record=NoTurnRecord())
-            self.registry.register(owned, new_owner=True)
+            owned = self._register_owner_unlocked(thread, identity)
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
