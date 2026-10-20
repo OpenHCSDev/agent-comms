@@ -7,7 +7,7 @@ machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only
 under ``~/.local/state/agent-comms/connector/``.
 
 Usage:
-  agent-comms-connector serve [--root ROOT] [--port PORT] [--issuer URL]
+  agent-comms-connector serve --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector round_trip ROOT RUNTIME [--port PORT]
   agent-comms-connector pending
   agent-comms-connector approve REQUEST
@@ -358,7 +358,7 @@ class Connector:
 
     store: ConnectorStore
     issuer: str
-    root: Path | None = None
+    root: Path
 
     @property
     def resource_metadata_url(self) -> str:
@@ -576,9 +576,7 @@ class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorVerb):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
-    root: Annotated[Path, PathText] | None = option(
-        "--root", default=None, help="Comms root (default: the active route)"
-    )
+    root: Annotated[Path, PathText] = option("--root", help="Explicit Comms root to serve")
     port: int = option("--port", default=PORT, help="The loopback port it listens on")
     issuer: str = option(
         "--issuer",

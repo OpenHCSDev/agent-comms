@@ -22,6 +22,8 @@ from agent_comms.connector import (
     CALLBACK,
     AuthorizationQuery,
     Connector,
+    ConnectorVerb,
+    ServeVerb,
     ApproveVerb,
     RevokeVerb,
 )
@@ -35,6 +37,16 @@ from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEnt
 from agent_comms.tools import CommsTurnsTool, ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+
+def test_serve_requires_explicit_root(tmp_path, capsys):
+    with pytest.raises(SystemExit) as missing:
+        ConnectorVerb.parse(["serve"])
+    assert missing.value.code == 2
+    assert "--root" in capsys.readouterr().err
+    command = ConnectorVerb.parse(["serve", "--root", str(tmp_path)])
+    assert isinstance(command, ServeVerb)
+    assert command.root == tmp_path
 
 
 def test_real_connector_refusals_and_replaced_source():
