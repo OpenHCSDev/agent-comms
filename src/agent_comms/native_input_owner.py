@@ -14,7 +14,7 @@ from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .private_send_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
@@ -89,10 +89,10 @@ class RegistryOwner:
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
-        canonical = snapshot.canonical_name(name)
-        thread = snapshot.threads.get(canonical)
-        if thread is None:
-            raise StaleFence(reason)
+        try:
+            thread = snapshot.require(name)
+        except UnregisteredThreadError as error:
+            raise StaleFence(reason) from error
         owner = cls(thread=thread, claimed_generation=snapshot.claim_generation(name))
         owner.require_snapshot(snapshot, reason)
         return owner
