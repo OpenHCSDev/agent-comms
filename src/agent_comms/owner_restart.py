@@ -225,7 +225,6 @@ class FencedOwnerBatch:
     launches: tuple[RetainedOwnerLaunch, ...]
     request: OwnerRestartRequest
     runtime: RestartEnvironment
-    exited_processes: tuple[RetainedOwnerLaunch, ...] = ()
     retired: tuple[RetiredOwnerLaunch, ...] = ()
     ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
@@ -246,12 +245,12 @@ class FencedOwnerBatch:
     def complete(self, cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         progress = self
         try:
+            # Every original shares one grace period instead of waiting in turn.
+            self.lifecycle._stop_processes(self.captured)
             for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
-                self.lifecycle._stop_process(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError('Owner survived retirement')
                 self.lifecycle._finish_stopped_owner(thread, generation)
-                progress = replace(progress, exited_processes=progress.exited_processes + (launch,))
                 # The next original may need this same lock to release itself.
                 # Capture each retired witness, then release before its stop.
                 with self.lifecycle.restart_wire():

@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
+STOP_POLL_SECONDS = 0.02  # no kernel event reports an emptied process group
 
 
 class IdentityMismatchError(ProcessLookupError):
@@ -1347,7 +1348,7 @@ class ChildProcess(Sealed, ABC):
                 with guard():
                     self.platform.force_group(self.identity)
                 break
-            yield 0.02
+            yield STOP_POLL_SECONDS
         # A killed process exits once the kernel releases it (swapped memory,
         # pending disk IO), which has no deadline. Kill again each round so a
         # member forked during the first kill retires too.
@@ -1358,7 +1359,7 @@ class ChildProcess(Sealed, ABC):
             if stage is ForcedStopOutcome:
                 with guard():
                     self.platform.force_group(self.identity)
-            yield 0.02
+            yield STOP_POLL_SECONDS
         self.registration.finished(self.identity)
         return stage
 
@@ -1673,9 +1674,42 @@ class SynchronousProcess(ChildProcess):
     def reap(self) -> ChildOutcome: ...
 
     def stop_sync(self, *, guard=nullcontext, deadline=math.inf) -> ChildOutcome:
-        self.require_stop_authority()
-        stage = self._retire_group(guard, deadline)
-        return stage(self.reap())
+        return SynchronousProcess.stop_together(((self, guard),), deadline=deadline)[0]
+
+    @staticmethod
+    def stop_together(stops, *, deadline=math.inf) -> tuple[ChildOutcome, ...]:
+        """Step every member's stop plan together: one signal pass, one shared grace, one force pass.
+
+        Each member still runs the sole stop plan under its own guard. A failing
+        member never leaves the others signalled but unretired; its error is
+        raised once every other plan has finished.
+        """
+        errors: list[Exception] = []
+        plans = {}
+        for index, (process, guard) in enumerate(stops):
+            try:
+                process.require_stop_authority()
+            except Exception as error:
+                errors.append(error)
+                continue
+            plans[index] = process._stop_plan(guard, deadline)
+        stages = {}
+        while plans:
+            delays = []
+            for index, plan in tuple(plans.items()):
+                try:
+                    delays.append(next(plan))
+                except StopIteration as done:
+                    stages[index] = done.value
+                    del plans[index]
+                except Exception as error:
+                    errors.append(error)
+                    del plans[index]
+            if delays:
+                time.sleep(min(delays))
+        if errors:
+            raise errors[0] if len(errors) == 1 else ExceptionGroup("Process retirement failed", errors)
+        return tuple(stages[index](process.reap()) for index, (process, _) in enumerate(stops))
 
 
 class ObservedProcess(SynchronousProcess):
@@ -1689,7 +1723,7 @@ class ObservedProcess(SynchronousProcess):
 
     async def wait(self) -> ChildOutcome:
         while self.alive():
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(STOP_POLL_SECONDS)
         return self.reap()
 
 
@@ -1744,7 +1778,7 @@ class ParentedProcess(SynchronousProcess):
 
     async def wait(self) -> ChildOutcome:
         while self.process.poll() is None:
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(STOP_POLL_SECONDS)
         return self.reap()
 
     def close_streams(self) -> None:
@@ -1880,7 +1914,7 @@ class NamespacedChild(ChildProcess):
         while NamespaceContainment.namespace_alive(self.namespace):
             if time.monotonic() >= deadline:
                 raise RuntimeError("Child PID namespace did not retire")
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(STOP_POLL_SECONDS)
         return result
 
 
