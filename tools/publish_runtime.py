@@ -206,12 +206,19 @@ class RuntimePublication:
         finally:
             os.close(descriptor)
 
+    def published_target(self, current: Path, target: Path) -> Path:
+        """A link into the runtime follows ``current``; one into an editable source tree
+        (a checkout stack's skills) names that tree, which no runtime switch moves."""
+        if target.is_relative_to(self.runtime):
+            return current / target.relative_to(self.runtime)
+        return target
+
     def publish_links(self) -> None:
         """Refresh the declared installation, including an already-current runtime."""
         current = LaunchRuntime.current_pointer()
         selected = self.runtime.resolve(strict=True)
         for link, target in self.links.items():
-            replace_link(link, current / target.relative_to(self.runtime))
+            replace_link(link, self.published_target(current, target))
         replace_link(current, selected)
         for harness in Harness.present(Path.home()):
             harness.configure()
