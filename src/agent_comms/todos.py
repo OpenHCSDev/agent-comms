@@ -2177,8 +2177,30 @@ class StrikeTodo(TodoOperation, StoryEvent):
     def matches_objective(self, strike: ObjectiveStrike) -> bool:
         return False
 
+    def matches_stall(self, assignment: Assignment) -> bool:
+        return False
+
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class StallStrike(StrikeTodo):
+    """One Core stall strike per held assignment; striking alone never releases it."""
+
+    @classmethod
+    def make(cls, todo: Todo, actor: ThreadIncarnation, at: EventTime) -> Self:
+        return cls(todo.revision, actor, todo.held(),
+                   f"{todo.holder} stopped making progress on {todo.id}; Core struck the order.", at)
+
+    def prior_strikes(self, current: Todo) -> tuple[StrikeTodo, ...]:
+        return current.strikes
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return recorded.matches_stall(self.previous)
+
+    def matches_stall(self, assignment: Assignment) -> bool:
+        return self.previous == assignment
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2820,7 +2842,7 @@ class Todo(TypedTable):
         owner, at = self.held(), RecordedEventTime(time.time())
         reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
                               f"Core reassigned the order to {assigned.held().owner}.")
-        struck = StrikeTodo(self.revision, actor, owner, reason.text, at).apply(self)
+        struck = StallStrike.make(self, actor, at).apply(self)
         released = ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
         return replace(assigned, strikes=struck.strikes, released=released.released,
                        revision=released.revision + 1)

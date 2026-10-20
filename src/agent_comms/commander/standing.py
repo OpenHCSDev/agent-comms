@@ -12,6 +12,7 @@ from typing import ClassVar
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
+from ..recorded_time import RecordedEventTime
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
@@ -20,7 +21,7 @@ from ..standing_rules import (
 )
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, Todo
+from ..todos import FlatTrend, OrderProgress, PullRequests, StallStrike, Todo
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
 from .config import CommanderConfig
@@ -127,13 +128,24 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
-                " to done did not fall across two readings -> Core strikes it and gives the order"
-                " to an idle unit")
+                " to done did not fall across two readings -> Core strikes the holder before"
+                " looking for an idle unit")
 
     def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
-        for unit in self.idle(comms, commander)[:1]:
+        actor = StallWatcherIncarnation.watcher()
+        todo = StallStrike.make(self.todo, actor, RecordedEventTime(time.time())).record(
+            comms.goals, self.todo.id)
+        idle = self.idle(comms, commander)
+        if not idle:
+            if todo.revision != self.todo.revision:
+                since = time.strftime("%H:%M", time.localtime(self.since))
+                comms.messaging.send(commander, "#comms",
+                    f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling"
+                    f" since {since}; struck, still held")
+            return
+        for unit in idle[:1]:
             yield ReusedWorkDispatch(self.order_for(
-                self.todo, commander, StallWatcherIncarnation.watcher()), self.todo.revision, unit)
+                todo, commander, actor), todo.revision, unit)
 
 
 @dataclass(frozen=True)
