@@ -6,7 +6,9 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
+import asyncio
 import os
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -26,7 +28,7 @@ from .goal_attempts import (
     GoalAttemptError,
     StaleAttemptError,
 )
-from .goal_presentation import GoalSnapshot
+from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
@@ -44,19 +46,43 @@ if TYPE_CHECKING:
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 
 
+@dataclass(eq=False, slots=True)
+class GoalSessionPublication:
+    """One session's last published goal and its publication lifetime."""
+
+    snapshot: GoalPublicationSnapshot = field(default_factory=UnpublishedGoalSnapshot)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    def in_standby(self) -> bool:
+        return self.snapshot.standby()
+
+
 class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
-        self.goal_snapshots: dict[str, GoalSnapshot] = {}
+        self.publications: dict[str, GoalSessionPublication] = {}
+
+    def publication(self, session_id: str) -> GoalSessionPublication:
+        return self.publications.setdefault(session_id, GoalSessionPublication())
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
         self.inputs = inputs
 
+    async def _retain_current_goal_turns(self, session_id: str) -> None:
+        """Keep only turns still owned by the currently active goal."""
+        current = await Coordination.run_worker(lambda: self.comms.registry.require(
+            self.sessions.require(session_id)
+        ).goal.active())
+        WakeScheduleCheck._retain_goal_turns(
+            self.inputs.state(session_id).pending_turns, current,
+        )
+
     async def schedule_goal(self, session_id: str) -> None:
         """Finish recording the goal's start permission before binding its loop queue."""
+        await self._retain_current_goal_turns(session_id)
         check = OwnerTurnScheduleCheck(
             session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
         )
@@ -66,6 +92,8 @@ class GoalScheduler:
             return
         scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
         if scheduled is None:
+            # Preparing this grant may itself have blocked the goal.
+            await self._retain_current_goal_turns(session_id)
             return
         # A worker wait cannot reserve the process-local queue. Its original
         # rules recheck that resource before the authorized work is bound.
@@ -205,15 +233,13 @@ class GoalScheduler:
         return resumed
 
     def in_standby(self, session_id: str) -> bool:
-        snapshot = self.goal_snapshots.get(session_id)
-        return snapshot is not None and snapshot.execution.standby()
+        return self.publication(session_id).in_standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = await Coordination.run_worker(partial(
-            self.comms.goals.goal_changed,
-            thread_name, self.goal_snapshots.get(session_id),
-        ))
-        if event is None:
-            return
-        await self.effects._emit_event(session_id, event)
-        self.goal_snapshots[session_id] = event.snapshot
+        # A publication advances this session's snapshot only after delivery.
+        record = self.publication(session_id)
+        async with record.lock:
+            event = await Coordination.run_worker(partial(
+                self.comms.goals.goal_changed, thread_name, record.snapshot,
+            ))
+            record.snapshot = await event.publish(self.effects, session_id, record.snapshot)

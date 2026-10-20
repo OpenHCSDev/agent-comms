@@ -22,6 +22,7 @@ from .acp_failure import (
 )
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
+from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_counts import PiCount, UnreportedCount
@@ -37,7 +38,7 @@ from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goal_presentation import GoalSnapshot
+    from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
     from .input_disposition import InputDocument
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
+    from .turn_effects import TurnEffects
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
 
@@ -58,8 +60,24 @@ class AgentEvent(ABC):
         """Concrete dataclass declarations supply their own payload constructor."""
 
 
+class GoalChange(ABC):
+    """A goal observation publishes its own change, including no change."""
+
+    @abstractmethod
+    async def publish(
+        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+    ) -> GoalPublicationSnapshot: ...
+
+
+class GoalUnchanged(NullMember, GoalChange):
+    async def publish(
+        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+    ) -> GoalPublicationSnapshot:
+        return previous
+
+
 @dataclass(frozen=True)
-class GoalChanged(AgentEvent):
+class GoalChanged(AgentEvent, GoalChange):
     """Current goal authority observed after durable registry/history publication.
 
     Cross-process notification uses the existing registry watcher/poll; the
@@ -67,6 +85,12 @@ class GoalChanged(AgentEvent):
     """
 
     snapshot: GoalSnapshot
+
+    async def publish(
+        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+    ) -> GoalPublicationSnapshot:
+        await effects._emit_event(session_id, self)
+        return self.snapshot
 
 
 @dataclass(frozen=True)
