@@ -112,6 +112,16 @@ class PrefixWitness(PrefixSeal):
         return cls(root_id, replace(FileRevision.from_stat(info), size=0), 0,
                    _SEED.hex(), hashlib.sha256(b"").hexdigest())
 
+    def rebuild_from_empty(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                           path: Path, info: os.stat_result) -> PrefixWitness:
+        """Clear the copied index and replay its bytes against this saved prefix."""
+        empty = PrefixWitness.empty(self.root_id, info)
+        marker.seal_with(PendingSeal.capture(empty, self, path))
+        with db:
+            for table in reversed(TypedTable.members_with(CheckpointTable)):
+                table.delete(db)
+            return empty.index_tail(bus, marker, db, path, info)
+
     def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                    path: Path, info: os.stat_result) -> PrefixWitness:
         """Continue the proved cut, committing bounded chunks without a prefix rescan."""
