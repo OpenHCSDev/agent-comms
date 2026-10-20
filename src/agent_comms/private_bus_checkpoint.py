@@ -229,6 +229,10 @@ class CheckedRead:
         self.require_open_prefix()
         self.witness.require_marker(self.marker)
 
+    def require_current_on(self, bus: WireLog) -> None:
+        self.require_current()
+        self.require_marker(bus.private_marker_unlocked())
+
     def require_open_prefix(self) -> None:
         """Validate the acquired committed bytes independently of reservations.
 
@@ -260,8 +264,7 @@ class CheckedRead:
         expected = replace(self.marker, checkpoint_version=None, checkpoint_seal=None)
         with bus.locked() as lock:
             prior = lock.checked_read
-            prior.require_current()
-            prior.require_marker(bus.private_marker_unlocked())
+            prior.require_current_on(bus)
             if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
             with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
@@ -278,8 +281,7 @@ class CheckedRead:
                 if digest.hex() != self.witness.digest:
                     raise RelationViolationError("Carried bytes differ from their prefix record")
                 self.require_current()
-                prior.require_current()
-                prior.require_marker(bus.private_marker_unlocked())
+                prior.require_current_on(bus)
                 try:
                     # Keep the required old seal and index until the shared
                     # installer publishes the new pair. Any failed replacement
@@ -421,8 +423,7 @@ class CheckedRead:
 
     def _addressed_after(self, bus: WireLog, lookup: str, after_seq: int) -> sqlite3.Cursor:
         """Select a recipient's newer message sequences from the checked address index."""
-        self.require_current()
-        self.require_marker(bus.private_marker_unlocked())
+        self.require_current_on(bus)
         try:
             return self.connection.execute(
                 f"SELECT a.seq FROM {Addressed.declared_name} a "
@@ -450,8 +451,7 @@ class CheckedRead:
         last addressed sequence come from the same checked bus state. Return
         only the selected bytes, without leaving a connection or file open.
         """
-        self.require_current()
-        self.require_marker(bus.private_marker_unlocked())
+        self.require_current_on(bus)
         db, witness = self.connection, self.witness
         window = witness if prefix is None else prefix
         witness.require_read_window(window)
@@ -468,8 +468,7 @@ class CheckedRead:
             if not 0 <= latest <= witness.through_seq:
                 raise RelationViolationError("checked initial high-water is invalid.")
             captured = self.capture_sources(tuple(rows[:request.limit]))
-            self.require_current()
-            self.require_marker(bus.private_marker_unlocked())
+            self.require_current_on(bus)
 
             def decoded():
                 for original in captured:
