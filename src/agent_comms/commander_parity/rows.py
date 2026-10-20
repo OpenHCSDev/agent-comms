@@ -11,7 +11,7 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
-from .family_f import (
+from .configuration_transfer import (
     ConfigurationComparison,
     TransferComparison,
     commander_page,
