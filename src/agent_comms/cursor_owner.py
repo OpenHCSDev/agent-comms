@@ -16,7 +16,7 @@ from .native_input_record import NativeInputReference
 from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
-from .turn_goal_permission import GoalPermission
+from .private_send_rules import RunningTurnRegistryCheck
 
 if TYPE_CHECKING:
     from .proven_source_coverage import ProvenSourceCoverage
@@ -24,13 +24,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CursorOwner(RegistryOwner):
+    """Settle recorded input, without re-admitting its goal or any new input."""
+
+    check_type = RunningTurnRegistryCheck
     wire_root_id: str
     generation: int
-    permission: GoalPermission
-
-    @property
-    def goal_permission(self) -> GoalPermission:
-        return self.permission
 
     def __post_init__(self):
         GenerationCounter.require_positive(self.generation)

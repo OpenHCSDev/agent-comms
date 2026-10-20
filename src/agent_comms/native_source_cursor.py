@@ -15,7 +15,6 @@ from .proven_source_coverage import SourceCoverage
 from .threads import Thread
 from .field_codec import FieldCodec
 from .store_files import StoreLockContention
-from .turn_goal_permission import GoalPermission, OwnerGoalPermission
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -38,20 +37,18 @@ class NativeSourceCursor:
 
     @classmethod
     async def advance_async(cls, bus, *, wire_root_id, owner, owner_claimed_generation,
-                            owner_generation, committed_input_id, source_reads, goal_permission):
+                            owner_generation, committed_input_id, source_reads):
         return await Coordination.run_async(
             bus.log.path.parent / 'coordination.sqlite3',
             partial(cls._advance_owned, bus, wire_root_id, owner, owner_claimed_generation,
-                    owner_generation, committed_input_id, source_reads=source_reads,
-                    goal_permission=goal_permission),
+                    owner_generation, committed_input_id, source_reads=source_reads),
         )
 
     @classmethod
-    def _advance_owned(cls, bus, wire_root_id, owner, claim_scope, generation, input_id, store,
-                       *, source_reads, goal_permission):
+    def _advance_owned(cls, bus, wire_root_id, owner, claim_scope, generation, input_id, store, *, source_reads):
         return cls(bus, store, wire_root_id=wire_root_id).advance(
             owner=owner, owner_claimed_generation=claim_scope, owner_generation=generation,
-            committed_input_id=input_id, source_reads=source_reads, goal_permission=goal_permission,
+            committed_input_id=input_id, source_reads=source_reads,
         )
 
     @classmethod
@@ -66,20 +63,17 @@ class NativeSourceCursor:
         owner, claim_scope = bus._registry.live_owner_with_claim(owner_name)
         person = store.participants.get(owner.incarnation.lookup)
         return cls._advance_owned(bus, wire_root_id, owner, claim_scope, person.participant_generation,
-                                  None, store, source_reads=source_reads,
-                                  goal_permission=OwnerGoalPermission(owner.goal))
+                                  None, store, source_reads=source_reads)
 
     def _coverage(self, lookup, contention=None):
         return SourceCoverage(self.bus, self.store, wire_root_id=self.wire_root_id,
                               recipient_lookup=lookup, contention=contention)
 
     def advance(self, *, owner: Thread, owner_claimed_generation: int, owner_generation: int,
-                committed_input_id: str | None, source_reads: NativeEvidenceScope,
-                goal_permission: GoalPermission) -> CurrentNativeCursor | None:
+                committed_input_id: str | None, source_reads: NativeEvidenceScope) -> CurrentNativeCursor | None:
         committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         identity = CursorOwner(wire_root_id=self.wire_root_id, thread=owner,
-                               generation=owner_generation, claimed_generation=owner_claimed_generation,
-                               permission=goal_permission)
+                               generation=owner_generation, claimed_generation=owner_claimed_generation)
         with source_reads.borrow():
             return self._advance_proven(identity, committed_input_id, source_reads,
                                        StoreLockContention(2.0) if committed_input_id is not None else None)
@@ -124,8 +118,7 @@ class NativeSourceCursor:
                     raise StaleFence('current native cursor recipient is not committed')
                 identity = CursorOwner(wire_root_id=self.wire_root_id, thread=captured.thread,
                                        generation=person.participant_generation,
-                                       claimed_generation=captured.claimed_generation,
-                                       permission=captured.goal_permission)
+                                       claimed_generation=captured.claimed_generation)
                 state = identity.state(db, marker.claimed_after_seq)
         sources = self._coverage(identity.lookup)
         with source_reads.borrow():
