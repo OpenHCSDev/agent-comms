@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import io
 import re
-import sys
 from collections.abc import Callable
+from configparser import ConfigParser
 from contextlib import redirect_stdout
 from dataclasses import dataclass
-from types import CodeType, FrameType
+from sys import monitoring
+from types import CodeType
 
 from pydantic import JsonValue
 
 from ..commander.judge import Edit
 from ..commander.order import BoardVerb, Commander, hhmm
 from ..field_codec import FieldCodec
+from ..native_entries import NativeEntry
 from ..native_tool_call import CodingCall
 from ..tool_caller import ThreadCaller
+from ..tool_declaration import EditCall
 from ..tools import (
     CommsOrderWorkTool,
     CommsThreadsTool,
@@ -26,15 +29,13 @@ from ..tools import (
     TodoList,
     UnjudgedEdits,
 )
-from ..transcript_events import ToolStartTranscript
-from ..turn_digests import TurnsSince
 from ..work_branches import WorkBranches
 from . import ParityComparison, UnverifiedParity
 
 
 @dataclass(frozen=True)
 class ReadComparison(ParityComparison):
-    """Compare complete projected facts, not a count that can hide different records."""
+    """Compare projected facts, not a count that can hide different records."""
 
     owner: str
     current: JsonValue
@@ -50,35 +51,37 @@ class ReadComparison(ParityComparison):
 
 def observe[T](
     code: CodeType,
-    result_type: type[T],
-    current: Callable[[], JsonValue],
-    native: Callable[[T], JsonValue],
+    current: Callable[[], object],
+    native: Callable[[T], object],
     owner: str,
 ) -> ParityComparison:
     """Observe the real native return used by the current path without replacing either.
 
-    A second read of a changing fleet is not a parity comparison of the first read.
-    The profile hook only records returns and restores any existing observer.
+    A second read of a changing fleet is not a comparison of the first read.
+    Only this function's return event is enabled; other profilers are untouched.
     """
     results: list[T] = []
-    previous = sys.getprofile()
+    tool = monitoring.PROFILER_ID
+    if monitoring.get_tool(tool):
+        return UnverifiedParity(f"{owner}: the Python profiler slot is already owned")
 
-    def returned(frame: FrameType, event: str, value: object) -> None:
-        if event == "return" and frame.f_code is code and isinstance(value, result_type):
-            results.append(value)
-        if previous:
-            previous(frame, event, value)
+    def returned(returned_code: CodeType, offset: int, value: T) -> None:
+        results.append(value)
 
-    sys.setprofile(returned)
+    monitoring.use_tool_id(tool, __name__)
     try:
+        monitoring.register_callback(tool, monitoring.events.PY_RETURN, returned)
+        monitoring.set_local_events(tool, code, monitoring.events.PY_RETURN)
         rendered = current()
     finally:
-        sys.setprofile(previous)
+        monitoring.set_local_events(tool, code, 0)
+        monitoring.register_callback(tool, monitoring.events.PY_RETURN, None)
+        monitoring.free_tool_id(tool)
     if len(results) != 1:
         return UnverifiedParity(
             f"{owner}: expected one live native return, observed {len(results)}"
         )
-    return ReadComparison(owner, rendered, native(results[0]))
+    return ReadComparison(owner, FieldCodec.encode(rendered), FieldCodec.encode(native(results[0])))
 
 
 @dataclass(frozen=True)
@@ -109,7 +112,7 @@ class BoardFacts:
                         order,
                         due,
                         progress,
-                        delivered != "no",
+                        ConfigParser.BOOLEAN_STATES[delivered.partition(",")[0]],
                         int(strikes),
                     )
                 )
@@ -120,9 +123,9 @@ class BoardFacts:
         return tuple(
             cls(
                 f"{todo.id}: {todo.text}",
-                todo.order.owner.to_wire(),
+                todo.order.checked().owner.to_wire(),
                 todo.holder or "",
-                todo.order.id,
+                todo.order.checked().id,
                 hhmm(todo.deadline),
                 listed.progress[todo.id].line if todo.id in listed.progress else "-",
                 not todo.pending,
@@ -139,20 +142,19 @@ class BoardComparison:
         fleet = CommsThreadsTool().apply(context.comms, ThreadCaller(context.commander))
         names = {record.thread.name for record in fleet.threads}
 
-        def current() -> JsonValue:
+        def current() -> tuple[BoardFacts, ...]:
             output = io.StringIO()
             with redirect_stdout(output):
                 BoardVerb().run(context)
-            return FieldCodec.encode(BoardFacts.rendered(output.getvalue()))
+            return BoardFacts.rendered(output.getvalue())
 
-        def native(listed: TodoList) -> JsonValue:
+        def native(listed: TodoList) -> tuple[BoardFacts, ...]:
             if any(todo.holder and todo.holder not in names for todo in listed.todos):
                 raise ValueError("A board holder is absent from the live native fleet")
-            return FieldCodec.encode(BoardFacts.native_rows(listed))
+            return BoardFacts.native_rows(listed)
 
         return observe(
             CommsTodoListTool.apply.__code__,
-            TodoList,
             current,
             native,
             "CommsTodoListTool + CommsThreadsTool / Commander BoardVerb",
@@ -163,6 +165,8 @@ class BranchComparison:
     @classmethod
     def read(cls) -> ParityComparison:
         context = Commander.read(Commander.path())
+        if not context.repos:
+            return UnverifiedParity("CommsWorkBranchesTool has no configured repository to invoke")
         current: list[JsonValue] = []
         native: list[JsonValue] = []
         for repo in context.repos:
@@ -187,24 +191,37 @@ class OrderWorkComparison:
     @classmethod
     def read(cls) -> ParityComparison:
         context = Commander.read(Commander.path())
+        held = context.held_orders()
+        if not held:
+            return UnverifiedParity("CommsOrderWorkTool has no live held problem to invoke")
         current: list[JsonValue] = []
         native: list[JsonValue] = []
-        for todo in context.held_orders():
-            since = todo.order.at.recorded_at("An order")
-            turns = context.comms.transcripts.turns(todo.holder, TurnsSince(since))
-            calls: dict[str, str] = {}
-            for turn in reversed(turns.turns):
-                for event in turn.events:
-                    if isinstance(event, ToolStartTranscript) and not event.before(since):
-                        call = CodingCall.decode(
-                            event.tool_call_id, event.tool_name, event.raw_input
-                        )
-                        calls[event.tool_call_id] = call.digest()
-            current.append(FieldCodec.encode((todo.id, tuple(reversed(calls.items())))))
+        for todo in held:
             reply = CommsOrderWorkTool(problem=todo.id).apply(
                 context.comms,
                 ThreadCaller(context.commander),
             )
+            since = todo.order.checked().at.recorded_at("An order")
+            calls: dict[str, str] = {}
+            session = context.comms.registry.require(todo.held().owner).session_file
+            if not session:
+                return UnverifiedParity("Current tool_watch has no native session for this order")
+            with open(session, "rb") as source:
+                for line in source:
+                    if not line.endswith(b"\n"):
+                        return UnverifiedParity(
+                            "Current tool_watch source ends in an incomplete record"
+                        )
+                    entry = NativeEntry.read(line)
+                    if entry.timestamp.at.timestamp() >= since:
+                        for message in entry.messages:
+                            if message.assistant:
+                                for pi_call in message.tool_calls:
+                                    call = CodingCall.decode(
+                                        pi_call.id, pi_call.name, pi_call.arguments
+                                    )
+                                    calls[pi_call.id] = call.digest()
+            current.append(FieldCodec.encode((todo.id, tuple(reversed(calls.items())))))
             native.append(
                 FieldCodec.encode(
                     (
@@ -214,7 +231,7 @@ class OrderWorkComparison:
                 )
             )
         return ReadComparison(
-            "CommsOrderWorkTool / tool_watch CodingCall digests from live source turns",
+            "CommsOrderWorkTool / actual tool_watch NativeEntry and CodingCall digests",
             current,
             native,
         )
@@ -224,10 +241,13 @@ class UnjudgedComparison:
     @classmethod
     def read(cls) -> ParityComparison:
         context = Commander.read(Commander.path())
+
+        def native(reply: UnjudgedEdits) -> tuple[EditCall, ...]:
+            return reply.edits
+
         return observe(
             CommsUnjudgedTool.apply.__code__,
-            UnjudgedEdits,
-            lambda: FieldCodec.encode(Edit.unjudged(context.comms, context.commander)),
-            lambda reply: FieldCodec.encode(reply.edits),
+            lambda: Edit.unjudged(context.comms, context.commander),
+            native,
             "CommsUnjudgedTool / judge.Edit.unjudged",
         )
