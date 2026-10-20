@@ -21,7 +21,7 @@ from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEnt
 from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
     RulesDue, StandingRule, OrderOverdue, FirstCallMissing, OwnerIdle)
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DirectiveText, MergedProgress,
     MergedPullRequest, NoCommitProgress, OpenPrProgress, OrderProgress, PullRequests, StrikeReason,
@@ -141,30 +141,42 @@ def test_hunt_due_until_a_hunt_is_recorded(commander, commander_script):
     assert lines(comms, HuntDue) == []
 
 
+@pytest.mark.parametrize('execution', (NativeThreadExecution, ExternalThreadExecution),
+                         ids=('native', 'external'))
 async def test_order_alarm_family_is_delivered_once_without_a_monitor_and_resolves(
-        commander, standing, tmp_path, monkeypatch):
+        commander, standing, tmp_path, monkeypatch, execution):
     from contextlib import nullcontext
     from datetime import UTC, datetime
     from agent_comms.commander_heartbeat import CommanderHeartbeat
     from agent_comms.coordinator import Coordination
+    from agent_comms.transcript_events import ToolStartTranscript
 
     comms, _ = commander
     now = [9000.0]
     monkeypatch.setattr(time, 'time', lambda: now[0])
     for created, name in enumerate(('late', 'missing', 'idle'), 3):
         comms.registry.declare(comms.registry.new_thread(
-            name, frozenset(), str(tmp_path), created_at=float(created)))
+            name, frozenset(), str(tmp_path), created_at=float(created), execution=execution))
 
     def tool_call(name, timestamp):
+        identity = f'{name}-{timestamp}'
+        if execution is ExternalThreadExecution:
+            comms.transcripts.external(name).finish(turn_id=identity, item_id=identity, events=(
+                ToolStartTranscript(position=0, tool_call_id=identity,
+                                    tool_name='bash', timestamp=timestamp),))
+            return
         path = tmp_path / f'{name}-native.jsonl'
         stamp = datetime.fromtimestamp(timestamp, UTC).isoformat()
-        path.write_text(json.dumps({'type': 'session', 'version': 3, 'id': name,
-                                    'timestamp': stamp}) + '\n' + json.dumps({
-            'type': 'message', 'id': f'{name}-call', 'timestamp': stamp,
-            'message': {'role': 'assistant', 'content': [
-                {'type': 'toolCall', 'id': f'{name}-tool', 'name': 'bash',
-                 'arguments': {'command': 'pwd'}}]}}) + '\n')
-        path.chmod(0o600)
+        if not path.exists():
+            path.write_text(json.dumps({'type': 'session', 'version': 3, 'id': name,
+                                        'timestamp': stamp}) + '\n')
+            path.chmod(0o600)
+        with path.open('a') as stream:
+            stream.write(json.dumps({
+                'type': 'message', 'id': identity, 'timestamp': stamp,
+                'message': {'role': 'assistant', 'content': [
+                    {'type': 'toolCall', 'id': identity, 'name': 'bash',
+                     'arguments': {'command': 'pwd'}}]}}) + '\n')
         comms.registry.register(replace(comms.registry.require(name), session_file=str(path)))
 
     tool_call('late', 8990)

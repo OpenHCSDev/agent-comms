@@ -176,7 +176,7 @@ class FirstCallMissing(HeldOrderDue):
         if not order.first_call_deadline.before(now):
             return UnrecordedEventTime()
         thread = comms.registry.require(todo.held().owner)
-        last = thread.execution.last_tool_call(comms, thread)
+        last = thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
         if last.since(order.at.recorded_at("An order")):
             return UnrecordedEventTime()
         return order.first_call_deadline
@@ -197,8 +197,11 @@ class OwnerIdle(DatedStandingRule):
         now = time.time()
         threads = (comms.registry.require(holder)
                    for holder in sorted({todo.held().owner for todo in cls.todos(comms, commander)}))
-        calls = ((thread.name, thread.execution.last_tool_call(comms, thread))
-                 for thread in threads)
+        calls = (
+            (thread.name,
+             thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call())
+            for thread in threads
+        )
         return tuple(cls(holder, last.recorded_at("A tool call") + cls.seconds)
                      for holder, last in calls if last.before(now - cls.seconds))
 
