@@ -6,33 +6,44 @@ The frontend supplies a context owning its readers; it enters only after drain.
 from __future__ import annotations
 
 import argparse
-from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext, redirect_stdout
-from dataclasses import dataclass, field
-from abc import abstractmethod
-import hashlib
 import fcntl
-from io import StringIO
-from importlib.metadata import distribution
+import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from abc import abstractmethod
+from contextlib import (
+    AbstractContextManager,
+    ExitStack,
+    contextmanager,
+    nullcontext,
+    redirect_stdout,
+)
+from dataclasses import dataclass, field
+from importlib.metadata import distribution
+from io import StringIO
+from pathlib import Path
 from typing import Annotated
 
-from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
-from agent_comms.comms import wire
+from agent_comms.active_route import (
+    acquire_exclusive_route_lock,
+    active_route_path,
+    read_active_route,
+)
 from agent_comms.cli_commands import StatusCliCommand
-from agent_comms.field_codec import FieldCodec, PathText, SubclassUnion, NullMember, RecordMember
+from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec, NullMember, PathText, RecordMember, SubclassUnion
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
-from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
-from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
+from agent_comms.owner_cutover import MaintainedOwnerCutover, StoppedOwnerInstallation
+from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.store_files import _atomic_write_text, _store_lock
-from .cutover.carry import PendingConversion, PreparedCarries
+
 from .cutover.backup import StoreBackup
+from .cutover.carry import PendingConversion, PreparedCarries
 
 
 class PublicationIntent(SubclassUnion, affix=''):
