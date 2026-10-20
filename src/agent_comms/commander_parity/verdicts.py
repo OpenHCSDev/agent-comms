@@ -6,7 +6,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -130,7 +129,7 @@ class VerdictCase(ABC):
             for path in (Path(session_file), run.decisions, Path(worker.worktree)):
                 path.resolve().relative_to(run.commander.root.resolve())
             package = resolve_comms_route().launch().require_private().validate()
-            subprocess.run(
+            child = run.invoke_command(
                 (
                     "node",
                     "--no-global-search-paths",
@@ -145,11 +144,11 @@ class VerdictCase(ABC):
                 ),
                 cwd=worker.worktree,
                 env=package.node_environment(dict(os.environ)),
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=True,
             )
+            if not child.outcome.successful:
+                raise RuntimeError(
+                    f"Native edit {child.outcome.summary}: {child.stderr.decode('utf-8')}"
+                )
             edits = Edit.unjudged(run.commander.comms, run.commander.commander)
             if len(edits) != 1 or edits[0].id != call_id:
                 raise ValueError("The copied unit must expose exactly its one real native edit")
@@ -196,7 +195,10 @@ class VerdictCase(ABC):
                 ("declared verdict kind", isinstance(request.operation, cls.native_owner)),
                 (
                     "Goal publication retained",
-                    all(entry.before == goal and entry.after == after for entry in transitions),
+                    all(
+                        entry.kind == "transition" and entry.before == goal and entry.after == after
+                        for entry in transitions
+                    ),
                 ),
                 ("native verdict visible in Goal", request.operation.line in progress),
             )
