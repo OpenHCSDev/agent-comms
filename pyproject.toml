@@ -58,7 +58,7 @@ agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
 agent-comms-watch-guard = "agent_comms_hooks.watch:main"
-agent-comms-peer-sync = "agent_comms_hooks.watch:PeerSync.main"
+agent-comms-peer-sync = "agent_comms_hooks.watch:peer_sync_main"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 

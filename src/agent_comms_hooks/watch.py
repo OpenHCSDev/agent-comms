@@ -17,12 +17,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from os import fstat
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from agent_comms.commander.config import Commander, CommanderConfig
+from agent_comms.commander.send_guard import CommanderSession
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
-
-if TYPE_CHECKING:
-    from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -115,11 +113,14 @@ class PeerSync(ClaudeHookProgram):
     events = ("UserPromptSubmit", "PostToolUse", "Stop")
     commanders = frozenset({"claude-code", "desktop-commander"})
     interval = timedelta(minutes=15)
-    warning = "Peer sync overdue: send the other commander your PRs needed, PRs held and any state disagreement over the relay now."
+    warning = (
+        "Peer sync overdue: send the other commander your PRs needed, PRs held and any state "
+        "disagreement over the relay now."
+    )
 
     @classmethod
     def command(cls) -> str:
-        return cls.console_script(f"{cls.__module__}:{cls.__name__}.main")
+        return cls.console_script(f"{peer_sync_main.__module__}:{peer_sync_main.__name__}")
 
     @classmethod
     def sent(cls, config: CommanderConfig, target: str) -> None:
@@ -151,30 +152,27 @@ class PeerSync(ClaudeHookProgram):
         elapsed = datetime.now().astimezone() - written
         return elapsed < timedelta() or elapsed >= cls.interval
 
-    @classmethod
-    def main(cls) -> None:
-        from agent_comms.commander.config import Commander, CommanderConfig
-        from agent_comms.commander.send_guard import CommanderSession
 
-        hook = ClaudeHook.read()
-        config = CommanderConfig.installed()
-        if not CommanderSession(hook.session_id, Commander.of(config)).is_commander():
-            return
-        if not cls.overdue(config):
-            return
-        if hook.hook_event_name == "Stop":
-            print(json.dumps({"decision": "block", "reason": cls.warning}))
-        else:
-            print(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": hook.hook_event_name,
-                            "additionalContext": cls.warning,
-                        }
+def peer_sync_main() -> None:
+    hook = ClaudeHook.read()
+    config = CommanderConfig.installed()
+    if not CommanderSession(hook.session_id, Commander.of(config)).is_commander():
+        return
+    if not PeerSync.overdue(config):
+        return
+    if hook.hook_event_name == "Stop":
+        print(json.dumps({"decision": "block", "reason": PeerSync.warning}))
+    else:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": hook.hook_event_name,
+                        "additionalContext": PeerSync.warning,
                     }
-                )
+                }
             )
+        )
 
 
 def main() -> None:

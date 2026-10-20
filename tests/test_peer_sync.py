@@ -12,7 +12,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.send_guard import CommanderSession
 from agent_comms.errors import ToolRefusedError
 from agent_comms.todos import VerdictAudience
-from agent_comms_hooks.watch import PeerSync
+from agent_comms_hooks.watch import PeerSync, peer_sync_main
 
 
 @pytest.fixture
@@ -68,12 +68,13 @@ def test_shared_send_owner_records_once_and_never_on_failed_publication(peer_con
 @pytest.mark.parametrize("event", PeerSync.events)
 def test_overdue_hook_injects_or_blocks(peer_config, monkeypatch, capsys, event):
     _, config = peer_config
-    monkeypatch.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
-    monkeypatch.setattr(CommanderSession, "is_commander", lambda self: True)
-    monkeypatch.setattr(
-        "sys.stdin", io.StringIO(json.dumps({"session_id": "test", "hook_event_name": event}))
-    )
-    PeerSync.main()
+    with monkeypatch.context() as patches:
+        patches.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
+        patches.setattr(CommanderSession, "is_commander", lambda self: True)
+        patches.setattr(
+            "sys.stdin", io.StringIO(json.dumps({"session_id": "test", "hook_event_name": event}))
+        )
+        peer_sync_main()
     output = json.loads(capsys.readouterr().out)
     if event == "Stop":
         assert output == {"decision": "block", "reason": PeerSync.warning}
@@ -86,10 +87,11 @@ def test_overdue_hook_injects_or_blocks(peer_config, monkeypatch, capsys, event)
 
 def test_noncommander_session_is_untouched(peer_config, monkeypatch, capsys):
     _, config = peer_config
-    monkeypatch.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
-    monkeypatch.setattr(CommanderSession, "is_commander", lambda self: False)
-    monkeypatch.setattr(
-        "sys.stdin", io.StringIO(json.dumps({"session_id": "other", "hook_event_name": "Stop"}))
-    )
-    PeerSync.main()
+    with monkeypatch.context() as patches:
+        patches.setattr(CommanderConfig, "installed", classmethod(lambda cls: config))
+        patches.setattr(CommanderSession, "is_commander", lambda self: False)
+        patches.setattr(
+            "sys.stdin", io.StringIO(json.dumps({"session_id": "other", "hook_event_name": "Stop"}))
+        )
+        peer_sync_main()
     assert capsys.readouterr().out == ""
