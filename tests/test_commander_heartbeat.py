@@ -378,11 +378,20 @@ async def test_heartbeat_closes_merged_order_and_survives_maintenance(
 
 @pytest.mark.parametrize("commander_stopped_at_baseline", (False, True))
 async def test_holder_process_restart_wakes_once_without_replaying_orders(
-        commander, commander_stopped_at_baseline):
+        commander, commander_stopped_at_baseline, monkeypatch):
     import subprocess
     from contextlib import ExitStack
+    from agent_comms.todos import TodoStore
 
     comms, _ = commander
+    held_reads = []
+    held_by = TodoStore.held_by
+
+    def read_held(store, commander, unit):
+        held_reads.append(unit)
+        return held_by(store, commander, unit)
+
+    monkeypatch.setattr(TodoStore, "held_by", read_held)
     create(commander, "P1")
     create(commander, "P2")
     heartbeat = CommanderHeartbeat()
@@ -396,6 +405,7 @@ async def test_holder_process_restart_wakes_once_without_replaying_orders(
             owners.enter_context(external_commander(comms, "lead"))
         await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
         assert not restart_messages()
+        assert not held_reads
         if commander_stopped_at_baseline:
             owners.enter_context(external_commander(comms, "lead"))
         # Register an actual different process through the external-owner lifecycle.
@@ -409,11 +419,15 @@ async def test_holder_process_restart_wakes_once_without_replaying_orders(
                 assert len(messages) == 1
                 assert messages[0].body == (
                     "Restarted holding order-P1, order-P2; continue them from your branch")
+                reads_after_restart = tuple(held_reads)
+                assert "worker" in reads_after_restart
                 for _ in range(2):
                     await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))
+                assert tuple(held_reads) == reads_after_restart
                 assert restart_messages() == messages
                 restarted_connector = CommanderHeartbeat()
                 await Coordination.run_worker(lambda: restarted_connector.watch_pass(lambda: nullcontext(comms)))
+                assert tuple(held_reads) == reads_after_restart
                 assert restart_messages() == messages
                 create(commander, "P3")
                 await Coordination.run_worker(lambda: heartbeat.watch_pass(lambda: nullcontext(comms)))

@@ -13,7 +13,6 @@ from .standing_rules import StandingRule
 from .thread_execution import ExternalThreadExecution
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import Todo
 
 
 @dataclass
@@ -25,10 +24,16 @@ class HeartbeatReview:
     turn: int = 0
 
     def wake_restarted(
-        self, comms: Comms, sender: str, unit: Thread, orders: tuple[Todo, ...]
+        self, comms: Comms, sender: str, unit: Thread, commanders: tuple[Thread, ...]
     ) -> None:
         if self.process == unit.process_identity:
             return
+        orders = tuple(
+            todo
+            for commander in commanders
+            for todo in comms.goals.todos.held_by(commander.incarnation, unit.name)
+            if todo.pending and todo.held().owner_identity == unit.incarnation
+        )
         # Record before publication: a failed append must never replay a wake.
         self.process = unit.process_identity
         if orders:
@@ -95,15 +100,6 @@ class CommanderHeartbeat:
                     commander.incarnation, comms.registry.storage_rule
                 )
             commanding = {thread.incarnation for thread in commanders}
-            held = {
-                thread.incarnation: tuple(
-                    todo
-                    for commander in commanders
-                    for todo in comms.goals.todos.held_by(commander.incarnation, thread.name)
-                    if todo.pending and todo.held().owner_identity == thread.incarnation
-                )
-                for thread in threads.values()
-            }
             # Baseline all declared owners, including stopped ones. This distinguishes
             # a later process start from merely receiving a first order in the same process.
             # Keep the old process through a stopped gap, even if its commander also stops.
@@ -124,6 +120,6 @@ class CommanderHeartbeat:
                     )
                 elif thread.process_alive:
                     review = self.reviews[thread.incarnation]
-                    review.wake_restarted(comms, self.sender, thread, held[thread.incarnation])
+                    review.wake_restarted(comms, self.sender, thread, commanders)
                     if thread.incarnation in commanding:
                         review.wake(comms, self.sender, thread)
