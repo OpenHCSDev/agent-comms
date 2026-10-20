@@ -17,7 +17,11 @@ from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
-from .transcript_events import LiveTextTranscript, TranscriptEvent
+from .transcript_events import (
+    LiveTextTranscript,
+    ToolStartTranscript,
+    TranscriptEvent,
+)
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -46,7 +50,7 @@ class DraftAccumulator:
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return ()
 
-    def append(self, text: str, section: int) -> None:
+    def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         raise ValueError("Received a text delta for a non-text item")
 
     def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
@@ -60,15 +64,39 @@ class NoPrefixDraft(DraftAccumulator):
     def __init__(self) -> None:
         super().__init__(UnrecordedEventTime())
 
-    def append(self, text: str, section: int) -> None:
+    def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         """Drop the suffix: without an observed prefix it cannot form a whole item."""
+        return ()
 
 
 NO_PREFIX = NoPrefixDraft()
 
 
+class PresentableDraft(DraftAccumulator, ABC):
+    """A recorded prefix that can be projected as a live transcript row."""
+
+    @property
+    @abstractmethod
+    def events(self) -> tuple[TranscriptEvent, ...]: ...
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
+
+
 @dataclass
-class TextDraft(DraftAccumulator):
+class ToolDraft(PresentableDraft):
+    prefix: tuple[ToolStartTranscript, ...]
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return self.prefix
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return super().snapshot(turn_id, item_id) if self.prefix else ()
+
+
+@dataclass
+class TextDraft(PresentableDraft):
     event_type: type[LiveTextTranscript]
     sections: dict[int, list[str]]
     position: int | str
@@ -86,8 +114,9 @@ class TextDraft(DraftAccumulator):
             started_at, event_type, {index: [text] for index, text in enumerate(parts)}, position
         )
 
-    def append(self, text: str, section: int) -> None:
-        self.sections.setdefault(section, []).append(text)
+    def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
+        self.sections.setdefault(update.section, []).append(update.text)
+        return self.snapshot(update.turn_id, update.item_id)
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
@@ -98,9 +127,6 @@ class TextDraft(DraftAccumulator):
             (self.event_type(text, position=self.position,
                              timestamp=self.started_at.recorded_at("A transcript event")),) if text else ()
         )
-
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
-        return (DraftItem(turn_id, item_id, self),)
 
 
 class ParagraphDraft(TextDraft):
@@ -113,11 +139,14 @@ class ClosedDraft(DraftAccumulator):
     def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
         return self
 
+    def started(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
     def activity(self, update: ActiveItem) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def append(self, text: str, section: int) -> None:
-        pass
+    def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -165,8 +194,7 @@ class ThreadOutput(activity.ThreadOutput):
 
     def append_item(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         current = self.draft(update.key)
-        current.append(update.text, update.section)
-        return current.snapshot(update.turn_id, update.item_id)
+        return current.append(update)
 
     def finish_item(self, update: CompletedItem) -> FinishedItem:
         self.drafts[update.key], finished = self.draft(update.key).finish(update)
@@ -393,11 +421,11 @@ class HistoryNotice(RuntimeUpdate):
 
 @dataclass(frozen=True)
 class DraftItem(KeyedItem, RuntimeUpdate):
-    """A pending view; build its text only if this preview survives coalescing."""
+    """A pending item's events, materialized only if this preview survives coalescing."""
 
     turn_id: str
     item_id: str
-    accumulator: TextDraft
+    accumulator: PresentableDraft
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:

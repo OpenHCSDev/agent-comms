@@ -4,11 +4,12 @@ import pytest
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.runtime_updates import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
-    FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
+    FinishedTurn, ParagraphDraft, StartedItem, TextDraft, ToolDraft, TurnEnded,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from agent_comms.transcript_sources import NoDraft
+from agent_comms.tool_calls import ToolCall
 from test_codex_items import _output
 
 
@@ -91,6 +92,29 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
     completed = ReasoningItem(id='r', type='reasoning', summary=['One', 'Two plus'])
     assert draft.events[0].text == completed.events(2.0)[0].text == 'One\n\nTwo plus'
     assert draft.events[0].timestamp == 2.0
+
+
+def test_tool_start_is_one_draft_row_then_one_completed_row(tmp_path):
+    output = _output(tmp_path)
+    call = ToolCall('call', 'read', {'path': 'a.py'})
+    start_event = call.started('call', 1.0)
+    output.publish_batch([StartedItem(
+        't', 'call', ToolRunningPhase(tools=(('call', 'Read a.py'),)),
+        ToolDraft(RecordedEventTime(1.0), (start_event,)))])
+    draft = output.transcript.current_draft(output.transcript.root, output.transcript.incarnation)
+    assert draft.events == (start_event,)
+    output.publish_batch([CompletedItem('t', 'call', call.finished('done', True, 'call', 2.0))])
+    assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
+    with output.transcript.reading() as snapshot:
+        row, = snapshot.forward(0, snapshot.cut().offset)
+        assert row.events == call.finished('done', True, 'call', 2.0)
+
+
+def test_empty_tool_collection_has_activity_but_no_blank_row(tmp_path):
+    output = _output(tmp_path)
+    phase = ToolRunningPhase('Editing files')
+    output.publish_batch([StartedItem('t', 'empty', phase, ToolDraft(RecordedEventTime(1.0), ()))])
+    assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
 
 def test_non_text_items_never_acquire_invented_text(tmp_path):

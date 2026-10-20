@@ -20,7 +20,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
-from .transcript_events import ToolEndTranscript, ToolStartTranscript, TranscriptEvent
+from .transcript_events import ToolEndTranscript, ToolStartTranscript
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,9 @@ class ToolCall:
             position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=text, ok=ok
         )
 
-    def finished(self, text: str, ok: bool, position: int | str, timestamp: float) -> tuple[TranscriptEvent, ...]:
+    def finished(
+        self, text: str, ok: bool, position: int | str, timestamp: float,
+    ) -> tuple[ToolStartTranscript, ToolEndTranscript]:
         return self.started(position, timestamp), self.ended(text, ok, position, timestamp)
 
     def recorded(self, tool: ToolDeclaration) -> DecodedToolCall:

@@ -33,10 +33,11 @@ from agent_comms.runtime_updates import (
     RuntimeUpdate,
     StartedItem,
     TextDraft,
+    ToolDraft,
     TurnEnded,
     TurnStarted,
 )
-from agent_comms.tool_calls import ToolCall
+from agent_comms.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -353,6 +354,9 @@ class UserItem(Item):
 
 
 class ToolItem(Item, ABC):
+    def accumulator(self, started_at: EventTime) -> ToolDraft:
+        return ToolDraft(started_at, (self.call.started(self.id, started_at.recorded_at('Codex tool start')),))
+
     @property
     @abstractmethod
     def tool_name(self) -> str: ...
@@ -658,8 +662,12 @@ class FileChange(WireModel):
     diff: str
     kind: PatchChange.declared_union()
 
+    def call(self, call_id: str) -> DecodedToolCall:
+        return ToolCall(call_id, 'edit', {'path': self.path}).recorded(
+            FilePatchTool(path=self.path))
+
     def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        call = ToolCall(call_id, 'edit', {'path': self.path}).recorded(FilePatchTool(path=self.path))
+        call = self.call(call_id)
         diff = self.kind.patch(self.path, self.diff)
         return (call.patched(diff) if diff else call).finished('', ok, call_id, timestamp)
 
@@ -669,6 +677,12 @@ class FileChangeItem(Item):
     doing = 'Editing files'
     changes: list[FileChange]
     status: Literal['inProgress', 'completed', 'failed', 'declined']
+
+    def accumulator(self, started_at: EventTime) -> ToolDraft:
+        timestamp = started_at.recorded_at('Codex file change start')
+        return ToolDraft(started_at, tuple(
+            change.call(f'{self.id}:{index}').started(f'{self.id}:{index}', timestamp)
+            for index, change in enumerate(self.changes)))
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         if self.status == 'inProgress':
