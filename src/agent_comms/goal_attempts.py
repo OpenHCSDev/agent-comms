@@ -479,13 +479,8 @@ class GoalTurnPermit(ABC):
         for permit in self.claims:
             account.block_active_goal(diagnostic)
 
-    def settle_goal(
-        self,
-        settlement: type[VerifiedGoalSettlement],
-        store: GoalAttemptStore,
-        goal: GoalDeclaration,
-        turn: TurnId,
-    ) -> None:
+    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+                    goal: GoalDeclaration, turn: TurnId) -> None:
         for permit in self.claims:
             goal.settle(settlement, store, permit, turn)
 
@@ -496,9 +491,8 @@ class GoalTurnPermit(ABC):
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
 
     @abstractmethod
-    def charge_for(
-        self, goal_id: str | None, goals: Goals, response: str, usage: PiUsage
-    ) -> bool: ...
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: PiUsage) -> bool: ...
 
     @abstractmethod
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
@@ -510,7 +504,8 @@ class NoLaunchPermit(GoalTurnPermit):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         return False
 
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str, usage: PiUsage) -> bool:
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: PiUsage) -> bool:
         return False
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
@@ -519,9 +514,8 @@ class NoLaunchPermit(GoalTurnPermit):
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
         generation = store.snapshot(goal_id)
         if generation and generation.lifecycle.allows_resume(True):
-            store.retire_goal(
-                goal_id, expected_generation=generation.number, attempt_id=generation.attempt_id
-            )
+            store.retire_goal(goal_id, expected_generation=generation.number,
+                              attempt_id=generation.attempt_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -536,14 +530,12 @@ class LaunchPermit(GoalTurnPermit):
         """Read the original attempt, even after its successor generation advances."""
         with closing(store._connect()) as conn:
             original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
-        return original.reserved_by(
-            self.reservation,
-            StaleAttemptError(
-                "Original launch attempt changed or is unavailable.",
-            ),
-        ).phase.verified_progress
+        return original.reserved_by(self.reservation, StaleAttemptError(
+            "Original launch attempt changed or is unavailable.",
+        )).phase.verified_progress
 
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str, usage: PiUsage) -> bool:
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
         self.record_provider_usage(goals.open_goal_store(), response, usage)

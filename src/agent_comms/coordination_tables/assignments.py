@@ -42,7 +42,9 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         from agent_comms.audience_manifest import FrozenRecipient
         from agent_comms.coordination_errors import IdentityConflict
 
-        if self.recipient_identity != FrozenRecipient(owner.incarnation.lookup, owner.name):
+        if self.recipient_identity != FrozenRecipient(
+            owner.incarnation.lookup, owner.name
+        ):
             raise IdentityConflict("wake frame does not match a committed recipient")
         self.require_committed_source(initial)
 
@@ -226,10 +228,8 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
             ForeignKey(
-                ("execution_id", "exact_target"),
-                ResponseObligation,
-                ("execution_id", "exact_target"),
-                deferred=True,
+                ("execution_id", "exact_target"), ResponseObligation,
+                ("execution_id", "exact_target"), deferred=True,
             ),
             ForeignKey(
                 ("execution_id", "assignment_id"),

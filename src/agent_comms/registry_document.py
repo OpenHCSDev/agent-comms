@@ -72,9 +72,7 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     statuses: StatusMap
     last_seen: Mapping[str, float]
 
-    def set_status(
-        self: RegistryPresence[dict[str, ThreadStatus]], name: str, status: ThreadStatus
-    ) -> None:
+    def set_status(self: RegistryPresence[dict[str, ThreadStatus]], name: str, status: ThreadStatus) -> None:
         self.statuses[name] = status.declaration()
 
     def status(self, name: str) -> ThreadStatus:
@@ -93,22 +91,13 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return self.last_seen[self.require(name).name]
 
     def visible_threads(
-        self,
-        visibility: RosterVisibility,
-        *,
-        names: Iterable[str] | None = None,
+        self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
-        selected = (
-            self.threads.values()
-            if names is None
-            else {thread.name: thread for thread in map(self.require, names)}.values()
-        )
-        return (
-            executor
-            for thread in selected
-            if self.status(thread.name).in_view(visibility)
-            for executor in thread.role.executor(thread)
-        )
+        selected = (self.threads.values() if names is None else
+                    {thread.name: thread for thread in map(self.require, names)}.values())
+        return (executor for thread in selected
+                if self.status(thread.name).in_view(visibility)
+                for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
@@ -275,14 +264,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def __post_init__(self) -> None:
         # This answer belongs to the decoded revision. Keep the name, not an
         # unbound Thread: store binding and later reads use the current row.
-        self._human = next(
-            (
-                FoundUserThread(human.name)
-                for thread in self.threads.values()
-                for human in thread.role.human(thread)
-            ),
-            NoUserThread(),
-        )
+        self._human = next((FoundUserThread(human.name)
+                            for thread in self.threads.values()
+                            for human in thread.role.human(thread)), NoUserThread())
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
@@ -359,9 +343,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         )
 
     @classmethod
-    def from_wire(
-        cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
-    ) -> RegistryDocument:
+    def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
+                  ) -> RegistryDocument:
         """Decode a registry revision.
 
         ``earlier`` is another revision's raw rows with the document decoded
@@ -382,35 +365,21 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                     raise MalformedRecord("registry thread sections must be objects")
                 kept = {
                     section: {
-                        name
-                        for name, row in raw[section].items()
+                        name for name, row in raw[section].items()
                         if name in getattr(decoded, section)
-                        and name in earlier_raw[section]
-                        and earlier_raw[section][name] == row
+                        and name in earlier_raw[section] and earlier_raw[section][name] == row
                     }
                     for section in thread_rows
                 }
-                changed = FieldCodec.decode(
-                    cls,
-                    {
-                        **raw,
-                        **{
-                            section: {
-                                name: row
-                                for name, row in raw[section].items()
-                                if name not in kept[section]
-                            }
-                            for section in thread_rows
-                        },
-                    },
-                )
+                changed = FieldCodec.decode(cls, {**raw, **{
+                    section: {name: row for name, row in raw[section].items()
+                              if name not in kept[section]}
+                    for section in thread_rows
+                }})
                 reused: dict[str, Any] = {
                     section: {
-                        name: (
-                            getattr(decoded, section)
-                            if name in kept[section]
-                            else getattr(changed, section)
-                        )[name]
+                        name: (getattr(decoded, section) if name in kept[section]
+                               else getattr(changed, section))[name]
                         for name in raw[section]
                     }
                     for section in thread_rows
@@ -559,9 +528,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             raise OwnerChangedBeforeFenceRefusal()
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
-        self.set_status(
-            expected.name, expected.execution.registered_status(expected, StoppedThreadStatus())
-        )
+        self.set_status(expected.name, expected.execution.registered_status(
+            expected, StoppedThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
         return self.claims.generations[expected.name]
@@ -600,8 +568,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             current = self.require(original.name)
             tags = (current.tags - {tag}) | ({replacement} if replacement else set())
             change = self.prepare_registration(
-                replace(current, tags=tags), self.status(current.name), new_owner=False
-            )
+                replace(current, tags=tags), self.status(current.name), new_owner=False)
             change.apply(self)
 
     def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
@@ -662,11 +629,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
-        attested = (
-            canonical_lease.can_attest(self.claims.generations[name])
-            and turn.held_by(canonical_lease)
-            and self.status(name).active
-        )
+        attested = (canonical_lease.can_attest(self.claims.generations[name])
+                    and turn.held_by(canonical_lease) and self.status(name).active)
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
@@ -802,9 +766,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return ClaimedIdentity(
-            self.threads[canonical].incarnation, self.claimed_generations[canonical]
-        )
+        return ClaimedIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)

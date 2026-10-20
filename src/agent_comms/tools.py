@@ -276,11 +276,7 @@ class MessagePublished(ToolResult):
 
     @classmethod
     def from_send(cls, result: SendResult) -> MessagePublished:
-        return cls(
-            result.message.message_id,
-            SentTranscript.from_message(result.message),
-            result.correction,
-        )
+        return cls(result.message.message_id, SentTranscript.from_message(result.message), result.correction)
 
 
 @dataclass(frozen=True)
@@ -391,9 +387,8 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     def cli_command(self, caller: ToolCaller) -> InvokeCliCommand:
         """Project this declaration into Core's existing external tool command."""
-        return InvokeCliCommand(
-            caller=caller.acting_name(""), tool=self.declared_name, arguments=self.arguments
-        )
+        return InvokeCliCommand(caller=caller.acting_name(''),
+                                tool=self.declared_name, arguments=self.arguments)
 
     @classmethod
     def invoke(
@@ -403,9 +398,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode(
-                cls, {**arguments, cls.family_discriminator: cls.declared_name}
-            )
+            request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
@@ -558,13 +551,8 @@ class CommsTagsTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TagList:
-        tags = self.action.apply(
-            comms.channels,
-            self.name,
-            self.new_name,
-            disposition=self.disposition,
-            confirmed=self.confirmed,
-        )
+        tags = self.action.apply(comms.channels, self.name, self.new_name,
+                                disposition=self.disposition, confirmed=self.confirmed)
         return TagList(tuple(sorted(tags)))
 
 
@@ -602,9 +590,8 @@ class CommsChannelsTool(ReadTool, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelListing:
         catalog = comms.channels.catalog.read()
-        return ChannelListing(
-            comms.views.channel_views(), tuple(catalog.saved_views.values()), catalog.list_order
-        )
+        return ChannelListing(comms.views.channel_views(), tuple(catalog.saved_views.values()),
+                              catalog.list_order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -637,8 +624,7 @@ class CommsSetViewTool(ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SavedView:
         return comms.channels.set_saved_view(
-            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags)))
-        )
+            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags))))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -677,10 +663,7 @@ class CommsSetProjectTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProjectSet:
         result = comms.threads.set_project(caller.name, self.path)
         return ProjectSet(
-            result.thread,
-            result.previous,
-            result.current,
-            result.changed,
+            result.thread, result.previous, result.current, result.changed,
             (
                 (
                     "Project saved. End this turn now; the runtime automatically resumes this same "
@@ -704,8 +687,7 @@ class CommsSetGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalSet:
         return GoalSet(
             comms.goals.update_goal(caller.name, SetGoalAction(text=self.text)),
-            "Persistent goal activated. Work toward it and report progress with comms_goal.",
-        )
+            "Persistent goal activated. Work toward it and report progress with comms_goal.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -752,14 +734,9 @@ class CommsGoalTool(ThreadToolRequest):
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
-            **{
-                key: value
-                for key, value in (
-                    ("wait_for", self.wait_for),
-                    ("reviewed_inputs", self.reviewed_inputs),
-                )
-                if value
-            },
+            **{key: value for key, value in (
+                ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
+            ) if value},
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
@@ -845,11 +822,8 @@ class CommsTodoTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
-        return self.result(
-            comms.goals.change_problem(
-                self.problem, self.operation_for(todo, actor, comms), caller.name
-            )
-        )
+        return self.result(comms.goals.change_problem(
+            self.problem, self.operation_for(todo, actor, comms), caller.name))
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -885,26 +859,17 @@ class CommsVerdictTool(CommsChangeProblemTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
-    description = (
-        "Read original edit calls since each open order, excluding that order's recorded verdicts."
-    )
+    description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(
-            tuple(
-                edit
-                for read in OrderEditsRead.for_commander(comms, caller.subject(self.thread))
-                for edit in read.read()
-            )
-        )
+        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
+            comms, caller.subject(self.thread)) for edit in read.read()))
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = (
-        "Read canonical order/edit debt and receiving child commanders; never self-reported."
-    )
+    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Load:
         return Load.of(comms, caller.subject(self.thread))
@@ -937,9 +902,8 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
-        orders = [
-            todo.id for todo in comms.goals.todos.for_commander(actor) if todo.holder == self.unit
-        ]
+        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
+                  if todo.holder == self.unit]
         if not orders:
             raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
@@ -947,11 +911,9 @@ class CommsCorrectWordingTool(ThreadToolRequest):
                 f"Message {self.message_id} is plain; there is nothing to correct."
             )
         result = comms.messaging.send(
-            caller.name,
-            self.unit,
+            caller.name, self.unit,
             f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
-            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.",
-        )
+            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.")
         return MessagePublished.from_send(result)
 
 
@@ -964,10 +926,8 @@ class CommsTodoListTool(ThreadReadTool):
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(listed), comms.registry.storage_rule
-        return TodoList(
-            listed,
-            {todo.id: OrderProgress.read(todo, storage, pulls) for todo in listed if todo.holder},
-        )
+        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
+                                 for todo in listed if todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -986,8 +946,7 @@ class CommsStandingRulesTool(ThreadToolRequest):
         for rule in broken:
             rule.enforce(comms, caller.name)
         return StandingRulesRead(
-            tuple(rule.line() for rule in broken if rule.broke_after(self.after))
-        )
+            tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1016,9 +975,8 @@ class CommsOrderTool(ThreadToolRequest):
     owner: typing.Annotated[str, *tool_field("Assignee thread")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
-        goal = comms.goals.update_goal(
-            self.owner, self.order.bound_to(comms.registry.require(caller.name).incarnation)
-        )
+        goal = comms.goals.update_goal(self.owner, self.order.bound_to(
+            comms.registry.require(caller.name).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 
@@ -1132,9 +1090,8 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = (
-        "Read one story line for every pending order of this commander, including linked problems."
-    )
+    description = ("Read one story line for every pending order of this commander, "
+                   "including linked problems.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
@@ -1191,9 +1148,8 @@ class CommsWorkBranchesTool(ReadTool, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> WorkBranchList:
         branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
-        return WorkBranchList(
-            tuple(branch for branch in branches if not (self.unlinked_only and branch.linked))
-        )
+        return WorkBranchList(tuple(
+            branch for branch in branches if not (self.unlinked_only and branch.linked)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1213,8 +1169,7 @@ class CommsCollaborationTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> CollaborationEdited:
         return CollaborationEdited(
-            comms.relationships.edit(caller.name, self.action, self.peer, self.note)
-        )
+            comms.relationships.edit(caller.name, self.action, self.peer, self.note))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1227,16 +1182,11 @@ class CommsCollaborationsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CollaborationList:
         contacts = comms.relationships.contacts(caller.subject(self.thread))
-        visible = (
-            tuple(
-                VisibleCollaborator(
-                    entry.target, entry.available, entry.sources, entry.detail, entry.goal_contacts
-                )
-                for entry in contacts.visible
-            )
-            if any(entry.goal_contacts for entry in contacts.visible)
-            else ()
-        )
+        visible = tuple(
+            VisibleCollaborator(entry.target, entry.available, entry.sources, entry.detail,
+                                entry.goal_contacts)
+            for entry in contacts.visible
+        ) if any(entry.goal_contacts for entry in contacts.visible) else ()
         return CollaborationList(contacts.explicit, visible, contacts.diagnostics)
 
 
@@ -1270,9 +1220,9 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SendRefusalsRead:
-        return SendRefusalsRead(
-            SendRefusal.recent(comms.root, sender=self.sender, target=self.target, limit=self.limit)
-        )
+        return SendRefusalsRead(SendRefusal.recent(
+            comms.root, sender=self.sender, target=self.target, limit=self.limit
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1301,14 +1251,11 @@ class CommsSendTool(ToolRequest):
         try:
             caller.require_directive(comms, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(
-                self.sender, self.target, body, self.type, report=self.report
-            )
+            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
-            threading.Thread(
-                target=SendRefusal.record, args=(comms.root, self.sender, self.target, error)
-            ).start()
+            threading.Thread(target=SendRefusal.record,
+                             args=(comms.root, self.sender, self.target, error)).start()
             raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
@@ -1338,12 +1285,8 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
         owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
         result = comms.messaging.send(
-            owner.name,
-            self.target,
-            self.original_body(declaration),
-            role=NoticeRole(),
-            task=declaration,
-        )
+            owner.name, self.target, self.original_body(declaration),
+            role=NoticeRole(), task=declaration)
         return TaskPublished(result.message.reference, result.message.task, result.correction)
 
 
@@ -1362,9 +1305,8 @@ class CommsDecisionTool(CommsAuthoredTaskTool):
     ]
 
     def declaration(self, owner):
-        return Decision.from_claim(
-            owner, self.scope, self.change, chosen=self.chosen, rejected=self.rejected
-        )
+        return Decision.from_claim(owner, self.scope, self.change,
+                                       chosen=self.chosen, rejected=self.rejected)
 
     def original_body(self, declaration):
         return declaration.text
@@ -1447,8 +1389,7 @@ class CommsHistoryTool(ReadTool, ToolRequest):
         return HistoryCliCommand(
             target=target.canonical_name(lambda name: comms.registry.require(name).name),
             me=caller.subject(self.participant),
-            limit=self.limit,
-            before=self.before,
+            limit=self.limit, before=self.before,
         ).apply(comms)
 
 
@@ -1490,9 +1431,7 @@ class CommsInboxTool(ToolRequest):
             else None
         )
         page = comms.bus.inbox_at(
-            thread,
-            comms.registry.snapshot(),
-            CommandTarget.named(target),
+            thread, comms.registry.snapshot(), CommandTarget.named(target),
             bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
         )
         messages = page.page.messages
@@ -1500,11 +1439,8 @@ class CommsInboxTool(ToolRequest):
         references = tuple(message.reference for message in messages)
         acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
         return InboxPageRead(
-            messages,
-            acknowledged,
-            page.remaining + len(messages) - acknowledged,
-            unresolved,
-            standby_review=review,
+            messages, acknowledged, page.remaining + len(messages) - acknowledged,
+            unresolved, standby_review=review,
         )
 
 
@@ -1526,15 +1462,10 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
         parent = comms.registry.require(self.parent)
-        return ForkCliCommand(
-            name=self.name,
-            parent=parent.name,
-            task=self.task,
-            project=parent.worktree,
-            model=parent.model,
-            thinking_level=parent.thinking_level,
-            tags=_tag_set(self.tags) if self.tags is not None else None,
-        ).apply(comms)
+        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
+                              project=parent.worktree, model=parent.model,
+                              thinking_level=parent.thinking_level,
+                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1582,12 +1513,8 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(
-                comms,
-                OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
-                launch_runtime=LaunchRuntime.running(),
-            )
-        )
+            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
+                            launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1658,25 +1585,13 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
     def argv(self, root: Path) -> tuple[str, ...]:
         """The CLI boundary owns its module, grammar and argument serialization."""
         caller = ToolCaller.from_actor(self.caller)
-        return (
-            sys.executable,
-            "-m",
-            comms_cli.__name__,
-            "--root",
-            str(root),
-            self.declared_name,
-            "--from",
-            caller.acting_name(""),
-            "--tool",
-            self.tool,
-            "--arguments",
-            json.dumps(self.arguments),
-        )
+        return (sys.executable, '-m', comms_cli.__name__, '--root', str(root),
+                self.declared_name, '--from', caller.acting_name(''), '--tool', self.tool,
+                '--arguments', json.dumps(self.arguments))
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
-        return invoke_tool(
-            ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller)
-        )
+        return invoke_tool(ctx, self.tool, self.arguments,
+                           caller=ToolCaller.from_actor(self.caller))
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """The tool protocol's own reply, the one every adapter receives, not a CLI result."""

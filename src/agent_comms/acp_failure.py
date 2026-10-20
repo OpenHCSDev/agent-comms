@@ -110,8 +110,7 @@ class ProviderRetryResult:
     def for_failure(self, redact) -> ProviderRetryResult:
         """Create the one privacy-safe result stored by this turn's output."""
         return ProviderRetryResult(
-            success=self.success,
-            attempt=self.attempt,
+            success=self.success, attempt=self.attempt,
             final_error=redact(self.final_error) if self.final_error else None,
         )
 
@@ -120,15 +119,11 @@ class ProviderRetryResult:
 
     @property
     def summary(self) -> str:
-        return " ".join(
-            part
-            for part in (
-                f"Provider request retries: {self.attempt}.",
-                "Recovery completed." if self.success else "",
-                f"Final provider response: {self.final_error}" if self.final_error else "",
-            )
-            if part
-        )
+        return " ".join(part for part in (
+            f"Provider request retries: {self.attempt}.",
+            "Recovery completed." if self.success else "",
+            f"Final provider response: {self.final_error}" if self.final_error else "",
+        ) if part)
 
 
 @dataclass(frozen=True)
@@ -163,14 +158,10 @@ class ACPFailure(DeliveryFailure):
 
     @property
     def action(self) -> str:
-        return " ".join(
-            part
-            for part in (
-                self.retry_result.summary if self.retry_result is not None else "",
-                self.next_step,
-            )
-            if part
-        )
+        return " ".join(part for part in (
+            self.retry_result.summary if self.retry_result is not None else "",
+            self.next_step,
+        ) if part)
 
     @property
     def next_step(self) -> str:
@@ -214,10 +205,8 @@ class RequestFailure:
 
     @classmethod
     def from_error(cls, error: RequestError) -> RequestFailure:
-        return (
-            FieldCodec.decode(ErrorValue, error.data)
-            .original_root()
-            .request_failure(error.code, str(error))
+        return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
+            error.code, str(error)
         )
 
 
@@ -270,37 +259,26 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
 
     @classmethod
     def resolve(
-        cls,
-        terminal: Done,
-        error: Error | None,
-        document: InputDocument,
-        original: OriginalTurnInput,
+        cls, terminal: Done, error: Error | None,
+        document: InputDocument, original: OriginalTurnInput,
     ) -> FailedNativeTurnOutcome:
         failure = replace(
-            ACPFailure.from_detail(
-                -32603,
-                terminal.text or "Backend failed",
-                diagnostics=error.diagnostics if error is not None else (),
-            ),
+            ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
+                                  diagnostics=error.diagnostics if error is not None else ()),
             input_state=document.shared_state(original.notice_keys),
             retry_result=terminal.retry_result,
         )
         return cls(
             request=RequestFailure(failure, False),
             source=error.source if error is not None else UnrecordedFailureSource(),
-            failed_input_text=(
-                original.notice_text if not document.all_started(original.notice_keys) else None
-            ),
+            failed_input_text=(original.notice_text
+                               if not document.all_started(original.notice_keys) else None),
         )
 
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
-
         from .acp_extension import (
-            InputFailedUpdate,
-            RequestFailedUpdate,
-            TextRouteUpdate,
-            encode_updates,
+            InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
         )
 
         failure = self.request.failure
@@ -310,21 +288,15 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TextRouteUpdate(None),
-                    RequestFailedUpdate(failure, self.source),
-                    *(
-                        (InputFailedUpdate(self.failed_input_text, failure),)
-                        if self.failed_input_text
-                        else ()
-                    ),
+                    TextRouteUpdate(None), RequestFailedUpdate(failure, self.source),
+                    *((InputFailedUpdate(self.failed_input_text, failure),)
+                      if self.failed_input_text else ()),
                 ),
             ),
         )
         # ACP SDK clients return None after acknowledgement; Core's transport
         # returns False when nobody accepted the notification.
-        return replace(
-            self, request=replace(self.request, notification_published=accepted is not False)
-        )
+        return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         raise NativeTurnError(self.request) from cause
@@ -413,7 +385,9 @@ class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
         return self
 
     def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
-        return ACPFailure.from_detail(code, self.detail or message, diagnostics=diagnostics)
+        return ACPFailure.from_detail(
+            code, self.detail or message, diagnostics=diagnostics
+        )
 
     def request_failure(self, code, message) -> RequestFailure:
         return RequestFailure(self.failure(code, message), False)
@@ -477,11 +451,8 @@ class TextErrorValue(ErrorValue, JsonShapeMember):
         except UnknownFamilyMember:
             # An external public status may be unambiguous; redacted UNKNOWN
             # cannot distinguish reserved from bound input and grants nothing.
-            matches = tuple(
-                member
-                for member in InputAttempt.members_with(InputAttempt)
-                if member.public_status == self.value
-            )
+            matches = tuple(member for member in InputAttempt.members_with(InputAttempt)
+                            if member.public_status == self.value)
             if len(matches) != 1:
                 return body
             (attempt,) = matches
@@ -511,14 +482,7 @@ class ArrayErrorValue(NestedErrorValue, JsonShapeMember):
 @dataclass(frozen=True)
 class ObjectErrorValue(NestedErrorValue, JsonShapeMember):
     value: dict[str, ErrorValue]
-    reason_fields: ClassVar[tuple[str, ...]] = (
-        "details",
-        "reason",
-        "detail",
-        "error",
-        "data",
-        "message",
-    )
+    reason_fields: ClassVar[tuple[str, ...]] = ("details", "reason", "detail", "error", "data", "message")
 
     @property
     def detail(self) -> str:
@@ -532,12 +496,8 @@ class ObjectErrorValue(NestedErrorValue, JsonShapeMember):
         return ""
 
     def reason(self) -> ErrorValue:
-        return ObjectErrorValue(
-            {
-                name: child.reason() if name in self.reason_fields else child
-                for name, child in self.value.items()
-            }
-        )
+        return ObjectErrorValue({name: child.reason() if name in self.reason_fields else child
+                                 for name, child in self.value.items()})
 
     def original_root(self) -> ErrorValue:
         values = dict(self.value)
@@ -581,9 +541,8 @@ class DeclaredInputErrorValue(ErrorValue):
         return self.value.detail
 
     def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
-        return replace(
-            self.value.failure(code, message, diagnostics=diagnostics), input_state=self.attempt
-        )
+        return replace(self.value.failure(code, message, diagnostics=diagnostics),
+                       input_state=self.attempt)
 
     def to_wire(self):
         return {**FieldCodec.encode(self.value), "inputStatus": self.attempt.declared_name}
@@ -602,10 +561,8 @@ class DiagnosticErrorValue(ErrorValue):
         return self.value.failure(code, message, diagnostics=self.diagnostics)
 
     def to_wire(self):
-        return {
-            **FieldCodec.encode(self.value),
-            "diagnostics": [item.to_wire() for item in self.diagnostics],
-        }
+        return {**FieldCodec.encode(self.value),
+                "diagnostics": [item.to_wire() for item in self.diagnostics]}
 
 
 @dataclass(frozen=True)

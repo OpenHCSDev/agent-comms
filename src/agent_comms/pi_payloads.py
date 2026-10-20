@@ -171,11 +171,9 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
     def recovery_events(self, session):
         from .turn_phase import ModelWaitPhase
 
-        return (
-            session.watchdog.state(
-                "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
-            ),
-        )
+        return (session.watchdog.state(
+            "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+        ),)
 
     def finish_request(self, session) -> None:
         session.request_retried()
@@ -206,7 +204,9 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         session.watchdog.retry_recovery_pending = False
         return (
             *event.exhausted(session),
-            session.watchdog.state("failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()),
+            session.watchdog.state(
+                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
+            ),
         )
 
     def recovery_events(self, session):
@@ -378,14 +378,8 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(
-                position=position,
-                timestamp=timestamp,
-                tool_call_id=self.id,
-                tool_name=self.name,
-                raw_input=self.arguments,
-                tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id),
-            )
+            ToolStartTranscript(position=position, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+                                tool=ToolDeclaration.record(self.name, self.arguments, call_id=self.id))
         ]
 
     id: str
@@ -399,13 +393,7 @@ class ImageContent(PiContent):
     def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
-        return [
-            UserTranscript(
-                f"[Image attachment: {self.mime_type or 'image'}]",
-                position=position,
-                timestamp=timestamp,
-            )
-        ]
+        return [UserTranscript(f"[Image attachment: {self.mime_type or 'image'}]", position=position, timestamp=timestamp)]
 
     data: str
     mime_type: typing.Annotated[
@@ -576,7 +564,6 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
 
     def turn_phase(self, phase: TurnPhase) -> TurnPhase:
         from .turn_phase import FailedPhase
-
         return FailedPhase(error=self.error)
 
     def refine_model_request_failure(self, failure):
@@ -782,11 +769,7 @@ class AssistantMessage(PiMessage):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
         if notice := self.error_notice:
-            return [
-                NoticeTranscript(
-                    f"[agent error] {notice}", position=context.position, timestamp=timestamp
-                )
-            ]
+            return [NoticeTranscript(f"[agent error] {notice}", position=context.position, timestamp=timestamp)]
         events = []
         for part in self.parts:
             for event in part.assistant_transcript(context.position, timestamp):
@@ -828,9 +811,7 @@ class UserMessage(PiMessage):
         events = []
         if display is not None:
             if raw_text and raw_text != display.text:
-                events.append(
-                    ContextTranscript(raw_text, position=context.position, timestamp=timestamp)
-                )
+                events.append(ContextTranscript(raw_text, position=context.position, timestamp=timestamp))
             if display.text is None:
                 return events
             parts = (
@@ -839,9 +820,7 @@ class UserMessage(PiMessage):
             )
         for part in parts:
             events.extend(part.user_transcript(context.position, timestamp))
-        return [
-            replace(event, routing=routing).with_native_input(self.input_id) for event in events
-        ]
+        return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
 class ToolDetailsPayload(PiPayload):
@@ -882,15 +861,12 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
-                position=context.position,
-                timestamp=timestamp,
+                position=context.position, timestamp=timestamp,
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
                 ok=not self.is_error,
-                diff=ToolDeclaration.for_name(self.tool_name).result_diff(
-                    result, not self.is_error
-                ),
+                diff=ToolDeclaration.for_name(self.tool_name).result_diff(result, not self.is_error),
                 sent_message=result.sent_message(not self.is_error),
             )
         ]
@@ -1081,9 +1057,7 @@ class QueueClearedData(PiResponseData):
     input_ids: typing.Annotated[tuple[str, ...], field_codec.WireName("inputIds")]
 
     def require_requested(self, requested: tuple[str, ...]) -> tuple[str, ...]:
-        if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(
-            requested
-        ):
+        if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
             raise ValueError("Native clear returned duplicate or unrequested input IDs")
         return self.input_ids
 
@@ -1337,7 +1311,6 @@ class NativeEditDetails(PiPayload):
 @dataclass(frozen=True)
 class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
-
     wire_tag = "agentCommsKind"
 
     @classmethod

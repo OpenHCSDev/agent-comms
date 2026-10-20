@@ -68,10 +68,11 @@ class NativeRequestTools:
         return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
 
     @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> CoordinationCall:
+    def create_call(
+        cls, call_id: str, arguments: dict[str, object]
+    ) -> CoordinationCall:
         return CoordinationCall(
-            call_id=call_id, declared_name=cls.declared_name, arguments=arguments
-        )
+            call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
@@ -177,9 +178,8 @@ class MutatingPathTool(PathTool):
     def storage_effects(self, cwd):
         return (WriteStorageEffect(physical_path(self.path, cwd)),)
 
-    def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
-    ) -> tuple[EditCall, ...]:
+    def edit_calls(self, call_id: str, at: EventTime, thread: str,
+                   problem: str) -> tuple[EditCall, ...]:
         return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 
 
@@ -198,9 +198,8 @@ class EditTool(MutatingPathTool, CodingTool):
         return result.edit_diff(ok)
 
     def digest(self) -> str:
-        return f"{self.declared_name} {self.path}: " + " | ".join(
-            f"-{one_line(e.old_text, 90)} +{one_line(e.new_text, 140)}" for e in self.edits[:2]
-        )
+        return f'{self.declared_name} {self.path}: ' + ' | '.join(
+            f'-{one_line(e.old_text, 90)} +{one_line(e.new_text, 140)}' for e in self.edits[:2])
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return self.edits
@@ -214,10 +213,10 @@ class WriteTool(MutatingPathTool, CodingTool):
     content: str
 
     def digest(self) -> str:
-        return f"{self.declared_name} {self.path}: {one_line(self.content, 160)}"
+        return f'{self.declared_name} {self.path}: {one_line(self.content, 160)}'
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
-        return (ReplacementEdit(old_text="", new_text=self.content),)
+        return (ReplacementEdit(old_text='', new_text=self.content),)
 
     claim_type = WritableFileClaim
 
@@ -225,7 +224,6 @@ class WriteTool(MutatingPathTool, CodingTool):
 @dataclass(frozen=True, kw_only=True)
 class FilePatchTool(PathTool, ToolDeclaration):
     """A file change known by its path and diff alone (Codex's patch), without replacement text."""
-
     acp_kind = "edit"
     label = "Edit"
 

@@ -47,10 +47,8 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     @classmethod
     def configure_connection(cls, connection) -> None:
         connection.create_function(
-            cls.validator_function,
-            sum(item.init for item in fields(cls)),
-            cls.validate_sql,
-            deterministic=True,
+            cls.validator_function, sum(item.init for item in fields(cls)),
+            cls.validate_sql, deterministic=True,
         )
 
     def matches_request(self, execution_id: str, message: Message) -> bool:
@@ -179,16 +177,13 @@ END"""
     def validate_sql(cls, *values: object) -> int:
         """SQLite positional input follows the declared columns; decode and validate once."""
         try:
-            FieldCodec.construct(
-                cls,
-                {
-                    item.name: item.decode(value)
-                    for item, value in zip(
-                        (item for item in cls._fields() if item.init), values, strict=True
-                    )
-                },
-            )
-        except MalformedRecord, CoordinationError:
+            FieldCodec.construct(cls, {
+                item.name: item.decode(value)
+                for item, value in zip(
+                    (item for item in cls._fields() if item.init), values, strict=True
+                )
+            })
+        except (MalformedRecord, CoordinationError):
             return 0  # The trigger refuses an invalid envelope; other errors are defects.
         return 1
 
@@ -228,7 +223,7 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
     ]
     received_at_ms: typing.Annotated[int, Column(check="received_at_ms >= 0")]
     obligation_publication_required: typing.Annotated[
-        int | None, field_codec.WireName("obligation_receipt_required"), Column(generated="1")
+        int | None, field_codec.WireName("obligation_receipt_required"), Column(record_key=True, generated="1")
     ] = dataclass_field(init=False, compare=False)
 
     @classmethod

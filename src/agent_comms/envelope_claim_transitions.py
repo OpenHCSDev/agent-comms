@@ -328,9 +328,8 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     ) -> dict[str, ClaimOwner]:
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")
-        remaining = {
-            resource: owner for resource, owner in previous.items() if resource not in self.expired
-        }
+        remaining = {resource: owner for resource, owner in previous.items()
+                     if resource not in self.expired}
         for release in releases:
             current = remaining.get(release.resource)
             if current is None:
@@ -483,10 +482,9 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def live_in(self, registry: RegistrySnapshot) -> ClaimProjection:
         """Keep only claims whose recorded owner still holds its registry generation."""
-        return ClaimProjection(
-            self.last_seq,
-            {resource: owner for resource, owner in self.items() if owner.live(registry)},
-        )
+        return ClaimProjection(self.last_seq, {
+            resource: owner for resource, owner in self.items() if owner.live(registry)
+        })
 
     def __getitem__(self, key: str) -> ClaimOwner:
         return self._claims[key]

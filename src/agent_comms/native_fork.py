@@ -71,16 +71,9 @@ class RuntimeForkRequest(ForkSessionRequest):
 class RuntimeForkHelper(ForkSessionHelper):
     @classmethod
     def launch(cls, request, environment):
-        return (
-            (
-                str(request.runtime.interpreter),
-                "-I",
-                "-c",
-                "from agent_comms.native_fork import main; main()",
-                request.package,
-            ),
-            request.runtime.environment(environment),
-        )
+        return ((str(request.runtime.interpreter), "-I", "-c",
+                 "from agent_comms.native_fork import main; main()", request.package),
+                request.runtime.environment(environment))
 
 
 def main():

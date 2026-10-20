@@ -93,11 +93,9 @@ class CodexRolloutProvenance(Provenance):
     instruction: int
 
     def public_description(self) -> str:
-        return (
-            f"Historical Codex instruction · {self.path} · record bytes "
-            f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
-            "· not current instructions"
-        )
+        return (f"Historical Codex instruction · {self.path} · record bytes "
+                f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
+                "· not current instructions")
 
     def public_text(self, comms) -> str:
         from .cli_bridges.codex_rollout import ROLLOUT_RECORD
@@ -163,10 +161,8 @@ class NativeProvenance(Provenance):
     context_digest: str
 
     def public_description(self) -> str:
-        return (
-            f"Native request {self.identity.session_id} · generation {self.request_generation} "
-            f"· context {self.context_digest}"
-        )
+        return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
+                f"· context {self.context_digest}")
 
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
         return (self.identity,)
@@ -238,9 +234,7 @@ class ContextSources:
     provenance: tuple[Provenance, ...]
 
     def native_identity(self) -> NativeSessionIdentity:
-        originals = {
-            identity for source in self.provenance for identity in source.native_identities()
-        }
+        originals = {identity for source in self.provenance for identity in source.native_identities()}
         if len(originals) != 1:
             raise ValueError("Original segment has no unambiguous native source identity")
         (identity,) = originals
@@ -248,11 +242,8 @@ class ContextSources:
 
     def journal_entries(self) -> tuple[str, ...]:
         identity = self.native_identity()
-        entries = tuple(
-            dict.fromkeys(
-                entry for source in self.provenance for entry in source.journal_entries(identity)
-            )
-        )
+        entries = tuple(dict.fromkeys(entry for source in self.provenance
+                                      for entry in source.journal_entries(identity)))
         if not entries:
             raise ValueError("Original segment has no recoverable journal coordinates")
         return entries
@@ -295,11 +286,9 @@ class SegmentManifest:
 
     def contains_span(self, span: ContextSpan) -> bool:
         """Match an annotation by its segment hash and position, not by text alone."""
-        return (
-            span.segment_sha256 == self.sha256
-            and span.coordinates.kind is self.kind
-            and self.kind.contains_contribution(self, span.coordinates)
-        )
+        return (span.segment_sha256 == self.sha256
+                and span.coordinates.kind is self.kind
+                and self.kind.contains_contribution(self, span.coordinates))
 
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
@@ -318,16 +307,12 @@ class SegmentManifest:
             if len(public) != 1:
                 raise ValueError("Captured SDK public text is ambiguous")
             text = tuple(public)
-        return replace(
-            self,
-            captured_text=text,
-            contributors=tuple(child.capture_public(values) for child in self.contributors),
-        )
+        return replace(self, captured_text=text,
+                       contributors=tuple(child.capture_public(values) for child in self.contributors))
 
     def contains_value(self, value: MeasuredNativeSegment) -> bool:
-        return value.measured_manifest() == self or any(
-            child.contains_value(value) for child in self.contributors
-        )
+        return (value.measured_manifest() == self
+                or any(child.contains_value(value) for child in self.contributors))
 
     @property
     def sources(self) -> ContextSources:
@@ -358,7 +343,8 @@ class SegmentManifest:
                 return value.public_text()
         parts = self.recorded_parts()
         if parts:
-            return "\n".join(child.recorded_public_text(values_by_digest) for child in parts)
+            return "\n".join(child.recorded_public_text(values_by_digest)
+                             for child in parts)
         raise ValueError("Recorded SDK source differs from the original measured bytes")
 
     def original_values(self):
@@ -423,71 +409,46 @@ class RecordedSegmentManifest:
         return (self.previous,)
 
     def keyframe(
-        self,
-        original: SegmentManifest,
-        offset: int | None,
+        self, original: SegmentManifest, offset: int | None,
     ) -> tuple[tuple[ContextEntryReference, ...], int | None]:
         if self.previous is None:
             count, source = len(self.entries), offset
         else:
             count, source = self.inherited_entries, self.previous
-        return (
-            tuple(
-                ContextEntryReference.from_sources(child.sources)
-                for child in original.contributors[:count]
-            ),
-            source,
-        )
+        return (tuple(ContextEntryReference.from_sources(child.sources)
+                      for child in original.contributors[:count]), source)
 
     def record_text(
-        self,
-        original: SegmentManifest,
-        previous_value: SegmentManifest,
-        offset: int | None,
+        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int | None,
     ) -> RecordedSegmentManifest:
-        if (
-            original.sha256 == previous_value.sha256
-            and original.captured_text
-            and previous_value.captured_text
-        ):
+        if (original.sha256 == previous_value.sha256
+                and original.captured_text and previous_value.captured_text):
             reference = offset if self.manifest.captured_text else self.previous
             if reference is None:
                 raise ValueError("Recorded text predecessor is missing")
             return RecordedSegmentManifest(replace(original, captured_text=()), previous=reference)
         return RecordedSegmentManifest(original)
 
-    def restore(
-        self,
-        entries: dict[ContextEntryReference, SegmentManifest],
-        predecessors: dict[int, RecordedContextManifest] | None = None,
-        position: int = 0,
-    ) -> SegmentManifest:
-        prior = (
-            predecessors[self.previous].segments[position]
-            if self.previous is not None and predecessors is not None
-            else None
-        )
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
+                predecessors: dict[int, RecordedContextManifest] | None = None,
+                position: int = 0) -> SegmentManifest:
+        prior = (predecessors[self.previous].segments[position]
+                 if self.previous is not None and predecessors is not None else None)
         previous = prior.restore(entries) if prior is not None else None
         original = self.manifest
         if self.previous is not None and previous is None:
             raise ValueError("Recorded segment predecessor is missing")
         if previous is not None and previous.kind is not original.kind:
             raise ValueError("Recorded segment predecessor has a different kind")
-        if (
-            previous is not None
-            and previous.sha256 == original.sha256
-            and not original.captured_text
-        ):
+        if (previous is not None and previous.sha256 == original.sha256
+                and not original.captured_text):
             original = replace(original, captured_text=previous.captured_text)
         if not self.entries and not self.inherited_entries:
             return original
         if self.inherited_entries and (
-            previous is None or self.inherited_entries > len(previous.contributors)
-        ):
+                previous is None or self.inherited_entries > len(previous.contributors)):
             raise ValueError("Recorded transcript prefix is missing")
-        contributors = (
-            previous.contributors[: self.inherited_entries] if previous is not None else ()
-        )
+        contributors = (previous.contributors[:self.inherited_entries] if previous is not None else ())
         contributors += tuple(entries[reference] for reference in self.entries)
         membership = tuple(
             source
@@ -539,13 +500,9 @@ class ContextSegment(
 
     @classmethod
     def record_manifest(
-        cls,
-        original: SegmentManifest,
-        previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None,
-        previous_offset: int | None = None,
-        *,
-        recording_turn: int = 1,
+        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
+        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
         recorded = RecordedSegmentManifest(original)
         if previous is not None and previous_value is not None:
@@ -556,25 +513,20 @@ class ContextSegment(
         return self.text()
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        return (
-            ContributionCoordinates.capture(type(self), self.provenance, 0, self.public_text()),
-        )
+        return (ContributionCoordinates.capture(
+            type(self), self.provenance, 0, self.public_text()),)
 
     @classmethod
-    def contains_contribution(
-        cls, original: SegmentManifest, coordinates: ContributionCoordinates
-    ) -> bool:
+    def contains_contribution(cls, original: SegmentManifest, coordinates: ContributionCoordinates) -> bool:
         return all(source in original.source_membership() for source in coordinates.provenance)
 
     def public_spans(self) -> tuple[ContextSpan, ...]:
         """Locate public sentences within the text ranges supplied by this segment."""
         digest = self.manifest(0).sha256
         text = self.public_text()
-        return tuple(
-            ContextSpan(digest, sentence)
-            for source in self.source_ranges()
-            for sentence in source.sentences(text)
-        )
+        return tuple(ContextSpan(digest, sentence)
+                     for source in self.source_ranges()
+                     for sentence in source.sentences(text))
 
     def disclosure_for(self, span: ContextSpan):
         from .working_memory_disclosure import WithheldDisclosure
@@ -600,15 +552,13 @@ class ContextSegment(
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
-        return InputContributionCoordinates(
-            type(self), self.provenance, offset, len(raw), hashlib.sha256(raw).hexdigest()
-        )
+        return InputContributionCoordinates(type(self), self.provenance, offset,
+                                 len(raw), hashlib.sha256(raw).hexdigest())
 
 
 @dataclass(frozen=True)
 class ContributionCoordinates:
     """Byte coordinates and proof in one owner's rendered public value."""
-
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     offset: int
@@ -617,9 +567,7 @@ class ContributionCoordinates:
 
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:
-            raise ValueError(
-                "Contribution requires original sources and nonnegative byte coordinates"
-            )
+            raise ValueError("Contribution requires original sources and nonnegative byte coordinates")
         Sha256Text.from_text(self.sha256)
 
     @classmethod
@@ -631,7 +579,7 @@ class ContributionCoordinates:
         raw = original.encode("utf-8")
         if self.offset + self.length > len(raw):
             raise ValueError("Contribution extends beyond the original public value")
-        selected = raw[self.offset : self.offset + self.length]
+        selected = raw[self.offset:self.offset + self.length]
         if hashlib.sha256(selected).hexdigest() != self.sha256:
             raise ValueError("Contribution differs from its original addressed bytes")
         return selected.decode("utf-8")
@@ -643,22 +591,18 @@ class ContributionCoordinates:
         for sentence in re.split(r"(?<=[.!?])(?=\s)|(?<=\n)", text):
             if sentence.strip():
                 yield ContributionCoordinates.capture(
-                    self.kind, self.provenance, byte_offset, sentence
-                )
+                    self.kind, self.provenance, byte_offset, sentence)
             byte_offset += len(sentence.encode("utf-8"))
 
     def contains(self, other: ContributionCoordinates) -> bool:
-        return (
-            (self.kind, self.provenance) == (other.kind, other.provenance)
-            and self.offset <= other.offset
-            and other.offset + other.length <= self.offset + self.length
-        )
+        return ((self.kind, self.provenance) == (other.kind, other.provenance)
+                and self.offset <= other.offset
+                and other.offset + other.length <= self.offset + self.length)
 
 
 @dataclass(frozen=True)
 class InputContributionCoordinates(ContributionCoordinates):
     """Record positions in submitted input, including only images from that input."""
-
     images: tuple[int, ...] = ()
 
 
@@ -709,15 +653,9 @@ class MeasuredNativeSegment(ContextSegment):
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
-        return SegmentManifest(
-            type(self),
-            self.provenance,
-            self.sha256,
-            self.utf8_bytes,
-            self.tokens,
-            self.contributors,
-            source_spans=self.assembly_ranges(),
-        )
+        return SegmentManifest(type(self), self.provenance,
+                               self.sha256, self.utf8_bytes, self.tokens, self.contributors,
+                               source_spans=self.assembly_ranges())
 
     def assembly_ranges(self) -> tuple[ContributionCoordinates, ...]:
         return ()
@@ -726,11 +664,8 @@ class MeasuredNativeSegment(ContextSegment):
         return self.measured_manifest()
 
     def matches_recorded(self, original: SegmentManifest) -> bool:
-        return (
-            self.__class__ is original.kind
-            and self.sha256 == original.sha256
-            and self.utf8_bytes == original.utf8_bytes
-        )
+        return (self.__class__ is original.kind and self.sha256 == original.sha256
+                and self.utf8_bytes == original.utf8_bytes)
 
     def source_membership(self):
         yield from super().source_membership()
@@ -769,9 +704,7 @@ class SystemLayerSegment(MeasuredNativeSegment):
         return self.source_spans
 
     @classmethod
-    def contains_contribution(
-        cls, original: SegmentManifest, coordinates: ContributionCoordinates
-    ) -> bool:
+    def contains_contribution(cls, original: SegmentManifest, coordinates: ContributionCoordinates) -> bool:
         if original.source_spans:
             return any(source.contains(coordinates) for source in original.source_spans)
         # Historical captures prove wording with no assembly attribution.
@@ -789,11 +722,8 @@ class SystemLayerSegment(MeasuredNativeSegment):
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
         # Old captures prove whole wording, not attribution to today's files.
-        return self.source_spans or (
-            ContributionCoordinates.capture(
-                type(self), (UnattributedProvenance(),), 0, self.content
-            ),
-        )
+        return self.source_spans or (ContributionCoordinates.capture(
+            type(self), (UnattributedProvenance(),), 0, self.content),)
 
     def provider_value(self):
         return self.content
@@ -861,32 +791,22 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
     @classmethod
     def record_manifest(
-        cls,
-        original: SegmentManifest,
-        previous: RecordedSegmentManifest | None = None,
-        previous_value: SegmentManifest | None = None,
-        previous_offset: int | None = None,
-        *,
-        recording_turn: int = 1,
+        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
+        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
         if not original.contributors:
-            return super().record_manifest(
-                original, previous, previous_value, previous_offset, recording_turn=recording_turn
-            )
-        provenance = tuple(
-            source for source in original.provenance for source in source.turn_recording()
-        )
+            return super().record_manifest(original, previous, previous_value, previous_offset,
+                                           recording_turn=recording_turn)
+        provenance = tuple(source for source in original.provenance
+                           for source in source.turn_recording())
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
-        references = tuple(
-            ContextEntryReference.from_sources(child.sources) for child in original.contributors
-        )
+        references = tuple(ContextEntryReference.from_sources(child.sources)
+                           for child in original.contributors)
         prior: tuple[ContextEntryReference, ...] = ()
         keyframe_offset = None
-        if (
-            previous is not None
-            and previous_value is not None
-            and recording_turn % cls.keyframe_interval
-        ):
+        if (previous is not None and previous_value is not None
+                and recording_turn % cls.keyframe_interval):
             prior, keyframe_offset = previous.keyframe(previous_value, previous_offset)
         inherited = 0
         for before, current in zip(prior, references, strict=False):
@@ -896,9 +816,8 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
         entries = tuple(ContextEntryManifest(child) for child in original.contributors[inherited:])
         references = tuple(entry.reference for entry in entries)
         return (
-            RecordedSegmentManifest(
-                header, references, keyframe_offset if inherited else None, inherited
-            ),
+            RecordedSegmentManifest(header, references,
+                                    keyframe_offset if inherited else None, inherited),
             entries,
         )
 
@@ -1022,21 +941,14 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(
-        cls,
-        owner: Thread,
-        views: tuple[ThreadView, ...],
-        relations: tuple[PeerRelation, ...],
-        goals,
+        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
         from .wake_policy import WakePolicy
 
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
-        peers = tuple(
-            PeerState.from_view(viewed[r.peer], r, goals)
-            for r in relations
-            if r.peer in viewed and r.relevance.grants(AlwaysListed)
-        )
+        peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)
+                      for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return super().capture(
             (OwnerProvenance(owner.incarnation, revision), response_instruction.source),
@@ -1068,22 +980,12 @@ class GoalSegment(InstructionSegment):
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
         progress = goal.order.progress(goal, todos)
-        revision = hashlib.sha256(
-            json.dumps(FieldCodec.encode((goal, orders_text, progress))).encode()
-        ).hexdigest()
-        return super().capture(
-            (OwnerProvenance(owner.incarnation, revision),),
-            goal=goal,
-            orders_text=orders_text,
-            progress=progress,
-        )
+        revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text, progress))).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), goal=goal,
+                               orders_text=orders_text, progress=progress)
 
     def values(self) -> dict[str, object]:
-        return dict(
-            goal_id=self.goal.id,
-            goal_text=self.goal.render_instructions(self.orders_text),
-            progress=self.progress,
-        )
+        return dict(goal_id=self.goal.id, goal_text=self.goal.render_instructions(self.orders_text), progress=self.progress)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1119,12 +1021,10 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
         """A recorded allocation keeps its identity across a registry rename."""
         selected = self.require_recorded()
         previous = other.require_recorded()
-        return (
-            selected.identity == previous.identity
-            and selected.occurrence.generation == previous.occurrence.generation
-            and selected.occurrence.incarnation.require_recorded().created_at
-            == previous.occurrence.incarnation.require_recorded().created_at
-        )
+        return (selected.identity == previous.identity
+                and selected.occurrence.generation == previous.occurrence.generation
+                and selected.occurrence.incarnation.require_recorded().created_at
+                == previous.occurrence.incarnation.require_recorded().created_at)
 
     def matches_generation(self, generation: int) -> bool:
         return False
@@ -1168,18 +1068,14 @@ class ContextManifest:
 
     @property
     def public_text_recorded(self) -> bool:
-        return bool(self.segments) and all(
-            segment.public_text_recorded for segment in self.segments
-        )
+        return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
 
     def require_request_id(self) -> str:
         if not self.request_id:
             raise ValueError("Original request ID was not captured by this historical context")
         return self.request_id
 
-    def selected_segment(
-        self, position: int, contributors: tuple[int, ...] = ()
-    ) -> SegmentManifest:
+    def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
         if not 0 <= position < len(self.segments):
             raise ValueError("Original request has no selected segment")
         return self.segments[position].selected_contributor(contributors)
@@ -1193,9 +1089,8 @@ class ContextManifest:
     @classmethod
     def for_request(cls, history, turn: RecordedContextTurn, request_id: str) -> ContextManifest:
         """Select the original indexed publication, never today's preview."""
-        selected = tuple(
-            record for record in history if record.turn == turn and record.request_id == request_id
-        )
+        selected = tuple(record for record in history
+                         if record.turn == turn and record.request_id == request_id)
         if not request_id or len(selected) != 1:
             raise ValueError("Original context request is absent or ambiguous")
         return selected[0]
@@ -1208,11 +1103,9 @@ class ContextManifest:
     def changed_since(self, previous: ContextManifest) -> ContextManifestChange:
         """An inspection projection, never a retained input copy."""
         return ContextManifestChange(
-            previous.turn,
-            self.turn,
+            previous.turn, self.turn,
             tuple(s for s in previous.segments if s not in self.segments),
-            tuple(s for s in self.segments if s not in previous.segments),
-        )
+            tuple(s for s in self.segments if s not in previous.segments))
 
 
 @dataclass(frozen=True)
@@ -1238,8 +1131,7 @@ class RecordedContextManifest:
 
     @classmethod
     def capture(
-        cls,
-        manifest: ContextManifest,
+        cls, manifest: ContextManifest,
         previous: CapturedWireSource[RecordedContextManifest, ContextManifest] | None = None,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         recording_turn = 1
@@ -1257,11 +1149,8 @@ class RecordedContextManifest:
                     value = candidate
                     old = prior[position]
                     offset = previous.pointer.offset
-            parts.append(
-                segment.kind.record_manifest(
-                    segment, old, value, offset, recording_turn=recording_turn
-                )
-            )
+            parts.append(segment.kind.record_manifest(
+                segment, old, value, offset, recording_turn=recording_turn))
         return (
             cls(
                 manifest.thread,
@@ -1274,19 +1163,14 @@ class RecordedContextManifest:
             tuple(entry for _, group in parts for entry in group),
         )
 
-    def restore(
-        self,
-        entries: dict[ContextEntryReference, SegmentManifest],
-        previous: dict[int, RecordedContextManifest] | None = None,
-    ) -> ContextManifest:
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
+                previous: dict[int, RecordedContextManifest] | None = None) -> ContextManifest:
         previous = {} if previous is None else previous
         return ContextManifest(
             self.thread,
             self.turn,
-            tuple(
-                segment.restore(entries, previous, position)
-                for position, segment in enumerate(self.segments)
-            ),
+            tuple(segment.restore(entries, previous, position)
+                  for position, segment in enumerate(self.segments)),
             self.counter,
             self.request_id,
         )
@@ -1306,12 +1190,8 @@ class TurnContext(DeclaredReply):
         a recorded SDK request and does not grant permission to submit input.
         """
         relations = comms.relationships.context_relations(owner.name)
-        context = cls.for_owner(
-            owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals
-        )
-        return context.with_goal(owner, comms.goals).with_awareness(
-            comms, owner, relations, blocking=True
-        )
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
         return owner.goal.active().add_context(self, owner, goals)
@@ -1344,14 +1224,8 @@ class TurnContext(DeclaredReply):
                 return source
         raise ValueError("Source is outside the selected context preview")
 
-    def public_source_text(
-        self,
-        comms,
-        owner: ThreadIncarnation,
-        segment: int,
-        manifest: SegmentManifest,
-        source: Provenance,
-    ) -> ContextSourceText:
+    def public_source_text(self, comms, owner: ThreadIncarnation, segment: int,
+                           manifest: SegmentManifest, source: Provenance) -> ContextSourceText:
         """Read only a source selected from this current Core observation."""
         if owner != self.thread:
             raise ValueError("Current Core context belongs to another owner incarnation")
@@ -1395,10 +1269,8 @@ class TurnContext(DeclaredReply):
         return replace(self, segments=(*self.segments, segment))
 
     def after_received(self, received: tuple[Provenance, ...]) -> TurnContext:
-        return replace(
-            self,
-            segments=tuple(segment for segment in self.segments if segment.needed_after(received)),
-        )
+        return replace(self, segments=tuple(segment for segment in self.segments
+                                           if segment.needed_after(received)))
 
     def render(self, *, images=()) -> RenderedInput:
         return self.render_segments(self.segments, images=images)

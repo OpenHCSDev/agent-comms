@@ -135,10 +135,8 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
         from .runtime_requests import UpdateGoalRuntimeRequest
 
         return await invoke(
-            FieldCodec.encode(UpdateGoalRuntimeRequest),
-            status=cls,
-            goal_id=goal.id,
-            expected_revision=goal.revision,
+            FieldCodec.encode(UpdateGoalRuntimeRequest), status=cls,
+            goal_id=goal.id, expected_revision=goal.revision,
         )
 
     def require_actor(self, actor: type) -> None:
@@ -296,7 +294,8 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             )
         snapshot = ctx.goals.registry.snapshot()
         if not any(
-            ctx.goals.agents.is_working(target.incarnation, snapshot) for target in wait_targets
+            ctx.goals.agents.is_working(target.incarnation, snapshot)
+            for target in wait_targets
         ):
             names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
@@ -345,12 +344,9 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 target_turn_generations=tuple(
                     (
                         lease.identity.generation
-                        if (
-                            lease := snapshot.threads[
-                                snapshot.canonical_name(target.incarnation.name)
-                            ].turn_lease
-                        )
-                        is not None
+                        if (lease := snapshot.threads[
+                            snapshot.canonical_name(target.incarnation.name)
+                        ].turn_lease) is not None
                         else None
                     )
                     for target in wait_targets
@@ -378,7 +374,6 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 @dataclass(frozen=True, kw_only=True)
 class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
-
     problem: str
     operation: TodoOperation
 
@@ -445,8 +440,7 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
         generation = attempts.snapshot(goal.id)
         if generation is not None and not generation.lifecycle.terminal:
             attempts.retire_goal(
-                goal.id,
-                expected_generation=generation.number,
+                goal.id, expected_generation=generation.number,
                 attempt_id=generation.attempt_id,
             )
 
@@ -474,10 +468,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
     def create(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(
-            text=self.text.strip(),
-            id=self.goal_id,
-            revision=1,
-            order=self.order,
+            text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
             published_seq=ctx.goals.bus.log.latest_sequence(),
         )
         goal = replace(
@@ -535,16 +526,10 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
         revision = goal.revision + 1
-        return replace(
-            goal,
-            order=ProblemGoalOrder(),
-            text=ProblemGoalOrder.text,
-            progress="",
-            revision=revision,
-            mention_source=bind_goal_mentions(
-                ProblemGoalOrder.text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
-            ),
-        )
+        return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
+                       revision=revision, mention_source=bind_goal_mentions(
+                           ProblemGoalOrder.text, goal.id, revision, ctx.thread,
+                           ctx.goals.registry.snapshot()))
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
         """Refuse invalid orders before reserving their Todo."""
@@ -578,17 +563,10 @@ class OrderGoalAction(ProblemOrderGoalAction):
         return replace(self, commander=actor.name, assigner=actor)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
-        return ctx.goals.todos.assign(
-            self.problem,
-            expected_revision=self.expected_revision,
-            owner=ctx.thread,
-            assigner=self.assigner,
-            generation=generation,
-            goal=goal,
-            deadline=self.deadline,
-            order=self.order,
-            traced=self.traced,
-        )
+        return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
+            owner=ctx.thread, assigner=self.assigner,
+            generation=generation, goal=goal, deadline=self.deadline, order=self.order,
+            traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -600,17 +578,9 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
         return replace(self, commander=actor.name)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
-        return ctx.goals.todos.create(
-            self.problem,
-            self.repo,
-            self.text,
-            creator=ctx.goals.registry.require(self.commander),
-            owner=ctx.thread,
-            generation=generation,
-            goal=goal,
-            deadline=self.deadline,
-            order=self.order,
-        )
+        return ctx.goals.todos.create(self.problem, self.repo, self.text,
+            creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
+            generation=generation, goal=goal, deadline=self.deadline, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -672,8 +642,7 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
         return await invoke(
             FieldCodec.encode(RetryGoalRuntimeRequest),
-            goal_id=goal.id,
-            expected_revision=goal.revision,
+            goal_id=goal.id, expected_revision=goal.revision,
         )
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:

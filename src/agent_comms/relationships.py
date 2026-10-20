@@ -104,23 +104,15 @@ class MutualThreadRelation(ABC):
     def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
         return ()
 
-    def entry(
-        self,
-        identity: ThreadIncarnation,
-        person: presentation.ThreadView | None,
-        available: bool,
-        current: RelationshipEntry | None,
-    ) -> RelationshipEntry:
+    def entry(self, identity: ThreadIncarnation, person: presentation.ThreadView | None,
+              available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
         return RelationshipEntry(
-            identity.name,
-            "thread",
-            person if available else None,
+            identity.name, "thread", person if available else None,
             detail=f"{current.detail}\n{self.note}" if current and current.detail else self.note,
             available=available,
             sources=(*current.sources, self.source) if current else (self.source,),
             goal_contacts=(*current.goal_contacts, *self.entry_goal_contacts())
-            if current
-            else self.entry_goal_contacts(),
+                          if current else self.entry_goal_contacts(),
         )
 
     def counterpart(self, thread: Thread) -> ThreadIncarnation | None:
@@ -155,11 +147,7 @@ class CollaborationRevision(MutualThreadRelation):
     def record(self, peer: ThreadIncarnation) -> RelationRecord:
         # The stored owner is the thread that created the collaboration.
         return RelationRecord(
-            peer.name,
-            self.relevance,
-            self.owner,
-            self.created_at,
-            self.note,
+            peer.name, self.relevance, self.owner, self.created_at, self.note,
             self.earlier_notes(),
         )
 
@@ -276,10 +264,8 @@ class RelationshipEntry:
             return False
         if earlier.person is None:
             return True
-        return (
-            self.person is not None
-            and self.person.thread.incarnation == earlier.person.thread.incarnation
-        )
+        return (self.person is not None
+                and self.person.thread.incarnation == earlier.person.thread.incarnation)
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,14 +298,10 @@ class RecentRelationshipGroup(RelationshipGroup):
             if not message.role.counts_as_conversation():
                 continue
             for target in cls.targets(context, message):
-                entries.setdefault(
-                    target,
-                    context.entry(
-                        target,
-                        message=message,
-                        detail=f"{message.sender} → {message.target}\n{message.body[:240]}",
-                    ),
-                )
+                entries.setdefault(target, context.entry(
+                    target, message=message,
+                    detail=f"{message.sender} → {message.target}\n{message.body[:240]}",
+                ))
         return tuple(entries.values())
 
     @staticmethod
@@ -334,9 +316,7 @@ class InboundRelationshipGroup(RecentRelationshipGroup):
     @staticmethod
     def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         sender = context.registry.canonical_name(message.sender)
-        if sender == context.thread.name or not context.delivery.delivers(
-            message.sender, message.target
-        ):
+        if sender == context.thread.name or not context.delivery.delivers(message.sender, message.target):
             return ()
         return CommandTarget.named(message.target).inbound_relations(sender)
 
@@ -349,9 +329,7 @@ class OutboundRelationshipGroup(RecentRelationshipGroup):
     def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         if context.registry.canonical_name(message.sender) != context.thread.name:
             return ()
-        return (
-            CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),
-        )
+        return (CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),)
 
 
 class ParentRelationshipGroup(RelationshipGroup):
@@ -393,15 +371,12 @@ class SortableRelationshipGroup(RelationshipGroup):
         return (self,)
 
     @classmethod
-    def ordered(
-        cls, document: RelationshipDocument, owner: Thread, order: type[ThreadSort]
-    ) -> RelationshipDocument:
+    def ordered(cls, document: RelationshipDocument, owner: Thread,
+                order: type[ThreadSort]) -> RelationshipDocument:
         row = RelationshipOrder(owner.name, owner.created_at, cls, order)
-        return replace(
-            document,
-            orders=tuple(saved for saved in document.orders if saved.identity != row.identity)
-            + (row,),
-        )
+        return replace(document, orders=tuple(
+            saved for saved in document.orders if saved.identity != row.identity
+        ) + (row,))
 
 
 class ChildrenRelationshipGroup(SortableRelationshipGroup):
@@ -448,18 +423,13 @@ class RelationshipContext:
     orders: dict[type[SortableRelationshipGroup], type[ThreadSort]]
     sent: dict[str, float]
 
-    def entry(
-        self, name: str, *, message: Message | None = None, detail: str = ""
-    ) -> RelationshipEntry:
+    def entry(self, name: str, *, message: Message | None = None,
+              detail: str = "") -> RelationshipEntry:
         target = CommandTarget.named(name)
         name = target.canonical_name(self.registry.canonical_name)
         return RelationshipEntry(
-            name,
-            target.kind,
-            self.people.get(name),
-            message.seq if message else 0,
-            message.timestamp if message else 0,
-            detail,
+            name, target.kind, self.people.get(name),
+            message.seq if message else 0, message.timestamp if message else 0, detail,
         )
 
 
@@ -478,9 +448,8 @@ class ThreadCommsSnapshot:
         """Index the actual groups by exact nominal identity, never by a base capability."""
         return {type(group): group for group in self.groups}
 
-    def current_entry(
-        self, group: type[RelationshipGroup], earlier: RelationshipEntry
-    ) -> RelationshipEntry | None:
+    def current_entry(self, group: type[RelationshipGroup],
+                      earlier: RelationshipEntry) -> RelationshipEntry | None:
         if (current := self.groups_by_type.get(group)) is None:
             return None
         entry = current.entries.get(earlier.target)
@@ -605,11 +574,9 @@ class RelationshipEditContext:
     def require_peer(self) -> Thread:
         if self.second is None:
             raise UnregisteredThreadError(f"Thread {self.peer_name!r} is not registered.")
-        self.second.role.require_executable(
-            RelationViolationError(
-                f"Thread {self.peer_name!r} is human; collaborations relate agents"
-            )
-        )
+        self.second.role.require_executable(RelationViolationError(
+            f"Thread {self.peer_name!r} is human; collaborations relate agents"
+        ))
         if self.first.name == self.second.name:
             raise ValueError("A thread cannot collaborate with itself")
         if self.existing is not None and self.active is None:
@@ -707,8 +674,7 @@ class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocu
 
         def remove(document: RelationshipDocument) -> RelationshipDocument:
             collaborations = tuple(
-                edge
-                for edge in document.collaborations
+                edge for edge in document.collaborations
                 if not {edge.owner_incarnation, edge.peer_incarnation} & deleted
             )
             orders = tuple(order for order in document.orders if order.incarnation not in deleted)
@@ -761,19 +727,13 @@ class ThreadRelationships:
             for executor in thread.role.executor(thread)
         ):
             for goal in owner.goal.active():
-                ThreadRelationships._project_goal_contacts(
-                    goal, owner, registry, contacts, diagnostics
-                )
+                ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
         return tuple(contacts), tuple(diagnostics)
 
     @staticmethod
-    def _project_goal_contacts(
-        goal: Goal,
-        owner: Thread,
-        registry: RegistrySnapshot,
-        contacts: list[GoalDerivedContact],
-        diagnostics: list[GoalMentionDiagnostic],
-    ) -> None:
+    def _project_goal_contacts(goal: Goal, owner: Thread, registry: RegistrySnapshot,
+                               contacts: list[GoalDerivedContact],
+                               diagnostics: list[GoalMentionDiagnostic]) -> None:
         source = goal.mention_source
         # Missing historical evidence grants no contact or current-name binding.
         if source is None or not source.matches(goal, owner, registry):
@@ -818,19 +778,17 @@ class ThreadRelationships:
             if identity in granted:
                 granted[identity].append(relation.relevance)
                 records.setdefault(identity, []).append(relation.record(identity))
-        return tuple(
-            sorted(
-                (
-                    PeerRelation(
-                        identity,
-                        PeerRelevance.most_derived(members),
-                        tuple(records.get(identity, ())),
-                    )
-                    for identity, members in granted.items()
-                ),
-                key=cmp_to_key(PeerRelation.order),
-            )
-        )
+        return tuple(sorted(
+            (
+                PeerRelation(
+                    identity,
+                    PeerRelevance.most_derived(members),
+                    tuple(records.get(identity, ())),
+                )
+                for identity, members in granted.items()
+            ),
+            key=cmp_to_key(PeerRelation.order),
+        ))
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
@@ -842,20 +800,13 @@ class ThreadRelationships:
         correspondents: dict[str, float] = {}
         for message in messages:
             peer = message.role.response_policy(message).context_peer(
-                thread.name,
-                registry.canonical_name(message.sender),
-                registry.canonical_name(message.target),
-            )
+                thread.name, registry.canonical_name(message.sender),
+                registry.canonical_name(message.target))
             if peer is not None:
                 correspondents[peer] = max(correspondents.get(peer, 0), message.timestamp)
-        return tuple(
-            r
-            for r in relations
-            if r.records
-            or r.peer.name == thread.parent
-            or correspondents.get(r.peer.name, 0)
-            >= max(thread.created_at, r.peer.require_recorded().created_at)
-        )
+        return tuple(r for r in relations if r.records or r.peer.name == thread.parent
+                     or correspondents.get(r.peer.name, 0) >= max(
+                         thread.created_at, r.peer.require_recorded().created_at))
 
     def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
         """The most derived relevance ``peer`` has to ``owner``."""
@@ -879,10 +830,7 @@ class ThreadRelationships:
                 if identity is None:
                     continue
                 visible[identity] = relation.entry(
-                    identity,
-                    None,
-                    identity.current(registry),
-                    visible.get(identity),
+                    identity, None, identity.current(registry), visible.get(identity),
                 )
             return Contacts(
                 explicit,
@@ -912,9 +860,8 @@ class ThreadRelationships:
             self.store.update(change)
             return result
 
-    def set_order(
-        self, owner: str, group: type[SortableRelationshipGroup], order: type[ThreadSort]
-    ) -> type[ThreadSort]:
+    def set_order(self, owner: str, group: type[SortableRelationshipGroup],
+                  order: type[ThreadSort]) -> type[ThreadSort]:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(owner)
             registry = self.registry.snapshot()
@@ -933,16 +880,14 @@ class ThreadRelationships:
             with self.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
                 return self._opened_recent_messages(source)
 
+
     def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
         if not source.changed_since(self._recent_revision):
             return self._recent, self._limited
         previous = self._recent_revision
-        if (
-            previous is not None
-            and source.same_file(previous.identity)
-            and source.boundary > previous.size
-            and previous.holds_cut(source.revision, previous.size)
-        ):
+        if (previous is not None and source.same_file(previous.identity)
+                and source.boundary > previous.size
+                and previous.holds_cut(source.revision, previous.size)):
             start = max(previous.size, source.boundary - self.RECENT_BYTES)
             data, start = source.tail_bytes(source.boundary - start)
             contiguous = start == previous.size
@@ -958,9 +903,7 @@ class ThreadRelationships:
             if line.endswith(b"\n") and line.strip()
             for message in WireRecord.public_from_wire(json.loads(line)).messages()
         )
-        limited = (self._limited if contiguous else bool(start)) or len(
-            messages
-        ) > self.RECENT_MESSAGES
+        limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
         messages = messages[-self.RECENT_MESSAGES :]
         self._recent_revision = source.revision if source.boundary else None
         self._recent, self._limited = messages, limited
@@ -974,9 +917,7 @@ class ThreadRelationships:
             state = self.store.read().resolved(registry)
             edges = state.collaborations
             goal_contacts, goal_diagnostics = self._goal_contacts(registry)
-            delivery = DeliveryScope.capture(
-                thread.name, registry, self.views.channels.catalog.read()
-            )
+            delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
             for view in self.views.thread_views(RosterVisibility(archived=True))
@@ -984,13 +925,7 @@ class ThreadRelationships:
         messages, limited = self._recent_messages()
 
         context = RelationshipContext(
-            registry,
-            thread,
-            people,
-            messages,
-            delivery,
-            edges,
-            goal_contacts,
+            registry, thread, people, messages, delivery, edges, goal_contacts,
             {row.group: row.order for row in state.orders if row.incarnation == thread.incarnation},
             {},
         )
@@ -1002,9 +937,7 @@ class ThreadRelationships:
         return ThreadCommsSnapshot(
             thread.name,
             str(self.root.resolve()),
-            tuple(
-                group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)
-            ),
+            tuple(group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)),
             limited,
             len(messages),
             unresolved_goal_mentions=tuple(

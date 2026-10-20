@@ -226,11 +226,9 @@ class IncompatibleOwner(DeclaredFamily, affix="Owner"):
         return {"reason": self.line(), self.FAILURE: FieldCodec.encode(self)}
 
     def line(self) -> str:
-        return (
-            f"The {self.thread} owner runs {self.owner_core()}, not this app's Core "
-            f"{CORE_COMMIT[:9]}. Its history is shown read-only; sending opens after "
-            f"the owner restarts while idle."
-        )
+        return (f"The {self.thread} owner runs {self.owner_core()}, not this app's Core "
+                f"{CORE_COMMIT[:9]}. Its history is shown read-only; sending opens after "
+                f"the owner restarts while idle.")
 
     async def request(self, action: str, **_: object) -> dict:
         """The history-only attachment refuses every owner request with this owner's line."""

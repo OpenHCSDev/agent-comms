@@ -35,9 +35,7 @@ class PublicInstructionDisclosure(DisclosurePolicy):
     credential = re.compile(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)[-_][A-Za-z0-9_-]+"
         r"|\b(?:api[_ -]?key|access[_ -]?token|password|secret)\s*[:=]\s*\S+"
-        r"|\bBearer\s+\S+",
-        re.IGNORECASE,
-    )
+        r"|\bBearer\s+\S+", re.IGNORECASE)
 
     def require_text(self, text: str) -> str:
         if self.credential.search(text):
@@ -56,13 +54,8 @@ class DisclosureState:
     )
 
     @classmethod
-    def capture(
-        cls,
-        segment: ContextSegment,
-        span: ContextSpan,
-        question: type[SpanQuestion],
-        owner_rules: tuple[str, ...] = (),
-    ):
+    def capture(cls, segment: ContextSegment, span: ContextSpan, question: type[SpanQuestion],
+                owner_rules: tuple[str, ...] = ()):
         original = segment.public_spans()
         try:
             index = original.index(span)
@@ -74,12 +67,7 @@ class DisclosureState:
         # escape through adjacency to an allowed agent message.
         if index:
             neighbor = segment.disclosure_for(original[index - 1]).require_text(neighbor)
-        return cls(
-            policy.require_text(span.public_text(segment)),
-            type(segment),
-            policy.require_text(
-                "; ".join(source.public_description() for source in span.coordinates.provenance)
-            ),
-            neighbor,
-            question.disclosed_owner_rules(owner_rules),
-        )
+        return cls(policy.require_text(span.public_text(segment)), type(segment),
+                   policy.require_text("; ".join(source.public_description()
+                                                for source in span.coordinates.provenance)),
+                   neighbor, question.disclosed_owner_rules(owner_rules))

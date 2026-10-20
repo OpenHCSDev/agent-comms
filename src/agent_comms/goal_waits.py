@@ -60,9 +60,7 @@ class GoalWait(ABC):
     def idle_execution(self) -> IdleGoalExecution:
         return IdleGoalExecution()
 
-    def project(
-        self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity
-    ) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         return GoalExecution(
             GoalExecutionState.for_domain_state(goal.state),
             goal.id,
@@ -91,9 +89,12 @@ class RecordedGoalWait(GoalWait):
     report_turn_generation: int | None
 
     def __post_init__(self) -> None:
-        if len(self.target_turn_generations) != len(self.targets) or any(
-            generation is not None and (type(generation) is not int or generation <= 0)
-            for generation in self.target_turn_generations
+        if (
+            len(self.target_turn_generations) != len(self.targets)
+            or any(
+                generation is not None and (type(generation) is not int or generation <= 0)
+                for generation in self.target_turn_generations
+            )
         ):
             raise ValueError("A wait requires its owner incarnation and aligned target turns.")
         if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
@@ -121,17 +122,14 @@ class RecordedGoalWait(GoalWait):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return waits.clear(goal_id, wait_id=self.wait_id)
 
-    def project(
-        self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity
-    ) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         targets = tuple(
-            GoalWaitTarget(
-                target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name))
-            )
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
-            target for target in targets if not agents.is_working(target.incarnation, snapshot)
+            target for target in targets
+            if not agents.is_working(target.incarnation, snapshot)
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
@@ -142,7 +140,9 @@ class RecordedGoalWait(GoalWait):
         goal revision preserves the declared wait; a future wait revision does
         not belong to the observed goal snapshot.
         """
-        return self.owner_matches(owner) and goal.accepts_observation(self.goal_id, self.revision)
+        return self.owner_matches(owner) and goal.accepts_observation(
+            self.goal_id, self.revision
+        )
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
@@ -155,9 +155,9 @@ class RecordedGoalWait(GoalWait):
         )
 
     def review_after_seq(self, goal, owner, targets) -> int:
-        if self.owner_matches(owner) and {target.incarnation.lookup for target in targets} == {
-            target.incarnation.lookup for target in self.targets
-        }:
+        if self.owner_matches(owner) and {
+            target.incarnation.lookup for target in targets
+        } == {target.incarnation.lookup for target in self.targets}:
             return self.after_seq
         return super().review_after_seq(goal, owner, targets)
 
@@ -189,14 +189,9 @@ class ExcludedInput(UnresolvedInput):
     @classmethod
     def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
         return ExcludedInput(
-            sequence=row.sequence,
-            target=row.target,
-            text=row.source_text,
-            input_id=row.public_id,
-            status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
-            reason=reason,
-        )
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
 
 
 @dataclass(frozen=True)
@@ -227,16 +222,9 @@ class GoalInputReview:
         excluded: list[ExcludedInput] = []
         for row in self.unknown:
             if row.key not in self.eligible_keys:
-                excluded.append(
-                    ExcludedInput.excluded(
-                        row,
-                        reason=(
-                            OwnerInputWithoutBusSequenceExclusion
-                            if row.sequence is None
-                            else NotADirectReplyFromDeclaredDependenciesExclusion
-                        ),
-                    )
-                )
+                excluded.append(ExcludedInput.excluded(row, reason=(
+                    OwnerInputWithoutBusSequenceExclusion if row.sequence is None
+                    else NotADirectReplyFromDeclaredDependenciesExclusion)))
             elif row.reviewed_for_goal(self.goal_id):
                 reviewed.append(UnresolvedInput.of(row))
             else:
@@ -295,7 +283,9 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                 for position, target in enumerate(wait.targets):
                     GoalWaitTargetRow(wait.goal_id, position, target.incarnation.lookup).insert(db)
 
-    def targeting(self, target: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
+    def targeting(
+        self, target: RecordedThreadIncarnation
+    ) -> tuple[RecordedGoalWait, ...]:
         with self.snapshot() as db:
             return tuple(
                 row.wait
@@ -323,14 +313,10 @@ class GoalWaits(ThreadOwnedState, TypedStore):
         if not self.path.exists():
             return False
         with self.writing() as db:
-            return (
-                StoredGoalWaitRow.delete(
-                    db,
-                    where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
-                    parameters=(goal_id, wait_id, wait_id),
-                ).rowcount
-                > 0
-            )
+            return StoredGoalWaitRow.delete(
+                db, where="goal_id=? AND (? IS NULL OR json_extract(wait, '$.wait_id')=?)",
+                parameters=(goal_id, wait_id, wait_id),
+            ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
         return self.for_goal(goal, self.read())
@@ -351,9 +337,8 @@ class GoalWaits(ThreadOwnedState, TypedStore):
         return goal.describe_execution(cls.for_goal(goal, rows), snapshot, agents)
 
     @staticmethod
-    def current_waits(
-        goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], owner: RecordedThreadIncarnation
-    ) -> tuple[RecordedGoalWait, ...]:
+    def current_waits(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
+                      owner: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
         wait = rows.get(goal.reported_id())
         return (wait,) if wait is not None and wait.current_for(goal, owner) else ()
 
@@ -382,16 +367,9 @@ class GoalWaits(ThreadOwnedState, TypedStore):
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal.active()
-            wait = next(
-                iter(
-                    cls.current_waits(
-                        goal,
-                        rows,
-                        thread.incarnation.require_recorded(),
-                    )
-                ),
-                None,
-            )
+            wait = next(iter(cls.current_waits(
+                goal, rows, thread.incarnation.require_recorded(),
+            )), None)
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -402,16 +380,9 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                     pending.append(owner)
                     continue
                 peer_goal = peer.goal.active()
-                peer_wait = next(
-                    iter(
-                        cls.current_waits(
-                            peer_goal,
-                            rows,
-                            peer.incarnation.require_recorded(),
-                        )
-                    ),
-                    None,
-                )
+                peer_wait = next(iter(cls.current_waits(
+                    peer_goal, rows, peer.incarnation.require_recorded(),
+                )), None)
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

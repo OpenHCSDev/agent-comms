@@ -149,8 +149,7 @@ class ActiveTurn(RecordMember, TurnDeclaration):
             raise RelationViolationError("A turn must belong to the registered executor.")
         if self.turn_generation is not None and (
             type(self.turn_generation) is not int
-            or self.turn_generation <= 0
-            or self.turn_generation != generation
+            or self.turn_generation <= 0 or self.turn_generation != generation
         ):
             raise RelationViolationError("Active turn generation differs from its owner.")
 
@@ -173,28 +172,20 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
         return self.id == lease.turn_id and self.current(
-            lease.claimed_generation, lease.identity.generation
-        )
+            lease.claimed_generation, lease.identity.generation)
 
     def may_release(self, lease: TurnLeaseFence) -> bool:
         return self.held_by(lease) or (
             self.claimed_generation is None
-            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease)
-        )
+            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
 
     def lease(
-        self,
-        incarnation: ThreadIncarnation,
-        record: StoredTurnRecord,
+        self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
     ) -> TurnLeaseFence | None:
         if self.claimed_generation is None or self.turn_generation is None:
             return None
-        return TurnLeaseFence(
-            TurnIdentity(incarnation, self.turn_generation),
-            self.id,
-            self.claimed_generation,
-            record=record,
-        )
+        return TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation),
+                              self.id, self.claimed_generation, record=record)
 
     def observed_id(self, finished: str | None) -> str:
         return self.id
@@ -203,9 +194,8 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return self.started_at * 1000 <= updated_at_ms + 1
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
-        return replace(
-            super().project_activity(activity), timestamp=max(activity.timestamp, self.started_at)
-        )
+        return replace(super().project_activity(activity),
+                       timestamp=max(activity.timestamp, self.started_at))
 
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnDeclaration]:
         if phase != self.phase:
@@ -270,9 +260,8 @@ class TurnRecord(SubclassUnion, affix=""):
     def without_claim(self) -> None: ...
 
     @abstractmethod
-    def lease(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> TurnLeaseFence | None: ...
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> TurnLeaseFence | None: ...
 
 
 @dataclass(frozen=True)
@@ -286,9 +275,8 @@ class NoTurnRecord(NullMember, TurnRecord):
     def without_claim(self) -> None:
         pass
 
-    def lease(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> TurnLeaseFence | None:
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> TurnLeaseFence | None:
         return None
 
 
@@ -305,9 +293,8 @@ class StoredTurnReference(RecordMember, TurnRecord):
     def without_claim(self) -> None:
         self.read()
 
-    def lease(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> TurnLeaseFence | None:
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> TurnLeaseFence | None:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 
@@ -330,11 +317,8 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)
-        return (
-            self
-            if (self.registry_path, self.identity) == (record.registry_path, record.identity)
-            else record
-        )
+        return (self if (self.registry_path, self.identity) ==
+                (record.registry_path, record.identity) else record)
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
@@ -345,19 +329,15 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
 
     @classmethod
     def begin(
-        cls,
-        registry_path: Path,
-        identity: TurnIdentity,
-        turn: ActiveTurn,
+        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn,
     ) -> StoredTurnRecord:
         record = cls.for_identity(registry_path, identity)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         record._publish_unlocked(turn)
         return record
 
-    def lease(
-        self, incarnation: ThreadIncarnation, process: ProcessState, generation: int
-    ) -> TurnLeaseFence | None:
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> TurnLeaseFence | None:
         active = self.read()
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)
@@ -366,9 +346,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         self._publish_unlocked(self.read().without_claim())
 
     def _turn_effects(
-        self,
-        lease: TurnLeaseFence,
-        observe: Callable[[TurnState], Iterable[TurnState]],
+        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
@@ -383,9 +361,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))
 
     def observe_native_phase(
-        self,
-        lease: TurnLeaseFence,
-        phase: TurnPhase,
+        self, lease: TurnLeaseFence, phase: TurnPhase,
     ) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 

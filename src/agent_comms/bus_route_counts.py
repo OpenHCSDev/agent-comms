@@ -61,7 +61,7 @@ class RouteTimeNode(DeclaredFamily, affix="RouteTimeNode"):
     @staticmethod
     def key(timestamp: float) -> int:
         # Numeric timestamp comparison identifies both signed zero values.
-        (bits,) = struct.unpack(">Q", struct.pack(">d", timestamp if timestamp else 0.0))
+        bits, = struct.unpack(">Q", struct.pack(">d", timestamp if timestamp else 0.0))
         sign = 1 << (RouteTimeNode.key_width - 1)
         return bits ^ ((sign * 2 - 1) if bits & sign else sign)
 
@@ -82,16 +82,15 @@ class RouteTimeNode(DeclaredFamily, affix="RouteTimeNode"):
             return self.count
         if self.maximum < since:
             return 0
-        return sum(
-            RouteTimeRow.require(db, child).node.count_since(db, since) for child in self.children
-        )
+        return sum(RouteTimeRow.require(db, child).node.count_since(db, since) for child in self.children)
 
     def add(self, db, original: RouteTimeRow, leaf: LeafRouteTimeNode):
         different = self.key(self.minimum) ^ self.key(leaf.timestamp)
         bit = self.key_width - different.bit_length()
         if bit < self.bit:
             added = RouteTimeRow.store(db, leaf)
-            left, right = (added, original) if leaf.timestamp < self.minimum else (original, added)
+            left, right = ((added, original) if leaf.timestamp < self.minimum
+                           else (original, added))
             return ForkRouteTimeNode.join(db, bit, left, right), None
         return self.grow(db, leaf)
 
@@ -142,17 +141,11 @@ class ForkRouteTimeNode(RouteTimeNode):
 
     @classmethod
     def join(cls, db, bit, left: RouteTimeRow, right: RouteTimeRow):
-        return RouteTimeRow.store(
-            db,
-            cls(
-                count=left.node.count + right.node.count,
-                bit=bit,
-                lower=left.node.minimum,
-                upper=right.node.maximum,
-                left=left.id,
-                right=right.id,
-            ),
-        )
+        return RouteTimeRow.store(db, cls(
+            count=left.node.count + right.node.count, bit=bit,
+            lower=left.node.minimum, upper=right.node.maximum,
+            left=left.id, right=right.id,
+        ))
 
     def grow(self, db, leaf):
         left = RouteTimeRow.require(db, self.left)
@@ -188,7 +181,7 @@ class RouteSourceRow(TypedRow, ABC):
     def current(cls, connection) -> RouteSourceRow:
         rows = RecordedRouteSourceRow.select(connection)
         if rows:
-            (recorded,) = rows
+            recorded, = rows
             return recorded
         return UnrecordedRouteSource()
 
@@ -217,10 +210,8 @@ class RecordedRouteSourceRow(RouteTable, RouteSourceRow, TypedTable, declared_na
         return self.revision.size
 
     def matches_source(self, source):
-        return (
-            source.same_file(self.revision.identity)
-            and source.fingerprint(self.through) == self.tail_digest
-        )
+        return (source.same_file(self.revision.identity)
+                and source.fingerprint(self.through) == self.tail_digest)
 
     def needs_rebuild(self, source):
         # An empty older cut cannot retire a later committed projection.
@@ -268,17 +259,15 @@ class RouteEntryRow(RouteTable, TypedTable):
     def record(cls, db, delivery: DeliveryMessage):
         message = delivery.message
         route = message.target, message.sender, delivery.sender_lookup
-        roots = RouteTimeRow.read(
-            db.execute(
-                f'SELECT tree.* FROM "{RouteTimeRow.declared_name}" AS tree '
-                f'WHERE tree.id=(SELECT time_root FROM "{cls.declared_name}" '
-                "WHERE target=? AND sender=? AND sender_lookup=? ORDER BY seq DESC LIMIT 1)",
-                route,
-            )
-        )
+        roots = RouteTimeRow.read(db.execute(
+            f'SELECT tree.* FROM "{RouteTimeRow.declared_name}" AS tree '
+            f'WHERE tree.id=(SELECT time_root FROM "{cls.declared_name}" '
+            'WHERE target=? AND sender=? AND sender_lookup=? ORDER BY seq DESC LIMIT 1)',
+            route,
+        ))
         leaf = LeafRouteTimeNode(count=1, timestamp=message.timestamp, head_seq=message.seq)
         if roots:
-            (original,) = roots
+            original, = roots
             root, previous = original.node.add(db, original, leaf)
         else:
             root, previous = RouteTimeRow.store(db, leaf), None
@@ -307,11 +296,9 @@ class RouteUnread(TypedRow):
     painted: int
 
     def count(self, connection: sqlite3.Connection) -> int:
-        return (
-            self.full.count_since(connection, self.since)
-            - (self.prefix.count_since(connection, self.since) if self.prefix is not None else 0)
-            - self.painted
-        )
+        return (self.full.count_since(connection, self.since)
+                - (self.prefix.count_since(connection, self.since) if self.prefix is not None else 0)
+                - self.painted)
 
 
 @dataclass(frozen=True)
@@ -394,13 +381,8 @@ class BusRouteCounts(StoreWriter):
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
             with closing(CoordinationStore.read_snapshot(self.path)) as current:
-                if (
-                    RecordedRouteSourceRow.present(current)
-                    and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[
-                        0
-                    ].journal_mode
-                    == "wal"
-                ):
+                if (RecordedRouteSourceRow.present(current)
+                        and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
                     return
         with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
@@ -425,11 +407,9 @@ class BusRouteCounts(StoreWriter):
                 yield connection
 
     def sync(
-        self,
-        source: WireSnapshot,
+        self, source: WireSnapshot,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-        *,
-        blocking: bool = True,
+        *, blocking: bool = True,
     ) -> RouteIndexState:
         """Decode a bounded source delta first, then commit under a short lock.
 
@@ -455,11 +435,8 @@ class BusRouteCounts(StoreWriter):
             with self.writing(blocking=blocking) as connection:
                 current = RouteSourceRow.current(connection)
                 if current != recorded:
-                    return (
-                        RouteIndexReady()
-                        if current.through >= size
-                        else RouteIndexBehind(current.through, size)
-                    )
+                    return (RouteIndexReady() if current.through >= size
+                            else RouteIndexBehind(current.through, size))
                 if rebuild:
                     for owner in TypedTable.members_with(RouteTable):
                         owner.delete(connection)
@@ -467,9 +444,7 @@ class BusRouteCounts(StoreWriter):
                     RouteEntryRow.record(connection, row)
                 RecordedRouteSourceRow.delete(connection)
                 if through:
-                    RecordedRouteSourceRow(
-                        1, replace(source.revision, size=through), source.fingerprint(through)
-                    ).insert(connection)
+                    RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
         except BlockingIOError:
             return RouteIndexBlocked()
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
@@ -477,11 +452,8 @@ class BusRouteCounts(StoreWriter):
 
 class OpenedRouteCounts(BusRouteCounts):
     def __init__(
-        self,
-        bus_path: Path,
-        source: WireSnapshot,
-        registry: RegistryProvenance,
-        deliveries: Mapping[str, DeliveryScope],
+        self, bus_path: Path, source: WireSnapshot,
+        registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
     ):
         super().__init__(bus_path)
         self.source = source
@@ -506,12 +478,10 @@ class OpenedRouteCounts(BusRouteCounts):
             # SQLite borrows the original routing behavior. Do not decode all
             # route rows into Python requests and encode them back into SQL.
             self.connection.create_function(
-                "delivery_since",
-                4,
+                "delivery_since", 4,
                 lambda actor, sender, target, lookup: self.deliveries[actor].minimum_timestamp(
                     sender, target, lookup, self.registry
-                ),
-                deterministic=True,
+                ), deterministic=True,
             )
         except BaseException:
             self.connection.close()
@@ -530,17 +500,16 @@ class OpenedRouteCounts(BusRouteCounts):
             self._preparation.defer_read(through, size)
         if through >= size:
             return ()
-        return tuple(
-            row for record, _, _ in self.source.rows(through, size) for row in self._decode(record)
-        )
+        return tuple(row for record, _, _ in self.source.rows(through, size)
+                     for row in self._decode(record))
 
     def _recipients(self, target: str):
         direct = self.registry.canonical_name(target)
-        return self._channel_members.get(target, {direct} if direct in self.deliveries else set())
+        return self._channel_members.get(
+            target, {direct} if direct in self.deliveries else set()
+        )
 
-    def unseen_counts(
-        self, seen: Mapping[str, ReadCursor], *, after: int = 0
-    ) -> dict[str, dict[str, int]]:
+    def unseen_counts(self, seen: Mapping[str, ReadCursor], *, after: int = 0) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}
 
         def add(actor: str, sender: str, target: str, count: int):
@@ -553,20 +522,13 @@ class OpenedRouteCounts(BusRouteCounts):
         for item in self._appended:
             message = item.message
             for actor in self._recipients(message.target):
-                if message.seq > after and self.deliveries[actor].unread(
-                    item, self.registry, seen[actor]
-                ):
+                if message.seq > after and self.deliveries[actor].unread(item, self.registry, seen[actor]):
                     add(actor, message.sender, message.target, 1)
         return counts
 
     def unseen_deliveries(
-        self,
-        actor: str,
-        seen: ReadCursor,
-        *,
-        after: int = 0,
-        scope: MessageDisplayScope | None = None,
-        limit: int = 100,
+        self, actor: str, seen: ReadCursor, *, after: int = 0,
+        scope: MessageDisplayScope | None = None, limit: int = 100,
     ) -> tuple[UnseenDelivery, ...]:
         """Select only the oldest requested unread rows, before decoding messages."""
         if limit <= 0:
@@ -578,11 +540,8 @@ class OpenedRouteCounts(BusRouteCounts):
             if len(rows) == limit:
                 break
             message = item.message
-            if (
-                message.seq > after
-                and scope.includes(message)
-                and delivery.unread(item, self.registry, seen)
-            ):
+            if (message.seq > after and scope.includes(message)
+                    and delivery.unread(item, self.registry, seen)):
                 rows.append(UnseenDelivery(message.seq, message.target))
         return tuple(rows)
 
@@ -628,15 +587,11 @@ class OpenedRouteCounts(BusRouteCounts):
         senders = self.registry.sender_bindings
         return (
             json.dumps({actor: sorted(self.deliveries[actor].index_targets) for actor in actors}),
-            senders["senders"],
-            senders["unrecorded"],
-            self.source.through,
-            after,
+            senders["senders"], senders["unrecorded"], self.source.through, after,
         )
 
     def _read_counts(self, seen: Mapping[str, ReadCursor], *, after: int) -> list[RouteUnread]:
-        return RouteUnread.read(
-            self.connection.execute(
+        return RouteUnread.read(self.connection.execute(
                 f'''WITH {self._requests}, {ReadCursor.sql("?")},
                 {ReadCursor.joined_sql}, painted AS (
                     SELECT request.actor,request.root,count(*) AS count
@@ -659,30 +614,17 @@ class OpenedRouteCounts(BusRouteCounts):
                     ORDER BY seq DESC LIMIT 1)
                 LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root
                 WHERE max(request.high_water,(SELECT after FROM arguments))<request.latest_seq''',
-                (
-                    *self._request_bindings(self.deliveries, after),
-                    *ReadCursor.sql_bindings(
-                        self.registry,
-                        {
-                            actor: cursor.counted(self.deliveries[actor], self.registry)
-                            for actor, cursor in seen.items()
-                        },
-                    ).values(),
-                ),
-            )
-        )
+                (*self._request_bindings(self.deliveries, after),
+                 *ReadCursor.sql_bindings(self.registry,
+                    {actor: cursor.counted(self.deliveries[actor], self.registry)
+                     for actor, cursor in seen.items()}).values())))
 
     def _read_deliveries(
-        self,
-        actor: str,
-        seen: ReadCursor,
-        after: int,
-        scope: MessageDisplayScope,
-        limit: int,
+        self, actor: str, seen: ReadCursor, after: int,
+        scope: MessageDisplayScope, limit: int,
     ) -> list[UnseenDelivery]:
         predicate, values = scope.index_predicate
-        return UnseenDelivery.read(
-            self.connection.execute(
+        return UnseenDelivery.read(self.connection.execute(
                 f'''WITH {self._requests}, {ReadCursor.sql("?")},
                 {ReadCursor.joined_sql}, unread AS (
                     SELECT row.seq,row.target,row.sender
@@ -694,17 +636,10 @@ class OpenedRouteCounts(BusRouteCounts):
                         AND row.seq<=(SELECT through FROM arguments)
                         AND {ReadCursor.unread_sql}
                 ) SELECT seq,target FROM unread WHERE ({predicate}) ORDER BY seq LIMIT ?''',
-                (
-                    *self._request_bindings((actor,), after),
-                    *ReadCursor.sql_bindings(
-                        self.registry, {actor: seen.counted(self.deliveries[actor], self.registry)}
-                    ).values(),
-                    actor,
-                    *values,
-                    limit,
-                ),
-            )
-        )
+                (*self._request_bindings((actor,), after),
+                 *ReadCursor.sql_bindings(self.registry,
+                    {actor: seen.counted(self.deliveries[actor], self.registry)}).values(),
+                 actor, *values, limit)))
 
 
 class CompletingRouteCounts(OpenedRouteCounts):

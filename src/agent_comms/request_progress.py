@@ -54,17 +54,8 @@ class RequestProgress(PiPayload):
     ] = field(default=None)
 
     def __post_init__(self) -> None:
-        if (
-            min(
-                self.started_at_ms,
-                self.observed_at_ms,
-                self.elapsed_ms,
-                self.callback_ms,
-                self.callback_count,
-                self.callback_max_ms,
-            )
-            < 0
-        ):
+        if min(self.started_at_ms, self.observed_at_ms, self.elapsed_ms,
+               self.callback_ms, self.callback_count, self.callback_max_ms) < 0:
             raise ValueError("Invalid native request measurement")
         if not self.monotonic_ns.isdecimal():
             raise ValueError("Invalid native monotonic observation")

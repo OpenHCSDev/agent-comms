@@ -33,16 +33,8 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def open_checkpoint(self, path: Path, *, mode: LockMode) -> sqlite3.Connection: ...
 
     @abstractmethod
-    def verify_checkpoint(
-        self,
-        bus: WireLog,
-        marker: WireMetadata,
-        db: sqlite3.Connection,
-        stream: BinaryIO,
-        path: Path,
-        *,
-        mode: LockMode,
-    ) -> PrefixWitness: ...
+    def verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                          stream: BinaryIO, path: Path, *, mode: LockMode) -> PrefixWitness: ...
 
 
 @dataclass(frozen=True)

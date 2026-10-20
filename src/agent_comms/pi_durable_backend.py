@@ -49,10 +49,10 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def __post_init__(self):
         if not Path(self.path).is_absolute():
-            raise ValueError("Durable database path must be absolute")
+            raise ValueError('Durable database path must be absolute')
 
     def require_forkable(self):
-        raise ValueError("Durable database forking is not implemented")
+        raise ValueError('Durable database forking is not implemented')
 
     def history_source(self, root, incarnation):
         return DurableTranscript(self)
@@ -63,7 +63,7 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     @property
     def writer_lock(self):
-        return self.session.with_suffix(self.session.suffix + ".lock")
+        return self.session.with_suffix(self.session.suffix + '.lock')
 
     @property
     def members(self):
@@ -95,25 +95,16 @@ class DurableTranscript(TranscriptSource):
             yield replace(self, execute=lambda source, command: HistoryData(()))
             return
         with asyncio.Runner() as loop:
-            child = loop.run(
-                PiChild.start_command(
-                    ("node", str(Path(__file__).with_name("pi_durable_host.mjs"))),
-                    cwd=str(Path(self.location.path).parent),
-                    event_type=DurablePiEvent,
-                )
-            )
+            child = loop.run(PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
             try:
                 loop.run(child.request(OpenHistory(self.location.path)))
-                yield replace(
-                    self, execute=lambda source, command: loop.run(child.request(command))
-                )
+                yield replace(self, execute=lambda source, command: loop.run(child.request(command)))
             finally:
                 loop.run(child.shutdown())
 
     def cut(self):
-        return ExternalCut(
-            max((entry.id for entry in self.execute(self, Entries(1)).items), default=0)
-        )
+        return ExternalCut(max((entry.id for entry in self.execute(self, Entries(1)).items), default=0))
 
     def records(self, minimum, maximum, order):
         if maximum < minimum:
@@ -128,10 +119,10 @@ class DurableTranscript(TranscriptSource):
                 return
 
     def forward(self, after, through):
-        return self.records(after + 1, through, "ascending")
+        return self.records(after + 1, through, 'ascending')
 
     def reverse(self, before):
-        return self.records(1, before, "descending")
+        return self.records(1, before, 'descending')
 
 
 @dataclass(frozen=True)
@@ -222,11 +213,7 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
     serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
-    event_kinds = frozenset(
-        kind
-        for member in DurablePiEvent.members_with(DurablePiEvent)
-        for kind in member.known_kinds()
-    )
+    event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
     def __init__(self):
         self.child: PiChild | None = None
@@ -238,9 +225,7 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
 
     @classmethod
     def new_location(cls, root, worktree):
-        return DurableDatabase(
-            str(Path(root).absolute() / "durable-sessions" / f"{uuid4().hex}.sqlite3")
-        )
+        return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
     async def open(self, thread):
         async with self.lock:
@@ -248,27 +233,13 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
                 path = Path(thread.runtime.path)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
-                    lock = resources.enter_context(thread.runtime.writer_lock.open("a+b"))
+                    lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    child = await PiChild.start_command(
-                        ("node", str(Path(__file__).with_name("pi_durable_host.mjs"))),
-                        cwd=thread.worktree,
-                        pass_fds=(lock.fileno(),),
-                        event_type=DurablePiEvent,
-                        resources=resources.pop_all(),
-                    )
+                    child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(
-                        Open(
-                            str(path),
-                            thread.worktree,
-                            model.provider,
-                            model.model_id,
-                            thread.thinking_level,
-                            str(Path.home() / ".pi/agent/auth.json"),
-                        )
-                    )
+                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child
@@ -285,9 +256,7 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
 
     async def models(self, thread):
         child = await self.open(thread)
-        return tuple(
-            model.display_name for model in (await child.request(GetAvailableModels())).models
-        )
+        return tuple(model.display_name for model in (await child.request(GetAvailableModels())).models)
 
     async def configure(self, thread, model, thinking):
         child = await self.open(thread)
@@ -296,7 +265,5 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
         if thinking is not None:
             await child.request(SetThinkingLevel(level=thinking))
         state = await child.request(GetState())
-        reported = state.model.require_selection(
-            model if model is not None else state.model.display_name
-        )
+        reported = state.model.require_selection(model if model is not None else state.model.display_name)
         return reported.display_name, state.thinking_level.wire_value()

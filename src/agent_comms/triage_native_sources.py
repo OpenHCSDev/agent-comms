@@ -33,7 +33,8 @@ class TriageNativeSources(
         from .native_input_record import TriageNativeExecution
 
         guards = {
-            f"{cls.declared_name}_{operation.lower()}_guard": f" BEFORE {operation} "
+            f"{cls.declared_name}_{operation.lower()}_guard":
+            f" BEFORE {operation} "
             f"ON {cls.declared_name} BEGIN SELECT RAISE(ABORT,'native source membership is frozen'); END"
             for operation in ("UPDATE", "DELETE")
         }

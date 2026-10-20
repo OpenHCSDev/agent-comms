@@ -73,14 +73,10 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
     def for_digests(cls, db, digests, classifier):
         if not digests:
             return ()
-        return cls.select(
-            db,
-            where="segment_digest IN (" + ",".join("?" for _ in digests) + ")",
-            parameters=tuple(digests),
-            order_by=("id",),
-            classifier=classifier.classifier,
-            classifier_pin=classifier.pin,
-        )
+        return cls.select(db,
+            where='segment_digest IN (' + ','.join('?' for _ in digests) + ')',
+            parameters=tuple(digests), order_by=("id",),
+            classifier=classifier.classifier, classifier_pin=classifier.pin)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -122,6 +118,4 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
 
     @classmethod
     def requests_since(cls, db, reference: MessageReference, since: int) -> int:
-        return cls.count(
-            db, where="created_at_ms>?", parameters=(since,), grant_reference=reference
-        )
+        return cls.count(db, where='created_at_ms>?', parameters=(since,), grant_reference=reference)

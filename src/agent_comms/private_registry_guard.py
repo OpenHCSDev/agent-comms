@@ -209,13 +209,8 @@ class PrivateRegistryGuard(RegistryPrivacy):
                 _reject("does not match the registry snapshot")
             return seq, digest, 1 - latest
         previous_seq, previous_phase, previous_digest = slots[1 - latest]
-        if (
-            phase == _PENDING
-            and digest != current
-            and previous_phase == _COMMITTED
-            and previous_seq != 0
-            and previous_digest == current
-        ):
+        if (phase == _PENDING and digest != current and previous_phase == _COMMITTED
+                and previous_seq != 0 and previous_digest == current):
             # An abandoned write: its replacement never reached the registry.
             return previous_seq, current, latest
         _reject("is pending, not committed")
@@ -273,11 +268,8 @@ class PrivateRegistryGuard(RegistryPrivacy):
         with Coordination(str(self.registry_path.parent / "coordination.sqlite3")) as store:
             for thread in threads:
                 store.participants.register(
-                    thread.incarnation.require_recorded().lookup,
-                    thread.name,
-                    thread.name,
-                    committed=True,
-                )
+                    thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                    committed=True)
 
     def create_pending(self) -> None:
         """Caller holds bus then registry locks; no marker may exist yet."""
@@ -291,7 +283,9 @@ class PrivateRegistryGuard(RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        directory_fd = os.open(self.registry_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        directory_fd = os.open(
+            self.registry_path.parent, os.O_RDONLY | os.O_DIRECTORY
+        )
         try:
             os.fsync(directory_fd)  # baseline registry name and existing root
             fd = os.open(
@@ -349,11 +343,8 @@ class PrivateOwnerRenameIntent:
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        store_files._atomic_write_text(
-            root / PRIVATE_OWNER_RENAME_PENDING,
-            json.dumps(FieldCodec.encode(self), sort_keys=True),
-            fsync_parent=True,
-        )
+        store_files._atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+                           json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
 
     @classmethod
     def complete(cls, root: Path) -> None:

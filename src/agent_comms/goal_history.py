@@ -34,7 +34,6 @@ class GoalHistoryError(RuntimeError):
 @dataclass(frozen=True)
 class RecordedGoalRevision:
     """A history entry's public fields; its owner key and journal state stay in the store."""
-
     sequence: int | None
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
@@ -65,8 +64,7 @@ class GoalHistoryEntry(TypedTable):
 
     def recorded(self) -> RecordedGoalRevision:
         return RecordedGoalRevision(
-            self.sequence, self.kind, self.observed_at, self.before, self.after
-        )
+            self.sequence, self.kind, self.observed_at, self.before, self.after)
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode_record(self.recorded())
@@ -96,30 +94,20 @@ class GoalHistoryStore:
         path = cls.path_for(registry_path)
         try:
             before = path.lstat()
-            if (
-                not stat.S_ISREG(before.st_mode)
-                or before.st_uid != os.geteuid()
-                or stat.S_IMODE(before.st_mode) != 0o600
-            ):
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                    or stat.S_IMODE(before.st_mode) != 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
             with closing(CoordinationStore.read_snapshot(path)) as connection:
-                actual = SQLiteSchemaObject.read(
-                    connection.execute(
-                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                        "AND name NOT LIKE 'sqlite_%'"
-                    )
-                )
+                actual = SQLiteSchemaObject.read(connection.execute(
+                    "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+                    "AND name NOT LIKE 'sqlite_%'"
+                ))
                 if SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
                     raise GoalHistoryError("Original goal history declaration differs.")
                 rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
             after = path.lstat()
-            if (
-                before.st_dev,
-                before.st_ino,
-                before.st_size,
-                before.st_mtime_ns,
-                before.st_ctime_ns,
-            ) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
                 raise GoalHistoryError("Original goal history changed during acquisition.")
             return rows
         except (OSError, sqlite3.Error, MalformedRecord) as error:
@@ -281,9 +269,7 @@ class GoalHistoryStore:
             # Known endpoints do not manufacture unobserved revisions or timing.
             self._insert(owner_created_at, "observed_gap", "committed", last, current)
 
-    def begin(
-        self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration
-    ) -> int:
+    def begin(self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration) -> int:
         self.observe(owner_created_at, before)
         return self._insert(owner_created_at, "transition", "pending", before, after)
 

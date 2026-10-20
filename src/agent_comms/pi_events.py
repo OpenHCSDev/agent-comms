@@ -57,11 +57,8 @@ class PiTurnPhase:
         return member()
 
     def matches_end(self, current: phases.TurnPhase) -> bool:
-        return any(
-            event_type in self._end_events.get(member, frozenset())
-            for member in type(current).__mro__
-            for event_type in type(self).__mro__
-        )
+        return any(event_type in self._end_events.get(member, frozenset())
+                   for member in type(current).__mro__ for event_type in type(self).__mro__)
 
     def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return phases.ModelWaitPhase()
@@ -74,11 +71,8 @@ class PiEvent(PiTurnPhase, PiPayload, DeclaredFamily):
     wire_tag = "type"
 
     def __init_subclass__(
-        cls,
-        *,
-        starts: type[phases.TurnPhase] | None = None,
-        ends: type[phases.TurnPhase] | None = None,
-        **kwargs,
+        cls, *, starts: type[phases.TurnPhase] | None = None,
+        ends: type[phases.TurnPhase] | None = None, **kwargs,
     ) -> None:
         super().__init_subclass__(**kwargs)
         if starts is not None:
@@ -169,13 +163,12 @@ class NativePiEvent(PiEvent, declared_name=None):
 class DurablePiEvent(PiEvent, declared_name=None):
     @staticmethod
     def unowned_event(event):
-        raise RuntimeError("Pi event arrived with no open turn")
+        raise RuntimeError('Pi event arrived with no open turn')
 
     @classmethod
     def wire_member(cls, wire):
-        members = tuple(
-            member for member in cls.members_with(cls) if wire.get("type") in member.known_kinds()
-        )
+        members = tuple(member for member in cls.members_with(cls)
+                        if wire.get("type") in member.known_kinds())
         if len(members) > 1:
             raise ValueError("Ambiguous durable event declaration")
         return members[0] if members else UnknownPiEvent
@@ -190,16 +183,7 @@ class UnreadPayload:
 
 
 class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
-    ignored_kinds = (
-        "run_start",
-        "run_end",
-        "inbox_update",
-        "submission",
-        "deferred_poll",
-        "usage_changed",
-        "snapshot",
-        "agent_changed",
-    )
+    ignored_kinds = ('run_start', 'run_end', 'inbox_update', 'submission', 'deferred_poll', 'usage_changed', 'snapshot', 'agent_changed')
 
     @classmethod
     def known_kinds(cls):
@@ -378,15 +362,14 @@ class RetryAttemptEvent(NativePiEvent):
         pass
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        elapsed_ms = round((session.watchdog.now - session.watchdog.last_model_progress) * 1000)
+        elapsed_ms = round(
+            (session.watchdog.now - session.watchdog.last_model_progress) * 1000
+        )
         self.prepare_retry(session)
         session.watchdog.progress()
         yield session.watchdog.state(
-            "retrying",
-            self.retry_reason_code,
-            elapsed_ms,
-            phase=phases.ModelWaitPhase(),
-            attempt=self,
+            "retrying", self.retry_reason_code, elapsed_ms,
+            phase=phases.ModelWaitPhase(), attempt=self,
         )
 
 
@@ -784,11 +767,7 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
                 yield event
 
     def convert(self):
-        return (
-            self.assistant_message_event.events()
-            if self.assistant_message_event is not None
-            else ()
-        )
+        return self.assistant_message_event.events() if self.assistant_message_event is not None else ()
 
     accepts_prompt = True
 
@@ -831,12 +810,9 @@ class Response(NativePiEvent, DurablePiEvent):
             if owner.strict_response:
                 success = record.get("success")
                 payload = "data" if success is True else "error" if success is False else None
-                if (
-                    payload is None
+                if (payload is None
                     or set(record) != {"id", "type", "command", "success", payload}
-                    or payload == "error"
-                    and not isinstance(record[payload], str)
-                ):
+                    or payload == "error" and not isinstance(record[payload], str)):
                     raise ValueError("Unexpected selected response envelope")
             return FieldCodec.encode(owner)
         if key == "data":

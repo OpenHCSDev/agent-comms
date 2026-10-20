@@ -40,9 +40,7 @@ class NativeSessionIdentity:
             raise NativeReopenError("Native saved source identity changed")
 
     def require_context(self, context) -> None:
-        self.require_same_session(
-            NativeSessionIdentity(context.session_id, str(context.session_file))
-        )
+        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""
@@ -52,9 +50,8 @@ class NativeSessionIdentity:
         if self.session_file != canonical:
             raise ValueError("Native identity differs from owner's canonical session")
 
-    def covers(
-        self, evidence: NativeEvidenceRead, revision: FileRevision, *other_revisions: FileRevision
-    ) -> bool:
+    def covers(self, evidence: NativeEvidenceRead, revision: FileRevision,
+               *other_revisions: FileRevision) -> bool:
         """Corroborate this session and its recorded positions in a held source.
 
         Revisions are the original prepared/returned observations, not freshly

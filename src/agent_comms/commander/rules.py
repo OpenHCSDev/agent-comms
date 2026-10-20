@@ -40,53 +40,43 @@ PINNED = ("slop-and-polymorphism",)
 def principles() -> list[str]:
     """Paper 1's correct-maintenance results, the definitions every judgment is measured against."""
     text = RuleFile.read(Path(PAPER)).body
-    return [l[2:].strip() for l in text.splitlines() if l.startswith("- ") and len(l) > 40]
+    return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
 
 
 def rules() -> list[tuple[str, str]]:
     """Every rule as (file:line, text)."""
     skill = CommanderConfig.packaged_skill()
     text = skill.read_text()
-    found = [
-        (f"{skill.name}:{text.count(chr(10), 0, m.start()) + 1}", (m.group(1) + m.group(2)).strip())
-        for m in re.finditer(r"^\s*- \*\*(.+?)\*\*(.*)$", text, re.M)
-    ]
+    found = [(f'{skill.name}:{text.count(chr(10), 0, m.start()) + 1}', (m.group(1) + m.group(2)).strip())
+             for m in re.finditer(r'^\s*- \*\*(.+?)\*\*(.*)$', text, re.M)]
     for rule in RuleFile.packaged():
-        found.extend((f"rules/{rule.name}.md:1", line) for line in rule.review_rules())
+        found.extend((f'rules/{rule.name}.md:1', line) for line in rule.review_rules())
     return found
 
 
 def record(ctx: Commander, who: str, entry: RuleReviewEntry) -> None:
     read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), ctx.comms)
-    print("\n".join(read.broken) or "review complete")
+    print('\n'.join(read.broken) or 'review complete')
 
 
 def review(ctx: Commander, who: str) -> None:
     located = rules()
     for i, (where, r) in enumerate(located, 1):
-        print(f"{i:3}. {where}  {r}")
+        print(f'{i:3}. {where}  {r}')
     every = [r for _, r in located]
     paper = principles()
-    print("\nCorrect maintenance (paper 1; every judgment is measured against these):")
+    print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:
-        print(f"  - {r}")
-    drawn = (
-        random.sample(paper, DRAWN)
-        if who != ctx.commander
-        else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
-    )
-    pinned = [r for r in every if r.split(":", 1)[0] in PINNED]
+        print(f'  - {r}')
+    drawn = random.sample(paper, DRAWN) if who != ctx.commander else random.sample(paper, 2) + random.sample(every, DRAWN - 2)
+    pinned = [r for r in every if r.split(':', 1)[0] in PINNED]
     if len(pinned) != len(PINNED):
-        sys.exit(
-            f"Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(':', 1)[0] for r in pinned})}"
-        )
+        sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
     record(ctx, who, DrawnRuleReviewEntry(tuple(drawn)))
-    print(
-        '\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):'
-    )
+    print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
-        print(f"  {n}. {r}")
+        print(f'  {n}. {r}')
 
 
 def answer(ctx: Commander, n: int, text: str, who: str) -> None:
@@ -125,13 +115,12 @@ class StaleVerb(RulesVerb):
     help = "show whether the acting commander's rule review is due"
 
     def run(self, ctx: Commander) -> None:
-        print(
-            "\n".join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or "fresh"
-        )
+        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx)))
+              or 'fresh')
 
 
 def main(a, ctx):
     try:
         RulesVerb.parse(a, __doc__).apply(ctx)
     except ValueError as refused:  # Core owns what a review and an answer may say
-        sys.exit(f"REFUSED: {refused}")
+        sys.exit(f'REFUSED: {refused}')

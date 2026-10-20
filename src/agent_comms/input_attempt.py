@@ -111,7 +111,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def context_provenance(self) -> InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
 
-    def bind(self, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> InputTransition:
+    def bind(
+        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
+    ) -> InputTransition:
         self.require_not_cleared()
         return UnchangedInput(self)
 
@@ -170,13 +172,9 @@ class UnresolvedInput:
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
         return UnresolvedInput(
-            sequence=row.sequence,
-            target=row.target,
-            text=row.source_text,
-            input_id=row.public_id,
-            status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
-        )
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)))
 
 
 @dataclass(frozen=True)
@@ -190,14 +188,9 @@ class HistoricalInput(UnresolvedInput):
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
         return HistoricalInput(
-            sequence=row.sequence,
-            target=row.target,
-            text=row.source_text,
-            input_id=row.public_id,
-            status=row.public_status,
-            reviewed_for_goals=tuple(sorted(row.goal_reviews)),
-            notice_dismissed=notice_dismissed,
-        )
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
 
 
 @dataclass(frozen=True)
@@ -308,17 +301,14 @@ class ReservedInput(RecoverableUnboundInput):
             and self.digest.matches(text)
         )
 
-    def bind(self, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> InputTransition:
+    def bind(
+        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
+    ) -> InputTransition:
         if self.claim_scope != claim_scope:
             return UnchangedInput(self)
-        return MovedInput(
-            self._transition(
-                BoundUnknownInput,
-                turn_id=turn_id,
-                native_id=native_id,
-                sent_digest=TextDigest.of(text),
-            )
-        )
+        return MovedInput(self._transition(
+            BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)
+        ))
 
     def finish_unbound(self) -> InputTransition:
         return MovedInput(self._transition(NotSentInput))
@@ -350,9 +340,7 @@ class SentInput(StoredInput):
             raise ValueError("Invalid native input attempt") from error
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
-        return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(
-            text
-        )
+        return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
 
 
 class BoundUnknownInput(SentInput):
@@ -415,14 +403,15 @@ class StartedInput(SentInput):
         and native ancestry; this acknowledgement never invents their missing proof.
         """
         return self.matches_lease(lease, snapshot) and self.matches_native(
-            turn_id=lease.turn_id, native_id=native_id, text=sent_text
-        )
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text)
 
 
 class NotSentInput(RecoverableUnboundInput):
     unresolved = True
     public_status = "not_sent"
-    cancellation_feedback = "Not sent — cancellation completed before native delivery."
+    cancellation_feedback = (
+        "Not sent — cancellation completed before native delivery."
+    )
 
 
 class MissingInput(InputAttempt):

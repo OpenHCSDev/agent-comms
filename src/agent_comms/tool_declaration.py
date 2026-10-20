@@ -17,7 +17,7 @@ from .recorded_time import EventTime
 
 
 def one_line(text: str, limit: int) -> str:
-    return " ".join(text.split())[:limit]
+    return ' '.join(text.split())[:limit]
 
 
 @dataclass(frozen=True)
@@ -67,32 +67,30 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
-        except MalformedRecord, SelectedToolDenied:
+        except (MalformedRecord, SelectedToolDenied):
             return None
 
-    def edit_calls(
-        self, call_id: str, at: EventTime, thread: str, problem: str
-    ) -> tuple[EditCall, ...]:
+    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
 
     def reads(self) -> str:
         """What the call names after its label: nothing unless the tool says."""
-        return ""
+        return ''
 
     def digest(self) -> str:
         """What the call does in one line, enough to judge it."""
-        return f"{self.declared_name} {one_line(self.reads(), 260)}"
+        return f'{self.declared_name} {one_line(self.reads(), 260)}'
 
     @classmethod
     def caption(cls, name: str, tool: ToolDeclaration | None) -> str:
         """A call reads as its label, then what its record names; with no record, its label."""
-        reads = one_line(text := tool.reads(), len(text)) if tool else ""
-        return cls.for_name(name).label + (" " + reads if reads else "")
+        reads = one_line(text := tool.reads(), len(text)) if tool else ''
+        return cls.for_name(name).label + (' ' + reads if reads else '')
 
     @classmethod
     def call_digest(cls, name: str, tool: ToolDeclaration | None, arguments: object) -> str:
         """A call in one line: its record's digest; with no record, its name and raw arguments."""
-        return tool.digest() if tool else f"{name} {one_line(json.dumps(arguments), 260)}"
+        return tool.digest() if tool else f'{name} {one_line(json.dumps(arguments), 260)}'
 
     @classmethod
     def result_diff(cls, result, ok):

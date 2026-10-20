@@ -24,11 +24,8 @@ from .order import Commander, CommanderVerb
 def open_requests(ctx: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
     thread = ctx.comms.registry.require(ctx.commander)
-    return tuple(
-        request
-        for goal in thread.goal.active()
-        for request in goal.order.open_requests(goal, ctx.comms.goals, thread.incarnation)
-    )
+    return tuple(request for goal in thread.goal.active()
+                 for request in goal.order.open_requests(goal, ctx.comms.goals, thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -41,9 +38,8 @@ class RequestAddVerb(RequestVerb, declared_name="add"):
     text: typing.Annotated[str, field_codec.Argument(flags=("text",))]
 
     def run(self, ctx: Commander) -> None:
-        goal = ctx.comms.goals.update_goal(
-            ctx.commander, SetGoalAction(text=self.text, order=RequestGoalOrder())
-        )
+        goal = ctx.comms.goals.update_goal(ctx.commander,
+                                          SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -55,9 +51,8 @@ class RequestCompleteVerb(RequestVerb, declared_name="complete"):
 
     def run(self, ctx: Commander) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        ctx.comms.goals.update_goal(
-            ctx.commander, CompletedGoalAction(progress=self.why, expect=expect)
-        )
+        ctx.comms.goals.update_goal(ctx.commander,
+                                   CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 

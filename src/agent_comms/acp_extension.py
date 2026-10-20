@@ -155,15 +155,12 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
 
 class AttachmentScope(WireValue):
     """One decoded attachment; JSON null is an absent attachment, not Python None."""
-
     accepts_null = True
     external_json_shape = True
 
     @classmethod
     def from_wire(cls, data):
-        return (
-            cls.empty_scope() if data is None else FieldCodec.decode_record(cls.record_type(), data)
-        )
+        return cls.empty_scope() if data is None else FieldCodec.decode_record(cls.record_type(), data)
 
     @classmethod
     @abstractmethod
@@ -202,12 +199,11 @@ class AttachmentScope(WireValue):
         return self == other or self.current_for(other)
 
     def require_live(self):
-        raise ValueError("Attachment has no live local owner scope.")
+        raise ValueError('Attachment has no live local owner scope.')
 
 
 class LiveAttachmentScope(AttachmentScope):
     """Logical ACP attachment and executor evidence have separate identities."""
-
     session_id: str
     claim_scope: ClaimedIdentity
     owner_pid: int
@@ -248,7 +244,6 @@ class LiveAttachmentScope(AttachmentScope):
 
 class AttachmentRelation:
     """Absent evidence cannot identify a common live attachment."""
-
     foreign = True
     same_incarnation = False
     ambiguous = True
@@ -260,7 +255,6 @@ class AttachmentRelation:
 @dataclass(frozen=True)
 class ObservedAttachmentRelation(AttachmentRelation):
     """Compare original scope witnesses once; no state or alias registry."""
-
     original: AttachmentScope
     received: AttachmentScope
 
@@ -270,36 +264,27 @@ class ObservedAttachmentRelation(AttachmentRelation):
 
     @property
     def same_incarnation(self):
-        return not self.foreign and self.original.owner_created_at == self.received.owner_created_at
+        return (not self.foreign and self.original.owner_created_at == self.received.owner_created_at)
 
     @property
     def ambiguous(self):
-        return not self.same_incarnation or (
-            self.original.claimed_generation == self.received.claimed_generation
-            and self.original.owner_pid != self.received.owner_pid
-        )
+        return (not self.same_incarnation or
+                (self.original.claimed_generation == self.received.claimed_generation
+                 and self.original.owner_pid != self.received.owner_pid))
 
     @property
     def newer(self):
-        return (
-            self.same_incarnation
-            and self.received.claimed_generation > self.original.claimed_generation
-        )
+        return self.same_incarnation and self.received.claimed_generation > self.original.claimed_generation
 
     @property
     def older(self):
-        return (
-            self.same_incarnation
-            and self.received.claimed_generation < self.original.claimed_generation
-        )
+        return self.same_incarnation and self.received.claimed_generation < self.original.claimed_generation
 
     @property
     def current(self):
-        return (
-            self.same_incarnation
-            and self.original.claimed_generation == self.received.claimed_generation
-            and self.original.owner_pid == self.received.owner_pid
-        )
+        return (self.same_incarnation
+                and self.original.claimed_generation == self.received.claimed_generation
+                and self.original.owner_pid == self.received.owner_pid)
 
 
 class CursorScope(AttachmentScope):
@@ -327,7 +312,11 @@ class LiveCursorScope(CursorScope, LiveAttachmentScope):
     def __post_init__(self):
         Id128Text.decode(self.wire_root_id)
         self.claim_scope.incarnation.require_recorded()
-        if not self.session_id or self.owner_pid <= 0 or self.claim_scope.claimed_generation <= 0:
+        if (
+            not self.session_id
+            or self.owner_pid <= 0
+            or self.claim_scope.claimed_generation <= 0
+        ):
             raise ValueError("Invalid native cursor scope")
 
     @property
@@ -425,9 +414,8 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
     selected_status: str | None = None
 
     def for_session(self, session_id: str) -> CursorAdvancedUpdate:
-        return replace(
-            self, envelope=replace(self.envelope, scope=self.envelope.scope.for_session(session_id))
-        )
+        return replace(self, envelope=replace(
+            self.envelope, scope=self.envelope.scope.for_session(session_id)))
 
 
 class QueueScope(AttachmentScope):
@@ -489,7 +477,7 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
         return inputs.next_revision(session_id)
 
     def accepts_request(self, projection: QueueProjection) -> bool:
-        return projection.status == "available"
+        return projection.status == 'available'
 
     def unidentified_start(self, input_id: str | None) -> bool:
         return False
@@ -515,9 +503,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def without_scope(self) -> None:
         """Do not offer queue access while its state is missing or still loading."""
 
-    def capture_human_input(
-        self, comms, acquire_scope: Callable[[], QueueScope]
-    ) -> HumanInputOrigin:
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         """Refuse input until the queue's current state has been read."""
         raise ValueError(self.feedback(True))
 
@@ -565,11 +551,9 @@ class AvailableQueueProjection(QueueProjection):
         return ""
 
     def without_scope(self) -> None:
-        raise ValueError("Available input queue has no original attachment scope.")
+        raise ValueError('Available input queue has no original attachment scope.')
 
-    def capture_human_input(
-        self, comms, acquire_scope: Callable[[], QueueScope]
-    ) -> HumanInputOrigin:
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         return HumanInputOrigin.capture(comms, acquire_scope().claim_scope)
 
 

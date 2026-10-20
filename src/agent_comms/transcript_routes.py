@@ -53,9 +53,8 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
 
 
 def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-    return SQLiteSchemaObject.read(
-        connection.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
-    )
+    return SQLiteSchemaObject.read(connection.execute(
+        "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
 
 
 def _declared_schema() -> dict[str, str]:

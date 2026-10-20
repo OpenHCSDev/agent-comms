@@ -84,10 +84,7 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     @classmethod
     def claimed(cls, owner: Thread) -> Message:
         return Message(
-            owner.name,
-            owner.name,
-            "Claimed",
-            cls,
+            owner.name, owner.name, "Claimed", cls,
         )
 
 
@@ -124,15 +121,13 @@ class HandoffKind(SendableMessageKind):
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
         claims = [
-            claim
-            for claim in cls.CLAIMS
+            claim for claim in cls.CLAIMS
             if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
         ]
         if not claims or FileLine.scan(message.body) or cls.COMMANDS.search(message.body):
             return
         raise ValueError(
-            "Handoff message claims "
-            + ", ".join(claims)
+            "Handoff message claims " + ", ".join(claims)
             + " without a file:line reference or a command in backticks as evidence."
         )
 
@@ -247,11 +242,8 @@ class ConversationRole(SendableRole):
         return HistoricalConversationRole()
 
     def response_policy(self, message):
-        return (
-            CommandTarget.named(message.target).response_policy(message)
-            if message.type.conversation_message
-            else InformationalPolicy.instance()
-        )
+        return (CommandTarget.named(message.target).response_policy(message)
+                if message.type.conversation_message else InformationalPolicy.instance())
 
     def notification_references(self, message):
         return (message.reference,) if message.type.conversation_message else ()
@@ -334,8 +326,7 @@ class HistoricalNoticeRole(HistoricalRole, NoticeRole, declared_name=None):
 
 
 class HistoricalMembershipConversationRole(
-    HistoricalRole, MembershipConversationRole, declared_name=None
-):
+    HistoricalRole, MembershipConversationRole, declared_name=None):
     pass
 
 
@@ -495,7 +486,7 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, "type")])
+        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
         return kind.decode_message({"ts": 0.0, **public})
 
     @classmethod
@@ -552,30 +543,23 @@ class ClaimMessage(Message):
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(
-            **{item.name: getattr(message, item.name) for item in fields(Message)},
-            claim_transition=transition,
-        )
+        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
+                   claim_transition=transition)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         transition = self.claim_transition
-        if (
-            transition.owner != self.sender
-            or transition.seq != self.seq
-            or transition.message_id != self.message_id
-        ):
-            raise RelationViolationError("Claim transition does not bind this message.")
+        if (transition.owner != self.sender or transition.seq != self.seq
+                or transition.message_id != self.message_id):
+            raise RelationViolationError('Claim transition does not bind this message.')
 
     @property
     def history_snapshot(self) -> Message:
         """A copied history keeps the envelope's display facts and drops its claim."""
-        return Message(
-            **{
-                **{item.name: getattr(self, item.name) for item in fields(Message)},
-                "type": ClaimHistoryKind,
-            }
-        )
+        return Message(**{
+            **{item.name: getattr(self, item.name) for item in fields(Message)},
+            "type": ClaimHistoryKind,
+        })
 
     def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
         return (table(self.claim_transition),)
@@ -585,7 +569,6 @@ class ClaimMessage(Message):
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
-
         yield from super().retained_task_facts()
         yield ClaimTaskFact(self)
 

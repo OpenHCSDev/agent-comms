@@ -63,9 +63,7 @@ class RecoverySnapshot:
             raise IdentityConflict("response route is absent from original obligations")
         return obligation
 
-    def require_final_response(
-        self, recipient_lookup: str, exact_target: str
-    ) -> ResponseObligation:
+    def require_final_response(self, recipient_lookup: str, exact_target: str) -> ResponseObligation:
         if self.execution.owner_lookup != recipient_lookup:
             raise StaleFence("response turn belongs to a different SQL recipient")
         self.execution.lifecycle.require_final_response()
@@ -84,13 +82,9 @@ class RecoverySnapshot:
         if intent is None or not intent.matches_request(self.execution.execution_id, candidate):
             raise IdentityConflict("prepared response envelope conflicts")
 
-    def require_publishing_intent(
-        self, exact_target: str
-    ) -> tuple[PublicationIntents, ResponseObligation]:
+    def require_publishing_intent(self, exact_target: str) -> tuple[PublicationIntents, ResponseObligation]:
         if len(self.publication_intents) != len(self.require_wire_responses()):
-            raise IdentityConflict(
-                "all original response bodies must be frozen before first append"
-            )
+            raise IdentityConflict("all original response bodies must be frozen before first append")
         obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_publishing()
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
@@ -100,9 +94,7 @@ class RecoverySnapshot:
 
     def require_published_evidence(self, exact_target: str):
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        acknowledgement = ResponseObligation.response_record(
-            self.publication_evidence, exact_target
-        )
+        acknowledgement = ResponseObligation.response_record(self.publication_evidence, exact_target)
         if intent is None or acknowledgement is None:
             raise StaleFence("response route has no frozen publication evidence")
         return intent, acknowledgement
@@ -228,10 +220,7 @@ class RecoverySnapshot:
         )
 
     def settle(
-        self,
-        session,
-        outcome,
-        reason_code: str | None,
+        self, session, outcome, reason_code: str | None,
         boundary: NativeBoundary | None = None,
     ) -> None:
         from .coordination_tables.assignments import WakeAssignment
@@ -316,41 +305,31 @@ class RecoverySnapshot:
         session.release_resources(self, outcome, boundary)
         db, execution = session._connection, self.execution
         AttemptRecord.update(
-            db,
-            where="execution_id=? AND attempt_ordinal=? AND revision=?",
+            db, where="execution_id=? AND attempt_ordinal=? AND revision=?",
             parameters=(execution.execution_id, attempt.attempt_ordinal, attempt.revision),
-            lifecycle=outcome,
-            revision=attempt.revision + 1,
+            lifecycle=outcome, revision=attempt.revision + 1,
             updated_at_ms=session.now(attempt.updated_at_ms),
         )
         ExecutionRecord.update(
-            db,
-            where="execution_id=? AND revision=?",
+            db, where="execution_id=? AND revision=?",
             parameters=(execution.execution_id, execution.revision),
             lifecycle=CompletedExecution(attempt.attempt_ordinal),
-            revision=execution.revision + 1,
-            updated_at_ms=session.now(execution.updated_at_ms),
+            revision=execution.revision + 1, updated_at_ms=session.now(execution.updated_at_ms),
         )
         for assignment in self.assignments:
             WakeAssignment.update(
-                db,
-                where="assignment_id=? AND revision=?",
+                db, where="assignment_id=? AND revision=?",
                 parameters=(assignment.assignment_id, assignment.revision),
                 lifecycle=CompletedExecution.assignment_state().build(
-                    assignment.lifecycle.mode,
-                    assignment.lifecycle.execution_id,
+                    assignment.lifecycle.mode, assignment.lifecycle.execution_id,
                     assignment.lifecycle.exact_target,
-                ),
-                revision=assignment.revision + 1,
+                ), revision=assignment.revision + 1,
                 updated_at_ms=session.now(assignment.updated_at_ms),
             )
         CurrentExecutions.update(
-            db,
-            where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
+            db, where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
             parameters=(execution.owner_lookup, self.pointer_revision, execution.execution_id),
-            execution_id=None,
-            attempt_ordinal=None,
-            pointer_revision=self.pointer_revision + 1,
+            execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
         )
 
     def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:
@@ -365,7 +344,10 @@ class RecoverySnapshot:
         metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection().live_in(boundary.registry)
-        owned = tuple(claim for claim in current.values() if claim.claim_scope.belongs_to(attempt))
+        owned = tuple(
+            claim for claim in current.values()
+            if claim.claim_scope.belongs_to(attempt)
+        )
         if owned:
             bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 

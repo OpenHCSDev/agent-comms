@@ -58,16 +58,10 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
     def require_context(self, owner: Thread) -> None: ...
 
     @abstractmethod
-    def applies(
-        self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot
-    ) -> bool: ...
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool: ...
 
-    def require_correction(
-        self,
-        previous: ScopedTaskDeclaration,
-        correction: ScopedTaskDeclaration,
-        registry: RegistrySnapshot,
-    ) -> None:
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
+                           registry: RegistrySnapshot) -> None:
         if previous.scope != self:
             raise RelationViolationError("Decision correction must preserve its original scope")
 
@@ -80,9 +74,7 @@ class GoalTaskScope(TaskScope):
         owner.goal.require().require_id(self.goal.id).require_active()
         owner.goal.require_checkpoint(self.goal)
 
-    def applies(
-        self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot
-    ) -> bool:
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
         return owner.task_scope == self
 
 
@@ -91,9 +83,7 @@ class ProjectTaskScope(TaskScope):
     def require_context(self, owner: Thread) -> None:
         pass
 
-    def applies(
-        self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot
-    ) -> bool:
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
         return owner.worktree == self.project
 
 
@@ -105,9 +95,7 @@ class TurnTaskScope(TaskScope):
         if owner.task_scope != self:
             raise RelationViolationError("An active goal requires its revision scope")
 
-    def applies(
-        self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot
-    ) -> bool:
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
         return owner.worktree == self.project and declaration.turn_scope_matches(owner, registry)
 
     def require_human_context(self, owner: Thread) -> None:
@@ -116,12 +104,8 @@ class TurnTaskScope(TaskScope):
     def for_human(self) -> TaskScope:
         return ProjectTaskScope(project=self.project)
 
-    def require_correction(
-        self,
-        previous: ScopedTaskDeclaration,
-        correction: ScopedTaskDeclaration,
-        registry: RegistrySnapshot,
-    ) -> None:
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
+                           registry: RegistrySnapshot) -> None:
         super().require_correction(previous, correction, registry)
         previous.require_same_turn(correction, registry)
 
@@ -158,17 +142,12 @@ class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
 
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
-    def require_publication(
-        self,
-        declaration: ScopedTaskDeclaration,
-        registry: RegistrySnapshot,
-        original_source: CheckedRead | None,
-    ) -> None: ...
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
+                            original_source: CheckedRead | None) -> None: ...
 
     @abstractmethod
-    def root_source(
-        self, message: Message, originals: dict[MessageReference, Message]
-    ) -> Message: ...
+    def root_source(self, message: Message,
+                    originals: dict[MessageReference, Message]) -> Message: ...
 
 
 @dataclass(frozen=True)
@@ -186,11 +165,9 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
 
     def require_original(self, original_source: CheckedRead | None) -> Message:
         if original_source is None:
-            raise RelationViolationError(
-                "Decision correction requires the original publication read"
-            )
+            raise RelationViolationError("Decision correction requires the original publication read")
 
-        (delivery,) = original_source.references((self.original,))
+        delivery, = original_source.references((self.original,))
         original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
@@ -238,9 +215,7 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
         return ()
 
-    def original_text_source(
-        self, message: Message, originals: dict[MessageReference, Message]
-    ) -> Message:
+    def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
 
     def original_wording(self, original: Message) -> str:
@@ -253,11 +228,8 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
         return ()
 
     def original_wording_provenance(self, original: Message) -> dict[str, object]:
-        return dict(
-            wording=FieldCodec.encode(original.reference),
-            author=original.sender,
-            author_role=FieldCodec.encode(original.sender_role),
-        )
+        return dict(wording=FieldCodec.encode(original.reference),
+                    author=original.sender, author_role=FieldCodec.encode(original.sender_role))
 
     def selected_sources(self, message: Message) -> tuple[Message, ...]:
         return (message,)
@@ -268,13 +240,8 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
-    def current_roots(
-        self,
-        message: Message,
-        originals: dict[MessageReference, Message],
-        owner: Thread,
-        registry: RegistrySnapshot,
-    ) -> tuple[Message, ...]:
+    def current_roots(self, message: Message, originals: dict[MessageReference, Message],
+                      owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
         return ()
 
     def revises_after(self, previous: Message) -> bool:
@@ -406,9 +373,7 @@ class ScopedTaskDeclaration(TaskAttachment):
     def require_correction(self, original, registry):
         previous = self.require_previous(original)
         if previous.author.resolved(registry) != self.author.resolved(registry):
-            raise RelationViolationError(
-                "An agent cannot correct another author's task declaration"
-            )
+            raise RelationViolationError("An agent cannot correct another author's task declaration")
         self.scope.require_correction(previous, self, registry)
 
 
@@ -421,13 +386,8 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     @classmethod
     def from_claim(cls, owner, scope, change, **content):
         lease = owner.require_turn_lease()
-        return cls(
-            scope=scope.select(owner),
-            source_turn=lease.identity,
-            source_turn_id=TurnId(lease.turn_id),
-            change=change,
-            **content,
-        )
+        return cls(scope=scope.select(owner), source_turn=lease.identity,
+                   source_turn_id=TurnId(lease.turn_id), change=change, **content)
 
     def __post_init__(self):
         self.author.require_recorded()
@@ -439,11 +399,9 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
         return self.source_turn.incarnation
 
     def applies(self, owner, registry):
-        return (
-            self.author.current(registry)
-            and self.author.resolved(registry) == owner.incarnation
-            and self.scope.applies(owner, self, registry)
-        )
+        return (self.author.current(registry)
+                and self.author.resolved(registry) == owner.incarnation
+                and self.scope.applies(owner, self, registry))
 
     def turn_scope_matches(self, owner, registry):
         return owner.has_authored_turn(self.source_turn.resolved(registry), self.source_turn_id)
@@ -454,9 +412,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
 
     def turn_scope_matches_original(self, previous, registry):
         return (previous.source_turn.resolved(registry), previous.source_turn_id) == (
-            self.source_turn.resolved(registry),
-            self.source_turn_id,
-        )
+            self.source_turn.resolved(registry), self.source_turn_id)
 
     def require_emission(self, owner):
         self.require_sender(owner.name)
@@ -468,8 +424,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def require_publication(self, sender, registry, original_source):
         author = registry.require(sender)
         author.turn_record.read().require_current(
-            registry.claimed_generations[sender],
-            author.turn_generation,
+            registry.claimed_generations[sender], author.turn_generation,
         )
         author.turn_record.read().require_turn(self.source_turn_id)
         self.require_emission(author)
@@ -484,7 +439,6 @@ class Subtask(ModelTaskDeclaration):
     has no independently updated lifecycle: corrections replace the observation
     through the same original wire lineage as decisions and constraints.
     """
-
     completed: bool
     observes_subtask = True
 
@@ -495,9 +449,7 @@ class Subtask(ModelTaskDeclaration):
         return original.task.require_subtask()
 
     def turn_scope_matches(self, owner, registry):
-        return owner.has_observed_task_turn(
-            self.source_turn.resolved(registry), self.source_turn_id
-        )
+        return owner.has_observed_task_turn(self.source_turn.resolved(registry), self.source_turn_id)
 
     def applies(self, owner, registry):
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
@@ -511,7 +463,6 @@ class Subtask(ModelTaskDeclaration):
 @dataclass(frozen=True, kw_only=True)
 class HumanConstraintPin(ScopedTaskDeclaration):
     """Original human wording is referenced, never copied into a pin's body."""
-
     subject: MessageReference
     source_user: ThreadIncarnation
     recipient: ThreadIncarnation
@@ -535,9 +486,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
 
     def require_correction(self, original, registry):
         super().require_correction(original, registry)
-        if self.require_previous(original).recipient.resolved(registry) != self.recipient.resolved(
-            registry
-        ):
+        if self.require_previous(original).recipient.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER pin correction must preserve its recipient")
 
     def require_user_revision(self, sender, registry):
@@ -551,11 +500,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         return self.subject
 
     def applies(self, owner, registry):
-        return (
-            self.recipient.current(registry)
-            and self.recipient.resolved(registry) == owner.incarnation
-            and self.scope.applies(owner, self, registry)
-        )
+        return (self.recipient.current(registry)
+                and self.recipient.resolved(registry) == owner.incarnation
+                and self.scope.applies(owner, self, registry))
 
     def original_text_source(self, message, originals):
         try:
@@ -582,7 +529,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        (delivery,) = original_source.references((self.subject,))
+        delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user(
             RelationViolationError("Original wording must come from a human sender")
         )
@@ -621,19 +568,15 @@ class NativeInputConstraintPin(HumanConstraintPin):
 
     def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
-        return dict(
-            wording=FieldCodec.encode(original.context_provenance()),
-            author=origin.author.sender,
-            author_role=FieldCodec.encode(UserThreadRole),
-        )
+        return dict(wording=FieldCodec.encode(original.context_provenance()),
+                    author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions
 
         original_source.require_current()
         row = self.subject.require_human_input().require_original(
-            InputDispositions(original_source.path.parent)
-        )
+            InputDispositions(original_source.path.parent))
         origin = row.origin.require_human()
         if origin.root_id != original_source.witness.root_id:
             raise RelationViolationError("USER input pin belongs to another wire root")
@@ -641,9 +584,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
         if origin.claim_scope.incarnation.resolved(registry) != self.recipient.resolved(registry):
-            raise RelationViolationError(
-                "USER input pin recipient did not receive its original input"
-            )
+            raise RelationViolationError("USER input pin recipient did not receive its original input")
         if origin.project != self.scope.project:
             raise RelationViolationError("USER input pin belongs to another project")
 
@@ -679,12 +620,8 @@ class Decision(ModelTaskDeclaration, declared_name="choice"):
 
     @property
     def text(self):
-        return (
-            "Decision: "
-            + self.chosen
-            + "\nValid rejected alternatives:\n"
-            + "\n".join("- " + value for value in self.rejected)
-        )
+        return "Decision: " + self.chosen + "\nValid rejected alternatives:\n" + "\n".join(
+            "- " + value for value in self.rejected)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -710,7 +647,6 @@ from .working_memory_labels import ClassifierVersion, JevClassifier
 @dataclass(frozen=True, kw_only=True)
 class AnnotationDisclosureGrant(HumanConstraintPin):
     """Borrow human authorship, recipient, scope and correction from the pin."""
-
     per_hour: int
     segments: tuple[type[ContextSegment], ...]
     classifier: ClassifierVersion = field(default_factory=JevClassifier.version)
@@ -733,6 +669,7 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
         if type(segment) not in self.segments:
             raise RelationViolationError("Human grant does not disclose this segment kind")
 
+
     def window_start(self, now: int) -> int:
         return now - 3_600_000
 
@@ -740,6 +677,4 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
         from .working_memory_requests import AnnotationBudgetExhausted
 
         if submitted >= self.per_hour:
-            raise AnnotationBudgetExhausted(
-                "Original disclosure grant's hourly request budget is exhausted"
-            )
+            raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")

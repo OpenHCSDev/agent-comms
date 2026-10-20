@@ -100,9 +100,7 @@ class QueuedInput:
         """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
 
-        return (
-            (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claim_scope) else ()
-        )
+        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claim_scope) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
@@ -145,13 +143,8 @@ class QueuedInput:
             controller,
         )
         row = ReservedInput(
-            item.key,
-            None,
-            canonical,
-            context.claim_scope.claimed_generation,
-            canonical,
-            item.text,
-            origin=origin,
+            item.key, None, canonical, context.claim_scope.claimed_generation,
+            canonical, item.text, origin=origin,
         )
         document = inputs.dispositions.reserve_originals(row, ownership=ownership)
         return item, document.lookup(item.key)
@@ -173,16 +166,8 @@ class QueuedInput:
     @classmethod
     @asynccontextmanager
     async def reserve(
-        cls,
-        inputs: InputDrain,
-        session_id: str,
-        name: str,
-        *,
-        text: str,
-        prompt: str,
-        echo: bool,
-        images: tuple[ImageInput, ...],
-        controller: Any,
+        cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
+        echo: bool, images: tuple[ImageInput, ...], controller: Any,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
@@ -197,27 +182,17 @@ class QueuedInput:
                     with _store_lock(inputs.comms._wire_lock_path):
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
-                            inputs,
-                            name,
-                            text=text,
-                            prompt=prompt,
-                            echo=echo,
-                            images=images,
-                            controller=controller,
-                            input_id=input_id,
-                            origin=origin,
-                            ownership=ownership,
+                            inputs, name, text=text, prompt=prompt, echo=echo,
+                            images=images, controller=controller, input_id=input_id,
+                            origin=origin, ownership=ownership,
                         )
 
                 item, row = await Coordination.run_worker(capture)
                 yield InputReservation(item, row, rollback)
 
     def place(
-        self,
-        inputs: InputDrain,
-        session_id: str,
-        inbox: TurnInbox,
-        content: InputContent,
+        self, inputs: InputDrain, session_id: str,
+        inbox: TurnInbox, content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
         from .agent_backend import InputId, InputRequest
@@ -226,13 +201,9 @@ class QueuedInput:
         source = self.source()
         inputs.state(session_id).following[self.input_id] = source
         inputs.state(session_id).queued[self.input_id] = self
-        inbox.put_nowait(
-            InputRequest(
-                input_id=InputId(self.input_id),
-                content=content,
-                when_busy=source.when_busy,
-            )
-        )
+        inbox.put_nowait(InputRequest(
+            input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
+        ))
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
         """Transfer this live acceptance under current authority; never recover disk work."""
@@ -246,10 +217,7 @@ class QueuedInput:
                         snapshot = inputs.comms.registry.snapshot()
                         canonical = snapshot.canonical_name(name)
                         self.require_handoff(
-                            snapshot,
-                            canonical,
-                            inputs.dispositions.lookup(self.key),
-                            self.input_id,
+                            snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
                         )
                         return canonical
 
@@ -360,10 +328,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     def reserve_pending(
-        cls,
-        inputs: InputDrain,
-        name: str,
-        root_id: str,
+        cls, inputs: InputDrain, name: str, root_id: str,
         pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
@@ -380,16 +345,16 @@ class DeliveredInput(QueuedInput):
         from .turn_context import TurnContext
 
         with _store_lock(inputs.comms._wire_lock_path):
-            accepted = pending[: max(cls.remaining_capacity(inputs, sources), 0)]
+            accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
             snapshot = inputs.comms.registry.snapshot()
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads[canonical]
             context = QueuedInputContext.capture(owner, snapshot.claimed_identity(canonical))
-            document = inputs.dispositions.read(
-                tuple(InputDispositions.bus_key(source.message, owner) for source, _ in accepted)
-            )
+            document = inputs.dispositions.read(tuple(
+                InputDispositions.bus_key(source.message, owner) for source, _ in accepted
+            ))
             with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
                 for source, assignment in accepted:
                     message = source.message
@@ -400,10 +365,7 @@ class DeliveredInput(QueuedInput):
                         (DeliveredMessageSegment.capture(source, assignment, owner),)
                     )
                     row = ReservedInput(
-                        key,
-                        message.seq,
-                        canonical,
-                        context.claim_scope.claimed_generation,
+                        key, message.seq, canonical, context.claim_scope.claimed_generation,
                         message.target,
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
@@ -411,34 +373,23 @@ class DeliveredInput(QueuedInput):
                     with ExitStack() as ownership:
                         inputs.dispositions.reserve_originals(row, ownership=ownership)
                         paused = store.assignments.transition_preengagement(
-                            assignment.assignment_id,
-                            DeferredAssignment,
+                            assignment.assignment_id, DeferredAssignment,
                             expected_revision=assignment.revision,
                         ).value
                         ownership.callback(store.assignments.restore_unbound_delivery, paused)
-                        reserved.append(
-                            (
-                                cls(
-                                    text=row.source_text,
-                                    echo=False,
-                                    context=context,
-                                    input_id=Id128Text.mint(),
-                                    prompt=rendered.text,
-                                    bus_key=key,
-                                    message=message,
-                                    assignment=paused,
-                                ),
-                                InputContent(
-                                    text=rendered.text, contributions=rendered.contributions
-                                ),
-                            )
-                        )
+                        reserved.append((
+                            cls(
+                                text=row.source_text, echo=False, context=context,
+                                input_id=Id128Text.mint(), prompt=rendered.text,
+                                bus_key=key, message=message, assignment=paused,
+                            ),
+                            InputContent(text=rendered.text, contributions=rendered.contributions),
+                        ))
                         ownership.pop_all()
 
     @staticmethod
     async def _restore_unplaced(
-        inputs: InputDrain,
-        session_id: str,
+        inputs: InputDrain, session_id: str,
         reserved: list[tuple[DeliveredInput, InputContent]],
     ) -> None:
         # Capture the loop-owned transfer before the first await; a turn may
@@ -452,10 +403,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def recover_interrupted(
-        cls,
-        inputs: InputDrain,
-        session_id: str,
-        root_id: str,
+        cls, inputs: InputDrain, session_id: str, root_id: str,
     ) -> int:
         """Requeue only deliveries positively proved absent from native input.
 
@@ -466,33 +414,25 @@ class DeliveredInput(QueuedInput):
         """
         async with inputs.queue_lock:
             name = inputs.sessions.require(session_id)
-            live_keys = frozenset(item.key for item in inputs.state(session_id).queued.values())
-            return await Coordination.run_worker(
-                partial(
-                    cls._recover_locked,
-                    inputs.comms,
-                    inputs.dispositions,
-                    name,
-                    root_id,
-                    live_keys,
-                )
+            live_keys = frozenset(
+                item.key for item in inputs.state(session_id).queued.values()
             )
+            return await Coordination.run_worker(partial(
+                cls._recover_locked, inputs.comms, inputs.dispositions,
+                name, root_id, live_keys,
+            ))
 
     @staticmethod
     def _recover_locked(
-        comms: Comms,
-        dispositions: InputDispositions,
-        name: str,
-        root_id: str,
-        live_keys: frozenset[str],
+        comms: Comms, dispositions: InputDispositions,
+        name: str, root_id: str, live_keys: frozenset[str],
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
         entry = comms.registry.entry(name).entry
         owner = entry.thread
         document = dispositions.unresolved(entry.names)
-        if not any(
-            row.key not in live_keys for row in document.unbound_wire_inputs(root_id).values()
-        ):
+        if not any(row.key not in live_keys
+                   for row in document.unbound_wire_inputs(root_id).values()):
             return 0
         with _store_lock(comms._wire_lock_path):
             entry = comms.registry.entry(name).entry
@@ -508,8 +448,7 @@ class DeliveredInput(QueuedInput):
             path = str(comms.root / "coordination.sqlite3")
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
-                    owner.incarnation.lookup,
-                    frozenset(rows),
+                    owner.incarnation.lookup, frozenset(rows),
                 )
             if not assignments:
                 return 0
@@ -526,13 +465,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def deliver_pending(
-        cls,
-        inputs: InputDrain,
-        session_id: str,
-        owner: Thread,
-        bus: MessageBus,
-        root_id: str,
-        after_seq: int,
+        cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
     ) -> None:
         """Hand this owner's pending bus messages to its running turn.
 
@@ -549,18 +482,16 @@ class DeliveredInput(QueuedInput):
         def read(store: Coordination):
             with store.session.read():
                 assignments = tuple(
-                    assignment
-                    for assignment in pending_sealed_assignments(
+                    assignment for assignment in pending_sealed_assignments(
                         store, lookup, owner.name, after_seq=after_seq
-                    )
-                    if assignment.audience.joins_active_turn()
+                    ) if assignment.audience.joins_active_turn()
                 )
             with bus.log.checked_read() as source:
                 if source.marker.root_id != root_id:
                     raise IdentityConflict("delivered source wire root changed")
-                originals = tuple(
-                    source.references(tuple(assignment.source for assignment in assignments))
-                )
+                originals = tuple(source.references(tuple(
+                    assignment.source for assignment in assignments
+                )))
             return tuple(zip(originals, assignments, strict=True))
 
         pending = await Coordination.run_read_async(store_path, read)
@@ -571,17 +502,9 @@ class DeliveredInput(QueuedInput):
             rollback.push_async_callback(cls._restore_unplaced, inputs, session_id, reserved)
             async with inputs.queue_lock:
                 sources = tuple(inputs.state(session_id).following.values())
-                await Coordination.run_worker(
-                    partial(
-                        cls.reserve_pending,
-                        inputs,
-                        owner.name,
-                        root_id,
-                        pending,
-                        sources,
-                        reserved,
-                    )
-                )
+                await Coordination.run_worker(partial(
+                    cls.reserve_pending, inputs, owner.name, root_id, pending, sources, reserved,
+                ))
                 for item, content in reserved:
                     try:
                         item.place(inputs, session_id, inbox, content)
@@ -601,8 +524,7 @@ class DeliveredInput(QueuedInput):
         await Coordination.run_async(
             inputs.comms.root / "coordination.sqlite3",
             lambda store: store.assignments.transition_preengagement(
-                self.assignment.assignment_id,
-                state,
+                self.assignment.assignment_id, state,
                 expected_revision=self.assignment.revision,
             ),
         )
@@ -627,14 +549,8 @@ class InitialInput(QueuedInput):
 
     @classmethod
     async def run(
-        cls,
-        inputs: InputDrain,
-        session_id: str,
-        thread_name: str,
-        task: str,
-        *,
-        images: tuple[ImageInput, ...] = (),
-        display_text: str | None = None,
+        cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
+        images: tuple[ImageInput, ...] = (), display_text: str | None = None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
@@ -644,16 +560,10 @@ class InitialInput(QueuedInput):
         request = UserRequestSegment.capture(task)
         async with AsyncExitStack() as resources:
             async with cls.reserve(
-                inputs,
-                session_id,
-                thread_name,
-                text=display_text or task,
+                inputs, session_id, thread_name, text=display_text or task,
                 prompt=TurnContext.render_segments((request,), images=images).text,
-                echo=display_text is not None,
-                images=images,
-                controller=inputs.runtime.controller.get(),
-                input_id=input_id,
-                origin=origin,
+                echo=display_text is not None, images=images,
+                controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
             ) as reservation:
                 item = reservation.item
                 inputs.state(session_id).queued[item.input_id] = item
@@ -668,12 +578,9 @@ class InitialInput(QueuedInput):
         queued = inputs.state(session_id).queued
         if queued.get(self.input_id) is self:
             try:
-                await Coordination.run_worker(
-                    partial(
-                        inputs.finish_original_inputs,
-                        (self.key,),
-                    )
-                )
+                await Coordination.run_worker(partial(
+                    inputs.finish_original_inputs, (self.key,),
+                ))
             finally:
                 # The joined original write finishes before cancellation is
                 # propagated. Burn only this live grant; durable UNKNOWN stays.

@@ -31,18 +31,11 @@ class NativeContextManifestData(PiResponseData):
     values: tuple[MeasuredNativeSegment, ...] = ()
 
     def for_turn(self, thread, turn):
-        if any(
-            not any(segment.contains_value(value) for segment in self.segments)
-            for value in self.values
-        ):
+        if any(not any(segment.contains_value(value) for segment in self.segments)
+               for value in self.values):
             raise ValueError("Captured SDK value is outside the original manifest")
-        return ContextManifest(
-            thread,
-            turn,
-            tuple(segment.capture_public(self.values) for segment in self.segments),
-            self.counter,
-            request_id=self.request_id,
-        )
+        return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
+            for segment in self.segments), self.counter, request_id=self.request_id)
 
     async def record(self, log, thread, lease) -> ContextManifest:
         """Publish the original SDK observation under its leased owner turn."""
@@ -52,7 +45,9 @@ class NativeContextManifestData(PiResponseData):
 
         turn = RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
         manifest = self.for_turn(thread.incarnation, turn)
-        await Coordination.run_worker(partial(log.record_context, manifest))
+        await Coordination.run_worker(
+            partial(log.record_context, manifest)
+        )
         return manifest
 
 
@@ -65,21 +60,17 @@ class NativeContextData(PiResponseData, DeclaredReply):
 
     def observation(self) -> PreviewProvenance:
         """Return the SDK's original observation, without deriving its digest."""
-        originals = {
-            observation
-            for segment in self.segments
-            for source in segment.provenance
-            for observation in source.preview_observations()
-        }
+        originals = {observation for segment in self.segments
+                     for source in segment.provenance
+                     for observation in source.preview_observations()}
         if len(originals) != 1:
             raise ValueError("Native context has no unambiguous current preview observation")
         (original,) = originals
         self.identity.require_same_session(original.identity)
         return original
 
-    def public_source_text(
-        self, comms, observation: PreviewProvenance, segment: int, source: Provenance
-    ) -> ContextSourceText:
+    def public_source_text(self, comms, observation: PreviewProvenance,
+                           segment: int, source: Provenance) -> ContextSourceText:
         if observation != self.observation():
             raise ValueError("Current native preview changed since the selected observation")
         if not 0 <= segment < len(self.segments):
@@ -94,9 +85,8 @@ class NativeContextData(PiResponseData, DeclaredReply):
             originals.setdefault(original.sha256, []).append(original)
         values = {}
         for segment in self.segments:
-            if not any(
-                segment.matches_recorded(original) for original in originals.get(segment.sha256, ())
-            ):
+            if not any(segment.matches_recorded(original)
+                       for original in originals.get(segment.sha256, ())):
                 raise ValueError("Recorded SDK source is outside the selected original value")
             values.setdefault(segment.sha256, []).append(segment)
         return expected.recorded_public_text(values)

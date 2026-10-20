@@ -80,6 +80,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         field_codec.WireName("receipt_message_id"),
         field_codec.SnapshotExclude(True),
         Column(
+            record_key=True,
             generated="json_extract(lifecycle, '$.message_id')",
             check=(
                 "\n"
@@ -94,6 +95,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         field_codec.WireName("receipt_seq"),
         field_codec.SnapshotExclude(True),
         Column(
+            record_key=True,
             generated="json_extract(lifecycle, '$.seq')",
             check="receipt_seq IS NULL OR receipt_seq > 0",
         ),
@@ -117,7 +119,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         int | None,
         field_codec.WireName("receipt_settled"),
         field_codec.SnapshotExclude(True),
-        Column(generated="CASE WHEN state = 'published' THEN 1 ELSE 0 END"),
+        Column(record_key=True, generated="CASE WHEN state = 'published' THEN 1 ELSE 0 END"),
     ] = dataclass_field(init=False, default=None, compare=False)
     checks = (
         "(receipt_message_id IS NULL) = (receipt_seq IS NULL)",
@@ -147,11 +149,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
 
     @classmethod
     def trigger_bodies(cls):
-        return {
-            **cls._retry_trigger_bodies(),
-            **cls._lifecycle_trigger_bodies(),
-            **cls._publication_trigger_bodies(),
-        }
+        return {**cls._retry_trigger_bodies(), **cls._lifecycle_trigger_bodies(), **cls._publication_trigger_bodies()}
 
     @classmethod
     def _retry_trigger_bodies(cls):

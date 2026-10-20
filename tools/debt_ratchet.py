@@ -72,9 +72,8 @@ class Side(enum.Enum):
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
     def blocks(cls, delta: dict[str, int]) -> bool:
-        return any(
-            value > 0 for key, value in delta.items() if key.partition(":")[0] == cls.__name__
-        )
+        return any(value > 0 for key, value in delta.items()
+                   if key.partition(":")[0] == cls.__name__)
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
@@ -83,22 +82,18 @@ class Measure(DeclaredFamily, affix="Measure"):
 
     @classmethod
     @abstractmethod
-    def parts(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[Callable[[], object], ...]:
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
         """Independent pieces of the comparison; compare() runs each in a separate process."""
 
     @classmethod
     @abstractmethod
-    def combine(
-        cls, results: list, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         """The before/after measurements from the results of parts(), in order."""
 
     @classmethod
-    def align(
-        cls, base: dict[str, int], head: dict[str, int]
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         return base, head
 
     @classmethod
@@ -113,21 +108,18 @@ class ChangeMeasure(Measure):
 
     @classmethod
     @abstractmethod
-    def counted(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def counted(cls, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         """The before/after counts."""
 
     @classmethod
-    def parts(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[Callable[[], object], ...]:
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
         return (partial(cls.counted, repo, base, head, changed, root),)
 
     @classmethod
-    def combine(
-        cls, results: list, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         before, after = results[0]
         return before, after
 
@@ -137,21 +129,18 @@ class RevisionMeasure(Measure):
 
     @classmethod
     @abstractmethod
-    def at(
-        cls, repo: Path, ref: str, base: str, head: str, changed: set[str], root: str
-    ) -> dict[str, int]:
+    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
+           root: str) -> dict[str, int]:
         """This revision's measurements."""
 
     @classmethod
-    def parts(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[Callable[[], object], ...]:
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
         return tuple(partial(cls.at, repo, ref, base, head, changed, root) for ref in (base, head))
 
     @classmethod
-    def combine(
-        cls, results: list, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         return cls.align(*results)
 
 
@@ -172,43 +161,33 @@ class InventoryMeasure[Reading](Measure):
 
     @classmethod
     @abstractmethod
-    def measured(
-        cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, Reading], root: str
-    ) -> dict[str, int]:
+    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, Reading],
+                 root: str) -> dict[str, int]:
         """This revision's measurements from its files' readings, in path order."""
 
     @classmethod
     def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
-        return {
-            path: cls.reading(path, source)
-            for path, source in GitMeasure.sources(repo, ref, set(paths))
-        }
+        return {path: cls.reading(path, source)
+                for path, source in GitMeasure.sources(repo, ref, set(paths))}
 
     @classmethod
-    def parts(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[Callable[[], object], ...]:
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
         before, after = cls.inventory(repo, base, root), cls.inventory(repo, head, root)
         shared = sorted((before & after) - touched_paths(repo, base, head))
         shards = os.process_cpu_count() or 1
-        return (
-            partial(cls.read, repo, base, sorted(before.difference(shared))),
-            partial(cls.read, repo, head, sorted(after.difference(shared))),
-            *(partial(cls.read, repo, head, shared[shard::shards]) for shard in range(shards)),
-        )
+        return (partial(cls.read, repo, base, sorted(before.difference(shared))),
+                partial(cls.read, repo, head, sorted(after.difference(shared))),
+                *(partial(cls.read, repo, head, shared[shard::shards]) for shard in range(shards)))
 
     @classmethod
-    def combine(
-        cls, results: list, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         before, after, *shards = results
         shared = {path: reading for shard in shards for path, reading in shard.items()}
-        return cls.align(
-            *(
-                cls.measured(repo, ref, base, head, dict(sorted({**shared, **own}.items())), root)
-                for ref, own in ((base, before), (head, after))
-            )
-        )
+        return cls.align(*(cls.measured(repo, ref, base, head,
+                                        dict(sorted({**shared, **own}.items())), root)
+                           for ref, own in ((base, before), (head, after))))
 
 
 class GitMeasure(RevisionMeasure):
@@ -252,9 +231,8 @@ class GitMeasure(RevisionMeasure):
         return [(path, blobs[identities[path]]) for path in sorted(selected)]
 
     @classmethod
-    def at(
-        cls, repo: Path, ref: str, base: str, head: str, changed: set[str], root: str
-    ) -> dict[str, int]:
+    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
+           root: str) -> dict[str, int]:
         return cls.snapshot(cls.sources(repo, ref, changed & python_paths(repo, ref, root)))
 
 
@@ -298,14 +276,10 @@ class PerFileMeasure(CountedSource):
         return {f"{cls.__name__}:{path}": cls.count(source, path) for path, source in sources}
 
     @classmethod
-    def align(
-        cls, base: dict[str, int], head: dict[str, int]
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         identities = sorted(base.keys() | head.keys())
-        return (
-            {key: base.get(key, 0) for key in identities},
-            {key: head.get(key, 0) for key in identities},
-        )
+        return ({key: base.get(key, 0) for key in identities},
+                {key: head.get(key, 0) for key in identities})
 
 
 class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
@@ -319,7 +293,7 @@ class MetadataKeys(ast.NodeVisitor):
         return 1
 
     def visit_Dict(self, node: ast.Dict) -> int:
-        return sum(self.visit(key) if key else 1 for key in node.keys)
+        return sum(typing.cast(int, self.visit(key)) if key else 1 for key in node.keys)
 
     def visit_Constant(self, node: ast.Constant) -> int:
         return int(isinstance(node.value, str))
@@ -369,14 +343,12 @@ class CheckedRevision(Measure):
     @staticmethod
     def extract(repo: Path, ref: str, scratch: Path, selected: list[str]) -> None:
         """Write the revision's files the checker reads."""
-        subprocess.run(
-            ["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True, timeout=60
-        )
+        subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True,
+                       timeout=60)
 
     @classmethod
-    def findings(
-        cls, repo: Path, ref: str, head: str, root: str, selected: list[str], side: Side
-    ) -> tuple[Side, Counter[str]]:
+    def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                 side: Side) -> tuple[Side, Counter[str]]:
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
             tree = Path(scratch)
             cls.extract(repo, ref, tree, selected)
@@ -384,46 +356,34 @@ class CheckedRevision(Measure):
             configuration.unlink(missing_ok=True)
             if git(repo, "ls-tree", "--name-only", head, "--", "pyproject.toml"):
                 configuration.write_bytes(git(repo, "show", f"{head}:pyproject.toml"))
-            result = subprocess.run(
-                [sys.executable, "-m", *cls.command(tree, selected, side)],
-                cwd=tree,
-                env=cls.environment(root, tree),
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
+            result = subprocess.run([sys.executable, "-m", *cls.command(tree, selected, side)],
+                                    cwd=tree, env=cls.environment(root, tree), capture_output=True,
+                                    text=True, timeout=600)
         if result.returncode not in (0, 1):
             raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
         # A checker reports each file under the path it was given, inside the tree or relative to
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
         output = result.stdout + result.stderr
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
-        return side, Counter(
-            path.relative_to(tree).as_posix() for path in reported if path.is_relative_to(tree)
-        )
+        return side, Counter(path.relative_to(tree).as_posix()
+                             for path in reported if path.is_relative_to(tree))
 
     @classmethod
-    def parts(
-        cls, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[Callable[[], object], ...]:
-        return tuple(
-            partial(cls.findings, repo, ref, head, root, batch, side)
-            for side, ref in zip(Side, (base, head), strict=True)
-            for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
-            if batch
-        )
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        return tuple(partial(cls.findings, repo, ref, head, root, batch, side)
+                     for side, ref in zip(Side, (base, head), strict=True)
+                     for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
+                     if batch)
 
     @classmethod
-    def combine(
-        cls, results: list, repo: Path, base: str, head: str, changed: set[str], root: str
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
         found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
         for side, counted in results:
             found[side] += counted
-        before, after = (
-            {f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
-            for side in Side
-        )
+        before, after = ({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
+                         for side in Side)
         return before, after
 
 
@@ -473,14 +433,8 @@ class TypeErrors(CheckedRevision):
         # keeps its own cache: the two revisions run at once, and a base usually matches the
         # previous run's base.
         cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side.value
-        return [
-            "mypy",
-            "--explicit-package-bases",
-            "--cache-dir",
-            str(cache),
-            "--no-error-summary",
-            *(str(tree / path) for path in selected),
-        ]
+        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
+                *(str(tree / path) for path in selected)]
 
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
@@ -509,20 +463,8 @@ class ChangedSource:
 
     @classmethod
     def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
-        patch = git(
-            repo,
-            "diff",
-            "--no-renames",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--no-color",
-            "--unified=0",
-            "--inter-hunk-context=0",
-            base,
-            head,
-            "--",
-            path,
-        )
+        patch = git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
+                    "--no-color", "--unified=0", "--inter-hunk-context=0", base, head, "--", path)
         lines: set[int] = set()
         for header in patch.decode().splitlines():
             if header.startswith("@@ "):
@@ -545,19 +487,16 @@ class CleanChangedLines(OccurrenceMeasure):
     def introduced(repo: Path, base: str, head: str, path: str) -> dict[str, list[int]]:
         """Each strict measure's sites on the path's changed lines."""
         source = ChangedSource.read(repo, base, head, path)
-        return {
-            f"{measure.__name__}:{path}": measure.changed_sites(source)
-            for measure in Measure.members_with(CleanChangedLines)
-        }
+        return {f"{measure.__name__}:{path}": measure.changed_sites(source)
+                for measure in Measure.members_with(CleanChangedLines)}
 
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
         """The first changed line of each occurrence written on a changed line."""
         sites = []
         for node in cls.sites(source.tree, source.path):
-            if (count := cls.occurrences(node)) and (
-                touched := source.lines.intersection(cls.site_lines(node))
-            ):
+            if ((count := cls.occurrences(node))
+                    and (touched := source.lines.intersection(cls.site_lines(node)))):
                 sites.extend([min(touched)] * count)
         return sites
 
@@ -577,15 +516,10 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
         match node:
-            case (
-                ast.Name(id=name)
-                | ast.Attribute(attr=name)
-                | ast.FunctionDef(name=name)
-                | ast.AsyncFunctionDef(name=name)
-                | ast.ClassDef(name=name)
-                | ast.arg(arg=name)
-                | ast.keyword(arg=str(name))
-            ):
+            case (ast.Name(id=name) | ast.Attribute(attr=name)
+                  | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name)
+                  | ast.ClassDef(name=name) | ast.arg(arg=name)
+                  | ast.keyword(arg=str(name))):
                 return int(any(word in name.casefold() for word in cls.words))
         return 0
 
@@ -615,9 +549,7 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         module = ChangedSource(filename, source, frozenset())
-        return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(
-            cls.prose_lines(module)
-        )
+        return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
@@ -634,9 +566,8 @@ class DecoratorBinding:
     names: frozenset[str]
 
     @classmethod
-    def of(
-        cls, decorator: typing.Callable[..., object], tree: ast.AST, filename: str
-    ) -> DecoratorBinding:
+    def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
+           filename: str) -> DecoratorBinding:
         owner, name = decorator.__module__, decorator.__name__
         parts = Path(filename).with_suffix("").parts
         module = parts[1:] if parts[:1] == ("src",) else parts
@@ -645,13 +576,10 @@ class DecoratorBinding:
         for node in ast.walk(tree):
             match node:
                 case ast.Import(names=aliases):
-                    names.update(
-                        f"{alias.asname or alias.name}.{name}"
-                        for alias in aliases
-                        if alias.name == owner
-                    )
+                    names.update(f"{alias.asname or alias.name}.{name}"
+                                 for alias in aliases if alias.name == owner)
                 case ast.ImportFrom(module=source, names=aliases, level=level):
-                    base = package[: len(package) - level + 1] if level else ()
+                    base = package[:len(package) - level + 1] if level else ()
                     resolved = ".".join((*base, source) if source else base)
                     for alias in aliases:
                         if f"{resolved}.{alias.name}" == owner:
@@ -721,10 +649,8 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
         while pending:
             node = pending.pop()
             match node:
-                case (
-                    ast.FunctionDef(decorator_list=decorators)
-                    | ast.AsyncFunctionDef(decorator_list=decorators)
-                ) if any(map(marker.marks, decorators)):
+                case ast.FunctionDef(decorator_list=decorators) | ast.AsyncFunctionDef(
+                        decorator_list=decorators) if any(map(marker.marks, decorators)):
                     continue
             yield node
             pending.extend(ast.iter_child_nodes(node))
@@ -806,20 +732,15 @@ class DeclaredSpellings:
     enums: frozenset[str]
 
     boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
-        kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag)
-    )
+        kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
     named_calls: typing.ClassVar[frozenset[str]] = frozenset(
-        call.__name__
-        for call in (getattr, setattr, hasattr, delattr, __import__, importlib.import_module)
-    )
+        call.__name__ for call in (getattr, setattr, hasattr, delattr, __import__,
+                                   importlib.import_module))
     selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
-        call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value)
-    )
+        call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
-    entry_guard: typing.ClassVar[str] = ast.dump(
-        ast.parse('__name__ == "__main__"', mode="eval").body
-    )
+    entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
     @staticmethod
     def multiword(name: str) -> bool:
@@ -834,33 +755,20 @@ class DeclaredSpellings:
         while top.parent in packages:
             top = top.parent
         parts = module.relative_to(top.parent).parts
-        return ".".join(
-            parts[:-1] if module.name == Path(DeclaredSpellings.package_marker).stem else parts
-        )
+        return ".".join(parts[:-1] if module.name == Path(DeclaredSpellings.package_marker).stem else parts)
 
     @classmethod
     def declarations(cls, path: str, source: bytes) -> ModuleDeclarations:
         tree = ast.parse(source, path)
-        functions = (
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        )
+        functions = (node.name for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
         classes = (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
         return ModuleDeclarations(
             tuple(filter(cls.multiword, functions)),
-            tuple(
-                (
-                    node.name,
-                    tuple(
-                        base.id if isinstance(base, ast.Name) else base.attr
-                        for base in node.bases
-                        if isinstance(base, (ast.Name, ast.Attribute))
-                    ),
-                )
-                for node in classes
-            ),
-        )
+            tuple((node.name, tuple(base.id if isinstance(base, ast.Name) else base.attr
+                                    for base in node.bases
+                                    if isinstance(base, (ast.Name, ast.Attribute))))
+                  for node in classes))
 
     @classmethod
     def read(cls, modules: dict[str, ModuleDeclarations]) -> DeclaredSpellings:
@@ -890,12 +798,10 @@ class DeclaredSpellings:
         exempt: set[int] = set()
         for node in ast.walk(tree):
             match node:
-                case (
-                    ast.Module(body=[ast.Expr(value=ast.Constant() as prose), *_])
-                    | ast.ClassDef(body=[ast.Expr(value=ast.Constant() as prose), *_])
-                    | ast.FunctionDef(body=[ast.Expr(value=ast.Constant() as prose), *_])
-                    | ast.AsyncFunctionDef(body=[ast.Expr(value=ast.Constant() as prose), *_])
-                ):
+                case ast.Module(body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.ClassDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.FunctionDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.AsyncFunctionDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]):
                     exempt.add(id(prose))
             match node:
                 case ast.JoinedStr():
@@ -914,23 +820,16 @@ class DeclaredSpellings:
         found: dict[int, IdentitySite] = {}
 
         def record(literal: ast.AST, reading: type[IdentityReading], target: str) -> None:
-            if (
-                isinstance(literal, ast.Constant)
-                and isinstance(literal.value, str)
-                and id(literal) not in exempt
-            ):
-                found.setdefault(
-                    id(literal), IdentitySite(literal.lineno, literal.value, reading, target)
-                )
+            if (isinstance(literal, ast.Constant) and isinstance(literal.value, str)
+                    and id(literal) not in exempt):
+                found.setdefault(id(literal), IdentitySite(literal.lineno, literal.value, reading, target))
 
         for node in ast.walk(tree):
             match node:
                 case ast.Call(func=ast.Name(id=call) | ast.Attribute(attr=call), args=arguments):
                     if call in self.named_calls:
-                        position = int(
-                            call not in {__import__.__name__, importlib.import_module.__name__}
-                        )
-                        for argument in arguments[position : position + 1]:
+                        position = int(call not in {__import__.__name__, importlib.import_module.__name__})
+                        for argument in arguments[position:position + 1]:
                             record(argument, NamedAccess, f"{call} by name")
                     if call in self.selecting_calls:
                         for argument in arguments:
@@ -943,28 +842,20 @@ class DeclaredSpellings:
                                     if self.kind(side):
                                         record(side, ComparedKind, "kind compared by spelling")
                             case ast.In() | ast.NotIn(), ast.Set(elts=items) | ast.Tuple(
-                                elts=items
-                            ) | ast.List(elts=items):
+                                    elts=items) | ast.List(elts=items):
                                 for item in filter(self.kind, items):
                                     record(item, ComparedKind, "kind compared by spelling")
                         left = right
                 case ast.MatchValue(value=value) if self.kind(value):
                     record(value, ComparedKind, "kind matched by spelling")
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and node.value in self.names
-            ):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in self.names:
                 record(node, NamedDeclaration, self.names[node.value])
         return sorted(found.values(), key=lambda site: site.line)
 
     def kind(self, node: ast.AST) -> bool:
-        return (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and self.kind_spelling.fullmatch(node.value) is not None
-        )
+        return (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and self.kind_spelling.fullmatch(node.value) is not None)
 
 
 class PytestTestPaths:
@@ -989,11 +880,8 @@ class PytestTestPaths:
 def production_paths(repo: Path, ref: str) -> frozenset[str]:
     """Every Python path the revision tracks outside its declared test tree."""
     tests = PytestTestPaths.at(repo, ref)
-    return frozenset(
-        path
-        for path in python_paths(repo, ref, ".")
-        if not any(Path(path).is_relative_to(tree) for tree in tests)
-    )
+    return frozenset(path for path in python_paths(repo, ref, ".")
+                     if not any(Path(path).is_relative_to(tree) for tree in tests))
 
 
 class StringIdentity(InventoryMeasure[ModuleDeclarations]):
@@ -1013,21 +901,12 @@ class StringIdentity(InventoryMeasure[ModuleDeclarations]):
     reading = DeclaredSpellings.declarations
 
     @classmethod
-    def measured(
-        cls,
-        repo: Path,
-        ref: str,
-        base: str,
-        head: str,
-        readings: dict[str, ModuleDeclarations],
-        root: str,
-    ) -> dict[str, int]:
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
         spellings = DeclaredSpellings.read(readings)
         selected = readings.keys() & touched_paths(repo, base, head)
-        return {
-            f"{cls.__name__}:{path}": len(spellings.sites(source, path))
-            for path, source in GitMeasure.sources(repo, ref, selected)
-        }
+        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
+                for path, source in GitMeasure.sources(repo, ref, selected)}
 
     align = PerFileMeasure.align
 
@@ -1038,20 +917,13 @@ class ForeignFieldSpellings(PerFileOccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         match node:
-            case (
-                ast.For(iter=ast.Tuple(elts=items))
-                | ast.AsyncFor(iter=ast.Tuple(elts=items))
-                | ast.comprehension(iter=ast.Tuple(elts=items))
-            ):
-                return int(
-                    len(items) > 1
-                    and all(
-                        isinstance(item, ast.Constant)
-                        and isinstance(item.value, str)
-                        and item.value.isidentifier()
-                        for item in items
-                    )
-                )
+            case (ast.For(iter=ast.Tuple(elts=items))
+                  | ast.AsyncFor(iter=ast.Tuple(elts=items))
+                  | ast.comprehension(iter=ast.Tuple(elts=items))):
+                return int(len(items) > 1 and all(
+                    isinstance(item, ast.Constant) and isinstance(item.value, str)
+                    and item.value.isidentifier() for item in items
+                ))
         return 0
 
 
@@ -1090,41 +962,25 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
 
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
-        return int(
-            isinstance(node, ast.ExceptHandler)
-            and cls.broad(node.type)
-            and any(cls.returns_default(statement) for statement in node.body)
-        )
+        return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
+                   and any(cls.returns_default(statement) for statement in node.body))
 
 
 class BroadSwallow(CleanChangedLines, BroadExceptDefault):
     """A broad handler without a raise hides the failure, whatever it returns."""
 
-    broad_names = frozenset(
-        {
-            "Exception",
-            "BaseException",
-            "ValueError",
-            "RuntimeError",
-            "OSError",
-            "TypeError",
-            "KeyError",
-            "AttributeError",
-            "LookupError",
-        }
-    )
+    broad_names = frozenset({
+        "Exception", "BaseException", "ValueError", "RuntimeError", "OSError", "TypeError",
+        "KeyError", "AttributeError", "LookupError",
+    })
 
     suppressed_names = broad_names | {"ConnectionError", "TimeoutError"}
 
     @classmethod
     def suppresses(cls, node: ast.AST) -> bool:
         match node:
-            case ast.Call(
-                func=ast.Name(id="suppress") | ast.Attribute(attr="suppress"), args=arguments
-            ):
-                return any(
-                    cls.broad(argument, names=cls.suppressed_names) for argument in arguments
-                )
+            case ast.Call(func=ast.Name(id="suppress") | ast.Attribute(attr="suppress"), args=arguments):
+                return any(cls.broad(argument, names=cls.suppressed_names) for argument in arguments)
         return False
 
     @classmethod
@@ -1133,10 +989,8 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
             case ast.With(items=items) | ast.AsyncWith(items=items):
                 return sum(cls.suppresses(item.context_expr) for item in items)
             case ast.ExceptHandler(type=error):
-                return int(
-                    cls.broad(error)
-                    and not any(isinstance(child, ast.Raise) for child in ast.walk(node))
-                )
+                return int(cls.broad(error) and not any(
+                    isinstance(child, ast.Raise) for child in ast.walk(node)))
         return 0
 
 
@@ -1155,11 +1009,8 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
             self.owners.pop()
 
     def visit_Attribute(self, node: ast.Attribute):
-        if (
-            node.attr == "declared_name"
-            and isinstance(node.value, ast.Name)
-            and node.value.id in {"cls", "self", *self.owners[-1:]}
-        ):
+        if (node.attr == "declared_name" and isinstance(node.value, ast.Name)
+                and node.value.id in {"cls", "self", *self.owners[-1:]}):
             return ast.copy_location(ast.Constant(value=None), node)
         return self.generic_visit(node)
 
@@ -1167,13 +1018,8 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
         # `python -m` runs a module through this guard; it names the interpreter, not a family.
         for statement in node.body:
             match statement:
-                case ast.If(
-                    test=ast.Compare(
-                        left=ast.Name(id="__name__"),
-                        ops=[ast.Eq()],
-                        comparators=[ast.Constant(value="__main__")],
-                    )
-                ):
+                case ast.If(test=ast.Compare(left=ast.Name(id="__name__"), ops=[ast.Eq()],
+                                             comparators=[ast.Constant(value="__main__")])):
                     statement.test = ast.copy_location(ast.Constant(value=None), statement.test)
         return self.generic_visit(node)
 
@@ -1181,15 +1027,10 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
         match node:
             case ast.Call(
                 func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="decode"),
-                args=[
-                    ast.Name(id="str"),
-                    ast.Call(
-                        func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="encode"),
-                        args=[_],
-                        keywords=[],
-                    ),
-                ],
-                keywords=[],
+                args=[ast.Name(id="str"), ast.Call(
+                    func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="encode"),
+                    args=[_], keywords=[],
+                )], keywords=[],
             ):
                 self.round_trips += 1
                 return ast.copy_location(ast.Constant(value=None), node)
@@ -1197,17 +1038,12 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
 
     # GitMeasure supplies complete repository-relative paths. Only those exact
     # original modules own codec/schema behavior; nested package tails do not.
-    mechanism_modules = frozenset(
-        Path("src", package, module)
-        for package, module in {
-            ("agent_comms", "field_codec.py"),
-            ("agent_comms", "typed_table.py"),
-            ("agent_comms", "coordination_schema.py"),
-            ("agent_comms", "coordinated_runtime_schema.py"),
-            ("toad", "agent_schema.py"),
-            ("toad", "db.py"),
-        }
-    )
+    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
+        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
+        ("agent_comms", "coordination_schema.py"),
+        ("agent_comms", "coordinated_runtime_schema.py"),
+        ("toad", "agent_schema.py"), ("toad", "db.py"),
+    })
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
@@ -1230,9 +1066,8 @@ class DispatchCases(MroDispatch):
         self.cases.setdefault(ast.dump(subject), set()).add(case)
 
     def groups(self) -> tuple[frozenset[str], ...]:
-        return tuple(
-            frozenset(cases) for cases in self.cases.values() if len(cases) >= self.minimum_arms
-        )
+        return tuple(frozenset(cases) for cases in self.cases.values()
+                     if len(cases) >= self.minimum_arms)
 
     def read_function(self, function: ast.AST) -> None:
         pending = list(ast.iter_child_nodes(function))
@@ -1248,11 +1083,9 @@ class DispatchCases(MroDispatch):
 class LiteralDispatchCases(DispatchCases):
     @staticmethod
     def literal(node: ast.AST) -> bool:
-        return (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, (str, int, float))
-            and not isinstance(node.value, bool)
-        )
+        return (isinstance(node, ast.Constant)
+                and isinstance(node.value, (str, int, float))
+                and not isinstance(node.value, bool))
 
     @handles(ast.Compare)
     def comparison(self, node: ast.Compare) -> None:
@@ -1261,10 +1094,7 @@ class LiteralDispatchCases(DispatchCases):
             match operator, right:
                 case (ast.Eq() | ast.NotEq(), literal) if self.literal(literal):
                     self.add(left, repr(literal.value))
-                case (
-                    ast.In() | ast.NotIn(),
-                    ast.Set(elts=items) | ast.Tuple(elts=items) | ast.List(elts=items),
-                ):
+                case (ast.In() | ast.NotIn(), ast.Set(elts=items) | ast.Tuple(elts=items) | ast.List(elts=items)):
                     for item in items:
                         if self.literal(item):
                             self.add(left, repr(item.value))
@@ -1287,9 +1117,7 @@ class TypeDispatchCases(DispatchCases):
     @handles(ast.Compare)
     def exact_type(self, node: ast.Compare) -> None:
         match node:
-            case ast.Compare(
-                left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]
-            ):
+            case ast.Compare(left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]):
                 self.add(subject, ast.dump(kind))
 
     @handles(ast.Match)
@@ -1373,51 +1201,34 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         return python_paths(repo, ref, root)
 
     @classmethod
-    def measured(
-        cls,
-        repo: Path,
-        ref: str,
-        base: str,
-        head: str,
-        readings: dict[str, dict[str, int]],
-        root: str,
-    ) -> dict[str, int]:
-        return {
-            identity: value for values in readings.values() for identity, value in values.items()
-        }
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
+        return {identity: value
+                for values in readings.values() for identity, value in values.items()}
 
     @classmethod
     def reading(cls, path: str, source: bytes) -> dict[str, int]:
         values = {}
-
         def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
             match node:
-                case ast.ClassDef(
-                    name=name, lineno=start, end_lineno=end, decorator_list=decorators
-                ):
+                case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
                     scope = (*scope, name)
                     start = min([start, *(decorator.lineno for decorator in decorators)])
-                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(
-                        0, end - start + 1 - cls.threshold
-                    )
+                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(0, end - start + 1 - cls.threshold)
                 case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                     scope = (*scope, name)
             for child in ast.iter_child_nodes(node):
                 visit(child, path, scope)
-
         visit(ast.parse(source, path), path, ())
         return values
 
     @classmethod
-    def align(
-        cls, base: dict[str, int], head: dict[str, int]
-    ) -> tuple[dict[str, int], dict[str, int]]:
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         def names(values):
             result = {}
             for identity in values:
                 result.setdefault(identity.rsplit("::", 1)[1], []).append(identity)
             return result
-
         before, after = names(base), names(head)
         matched = {}
         consumed = set()
@@ -1527,11 +1338,8 @@ class TypingImports(MroDispatch):
     @handles(ast.Import)
     def modules(self, node: ast.Import) -> None:
         for item in node.names:
-            self.bind(
-                node,
-                item.asname or item.name.split(".")[0],
-                typing if item.name == typing.__name__ else None,
-            )
+            self.bind(node, item.asname or item.name.split(".")[0],
+                      typing if item.name == typing.__name__ else None)
 
     @handles(ast.ImportFrom)
     def members(self, node: ast.ImportFrom) -> None:
@@ -1569,7 +1377,6 @@ class TypingImports(MroDispatch):
 
     # Honor the package's Python 3.11 contract without inventing parser nodes.
     if hasattr(ast, "type_param"):
-
         @handles(ast.type_param)
         def type_parameter(self, node) -> None:
             self.shadowed.add(node.name)
@@ -1581,9 +1388,8 @@ class TypingImports(MroDispatch):
             imports.dispatch_sync(node)
         if "*" in imports.values:
             return {}  # A star import can replace any otherwise known binding.
-        return {
-            name: value for name, value in imports.values.items() if name not in imports.shadowed
-        }
+        return {name: value for name, value in imports.values.items()
+                if name not in imports.shadowed}
 
     @classmethod
     def at_any_depth(cls, tree: ast.Module) -> dict[str, object]:
@@ -1692,7 +1498,7 @@ class AnyInTypeExpression(MroDispatch):
             return
         try:
             quoted = ast.parse(node.value.strip(), mode="eval")
-        except SyntaxError, ValueError:
+        except (SyntaxError, ValueError):
             return
         self.dispatch_sync(quoted.body)
 
@@ -1722,9 +1528,8 @@ class DeclaredTypeSites(MroDispatch):
                 scope = (*scope, node)
             pending.extend((child, scope) for child in ast.iter_child_nodes(node))
 
-    def declare(
-        self, site: str, expression: ast.AST | None, scope: tuple[ast.AST, ...], quoted: bool = True
-    ) -> None:
+    def declare(self, site: str, expression: ast.AST | None, scope: tuple[ast.AST, ...],
+                quoted: bool = True) -> None:
         if expression is None:
             return
         counted = AnyInTypeExpression(self.imports, quoted)
@@ -1735,10 +1540,8 @@ class DeclaredTypeSites(MroDispatch):
     @staticmethod
     def record_class(scope: tuple[ast.AST, ...]) -> bool:
         """Whether the innermost scope is a class whose annotations are its fields."""
-
         def last_name(expression: ast.AST) -> str:
             return ast.unparse(getattr(expression, "func", expression)).rpartition(".")[2]
-
         decorators = {last_name(decorator) for decorator in scope[-1].decorator_list}
         bases = {last_name(base) for base in scope[-1].bases}
         return "dataclass" in decorators or bool(bases & {"NamedTuple", "TypedDict"})
@@ -1773,7 +1576,6 @@ class DeclaredTypeSites(MroDispatch):
 
     # Honor the package's Python 3.11 contract without inventing parser nodes.
     if hasattr(ast, "TypeAlias"):
-
         @handles(ast.TypeAlias)
         def alias_statement(self, node, scope: tuple[ast.AST, ...]) -> None:
             self.declare("alias", node.value, scope)
@@ -1815,38 +1617,18 @@ class EditedCarry(ChangeMeasure):
         tree = ast.parse(source)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
-                node.body = [
-                    statement
-                    for statement in node.body
-                    if not (
-                        isinstance(statement, ast.FunctionDef) and statement.name == "backup_files"
-                    )
-                    and not (
-                        isinstance(statement, ast.Assign)
-                        and [getattr(target, "id", None) for target in statement.targets]
-                        == ["after"]
-                    )
-                ]
+                node.body = [statement for statement in node.body
+                             if not (isinstance(statement, ast.FunctionDef)
+                                     and statement.name == 'backup_files')
+                             and not (isinstance(statement, ast.Assign)
+                                      and [getattr(target, "id", None)
+                                           for target in statement.targets] == ["after"])]
         return ast.dump(tree, include_attributes=False)
 
     @classmethod
     def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        fields = iter(
-            git(
-                repo,
-                "diff",
-                "--name-status",
-                "--find-renames=50%",
-                "-z",
-                base,
-                head,
-                "--",
-                str(STEPS),
-            )
-            .decode()
-            .split("\0")[:-1]
-        )
-
+        fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
+                          base, head, "--", str(STEPS)).decode().split("\0")[:-1])
         @cache
         def parents() -> dict[str, type[Carry]]:
             return carry_parents(git(repo, "show", f"{base}:{STEPS}/carry.py"))
@@ -1862,15 +1644,10 @@ class EditedCarry(ChangeMeasure):
             if status[0] in "MRC" or status == "T":
                 before = git(repo, "show", f"{base}:{path}")
                 if Step.holds_carry(before, parents()):
-                    edited += status != "M" or cls.conversion(before) != cls.conversion(
-                        git(repo, "show", f"{head}:{path}")
-                    )
+                    edited += (status != "M" or cls.conversion(before) !=
+                               cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":
-                edited += bool(
-                    git(
-                        repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path
-                    ).strip()
-                )
+                edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
         return {cls.__name__: 0}, {cls.__name__: edited}
 
 
@@ -1895,10 +1672,8 @@ class UncarriedRecordFormat(ChangeMeasure):
         for node in ast.walk(ast.parse(source)):
             for item in node.body if isinstance(node, ast.ClassDef) else ():
                 match item:
-                    case (
-                        ast.AnnAssign(target=ast.Name(id="version"))
-                        | ast.Assign(targets=[ast.Name(id="version")])
-                    ):
+                    case ast.AnnAssign(target=ast.Name(id="version")) | ast.Assign(
+                            targets=[ast.Name(id="version")]):
                         return True
         return False
 
@@ -1908,11 +1683,9 @@ class UncarriedRecordFormat(ChangeMeasure):
         package = Path(root)
         while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
             package = package.parent
-        modules = [
-            ".".join(Path(path).relative_to(package).with_suffix("").parts)
-            for path in sorted(changed & python_paths(repo, ref, root))
-            if cls.declares_version(git(repo, "show", f"{ref}:{path}"))
-        ]
+        modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
+                   for path in sorted(changed & python_paths(repo, ref, root))
+                   if cls.declares_version(git(repo, "show", f"{ref}:{path}"))]
         if not modules:
             return {}
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
@@ -1921,40 +1694,22 @@ class UncarriedRecordFormat(ChangeMeasure):
             # Extracted source is stamped with its commit the way a build stamps it.
             for stamp in Path(scratch).rglob("package_stamp.py"):
                 WheelStamp(revision(repo, ref)).write(stamp)
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-c",
-                    cls.probe,
-                    str(Path(scratch) / package),
-                    str(Path(__file__).resolve().parent),
-                    *modules,
-                ],
-                cwd=scratch,
-                env=cls.environment(root, Path(scratch)),
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=300,
-            )
+            result = subprocess.run([sys.executable, "-c", cls.probe,
+                                     str(Path(scratch) / package), str(Path(__file__).resolve().parent),
+                                     *modules], cwd=scratch,
+                                    env=cls.environment(root, Path(scratch)),
+                                    capture_output=True, text=True, check=True, timeout=300)
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
     def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        added = git(
-            repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS)
-        )
-        carried = any(
-            Path(path).stem.startswith("carry_") and path.endswith(".py")
-            for path in added.decode().split("\0")
-        )
+        added = git(repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS))
+        carried = any(Path(path).stem.startswith("carry_") and path.endswith(".py")
+                      for path in added.decode().split("\0"))
         before = cls.formats(repo, base, root, changed)
         after = cls.formats(repo, head, root, changed)
-        uncarried = sum(
-            before[name].version == form.version or not carried
-            for name, form in after.items()
-            if name in before and before[name] != form
-        )
+        uncarried = sum(before[name].version == form.version or not carried
+                        for name, form in after.items() if name in before and before[name] != form)
         return {cls.__name__: 0}, {cls.__name__: uncarried}
 
 
@@ -1984,9 +1739,7 @@ def touched_paths(repo: Path, base: str, head: str) -> frozenset[str]:
     # moves into/out of the declared production source boundary.
     return frozenset(
         path.decode()
-        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(
-            b"\0"
-        )
+        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
     )
 
 
@@ -2007,9 +1760,8 @@ class Comparison:
 
     @property
     def failed(self) -> bool:
-        return any(measure.blocks(self.delta) for measure in Measure.members_with(Measure)) or any(
-            self.introduced.values()
-        )
+        return (any(measure.blocks(self.delta) for measure in Measure.members_with(Measure))
+                or any(self.introduced.values()))
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
@@ -2032,14 +1784,11 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
     measures = Measure.members_with(Measure)
     # Forked workers start from this already-imported module instead of importing it again.
     with ProcessPoolExecutor(mp_context=multiprocessing.get_context("fork")) as pool:
-        parts = {
-            measure: [pool.submit(part) for part in measure.parts(repo, base, head, paths, root)]
-            for measure in measures
-        }
-        sites = [
-            pool.submit(CleanChangedLines.introduced, repo, base, head, path)
-            for path in sorted(paths & python_paths(repo, head, root))
-        ]
+        parts = {measure: [pool.submit(part)
+                           for part in measure.parts(repo, base, head, paths, root)]
+                 for measure in measures}
+        sites = [pool.submit(CleanChangedLines.introduced, repo, base, head, path)
+                 for path in sorted(paths & python_paths(repo, head, root))]
         # Each measure combines as soon as its parts finish, while slower checkers still run.
         measured = {}
         owners = {future: measure for measure, futures in parts.items() for future in futures}
@@ -2049,9 +1798,8 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         for future in as_completed(owners):
             measure = owners[future]
             if measure not in measured and all(part.done() for part in parts[measure]):
-                measured[measure] = measure.combine(
-                    [part.result() for part in parts[measure]], repo, base, head, paths, root
-                )
+                measured[measure] = measure.combine([part.result() for part in parts[measure]],
+                                                    repo, base, head, paths, root)
         for measure in measures:
             measured_base, measured_head = measured[measure]
             before.update(measured_base)
@@ -2061,16 +1809,13 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
                 introduced[identity] = len(found)
                 if found:
                     introduced_lines[identity] = sorted(found)
-    return Comparison(
-        root, base, head, tuple(sorted(paths)), before, after, introduced, introduced_lines
-    )
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after,
+                      introduced, introduced_lines)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--root", required=True, help="Repository-relative production source directory"
-    )
+    parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
     args = parser.parse_args()

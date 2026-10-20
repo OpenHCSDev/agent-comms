@@ -95,7 +95,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 
         from .transcript_routes import InputDisplay
 
-        return entry.events(replace(projection, input_display=InputDisplay(user.input_id, None)))
+        return entry.events(replace(
+            projection, input_display=InputDisplay(user.input_id, None)
+        ))
 
     def require_attempt(self) -> FullNativeExecution:
         raise IdentityConflict("Native triage input has no execution attempt")
@@ -119,14 +121,11 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         from .coordination_tables.assignments import WakeAssignment
 
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
-        originals = WakeAssignment.read(
-            db.execute(
-                f"SELECT {columns} FROM {WakeAssignment.declared_name} c "
-                f"JOIN ({self.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
-                "WHERE m.input_id=? ORDER BY m.ordinal",
-                (input_id,),
-            )
-        )
+        originals = WakeAssignment.read(db.execute(
+            f"SELECT {columns} FROM {WakeAssignment.declared_name} c "
+            f"JOIN ({self.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+            "WHERE m.input_id=? ORDER BY m.ordinal", (input_id,),
+        ))
         return tuple(original.assignment_id for original in originals)
 
     @abstractmethod
@@ -155,16 +154,15 @@ class TriageNativeExecution(NativeInputExecution):
     proof_order: ClassVar[int] = 0
 
     def transcript_events(self, entry, projection, user):
-        return [event.as_context() for event in super().transcript_events(entry, projection, user)]
+        return [event.as_context() for event in
+                super().transcript_events(entry, projection, user)]
 
     @classmethod
     def source_membership_sql(cls) -> str:
         from .triage_native_sources import TriageNativeSources
 
-        return (
-            f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
-            f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member"
-        )
+        return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
+                f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
 
     def record_sources(self, db, input_id, assignments) -> None:
         from .triage_native_sources import TriageNativeSources
@@ -199,20 +197,14 @@ class FullNativeExecution(NativeInputExecution):
         from .coordination_tables.assignments import ExecutionAssignmentLink
         from .native_runtime_input import NativeRuntimeInput
 
-        return (
-            f"SELECT n.input_id, c.assignment_id, c.ordinal "
-            f"FROM {NativeRuntimeInput.declared_name} n "
-            f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
-            f"WHERE n.stage='{cls.declared_name}'"
-        )
+        return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
+                f"FROM {NativeRuntimeInput.declared_name} n "
+                f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
+                f"WHERE n.stage='{cls.declared_name}'")
 
     def record_sources(self, db, input_id, assignments) -> None:
-        if self.source_assignment_ids(db, input_id) != tuple(
-            row.assignment_id for row in assignments
-        ):
-            raise IdentityConflict(
-                "Full native input differs from its original execution membership"
-            )
+        if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
+            raise IdentityConflict("Full native input differs from its original execution membership")
 
     def __post_init__(self):
         validate_execution_id(self.execution_id)
@@ -221,14 +213,11 @@ class FullNativeExecution(NativeInputExecution):
 
     @classmethod
     def from_columns(cls, execution_id, attempt_ordinal) -> FullNativeExecution:
-        return FieldCodec.decode(
-            cls,
-            {
-                cls.family_discriminator: cls.declared_name,
-                "execution_id": execution_id,
-                "attempt_ordinal": attempt_ordinal,
-            },
-        )
+        return FieldCodec.decode(cls, {
+            cls.family_discriminator: cls.declared_name,
+            "execution_id": execution_id,
+            "attempt_ordinal": attempt_ordinal,
+        })
 
     def binding_fields(self):
         return FieldCodec.encode_fields(self)
@@ -322,15 +311,12 @@ class NativeInputReference(NativeContextReference):
     def acquire(cls, row) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
-            result = FieldCodec.construct(
-                cls,
-                dict(
-                    input_id=row.input_id,
-                    stage=row.reference_stage,
-                    session_id=row.session_id,
-                    request_generation=row.request_generation,
-                ),
-            )
+            result = FieldCodec.construct(cls, dict(
+                input_id=row.input_id,
+                stage=row.reference_stage,
+                session_id=row.session_id,
+                request_generation=row.request_generation,
+            ))
             result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
                 raise MalformedRecord("Native reference generation is outside its native range")
@@ -367,20 +353,14 @@ class NativeInputRecord(ABC):
         """Join original coordinator naming/birth; this grants no live ownership."""
         from .coordination_errors import IdentityConflict
 
-        expected = OwnerGenerations(
-            owner_lookup=thread.incarnation.lookup,
-            owner_thread=thread.name,
-            generation=self.owner_generation,
-        )
+        expected = OwnerGenerations(owner_lookup=thread.incarnation.lookup, owner_thread=thread.name, generation=self.owner_generation)
         if self.owner_identity != expected:
             raise IdentityConflict("Native input belongs to another recorded owner")
 
     @property
     def identity(self) -> NativeInputIdentity:
         return NativeInputIdentity(
-            self.input_id,
-            self.execution,
-            self.owner_identity,
+            self.input_id, self.execution, self.owner_identity,
         )
 
 

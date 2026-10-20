@@ -48,7 +48,8 @@ class SessionSnapshot:
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return bool(
-            response.success and response.data.conflicts_attestation(session.native.attestation)
+            response.success
+            and response.data.conflicts_attestation(session.native.attestation)
         ) or super().invalidates_identity(response, session)
 
 
@@ -85,16 +86,13 @@ class PiCommand(DeclaredFamily):
             channel.pending.discard(type(self), self.id)
             future.cancel()
 
-    async def exchange(
-        self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None
-    ):
+    async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
         from .pi_events import Response
-
         async with self.pending_response(channel, writer) as future:
             while not future.done():
                 event = await channel.receive(strict=strict, max_bytes=max_bytes)
                 if event is None:
-                    raise EOFError("Pi RPC ended before the requested response")
+                    raise EOFError('Pi RPC ended before the requested response')
                 if isinstance(event, Response):
                     channel.correlate(event)
                 else:
@@ -124,7 +122,9 @@ class PiCommand(DeclaredFamily):
             return UnknownCommand
 
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         return ()
 
 
@@ -161,7 +161,9 @@ class Prompt(PiCommand):
     ] = field(default=None)
 
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         if response.id == session.command.id:
             session.watchdog.progress()
             if response.success:
@@ -189,7 +191,9 @@ class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         if response.success:
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
@@ -204,7 +208,9 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
 
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         if response.success:
             context = response.data.require_payload().context_usage
             if context is not None:
@@ -224,13 +230,8 @@ class CatalogQuery(NativeQuery):
 
     @asynccontextmanager
     async def catalog(
-        self,
-        agent_bin: str,
-        arguments: Sequence[str],
-        *,
-        package: VerifiedNativePackage,
-        worktree: Path | None = None,
-        root: Path | str | None = None,
+        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage,
+        worktree: Path | None = None, root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -259,19 +260,12 @@ class CatalogQuery(NativeQuery):
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(
-        self,
-        agent_bin: str,
-        arguments: Sequence[str],
-        root: Path | str | None = None,
-        *,
-        package: VerifiedNativePackage,
+        self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
+        *, package: VerifiedNativePackage,
     ) -> PiResponseData:
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments, root=root, package=package) as (
-            channel,
-            writer,
-        ):
+        async with self.catalog(agent_bin, arguments, root=root, package=package) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is True:
                 return response.data.require_payload()
@@ -296,7 +290,9 @@ class Abort(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         if response.success is False:
             yield events.Error(text=str(response.error or "Send now was refused"))
 
@@ -315,12 +311,7 @@ class SettingCommand(CatalogQuery):
     error_message: ClassVar[str]
 
     async def configure(
-        self,
-        agent_bin: str,
-        arguments: Sequence[str],
-        *,
-        package: VerifiedNativePackage,
-        worktree: Path,
+        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage, worktree: Path,
         root: Path | str | None = None,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
@@ -341,7 +332,9 @@ class SettingCommand(CatalogQuery):
             return state.data.require_payload()
 
     @classmethod
-    def on_response(cls, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
+    def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
             ok=bool(response.success),
@@ -355,7 +348,7 @@ class SetModel(SettingCommand):
     def from_name(cls, model: str | None):
         if model is None:
             return cls()
-        provider, model_id = model.split("/", 1)
+        provider, model_id = model.split('/', 1)
         return cls(provider=provider, model_id=model_id)
 
     result_type = events.ModelChanged
@@ -447,9 +440,5 @@ class AgentCommsInspectContextSegment(NativeQuery):
 
     @classmethod
     def for_manifest(cls, expected: SegmentManifest):
-        return cls(
-            identity=expected.sources.native_identity(),
-            entries=expected.sources.journal_entries(),
-            expected=expected,
-            parts=expected.requested_parts(),
-        )
+        return cls(identity=expected.sources.native_identity(), entries=expected.sources.journal_entries(),
+                   expected=expected, parts=expected.requested_parts())

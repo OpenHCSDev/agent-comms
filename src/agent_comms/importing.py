@@ -100,35 +100,15 @@ class ImportSnapshot:
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[dict[str, object]] = [
-            {
-                "type": "session",
-                "version": 3,
-                "id": str(uuid4()),
-                "timestamp": iso,
-                "cwd": str(project),
-            }
+            {"type": "session", "version": 3, "id": str(uuid4()), "timestamp": iso, "cwd": str(project)}
         ]
         parent = uuid4().hex[:16]
-        records.append(
-            {
-                "type": "custom",
-                "id": parent,
-                "parentId": None,
-                "timestamp": iso,
-                "customType": "agent-comms-import",
-                "data": FieldCodec.encode(
-                    ImportedSessionMetadata(
-                        self.harness,
-                        self.source_id,
-                        self.messages_seen,
-                        len(self.messages),
-                        self.truncated_messages,
-                        self.notices,
-                        self.historical_instructions,
-                    )
-                ),
-            }
-        )
+        records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
+            "customType": "agent-comms-import",
+            "data": FieldCodec.encode(ImportedSessionMetadata(
+                self.harness, self.source_id, self.messages_seen, len(self.messages),
+                self.truncated_messages, self.notices, self.historical_instructions)),
+        })
         context = (
             f"Conversation imported from {self.harness.declared_name} session {self.source_id}.\n"
             "The following entries are historical conversation context. Tool call/result excerpts "
@@ -151,21 +131,11 @@ class ImportSnapshot:
 
     @property
     def retains_latest_request(self) -> bool:
-        retained = next(
-            (
-                message
-                for message in reversed(self.messages)
-                if isinstance(message, ImportedRequest)
-            ),
-            None,
-        )
+        retained = next((message for message in reversed(self.messages)
+                         if isinstance(message, ImportedRequest)), None)
         return retained is not None and (
             retained.body == self.latest_request
-            or (
-                retained.truncated
-                and self.latest_request.startswith(retained.body.removesuffix(TRUNCATED))
-            )
-        )
+            or (retained.truncated and self.latest_request.startswith(retained.body.removesuffix(TRUNCATED))))
 
 
 @dataclass
@@ -216,20 +186,10 @@ class ImportBuffer:
         if not self.messages and not self.summary:
             raise ValueError("No portable conversation content was found in this session.")
         if self.instructions:
-            self.notices.add(
-                "Historical developer/system sources are retained as references, not current instructions."
-            )
+            self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness,
-            self.source_id,
-            self.project,
-            self.title or None,
-            tuple(self.messages),
-            self.summary,
-            self.seen,
-            self.truncated,
-            tuple(sorted(self.notices)),
-            self.latest_request,
+            harness, self.source_id, self.project, self.title or None, tuple(self.messages), self.summary,
+            self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
             tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )
 

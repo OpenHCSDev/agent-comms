@@ -321,9 +321,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
 
     async def answer(self, connector: Connector) -> web.Response:
         return web.json_response(
-            FieldCodec.encode(
-                ToolsCallReply(self.id, await self.result(connector), Path(sys.executable))
-            )
+            FieldCodec.encode(ToolsCallReply(self.id, await self.result(connector), Path(sys.executable)))
         )
 
     async def result(self, connector: Connector) -> ToolsCallResult:
@@ -388,9 +386,9 @@ class Connector:
         tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
             tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
         }
-        tools.update(
-            {tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)}
-        )
+        tools.update({
+            tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)
+        })
         return tools
 
     @contextmanager
@@ -428,12 +426,10 @@ class Connector:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         heartbeat = CommanderHeartbeat()
         tasks = (
-            asyncio.create_task(
-                Coordination.watch_worker(lambda: UnownedWheelSpin.watch_pass(self.opened_wire))
-            ),
-            asyncio.create_task(
-                Coordination.watch_worker(lambda: heartbeat.watch_pass(self.opened_wire))
-            ),
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: heartbeat.watch_pass(self.opened_wire))),
         )
         try:
             yield

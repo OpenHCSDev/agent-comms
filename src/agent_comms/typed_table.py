@@ -389,14 +389,9 @@ class TypedRow:
     @classmethod
     def _select_list(cls, table: type[TypedTable]) -> str:
         return ", ".join(
-            (
-                table._sql(item.column.generated)
-                if not item.column.writable
-                else table._column_list((item.name,))
-            )
-            + f" AS {_identifier(item.wire_name)}"
-            for item in cls._fields()
-        )
+            (table._sql(item.column.generated) if not item.column.writable
+             else table._column_list((item.name,))) + f" AS {_identifier(item.wire_name)}"
+            for item in cls._fields())
 
     @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
@@ -407,9 +402,8 @@ class TypedRow:
         return tuple(declared[name] for name in names)
 
     @classmethod
-    def _positions(
-        cls, cursor: sqlite3.Cursor, extra: Mapping[str, str] = types.MappingProxyType({})
-    ) -> dict[str, int]:
+    def _positions(cls, cursor: sqlite3.Cursor,
+                   extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
         if cursor.description is None:
             raise ValueError("Typed read requires a result set")
         names = tuple(item[0] for item in cursor.description)
@@ -453,10 +447,8 @@ class TypedRow:
         """
         try:
             positions = cls._positions(cursor, related.column_projection())
-            return [
-                (cls._decode_row(row, positions), related._decode_row(row, positions))
-                for row in cursor
-            ]
+            return [(cls._decode_row(row, positions), related._decode_row(row, positions))
+                    for row in cursor]
         finally:
             cursor.close()
 
@@ -480,18 +472,14 @@ class SQLiteSchemaObject(TypedRow):
 
     @classmethod
     def differences(
-        cls,
-        actual: list[SQLiteSchemaObject],
-        expected: Mapping[str, str],
+        cls, actual: list[SQLiteSchemaObject], expected: Mapping[str, str],
     ) -> tuple[SQLiteSchemaDifference, ...]:
         stored = {row.name: row.sql for row in actual}
         if stored == expected:
             return ()
-        return tuple(
-            SQLiteSchemaDifference(name, stored.get(name), expected.get(name))
-            for name in sorted(stored.keys() | expected.keys())
-            if stored.get(name) != expected.get(name)
-        )
+        return tuple(SQLiteSchemaDifference(name, stored.get(name), expected.get(name))
+                     for name in sorted(stored.keys() | expected.keys())
+                     if stored.get(name) != expected.get(name))
 
 
 @dataclass(frozen=True)
@@ -611,10 +599,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         existence = "IF NOT EXISTS " if if_not_exists else ""
-        return {
-            name: f"CREATE TRIGGER {existence}{name}{cls._sql(body)}"
-            for name, body in cls.trigger_bodies().items()
-        }
+        return {name: f"CREATE TRIGGER {existence}{name}{cls._sql(body)}"
+                for name, body in cls.trigger_bodies().items()}
 
     @classmethod
     def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:
@@ -632,47 +618,32 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
-    def _condition(cls, where: str, parameters: tuple, key: dict[str, object]) -> tuple[str, tuple]:
+    def _condition(
+        cls, where: str, parameters: tuple, key: dict[str, object]
+    ) -> tuple[str, tuple]:
         """Compile predicate field names and declared key values once."""
         selected = cls._fields_named(tuple(key))
         if selected:
-            where = (
-                "("
-                + where
-                + ") AND "
-                + " AND ".join(f"{_identifier(item.wire_name)} IS ?" for item in selected)
-            )
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.wire_name)} IS ?" for item in selected)
             parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
         return cls._sql(where), parameters
 
     @classmethod
     def _query(
-        cls,
-        db: sqlite3.Connection,
-        where: str,
-        parameters: tuple,
-        order_by: tuple[str, ...],
-        descending: bool,
-        key: dict[str, object],
-        row_type: type[RelatedRow] | None,
-        limit: int | None,
+        cls, db: sqlite3.Connection, where: str, parameters: tuple,
+        order_by: tuple[str, ...], descending: bool, key: dict[str, object],
+        row_type: type[RelatedRow] | None, limit: int | None,
     ) -> Generator[Self | RelatedRow, None, None]:
         condition, parameters = cls._condition(where, parameters, key)
         direction, selected = " DESC" if descending else "", row_type or cls
-        return selected.iterate(
-            db.execute(
-                f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
-                f"WHERE {condition}"
-                + (
-                    " ORDER BY "
-                    + ", ".join(cls._column_list((name,)) + direction for name in order_by)
-                    if order_by
-                    else ""
-                )
-                + (" LIMIT ?" if limit is not None else ""),
-                parameters + ((limit,) if limit is not None else ()),
-            )
-        )
+        return selected.iterate(db.execute(
+            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
+            f"WHERE {condition}"
+            + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
+               if order_by else "") + (" LIMIT ?" if limit is not None else ""),
+            parameters + ((limit,) if limit is not None else ()),
+        ))
 
     @classmethod
     def select(
@@ -683,8 +654,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
-        row_type: type[RelatedRow] | None = None,
-        limit: int | None = None,
+        row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
     ) -> list[Self | RelatedRow]:
         return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
@@ -698,8 +668,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
-        row_type: type[RelatedRow] | None = None,
-        limit: int | None = None,
+        row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
     ) -> Generator[Self | RelatedRow, None, None]:
         """Rows decoded as the caller consumes them; close it to release the query."""
@@ -714,33 +683,21 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
-        return SqlValue.for_annotation(bool).read(
-            db.execute(
-                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
-                (cls.declared_name,),
-            )
-        )[0]
+        return SqlValue.for_annotation(bool).read(db.execute(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+            (cls.declared_name,)))[0]
 
     @classmethod
     def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
-        return SqlValue.for_annotation(bool).read(
-            db.execute(
-                f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
-                parameters,
-            )
-        )[0]
+        return SqlValue.for_annotation(bool).read(db.execute(
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
+            parameters))[0]
 
     @classmethod
-    def count(
-        cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object
-    ) -> int:
+    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
         condition, parameters = cls._condition(where, parameters, key)
-        return SqlValue.for_annotation(int).read(
-            db.execute(
-                f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}",
-                parameters,
-            )
-        )[0]
+        return SqlValue.for_annotation(int).read(db.execute(
+            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
@@ -754,40 +711,28 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
         writable = cls._writable_fields(columns or None)
-        return (
-            f"INSERT INTO {_identifier(cls.declared_name)} "
-            f"({cls._column_list(tuple(item.name for item in writable))}) "
-            f"VALUES ({', '.join('?' for _ in writable)})"
-        )
+        return (f"INSERT INTO {_identifier(cls.declared_name)} "
+                f"({cls._column_list(tuple(item.name for item in writable))}) "
+                f"VALUES ({', '.join('?' for _ in writable)})")
 
     @classmethod
     def insert_values(cls, db: sqlite3.Connection, **values: object) -> sqlite3.Cursor:
         writable = cls._writable_fields(tuple(values) or None)
-        return db.execute(
-            cls.insertion_statement(tuple(item.name for item in writable)),
-            tuple(item.encode(values[item.name]) for item in writable),
-        )
+        return db.execute(cls.insertion_statement(tuple(item.name for item in writable)),
+                          tuple(item.encode(values[item.name]) for item in writable))
 
     @classmethod
     def delete(
-        cls,
-        db: sqlite3.Connection,
-        *,
-        where: str = "1",
-        parameters: tuple = (),
-        **key: object,
+        cls, db: sqlite3.Connection, *, where: str = "1",
+        parameters: tuple = (), **key: object,
     ) -> sqlite3.Cursor:
         condition, parameters = cls._condition(where, parameters, key)
-        return db.execute(
-            f"DELETE FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters
-        )
+        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
         writable = self._writable_fields()
-        return (
-            self.insertion_statement(),
-            tuple(item.encode(getattr(self, item.name)) for item in writable),
-        )
+        return (self.insertion_statement(),
+                tuple(item.encode(getattr(self, item.name)) for item in writable))
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         return db.execute(*self._insertion())
@@ -801,7 +746,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         statement, values = self._insertion()
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
-            item.wire_name for item in self._writable_fields() if not item.column.primary_key
+            item.wire_name
+            for item in self._writable_fields()
+            if not item.column.primary_key
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
         statement += (
@@ -849,7 +796,7 @@ class StoreWriter(RootFile):
 
     @staticmethod
     def _source_paths(path: Path) -> tuple[Path, ...]:
-        return (path.with_suffix(".changed"),)
+        return (path.with_suffix('.changed'),)
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
@@ -871,7 +818,7 @@ class StoreWriter(RootFile):
                 connection.execute("ROLLBACK")
             raise
         if connection.total_changes != before:
-            self._source_paths(self.store.path)[0].write_bytes(b"")
+            self._source_paths(self.store.path)[0].write_bytes(b'')
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -901,17 +848,13 @@ class TypedStore(StoreWriter):
 
     @staticmethod
     def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(
-            connection.execute(
-                "SELECT name,sql FROM sqlite_master "
-                "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
-            )
-        )
+        return SQLiteSchemaObject.read(connection.execute(
+            "SELECT name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
 
     @contextmanager
     def _attached(
-        self,
-        opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
     ) -> Iterator[sqlite3.Connection]:
         """Serialize WAL attachment and retirement, not authorized SQL work.
 
@@ -948,8 +891,7 @@ class TypedStore(StoreWriter):
         else:
             os.close(descriptor)
         connection = CoordinationStore.writer(
-            self.path, isolation_level=None, check_same_thread=check_same_thread
-        )
+            self.path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
@@ -975,13 +917,11 @@ class TypedStore(StoreWriter):
 
         with ExitStack() as lifetime:
             if self.path.exists():
-                connection = lifetime.enter_context(
-                    self._attached(lambda: CoordinationStore.observing(self.path, StoreBusy()))
-                )
+                connection = lifetime.enter_context(self._attached(
+                    lambda: CoordinationStore.observing(self.path, StoreBusy())))
             else:
-                connection = lifetime.enter_context(
-                    closing(sqlite3.connect(":memory:", isolation_level=None))
-                )
+                connection = lifetime.enter_context(closing(
+                    sqlite3.connect(":memory:", isolation_level=None)))
                 for row in self.rows:
                     row.create(connection)
                 CoordinationStore._configure_reader(connection)
@@ -996,9 +936,8 @@ class TypedStore(StoreWriter):
     @contextmanager
     def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Own attachment and schema; joined workers may borrow one serialized connection."""
-        with self._attached(
-            lambda: closing(self._open_writer(check_same_thread=check_same_thread))
-        ) as connection:
+        with self._attached(lambda: closing(self._open_writer(
+                check_same_thread=check_same_thread))) as connection:
             self.require_schema(self._schema(connection))
             yield connection
 

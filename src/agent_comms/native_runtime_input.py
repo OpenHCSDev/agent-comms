@@ -86,8 +86,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     @classmethod
     def source_membership_sql(cls) -> str:
         return " UNION ALL ".join(
-            member.source_membership_sql()
-            for member in NativeInputExecution.members_with(NativeInputExecution)
+            member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
         )
 
     def __post_init__(self):
@@ -127,10 +126,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .native_pi import NativeContextRecord
 
         self.reference.require_recorded()
-        values = {
-            item.name: getattr(self, item.name)
-            for item, _wire in FieldCodec.record_fields(NativeContextRecord)
-        }
+        values = {item.name: getattr(self, item.name)
+                  for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
         return FieldCodec.construct(NativeContextRecord, values).at(
             self.require_session_identity().path,
             session_entry_start=self.session_entry_start.offset,
@@ -141,9 +138,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
         except MalformedRecord as error:
-            raise IdentityConflict(
-                "Native input execution columns conflict with their stage"
-            ) from error
+            raise IdentityConflict("Native input execution columns conflict with their stage") from error
 
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
@@ -154,8 +149,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         original user entry; a precommit authorized row still owns its stage.
         """
         rows = cls.select(
-            db,
-            where="input_id=? AND session_file=? AND session_id=?",
+            db, where="input_id=? AND session_file=? AND session_id=?",
             parameters=(user.input_id, str(reader.path), session_id),
         )
         for row in rows:
@@ -370,11 +364,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     def owner_identity(self):
         from .coordination_tables.participants import OwnerGenerations
 
-        return OwnerGenerations(
-            owner_lookup=self.recipient_lookup,
-            owner_thread=self.owner_thread,
-            generation=self.owner_generation,
-        )
+        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
 
     covered_seq: typing.Annotated[int, Column(check="covered_seq>=0")]
     injected_seq: typing.Annotated[

@@ -76,9 +76,7 @@ class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchem
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
         except MalformedRecord as error:
-            raise IdentityConflict(
-                "Prompt binding execution columns conflict with their stage"
-            ) from error
+            raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
     without_rowid = True
     checks = (
@@ -220,14 +218,9 @@ def expected_prompt_bindings(
         yield {}
         return
     with sidecar_connection(path, PromptBinding, blocking=blocking, read_only=True) as db:
-        yield {
-            row.input_id: row
-            for row in PromptBinding.select(
-                db,
-                where=f"input_id IN ({','.join('?' for _ in input_ids)})",
-                parameters=input_ids,
-            )
-        }
+        yield {row.input_id: row for row in PromptBinding.select(
+            db, where=f"input_id IN ({','.join('?' for _ in input_ids)})", parameters=input_ids,
+        )}
 
 
 def expected_prompt_matches_journal(
