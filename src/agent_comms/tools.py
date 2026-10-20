@@ -69,6 +69,7 @@ from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import NativeToolDeclaration, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .thread_identity import ThreadIncarnation
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .send_result import CorrectionResult, SendResult
@@ -722,16 +723,32 @@ class CommsGoalHistoryTool(ThreadReadTool):
 class CommsTodoTool(ThreadToolRequest):
     label = "Change problem"
     description = "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
-    id: str = tool_field("Problem ID")
-    operation: TodoOperation = tool_field("Typed assignment, strike, release or state command")
+    problem: str = tool_field("Problem ID")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        todo = comms.goals.change_problem(self.id, self.operation, caller.name)
-        return TodoChanged(todo, todo.strike_count)
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        return self.result(comms.goals.change_problem(
+            self.problem, self.operation_for(todo, actor, comms), caller.name))
+
+    @abstractmethod
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        """Build the change, verifying any attached application claims before writing."""
+
+    def result(self, changed: Todo) -> TodoChanged | ProblemClosed:
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(CommsTodoTool):
+class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
+    operation: TodoOperation = tool_field("Typed assignment, strike, release or state command")
+
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        return self.operation
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsVerdictTool(CommsChangeProblemTool):
     label = "Judge order tool call"
     description = ("Record the commander's verdict on one tool call the holder made for its "
                    "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
@@ -851,7 +868,8 @@ class CommsOrderTool(ThreadToolRequest):
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
-        goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
+        goal = comms.goals.update_goal(self.owner, self.order.bound_to(
+            comms.registry.require(caller.name).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 
@@ -863,76 +881,57 @@ class CommsTodoCreateTool(CommsOrderTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderDoneTool(ThreadToolRequest):
+class CommsOrderDoneTool(CommsTodoTool):
     label = "Check delivered order"
     description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
-    problem: str = tool_field("Problem ID")
     order_id: str = tool_field("Exact open order ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
     claims: tuple[ProgressClaim, ...] = tool_field(
         "Merged, installed or working claims, each with the artifact Core verifies in the order's "
         "checkout; at least one")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         ProgressClaim.require_claimed(self.claims, "delivered")
-        todo = comms.goals.todos.get(self.problem)
         ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
-        todo.require_commander(comms.registry.require(caller.name).incarnation)
-        changed = comms.goals.change_problem(self.problem, DeliverTodo(
-            todo.revision, comms.registry.require(caller.name).incarnation,
-            self.delivery, self.order_id), caller.name)
-        return TodoChanged(changed, changed.strike_count)
+        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderCheckTool(ThreadToolRequest):
+class CommsOrderCheckTool(CommsTodoTool):
     label = "Correct order check"
     description = ("Replace the check of an open order, recording the old check, the new one and "
                    "why; only its commander may invoke this tool, and the order keeps its deadline "
                    "and strikes.")
-    problem: str = tool_field("Problem ID")
     check: OrderCheck = tool_field("The corrected check: directory, command and expected result")
     why: str = tool_field("Why the recorded check was wrong")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
-        changed = comms.goals.change_problem(self.problem, CorrectCheckTodo(
-            todo.revision, actor, todo.order.check, self.check, self.why), caller.name)
-        return TodoChanged(changed, changed.strike_count)
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        return CorrectCheckTodo(todo.revision, actor, todo.order.check, self.check, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderServeTool(ThreadToolRequest):
+class CommsOrderServeTool(CommsTodoTool):
     label = "Name order phase"
     description = ("Name the plan phase an open order serves; only its commander may invoke this "
                    "tool, and the order keeps its id, deadline and strikes.")
-    problem: str = tool_field("Problem ID")
     serves: type[OrderPhase] = tool_field("The plan phase the order serves")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
-        changed = comms.goals.change_problem(
-            self.problem, ServeTodo(todo.revision, actor, self.serves), caller.name)
-        return TodoChanged(changed, changed.strike_count)
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        return ServeTodo(todo.revision, actor, self.serves)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsProblemCloseTool(ThreadToolRequest):
+class CommsProblemCloseTool(CommsTodoTool):
     label = "Close installed problem"
     description = "Record installed application evidence and close only a problem with no open order."
-    problem: str = tool_field("Problem ID")
     works: str = tool_field("What worked in the app, quoting the order's Works when run")
     artifact: str = tool_field("Existing verification artifact file")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
-        todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
-        todo.require_commander(actor)
-        closed = comms.goals.change_problem(self.problem, InstallTodo(
-            todo.revision, actor, self.works, self.artifact), caller.name)
-        return ProblemClosed(closed)
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+        return InstallTodo(todo.revision, actor, self.works, self.artifact)
+
+    def result(self, changed: Todo) -> ProblemClosed:
+        return ProblemClosed(changed)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1365,8 +1364,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
     tool: str = option("--tool")
     arguments: dict[str, object] = option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
-        parser_default="{}", normalize=lambda value: FieldCodec.decode(
-            dict[str, object], FieldCodec.parse(value)))
+        parser_default="{}")
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,

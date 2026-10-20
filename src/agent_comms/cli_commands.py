@@ -1673,8 +1673,7 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
         normalize=list)
     operation: str = option('--operation')
     arguments: dict[str, Any] = option('--arguments', default_factory=dict,
-                                     parser_default='{}', normalize=lambda value: FieldCodec.decode(
-                                         dict[str, object], FieldCodec.parse(value)))
+                                     parser_default='{}')
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:

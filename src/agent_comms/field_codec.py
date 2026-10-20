@@ -1660,6 +1660,9 @@ class _DictDecoder(ValueDecoder[Any]):
     value: ValueDecoder[object]
     origins = (dict,)
 
+    def argument_options(self) -> dict[str, object]:
+        return {"type": FieldCodec.parse}
+
     @classmethod
     def from_annotation(cls, target, args):
         key, value = args or (str, Any)

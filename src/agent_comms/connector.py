@@ -22,13 +22,14 @@ import base64
 import hashlib
 import html
 import json
+import logging
 import secrets
 import sys
 import time
 import urllib.request
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -50,6 +51,7 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
+from .commander.standing import UnownedWheelSpin
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest
@@ -287,14 +289,15 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     async def result(self, connector: Connector) -> ToolsCallResult:
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
-            return ToolsCallResult.refused(
+            return ToolsCallResult.failed(
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except ToolRefusedError as error:
-            return ToolsCallResult.refused(error)
-        return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+            return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
+        except Exception as error:
+            logging.exception("Connector tool %s failed", self.params.name)
+            return ToolsCallResult.failed(error)
 
 
 @dataclass(frozen=True)
@@ -305,7 +308,7 @@ class TextContent:
 
 @dataclass(frozen=True)
 class ToolsCallResult:
-    """A tool's encoded reply, or the refusal standing in its place."""
+    """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
     is_error: bool = field(metadata={"wire_name": "isError"})
@@ -315,7 +318,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
+    def failed(cls, error: Exception) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 
@@ -360,6 +363,7 @@ class Connector:
         with self.opened_wire():
             pass
         app = web.Application()
+        app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
@@ -372,6 +376,16 @@ class Connector:
             ]
         )
         return app
+
+    async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
+        """The running Core service advances stalled orders without a commander call."""
+        task = asyncio.create_task(UnownedWheelSpin.watch(self.opened_wire))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(
@@ -572,7 +586,7 @@ class RoundTripVerb(ConnectorVerb):
         if running != self.runtime:
             return f"The connector service runs {running}, not the installed {self.runtime}"
         if reply.is_error:
-            return f"The connector round trip was refused: {reply.content[0].text}"
+            return f"The connector round trip failed: {reply.content[0].text}"
         with client_wire(self.root) as comms:
             if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                 return f"The service on port {self.port} reads another bus than {self.root}"

@@ -18,7 +18,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
-from functools import cache
+from functools import cache, cached_property
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
@@ -45,6 +45,7 @@ from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .commander.config import Repo
     from .comms import Comms
     from .goal_management import Goals
 
@@ -354,6 +355,9 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     @abstractmethod
     def readings(self, source: ProgressSource) -> DistanceReadings: ...
 
+    @abstractmethod
+    def pushes(self, since: float) -> Iterator[tuple[str, float]]: ...
+
 
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
@@ -363,6 +367,9 @@ class MissingCheckout(ProgressCheckout):
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
         return DistanceReadings()
+
+    def pushes(self, since: float) -> Iterator[tuple[str, float]]:
+        return iter(())
 
 
 class PresentCheckout(ProgressCheckout):
@@ -392,6 +399,17 @@ class PresentCheckout(ProgressCheckout):
         return DistanceReadings(
             tuple(source.reading(self, base, sha, at) for sha, at in points))
 
+    def pushes(self, since: float) -> Iterator[tuple[str, float]]:
+        """A push-ref update has its own time, not the commit's author time."""
+        branch = self.git("branch", "--show-current").strip()
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
+        for row in self.git("reflog", "show", "--all", "--date=unix", f"--since={after}",
+                            "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
+            selector, sha = row.split("\t")
+            reference, stamp = selector.rsplit("@{", 1)
+            if reference == f"refs/remotes/origin/{branch}":
+                yield sha, float(stamp.removesuffix("}"))
+
 
 @dataclass(frozen=True)
 class ProgressSource:
@@ -418,8 +436,18 @@ class ProgressSource:
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         return self.checkout.commits(self.since, *excluded)
 
+    @cached_property
+    def pushes(self) -> tuple[PushedProgress, ...]:
+        return tuple(PushedProgress(sha[:9], at=at) for sha, at in self.checkout.pushes(self.since))
+
+    @cached_property
+    def moved_at(self) -> float:
+        return max((self.since, *(at for _, at in self.commits()),
+                    *(push.at for push in self.pushes)))
+
     def readings(self) -> DistanceReadings:
-        return self.checkout.readings(self)
+        """Progress observation does not run the order's Check."""
+        return DistanceReadings()
 
     def reading(self, checkout: PresentCheckout, base: str, sha: str, at: float) -> DistanceReading:
         """Keep the check command with its measured or missing distance."""
@@ -428,6 +456,13 @@ class ProgressSource:
         run = check.at(sha, str(checkout.path))
         return DistanceReading(at, check.result.distance(run).plus(
             self.todo.order.untouched(touched)), check.command)
+
+
+class MeasuredProgressSource(ProgressSource):
+    """The board's distance view runs the Check; the stall watcher only reads activity."""
+
+    def readings(self) -> DistanceReadings:
+        return self.checkout.readings(self)
 
 
 @dataclass(frozen=True)
@@ -439,11 +474,14 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        source = ProgressSource.of(todo, storage, pulls)
+        return cls.from_source(MeasuredProgressSource.of(todo, storage, pulls))
+
+    @classmethod
+    def from_source(cls, source: ProgressSource) -> OrderProgress:
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            return next((progress for member in members for progress in member.found(source)),
-                        NoCommitProgress())
+            return next((progress for member in members
+                         for progress in member.observations(source)), NoCommitProgress())
         except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
 
@@ -489,28 +527,41 @@ class FoundProgress(OrderProgress):
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         """Each member of this class the source holds."""
 
+    @classmethod
+    def observations(cls, source: ProgressSource) -> Iterator[Self]:
+        return cls.found(source)
+
 
 class Stalling:
-    """Work that stalls at a time its own class declares."""
+    """One inactivity deadline and its strike/release transition."""
+
+    seconds: ClassVar[int] = 600
+
+    @property
+    @abstractmethod
+    def state(self) -> str: ...
 
     @abstractmethod
-    def stall_at(self, ordered: float) -> float: ...
+    def last_move(self, ordered: float) -> float: ...
+
+    def stall_at(self, ordered: float) -> float:
+        return self.last_move(ordered) + self.seconds
 
     def stalled(self, ordered: float, now: float) -> bool:
-        return now > self.stall_at(ordered)
+        return now >= self.stall_at(ordered)
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
-        return since < self.stall_at(ordered) < now
+        return since < self.stall_at(ordered) <= now
 
 
 @dataclass(frozen=True)
 class Moving(Stalling):
-    """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
+    """Work whose last commit, push or PR change was observed at ``at``."""
     at: float = field(kw_only=True)
     readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
-    def stall_at(self, ordered: float) -> float:
-        return self.at + 900
+    def last_move(self, ordered: float) -> float:
+        return max(ordered, self.at)
 
     def distance_readings(self) -> DistanceReadings:
         return self.readings
@@ -525,9 +576,8 @@ class NoCommitProgress(Stalling, OrderProgress):
     def state(self) -> str:
         return "no commit since the order"
 
-    def stall_at(self, ordered: float) -> float:
-        """No first commit within 10 minutes of the order."""
-        return ordered + 600
+    def last_move(self, ordered: float) -> float:
+        return ordered
 
 
 @dataclass(frozen=True)
@@ -539,9 +589,18 @@ class UnreadProgress(OrderProgress):
         return f"progress unread: {self.reason}"
 
 
+class GitProgress(Moving, FoundProgress, declared_name=None):
+    """Found progress whose activity includes the checkout's commits and pushes."""
+
+    @classmethod
+    def observations(cls, source: ProgressSource) -> Iterator[Self]:
+        return (replace(progress, at=max(progress.at, source.moved_at))
+                for progress in cls.found(source))
+
+
 @dataclass(frozen=True)
-class CommittedProgress(Moving, FoundProgress):
-    precedence: ClassVar[int] = 3
+class CommittedProgress(GitProgress):
+    precedence: ClassVar[int] = 4
     sha: str
 
     @classmethod
@@ -557,12 +616,14 @@ class CommittedProgress(Moving, FoundProgress):
 @dataclass(frozen=True)
 class PushedProgress(CommittedProgress):
     """Pushed past the default branch, with no PR naming the order yet."""
-    precedence: ClassVar[int] = 4
+    precedence: ClassVar[int] = 5
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
+        moves = (*source.commits("origin/HEAD"),
+                 *((push.sha, push.at) for push in source.pushes))
         return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in source.commits("origin/HEAD"))
+                for sha, at in sorted(moves, key=lambda move: move[1], reverse=True)[:1])
 
     @property
     def state(self) -> str:
@@ -570,15 +631,15 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(Moving, FoundProgress):
-    precedence: ClassVar[int] = 2
+class OpenPrProgress(GitProgress):
+    precedence: ClassVar[int] = 3
     number: int
     head: str
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.number, pr.head[:9], at=pr.updated_at, readings=source.readings())
-                for pr in source.requests("open"))
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at,
+                    readings=source.readings()) for pr in source.requests("open"))
 
     @property
     def state(self) -> str:
@@ -590,18 +651,18 @@ class OpenPrProgress(Moving, FoundProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """A merge awaits its order record; its alarm does not itself draw a strike."""
+    """A linked merge closes its order once the installed checkout contains it."""
     precedence: ClassVar[int] = 1
     sha: str
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.merge[:9]) for pr in source.requests("merged")
+        return (cls(pr.merge) for pr in source.requests("merged")
                 if pr.merge and (pr.merged_at or 0) >= source.since)
 
     @property
     def state(self) -> str:
-        return f"merged as {self.sha}, awaiting record"
+        return f"merged as {self.sha[:9]}, waiting on install"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -1123,6 +1184,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
+    def reissued(self, at: float) -> PendingProblemOrder:
+        """This order sent again at ``at`` to a new owner, its first-call window kept."""
+        raise ValueError("Only an undelivered order can change owner.")
+
     @classmethod
     def pull_request_ids(cls, body: str) -> tuple[str, ...]:
         return tuple(line.removeprefix(cls.pull_request_label).strip()
@@ -1223,10 +1288,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
 
-    def reissued(self, at: float) -> PendingProblemOrder:
-        """This order sent again at ``at`` to a new owner, its first-call window kept."""
-        raise ValueError("Only an undelivered order can change owner.")
-
     def untouched(self, touched: Sequence[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
@@ -1237,6 +1298,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
+
+    def merged(self, sha: str) -> ProblemOrder:
+        return MergedProblemOrder(original=self, sha=sha)
 
     @property
     def pull_request_reference(self) -> str:
@@ -1308,6 +1372,21 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """The order waiting on the fleet's install to record it working."""
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedProblemOrder(ProblemOrder):
+    """An installed merge, retaining its original order without inventing a check or app proof."""
+    original: CheckedProblemOrder
+    sha: str
+    line: ClassVar[str] = "Merged and installed"
+
+    @property
+    def id(self) -> str:
+        return self.original.id
+
+    def require_close(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1529,9 +1608,8 @@ class Assignment:
         _text(self.parent, "Thread name", 128)
         try:
             self.owner_identity.require_recorded()
-            self.parent_identity.require_recorded()
         except ValueError as error:
-            raise TodoError("Assignment requires recorded owner and parent incarnations") from error
+            raise TodoError("Assignment requires a recorded owner incarnation") from error
         _text(self.generation, "Assignment generation", 128)
 
     @property
@@ -1540,7 +1618,8 @@ class Assignment:
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.parent, self.parent_created)
+        """Who made the assignment: the order's commander, or Core's stall watcher."""
+        return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
     def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
@@ -1626,7 +1705,13 @@ class DoneTodoState(TodoState):
     @classmethod
     def decide(cls, current, command):
         current.require_commander(command.actor)
-        return replace(current, state=cls, assignment=None, revision=current.revision + 1)
+        return cls.closed(current, current.order)
+
+    @classmethod
+    def closed(cls, current: Todo, order: ProblemOrder) -> Todo:
+        order.require_close()
+        return replace(current, state=cls, order=order, assignment=None,
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -1650,6 +1735,7 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
+    """The order's commander gives the problem to a unit."""
     proposed: Assignment
     deadline: EventTime
     order: PendingProblemOrder
@@ -1663,11 +1749,16 @@ class AssignTodo(TodoOperation):
                 proposed, self.deadline, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
-        current.require_commander(proposed.parent_identity)
+        self.actor.require_may_change(current)
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
-        return replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
-                       revision=current.revision + 1)
+        assigned = replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
+                           revision=current.revision + 1)
+        return self.actor.assigned(current, assigned)
+
+    @property
+    def actor(self) -> ThreadIncarnation:
+        return self.proposed.parent_identity
 
 
 @dataclass(frozen=True)
@@ -1679,7 +1770,7 @@ class StrikeTodo(TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
@@ -1852,7 +1943,7 @@ class ReleaseTodo(TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
@@ -2053,7 +2144,7 @@ class Todo(TypedTable):
 
     @property
     def strike_count(self) -> int:
-        return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
+        return len(self.live_strikes(self.holder))
 
     def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
         """The strikes still counting on this task, against ``unit`` on any order of it."""
@@ -2102,6 +2193,16 @@ class Todo(TypedTable):
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
+
+    def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
+        """After assignment validation, fold its strike and release into the same row write."""
+        owner, at = self.held(), RecordedEventTime(time.time())
+        reason = StrikeReason(f"{owner.owner} stopped making progress on {self.id}; "
+                              f"Core reassigned the order to {assigned.held().owner}.")
+        struck = StrikeTodo(self.revision, actor, owner, reason.text, at).apply(self)
+        released = ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
+        return replace(assigned, strikes=struck.strikes, released=released.released,
+                       revision=released.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
         if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
@@ -2297,6 +2398,35 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
+    def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
+        """Observe active held orders without changing owners, strikes or releases."""
+        held = tuple(todo for todo in self._open(
+            "assignment IS NOT NULL", (), OpenTodoState) if todo.pending)
+        pulls = PullRequests(held)
+        return tuple(todo for todo in held
+                     if OrderProgress.from_source(source := ProgressSource.of(todo, storage, pulls))
+                     .stalled(source.since, time.time()))
+
+    def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
+                         storage: StorageRule) -> None:
+        """Read before locking; close only orders whose observed revision still holds."""
+        checked = tuple((todo, order) for todo in self.held_for_commander(commander)
+                        if isinstance(order := todo.order, CheckedProblemOrder))
+        pulls = PullRequests(tuple(todo for todo, _ in checked))
+        completed = tuple(DoneTodoState.closed(todo, order.merged(merged.sha))
+                          for todo, order in checked
+                          for repo in repos if repo.github.lower() == todo.repo
+                          for merged in MergedProgress.found(
+                              ProgressSource.of(todo, storage, pulls))
+                          if repo.contains(merged.sha))
+        if not completed:
+            return
+        with self.writing() as db:
+            for result in completed:
+                current = self._current(db, result.id)
+                if current.revision + 1 == result.revision:
+                    result.upsert(db)
+
     def board_disagreements(
         self, commander: ThreadIncarnation, storage: StorageRule,
     ) -> Iterator[tuple[Todo, MergedProgress]]:
@@ -2344,8 +2474,9 @@ class TodoStore(TypedStore):
             for assignment in (todo.assignment, *(release.previous for release in todo.released))
             if assignment)
 
-    def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        states = TodoState.open_names()
+    def _open(self, where: str, parameters: tuple,
+              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        states = state.open_names()
         selected = ','.join('?' for state in states)
         return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
 
@@ -2433,19 +2564,16 @@ class TodoStore(TypedStore):
         *,
         expected_revision: int,
         owner: Thread,
-        parent: Thread,
+        assigner: ThreadIncarnation,
         generation: str,
         goal: GoalRef,
         deadline: EventTime,
         order: PendingProblemOrder,
         traced: FileLine | None = None,
     ) -> Todo:
-        identity, parent_identity = _thread(owner), _thread(parent)
+        identity = _thread(owner)
         proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
-        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
+            identity.name, identity.created_at, assigner.name, assigner.wire_birth, generation)
+        return self.apply(
+            todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
+
