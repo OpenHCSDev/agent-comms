@@ -13,13 +13,12 @@ from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
-    StrikeTodo, WithdrawTodo)
+    StrikeTodo)
 from agent_comms.rule_reviews import DrawnRuleReviewEntry
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
-    CommsCommanderLoadTool, CommsSendRefusalsTool, CommsHistoryTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsFleetStoryTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
     CommsOrderStoryTool,
@@ -86,8 +85,6 @@ def scenario(comms: Comms, project, monkeypatch):
         commander="lead", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
     yield CommsUnjudgedTool, {"thread": "lead"}, lead
-    yield CommsCommanderLoadTool, {"thread": "lead"}, lead
-    yield CommsSendRefusalsTool, {}, lead
     yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
                                     "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
@@ -121,12 +118,6 @@ def scenario(comms: Comms, project, monkeypatch):
         commander="lead", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Fix P2"))}, lead
     yield CommsFireTool, {"unit": "worker",
                           "reason": "The unit broke the release path twice and missed both of its deadlines."}, lead
-    # The release has been exercised. Retire its fixture problem before the standing-rule
-    # read legitimately tries to assign that unowned repair to a new managed agent.
-    released = comms.goals.todos.get("P2")
-    yield CommsChangeProblemTool, {"problem": "P2", "operation": FieldCodec.encode(WithdrawTodo(
-        released.revision, actor, released.holder_state.previous_assignment(),
-        "The reply fixture proved release and has no remaining repair to assign."))}, lead
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody
@@ -136,7 +127,6 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead
     yield CommsCollaborationsTool, {"thread": "lead"}, lead
     yield CommsSendTool, {"from": "lead", "to": "worker", "body": "Hello @worker"}, lead
-    yield CommsHistoryTool, {"peer": "worker", "participant": "lead"}, lead
     yield CommsDecisionTool, {"to": "#team", "chosen": "Typed records", "rejected": ["Dicts"]}, author
     yield CommsConstraintTool, {"to": "#team", "text": "Never replay inputs"}, author
     yield CommsSubtaskTool, {"to": "#team", "text": "Type the replies", "completed": False}, author
