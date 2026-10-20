@@ -49,6 +49,6 @@ class PendingRequests(Sealed):
 
     def take_anonymous(self, result_type: type, value: Any) -> Any:
         for (owner, identity), pending in self._pending.items():
-            if owner is result_type and pending.request.id is None:
+            if owner is result_type and not pending.request.id:
                 return self.take(owner, identity, value)
         return None

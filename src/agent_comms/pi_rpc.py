@@ -114,7 +114,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     def track(self, command: PiCommand) -> asyncio.Future[Response]:
         """Expose the same pending response to the request's lifecycle owner."""
-        key = command.id if command.id is not None else uuid4().hex
+        key = command.id or uuid4().hex
         return self.pending.add(type(command), key, request=command)
 
     @staticmethod

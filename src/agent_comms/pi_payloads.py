@@ -869,7 +869,8 @@ class UserMessage(PiMessage):
             )
         for part in parts:
             events.extend(part.user_transcript(context.position, timestamp))
-        return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
+        events = [replace(event, routing=routing) for event in events]
+        return [event.with_native_input(self.input_id) for event in events] if self.input_id else events
 
 
 class ToolDetailsPayload(PiPayload):

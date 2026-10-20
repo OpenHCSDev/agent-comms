@@ -15,7 +15,7 @@ from uuid import uuid4
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, boundary_decoder, WireAbsentNone, WireName, WireOmitDefault
+from .field_codec import FieldCodec, WireAbsentNone, WireName, WireOmitDefault
 from .image_inputs import ImageInput
 from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
@@ -66,14 +66,13 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: Annotated[str | None, WireAbsentNone()] = field(
+    id: Annotated[str | PiOmitted, WireAbsentNone()] = field(
         default_factory=lambda: uuid4().hex
     )
 
-    @boundary_decoder
     def require_id(self) -> str:
         """Operations that correlate an input require the command's actual ID."""
-        if self.id is None:
+        if not self.id:
             raise ValueError("A correlated native input requires its command ID")
         return self.id
 

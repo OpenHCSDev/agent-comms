@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.pi_payloads import TextContent, UnknownContent
+from agent_comms.pi_payloads import PiOmitted, TextContent, UnknownContent
 
 
 def test_original_header_preserves_project_and_fork_lineage(tmp_path):
@@ -31,7 +31,7 @@ def test_original_header_preserves_project_and_fork_lineage(tmp_path):
         assert all(encoded[name] == value for name, value in raw.items())
     assert file.read_bytes() == before
     incomplete = NativeEntry.from_evidence({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "unrecorded"})
-    assert incomplete.cwd is None and incomplete.parent_session is None
+    assert incomplete.cwd == incomplete.parent_session == PiOmitted()
 
 
 @pytest.mark.parametrize(

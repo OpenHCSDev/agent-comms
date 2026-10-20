@@ -507,7 +507,7 @@ class ExtensionUiRequest(NativePiEvent):
     """Pi owns the outer type; concrete declarations own its method vocabulary."""
 
     method: str | None = None
-    id: str | None = None
+    id: str | PiOmitted = PiOmitted()
 
     @classmethod
     def wire_kind(cls) -> str:
@@ -531,7 +531,7 @@ class ExtensionUiRequest(NativePiEvent):
         return data
 
     def require_id(self) -> str:
-        if self.id is None or not 0 < len(self.id) <= 128:
+        if not self.id or len(self.id) > 128:
             raise ValueError("Pi extension UI request lacked a bounded ID.")
         return self.id
 
