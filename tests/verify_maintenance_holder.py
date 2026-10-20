@@ -69,7 +69,7 @@ def live_worker() -> None:
     # steps need no new revision worktree. The real busy owner holds its drain.
     head = subprocess.check_output(('git', 'rev-parse', 'HEAD'), cwd=ROOT, text=True).strip()
     live(ROOT, BUS, head, head, (), STACK, STACK,
-         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-worker-cpu', SCRATCH)
+         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-worker-cpu', SCRATCH, 0)
 
 
 def caller() -> None:
