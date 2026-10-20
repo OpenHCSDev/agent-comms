@@ -33,6 +33,10 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
+    def wake_key(self) -> str:
+        """The violation, not its changing measurements or age, identifies a wake."""
+        return f"{self.declared_name}:{self.line()}"
+
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
@@ -83,6 +87,9 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls.found(why, comms, commander),) if why else ()
+
+    def wake_key(self) -> str:
+        return self.declared_name
 
     def line(self) -> str:
         return self.text.format(why=self.why)
@@ -156,6 +163,9 @@ class RulesDue(DatedStandingRule):
 
     def began(self) -> float:
         return self.since
+
+    def wake_key(self) -> str:
+        return f"{self.declared_name}:{self.since}"
 
     def line(self) -> str:
         return (
@@ -237,6 +247,9 @@ class MemoryLow(UndatedStandingRule):
         memory = rule.memory()
         return (cls(rule, memory),) if rule.memory_due(memory) else ()
 
+    def wake_key(self) -> str:
+        return self.declared_name
+
     def line(self) -> str:
         dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
         processes = ", ".join(map(str, self.memory.processes)) or "none"
@@ -260,6 +273,9 @@ class DiskLow(UndatedStandingRule):
         rule = comms.registry.storage_rule
         free = rule.free_gib()
         return (cls(rule, free),) if rule.cleanup_due(free) else ()
+
+    def wake_key(self) -> str:
+        return f"{self.declared_name}:{self.rule.volume}:{self.rule.below_floor(self.free_gib)}"
 
     def line(self) -> str:
         floor = (

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import subprocess
 import time
 from collections.abc import Callable, Iterable, Iterator
@@ -13,7 +11,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from ..comms import Comms
-from ..coordinator import Coordination
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..repo import Repo
@@ -49,6 +46,9 @@ class Detached(UndatedStandingRule):
         unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
         return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
 
+    def wake_key(self) -> str:
+        return f"{self.declared_name}:{self.unit}:{self.orders}"
+
     def line(self) -> str:
         return (f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
                 " -> wake it or reassign")
@@ -65,6 +65,9 @@ class RequestStalled(UndatedStandingRule):
                      for request, served in goal.order.open_requests(
                          goal, comms.goals, thread.incarnation)
                      if not served)
+
+    def wake_key(self) -> str:
+        return f"{self.declared_name}:{self.goal.id}"
 
     def line(self) -> str:
         return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
@@ -182,17 +185,6 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
             cls.after_stall(comms)
-
-    @classmethod
-    async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Run a pass each minute; failures go to the existing service log."""
-        while True:
-            (outcome,) = await asyncio.gather(
-                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
-                return_exceptions=True)
-            if isinstance(outcome, Exception):
-                logging.error("Stall watcher pass failed", exc_info=outcome)
-            await asyncio.sleep(60)
 
 
 @dataclass(frozen=True)

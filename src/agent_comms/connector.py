@@ -52,6 +52,8 @@ from .connector_store import (
 )
 from .messages import Message
 from .commander.standing import UnownedWheelSpin
+from .commander_heartbeat import CommanderHeartbeat
+from .coordinator import Coordination
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest
@@ -378,14 +380,22 @@ class Connector:
         return app
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
-        """The running Core service advances stalled orders without a commander call."""
-        task = asyncio.create_task(UnownedWheelSpin.watch(self.opened_wire))
+        """Core owns both order maintenance and the commander's changed-rule wakes."""
+        heartbeat = CommanderHeartbeat(CALLER.name)
+        tasks = (
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+            asyncio.create_task(Coordination.watch_worker(
+                lambda: heartbeat.watch_pass(self.opened_wire))),
+        )
         try:
             yield
         finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                with suppress(asyncio.CancelledError):
+                    await task
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(
