@@ -296,8 +296,9 @@ class ToolDescription:
     annotations: ToolAnnotations
 
     @classmethod
-    def of(cls, tool: type[ToolRequest]) -> ToolDescription:
-        return cls(tool.declared_name, tool.label, f"{tool.description} {tool.bus_effect}",
+    def of(cls, name: str, tool: type[ToolRequest] | type[ConnectorTool]) -> ToolDescription:
+        """The name is the key tools/call dispatches on, so listing and calling share it."""
+        return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
                    FieldCodec.record_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
 
 
@@ -396,7 +397,9 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
     params: dict[str, object] = field(default_factory=dict)
 
     async def result(self, connector: Connector) -> ToolsListResult:
-        return ToolsListResult(tuple(map(ToolDescription.of, Connector.exposed().values())))
+        return ToolsListResult(tuple(
+            ToolDescription.of(name, tool) for name, tool in Connector.exposed().items()
+        ))
 
 
 @dataclass(frozen=True, kw_only=True)

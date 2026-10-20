@@ -110,7 +110,7 @@ class RecoverySnapshot:
         return self.attempt if self.attempt is not None else NoPreviousAttempt()
 
     def require_attempt(self) -> AttemptRecord:
-        return self.previous_attempt.require()
+        return self.previous_attempt.require_attempt()
 
     def require_current_attempt(self) -> AttemptRecord:
         if not self.is_current:

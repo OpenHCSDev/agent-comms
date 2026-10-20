@@ -58,7 +58,7 @@ class PreviousAttempt(ABC):
     """Start policy consumes an attempt capability, not the snapshot's optional SQL row."""
 
     @abstractmethod
-    def require(self) -> AttemptRecord: ...
+    def require_attempt(self) -> AttemptRecord: ...
 
     @abstractmethod
     def require_retry(self, snapshot: RecoverySnapshot) -> None: ...
@@ -71,7 +71,7 @@ class NoPreviousAttempt(PreviousAttempt):
     def require_newer_owner(self, generation: int) -> None:
         pass
 
-    def require(self) -> AttemptRecord:
+    def require_attempt(self) -> AttemptRecord:
         raise StaleFence("execution has no authorized attempt")
 
     def require_retry(self, snapshot: RecoverySnapshot) -> None:
@@ -80,7 +80,7 @@ class NoPreviousAttempt(PreviousAttempt):
 
 @dataclass(frozen=True, slots=True)
 class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
-    def require(self) -> AttemptRecord:
+    def require_attempt(self) -> AttemptRecord:
         return self
 
     def require_retry(self, snapshot: RecoverySnapshot) -> None:

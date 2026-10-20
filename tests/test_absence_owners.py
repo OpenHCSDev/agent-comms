@@ -55,7 +55,7 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
     attempt = NoPreviousAttempt()
     attempt.require_newer_owner(1)
     with pytest.raises(StaleFence):
-        attempt.require()
+        attempt.require_attempt()
     with pytest.raises(RecoveryBlocked):
         attempt.require_retry(None)
 

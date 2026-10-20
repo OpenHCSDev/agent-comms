@@ -16,7 +16,7 @@ class RecordedEventSeconds(FieldRepresentation):
 
     @classmethod
     def decode(cls, value: object) -> RecordedEventTime:
-        return RecordedEventTime(FieldCodec.decode(int | float, value))
+        return RecordedEventTime(FieldCodec.decode(float, value))
 
     @classmethod
     def encode(cls, value: object) -> float:
