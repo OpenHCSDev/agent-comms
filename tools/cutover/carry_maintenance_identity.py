@@ -61,7 +61,7 @@ class IdentifiedState(MaintenanceState):
         return Carried(0)
 
 
-type StoredMaintenanceState = IdentifiedState | OldReadyState
+StoredMaintenanceState = IdentifiedState | OldReadyState
 
 
 class MaintenanceIdentity(Carry):
