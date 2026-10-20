@@ -273,9 +273,10 @@ class Stack:
                 drain_candidate_catchup(into)
             finally:
                 _, error = child.communicate(input="\n", timeout=60)
-                if child.returncode and sys.exception() is None:
-                    raise UpgradeRefused(f"Installed practice copy did not retire: {error}") from subprocess.CalledProcessError(
-                        child.returncode, child.args, stderr=error)
+        if child.returncode:
+            raise UpgradeRefused(
+                f"Installed practice copy did not retire: {error}"
+            ) from subprocess.CalledProcessError(child.returncode, child.args, stderr=error)
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
