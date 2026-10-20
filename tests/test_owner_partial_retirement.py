@@ -23,7 +23,7 @@ from agent_comms.threads import Thread
 class AuthoredRetirement(OwnerLifecycle):
     def __init__(self, root, mode, monkeypatch):
         comms = Comms(root)
-        super().__init__(comms.root, comms.registry, comms.bus)
+        super().__init__(comms.root, comms.registry, comms.bus, comms.goals, comms.messaging)
         self.mode = mode
         self.originals = tuple(self.registry.new_thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
