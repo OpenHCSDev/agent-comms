@@ -23,7 +23,7 @@ from agent_comms_hooks import ClaudeBashHook, ClaudeFileEditHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
-from ..storage_rules import GitProgram, ShellInterpreter, ShellInvocation
+from ..storage_rules import GitProgram, ShellInvocation
 from ..todos import InstallDeadline
 
 if TYPE_CHECKING:
@@ -185,16 +185,8 @@ class SourceChangeCommand(TacticalCommand):
         )
 
     @classmethod
-    def landing(cls, words: Words, cwd: Path) -> bool:
-        script = (
-            words[1] if Path(words[0]).name in ShellInterpreter and len(words) > 1 else words[0]
-        )
-        path = Path(script).expanduser()
-        return (path if path.is_absolute() else cwd / path).resolve() == cls.landing_tool
-
-    @classmethod
     def refused(cls, words: Words, session: CommanderSession, cwd: Path) -> tuple[str, ...]:
-        if cls.landing(words, cwd) or Path(words[0]).name not in GitProgram.names:
+        if Path(words[0]).name not in GitProgram.names:
             return ()
         invocation = GitProgram.invocation(list(words[1:]), cwd)
         if invocation.writes_source and any(

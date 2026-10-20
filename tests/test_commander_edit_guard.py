@@ -118,6 +118,10 @@ def test_declared_batch_landing_path_remains_allowed(guard_entry):
         invoke({"command": f"bash {shlex.quote(str(SourceChangeCommand.landing_tool))}"}, cwd=repo)
         is None
     )
+    response = invoke({
+        "command": f"bash {shlex.quote(str(SourceChangeCommand.landing_tool))} && git commit -am fix"
+    })
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     # Naming the exemption as an ordinary git argument cannot exempt a push.
     response = invoke(
         {"command": f"git push origin {shlex.quote(str(SourceChangeCommand.landing_tool))}"}

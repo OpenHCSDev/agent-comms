@@ -373,11 +373,6 @@ class ShellInvocation:
             yield cls(tuple(words), cwd)
 
 
-class ShellInterpreter(StrEnum):
-    BASH = 'bash'
-    SH = 'sh'
-
-
 class GitWriteOperation(StrEnum):
     COMMIT = 'commit'
     PUSH = 'push'
