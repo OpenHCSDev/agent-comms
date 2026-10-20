@@ -20,6 +20,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
 from ..comms import Comms
+from ..change_report import FileLine
 from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, ToolCallVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec, option
@@ -245,7 +246,8 @@ class BackVerb(VerdictVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, ctx.incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
+                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               evidence=(FileLine.from_wire(self.at),))
 
     def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
