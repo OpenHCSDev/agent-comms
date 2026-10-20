@@ -144,6 +144,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
         return f"delivered commit {self.delivered}"
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailed) -> None:
+        if self.commit != self.delivered:
+            return  # A failed integration check is not evidence that the unit's commit failed.
         now = time.time()
         spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
         FailedCheckStrike.make(todo, now,
@@ -2067,7 +2069,8 @@ class MissedDeadlineStrike(ObjectiveStrike):
         if not todo.overdue(now):
             return ()
         due = todo.deadline.recorded_at("An order deadline")
-        return (cls.make(todo, now, f"missed its deadline; cost {(now - due) / 60:.1f} minutes late"),)
+        return (cls.make(todo, now,
+            f"missed its order deadline without a delivered commit; cost {(now - due) / 60:.1f} minutes late"),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2078,11 +2081,11 @@ class MissedFirstCallStrike(ObjectiveStrike):
         due = order.first_call_deadline.recorded_at("A first-call deadline")
         if now <= due:
             return ()
-        called = ExternalTranscript(goals.root, todo.held().owner_identity).last_tool_call()
-        if called.since(order.at.recorded_at("An order")):
+        transcript = ExternalTranscript(goals.root, todo.held().owner_identity)
+        if transcript.tool_call_between(order.at.recorded_at("An order"), due):
             return ()
         return (cls.make(todo, now,
-            f"made no first tool call; cost {(now - due) / 60:.1f} minutes late"),)
+            f"made no first tool call before its first-call deadline; cost {(now - due) / 60:.1f} minutes late"),)
 
 
 @dataclass(frozen=True, kw_only=True)
