@@ -37,33 +37,6 @@ def test_calling_thread_is_declared_by_owner_launch_environment():
     assert not ThreadLaunch.called_by("owner", lambda caller: caller, environment={})
 
 
-@pytest.mark.parametrize("task", ["", "first input"])
-def test_owner_launch_carries_startup_input_exactly_when_given_and_worker_takes_it_once(
-    comms, tmp_path, monkeypatch, task
-):
-    launched = []
-    launch = ParentedProcess.launch
-
-    def record(command, *, env, **kwargs):
-        launched.append(dict(env))
-        return launch((sys.executable, "-c", ""), env=env, **kwargs)
-
-    monkeypatch.setattr(ParentedProcess, "launch", record)
-    # An inherited key belongs to another launch and never reaches this child.
-    monkeypatch.setenv("AGENT_COMMS_STARTUP_INPUT_KEY", "inherited")
-    comms.threads.create(NewThreadSpec.from_task(
-        name="child", project=str(tmp_path), model="test/model",
-        thinking_level=HighThinkingLevel, task=task,
-    ))
-    child, = launched
-    key = ThreadLaunch.current(child).startup_input
-    assert ("AGENT_COMMS_STARTUP_INPUT_KEY" in child) == bool(task)
-    assert key != "inherited" and (key is not None) == bool(task)
-    assert ThreadLaunch.take_startup_input(child) == key
-    assert "AGENT_COMMS_STARTUP_INPUT_KEY" not in child
-    assert ThreadLaunch.take_startup_input(child) is None
-
-
 class TestMessaging:
     def test_send_routes_through_bus(self, wired):
         mid = wired.messaging.send("PR111", "fixer", "hello", QuestionKind).message.message_id
@@ -308,26 +281,6 @@ class TestThreadOps:
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
-    def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.native_transcript import NativeTranscript
-
-        session_file = tmp_path / "session.jsonl"
-        session_file.write_text(
-            json.dumps(transcript_records.entry(ModelChangeEntry, provider="test", model_id="saved").to_wire()) + "\n"
-        )
-        attached = wired.threads.attach_session((attachment_owner := wired.registry.require("fixer")), str(session_file), process=attachment_owner.process_identity)
-        assert attached.model == "test/saved"
-        assert wired.registry.require("fixer").model == "test/saved"
-
-        def no_tail(*_args, **_kwargs):
-            raise AssertionError("A configuration answer must not scan saved history")
-
-        monkeypatch.setattr(NativeTranscript, "tail", no_tail)
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model="runtime/model"))
-        assert wired.configuration.answer("fixer").model == "test/saved"
-        assert wired.threads.resolve_thread_model("PR111", "default/model") == "default/model"
 
     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")

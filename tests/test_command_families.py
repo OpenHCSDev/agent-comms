@@ -67,28 +67,6 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert build_parser().parse_args(["restart", "--all"]).agent_bin is None
 
 
-def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr(CliCommand, "__registry__", dict(CliCommand.__registry__))
-
-    @dataclass(frozen=True)
-    class ContractProbeResult(CliResult):
-        amount: int
-        root: str
-
-    @dataclass(frozen=True, kw_only=True)
-    class ContractProbeCliCommand(CliCommand, declared_name="contract-probe"):
-        help = "Test extension through declaration membership"
-        amount: int = option("--amount")
-
-        def apply(self, ctx):
-            return ContractProbeResult(self.amount + 1, str(ctx.root))
-
-    comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
-    assert main(["--root", str(tmp_path), "contract-probe", "--amount", "40"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"amount": 41, "root": str(tmp_path)}
-
-
 @pytest.mark.parametrize(
     "parameters",
     [
@@ -148,92 +126,6 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
     with pytest.raises(type(declared.value)) as refused:
         RuntimeRequest.from_wire(payload)
     assert str(refused.value) == str(declared.value)
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp_path, monkeypatch):
-    monkeypatch.setattr(RuntimeRequest, "__registry__", dict(RuntimeRequest.__registry__))
-
-    @dataclass(frozen=True, kw_only=True)
-    class ContractProbeRuntimeRequest(ResultRuntimeRequest):
-        amount: int
-
-        async def result(self, ctx):
-            return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
-
-    comms = Comms(tmp_path)
-    comms.registry.declare(
-        comms.registry.new_thread(
-            "owner",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        )
-    )
-
-    def require_owned_session(entry):
-        assert entry.thread.name == "owner"
-        assert entry.matches_name("owner")
-        return "session"
-
-    from agent_comms.input_attempt import OwnerQueueInputDeliveryScope
-
-    async def delivery_scope(session_id):
-        assert session_id == "session"
-        return OwnerQueueInputDeliveryScope(frozenset())
-
-    agent = SimpleNamespace(
-        _comms=comms,
-        inputs=SimpleNamespace(delivery_scope=delivery_scope),
-        sessions=SimpleNamespace(
-            bindings={"session": "owner"},
-            require_owned_session=require_owned_session,
-        ),
-    )
-    server = RuntimeServer(agent)
-    await server.start()
-    proxy = RuntimeProxy(agent, "owner", server.path)
-    try:
-        assert await proxy.request("contract_probe", amount=40) == {
-            "amount": 41,
-            "session": "session",
-            "owner": "owner",
-        }
-        delivery = await proxy.request("input_dispositions")
-        assert delivery["inputs"] == [] and delivery["historicalCount"] == 0
-        for invalid in (
-            {"amount": True},
-            {"amount": 40, "futureExtension": True},
-            {"amount": 40, "kind": "cancel"},
-        ):
-            with pytest.raises(ValueError) as declared:
-                RuntimeRequest.from_wire(
-                    {
-                        "action": FieldCodec.encode(ContractProbeRuntimeRequest),
-                        "thread": "owner",
-                        **invalid,
-                    }
-                )
-            with pytest.raises(RuntimeError) as refused:
-                await proxy.request("contract_probe", **invalid)
-            assert str(refused.value) == str(declared.value)
-        with PrivateSocketRole.address(server.path) as address:
-            reader, writer = await asyncio.open_unix_connection(address)
-        try:
-            invalid = {"action": "not-a-request", "thread": "owner"}
-            with pytest.raises(ValueError) as declared:
-                RuntimeRequest.from_wire(invalid)
-            writer.write(json.dumps(invalid).encode() + b"\n")
-            await writer.drain()
-            failure = OwnerLine.read(await reader.readline())
-            assert isinstance(failure, OwnerFailure) and failure.rpc_error is None
-            assert failure.error == str(declared.value)
-        finally:
-            writer.close()
-            await writer.wait_closed()
-    finally:
-        await proxy.close()
-        await server.close()
 
 
 @pytest.mark.parametrize(

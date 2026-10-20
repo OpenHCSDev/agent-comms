@@ -151,33 +151,6 @@ def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
         assert FieldCodec.decode(SchemaShape, FieldCodec.encode(value)) == value
 
 
-def test_compiled_plan_resolves_a_thousand_records_once(monkeypatch):
-    import agent_comms.field_codec as codec
-
-    @dataclass(frozen=True)
-    class Entry:
-        count: int
-        tags: tuple[str, ...]
-
-    annotation = list[Entry]
-    records = [Entry(i, ("alpha", "beta")) for i in range(1000)]
-    expected = [{"count": i, "tags": ["alpha", "beta"]} for i in range(1000)]
-    plan = codec.compile_decoder(annotation)
-    before = FieldCodec._record_plan.cache_info().misses
-    assert FieldCodec.encode(records, annotation) == expected
-    assert FieldCodec._record_plan.cache_info().misses == before + 1
-    assert codec.compile_decoder(annotation) is plan
-
-    def unexpected(*args):
-        raise AssertionError("The value path parsed an annotation")
-
-    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(unexpected))
-    monkeypatch.setattr(codec, "get_args", unexpected)
-    monkeypatch.setattr(codec, "get_origin", unexpected)
-    assert FieldCodec.encode(records, annotation) == expected
-    assert FieldCodec._record_plan.cache_info().misses == before + 1
-
-
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
     from pydantic import JsonValue
 

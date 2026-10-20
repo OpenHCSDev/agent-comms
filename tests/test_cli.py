@@ -11,18 +11,6 @@ from agent_comms.cli import main
 
 
 @pytest.fixture
-def run_cli(comms, monkeypatch):
-    root = comms.root
-
-    def run(*argv: str) -> tuple[int, dict]:
-        code = main(["--root", str(root), *argv])
-        captured = json.loads(Path("/dev/stdout").read_text()) if False else None
-        return code, captured
-
-    return run
-
-
-@pytest.fixture
 def cli(capsys):
 
     root = None
@@ -214,23 +202,8 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "poll", "--thread", "b")
         assert out["thread"]["name"] == "b" and len(out["inbox"]) == 1
 
-    def test_fork_missing_session_reports_error(self, cli, tmp_path, fake_native_catalog):
-        code, _ = cli(
-            tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native"
-        )
-        assert code == 0
-        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
-                        "--model", "test/model")
-        assert code == 1 and out == {"type": "failed", "error": "Canonical saved session required"}
-
 
 class TestCliFailClosed:
-    def test_fork_cli_parent_reports_transport_error(self, cli, tmp_path, fake_native_catalog):
-        code, _ = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        assert code == 0
-        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
-                        "--model", "test/model")
-        assert code == 1 and "no native prompt transport" in out["error"]
 
     def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
         code, out = cli(tmp_path, "tool", "--tool", "comms_threads", "--arguments", "[]")

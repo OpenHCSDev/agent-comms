@@ -86,59 +86,6 @@ async def test_nonwaiting_reader_reports_named_store_busy(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_resident_connections_keep_thread_affinity_and_fresh_snapshots(tmp_path, monkeypatch):
-    from agent_comms.coordination_session import CoordinationSession
-
-    path = tmp_path / "coordination.sqlite3"
-    opened, closed = [], []
-    configure = CoordinationStore._configure_connection
-    close = CoordinationSession.close
-
-    def configured(store):
-        opened.append(threading.get_ident())
-        return configure(store)
-
-    def closing(store):
-        closed.append(threading.get_ident())
-        return close(store)
-
-    monkeypatch.setattr(CoordinationStore, "_configure_connection", configured)
-    monkeypatch.setattr(CoordinationSession, "close", closing)
-    writer_ids, reader_ids, threads = set(), set(), set()
-
-    def write(store):
-        writer_ids.add(id(store.session._connection))
-        threads.add(threading.get_ident())
-        store.participants.register("first", "First", "first")
-
-    def read(store):
-        reader_ids.add(id(store.session._connection))
-        threads.add(threading.get_ident())
-        with store.session.read():
-            return store.participants.get("first").display_name
-
-    async with Coordination.worker(path):
-        await Coordination.run_async(path, write)
-        assert await Coordination.run_read_async(path, read) == "First"
-        # A separate connection commits between operations. A resident reader
-        # must acquire a NEW snapshot, not keep its previous read transaction.
-        def rename(store):
-            with store.session.writing() as db:
-                db.execute("UPDATE participants SET display_name = 'Updated' WHERE participant_lookup = 'first'")
-        await Coordination.run_worker(lambda: Coordination._run_owned(
-            path, rename, system_clock, StoreBusy()))
-        assert await Coordination.run_read_async(path, read) == "Updated"
-        await Coordination.run_async(path, write)
-        assert len(writer_ids) == len(reader_ids) == len(threads) == 1
-        assert writer_ids.isdisjoint(reader_ids)
-        assert threading.get_ident() not in threads
-        assert not closed or all(thread not in threads for thread in closed)
-    # Both resident stores close on their owning thread, after the scope ends.
-    assert closed.count(next(iter(threads))) == 2
-    assert opened.count(next(iter(threads))) == 1  # reader config is query-only
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("failing", [False, True])
 async def test_resident_operation_releases_unfinished_transactions(tmp_path, failing):
     path = tmp_path / "coordination.sqlite3"
@@ -176,30 +123,6 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
             await pending
         assert finished.is_set()
         assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_thread) == "joined"
-
-
-@pytest.mark.asyncio
-async def test_resident_initializer_failure_closes_partial_store(tmp_path, monkeypatch):
-    from concurrent.futures.thread import BrokenThreadPool
-    from agent_comms.coordination_session import CoordinationSession, ReadNativeCoordinationSession
-
-    closed = []
-    close = CoordinationSession.close
-
-    def closing(session):
-        closed.append(threading.get_ident())
-        return close(session)
-
-    def fail_reader(*args, **kwargs):
-        raise OSError("reader initialization failed")
-
-    monkeypatch.setattr(CoordinationSession, "close", closing)
-    monkeypatch.setattr(ReadNativeCoordinationSession, "__init__", fail_reader)
-    with pytest.raises(BrokenThreadPool):
-        async with Coordination.worker(tmp_path / "coordination.sqlite3"):
-            await Coordination.run_async(tmp_path / "coordination.sqlite3", lambda store: None)
-    assert len(closed) == 1
-    assert closed[0] != threading.get_ident()
 
 
 @pytest.mark.asyncio

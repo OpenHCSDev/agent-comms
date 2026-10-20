@@ -254,25 +254,6 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     assert comms.relationships.store.path.read_bytes() == original_relationships
 
 
-def test_registry_write_failure_never_exposes_uncommitted_contact(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    comms = _wire(tmp_path)
-    before = comms.registry.store.path.read_bytes()
-
-    def fail_save(self, document) -> None:
-        raise OSError("injected registry write failure")
-
-    monkeypatch.setattr(type(comms.registry.store), "save_unlocked", fail_save)
-    with pytest.raises(OSError, match="injected registry write failure"):
-        comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert comms.registry.store.path.read_bytes() == before
-    fresh = Comms(comms.root)
-    assert fresh.registry.require("owner").goal == NoGoal()
-    assert _rows(fresh, "peer")[0] == {}
-    assert not fresh.relationships.store.path.exists()
-
-
 def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))

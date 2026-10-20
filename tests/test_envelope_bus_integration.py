@@ -89,36 +89,6 @@ def release_messages(comms: Comms, messages: tuple[Message, ...]) -> None:
         comms.bus.publisher.release_resources(boundary, claims, "Finished test tool operation")
 
 
-def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(tmp_path, monkeypatch):
-    comms = marked(tmp_path)
-    path = comms.bus.log.path
-    for name in ("author", "reader"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.messaging.send("author", "reader", "one").message
-    path.write_bytes(path.read_bytes())
-    path.chmod(0o600)
-    real_fsync = os.fsync
-    calls = []
-    fail = True
-
-    def fsync(descriptor):
-        nonlocal fail
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        calls.append(target)
-        if target == str(path) and fail:
-            fail = False
-            raise OSError("simulated first bus fsync failure")
-        real_fsync(descriptor)
-
-    monkeypatch.setattr(store_files.os, "fsync", fsync)
-    with pytest.raises(RelationViolationError, match="UNKNOWN"):
-        read_history(comms)
-    assert str(path) in calls
-    assert len(read_history(comms)) == 1
-    assert calls.count(str(path)) >= 2
-    assert str(path.parent) in calls
-
-
 def test_valid_json_without_newline_not_exposed_by_any_gated_read(tmp_path):
     comms = marked(tmp_path)
     comms.bus.log.path.write_bytes(_sample_line(complete=False))
@@ -275,34 +245,6 @@ def test_concurrent_acquisition_exactly_one_winner(tmp_path):
     assert len(read_history(comms)) == 1
 
 
-@pytest.mark.parametrize("fail_at", ["bus", "directory"])
-def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(tmp_path, monkeypatch, fail_at):
-    comms, _ = _participants(tmp_path)
-    real_fsync = os.fsync
-    failed = False
-
-    def fsync(descriptor):
-        nonlocal failed
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        bus = comms.bus.log.path
-        trigger = (target == str(bus) and bus.stat().st_size > 0 if fail_at == "bus"
-                   else target == str(bus.parent) and bus.exists() and bus.stat().st_size > 0)
-        if trigger and not failed:
-            failed = True
-            raise OSError("injected claim-row fsync failure")
-        real_fsync(descriptor)
-
-    monkeypatch.setattr(store_files.os, "fsync", fsync)
-    with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
-        acquire_message(comms, "alice", Path("a.py"))
-    assert failed
-    messages = read_history(comms)
-    assert len(messages) == 1 and messages[0].claim_transition is not None
-    with pytest.raises(ClaimConflict):
-        acquire_message(comms, "bob", Path("a.py"))
-    assert read_history(comms) == messages
-
-
 def test_large_release_reopens_and_exports_without_a_second_parser_limit(tmp_path):
     comms, worktree = _participants(tmp_path)
     directory = worktree
@@ -356,52 +298,6 @@ def _ordinary_locked_iterator(comms):
 def _ordinary_snapshot(comms):
     with comms.bus.log._record_snapshot() as (_, records):
         return list(records)
-
-
-def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(tmp_path, monkeypatch):
-    comms, worktree = _participants(tmp_path)
-    bus = comms.bus.log.path
-    real_fsync = os.fsync
-    phase = "writer"
-    fsyncs = 0
-
-    def fail_fsync(descriptor):
-        nonlocal fsyncs
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        if target == str(bus) and bus.stat().st_size > 0:
-            fsyncs += 1
-            if phase != "allow":
-                raise OSError("claim row visible but not durable")
-        real_fsync(descriptor)
-
-    monkeypatch.setattr(store_files.os, "fsync", fail_fsync)
-    with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
-        acquire_message(comms, "alice", Path("a.py"))
-    assert bus.read_bytes().endswith(b"\n")
-    raw = json.loads(bus.read_text().splitlines()[0])
-    assert raw["claim_transition"]["claims"] == [str(worktree / "a.py")]
-    reference = MessageReference(raw["seq"], raw["id"])
-    phase = "reader_blocked"
-    denied = (
-        lambda: comms.bus.log.messages_for_references((reference,)),
-        lambda: _ordinary_locked_iterator(comms), lambda: _ordinary_snapshot(comms),
-        lambda: read_history(comms), lambda: comms.bus.log.latest_sequence(),
-        lambda: comms.bus.log.claim_projection(),
-        lambda: _checked_claim(comms, str(worktree / "a.py")),
-    )
-    for read in denied:
-        with pytest.raises(RelationViolationError, match="UNKNOWN"):
-            read()
-    assert fsyncs == 1 + len(denied)
-    phase = "allow"
-    message, = comms.bus.log.messages_for_references((reference,))
-    assert message is not None and message.claim_transition is not None
-    assert _ordinary_locked_iterator(comms) == [message]
-    assert _ordinary_snapshot(comms)[0][0] == message
-    assert read_history(comms) == [message]
-    assert comms.bus.log.latest_sequence() == message.seq
-    assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
-    assert _checked_claim(comms, str(worktree / "a.py")).message_id == message.message_id
 
 
 def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path):

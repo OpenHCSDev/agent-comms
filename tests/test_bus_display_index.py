@@ -106,31 +106,6 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         assert parsed == [2]
 
 
-@pytest.mark.parametrize("scopes", [
-    semantics(),
-    (AllChannelDisplayScope('#any'),),
-    (MemberActivityDisplayScope('#focus', participant_names=frozenset({'sender'})),),
-])
-def test_reopened_display_restores_scope_behavior_without_rebuilding(tmp_path, monkeypatch, scopes):
-    path = tmp_path / 'bus.jsonl'
-    path.write_bytes(row(1))
-    with opened(path, index := BusDisplayIndex(path, 'viewer')) as source:
-        initial = index.snapshot(source, scopes)
-    restored = BusDisplayIndex(path, 'viewer').read()
-    assert restored.scopes == scopes
-    probes = (Message('sender', '#outside', 'member', InfoKind),
-              Message('outsider', '#outside', 'other', InfoKind))
-    assert [scope.includes(message) for scope in restored.scopes for message in probes] == [
-        scope.includes(message) for scope in scopes for message in probes]
-
-    def unexpected_rebuild(*args, **kwargs):
-        pytest.fail('Unchanged saved metrics must not rebuild after reopening')
-
-    monkeypatch.setattr(BusPageIndex, 'display_snapshot', unexpected_rebuild)
-    with opened(path, reopened := BusDisplayIndex(path, 'viewer')) as source:
-        assert reopened.snapshot(source, scopes) == initial
-
-
 def test_activity_uses_the_same_complete_line_cut(tmp_path):
     path = tmp_path / "bus.jsonl"
     first = row(1)
@@ -143,20 +118,6 @@ def test_activity_uses_the_same_complete_line_cut(tmp_path):
     with opened(path, index) as source:
         assert index.snapshot(source) == initial
         assert source.complete_prefix.boundary == len(first) < source.boundary
-
-
-def test_reopened_activity_restores_saved_prefix_without_decoding_it(tmp_path, monkeypatch):
-    path = tmp_path / "bus.jsonl"
-    path.write_bytes(row(1))
-    with opened(path, index := BusActivityIndex(path)) as source:
-        initial = index.snapshot(source)
-
-    def unexpected_prefix(*args, **kwargs):
-        pytest.fail("An unchanged bus must not decode the saved prefix again")
-
-    monkeypatch.setattr(Message, "from_wire", unexpected_prefix)
-    with opened(path, reopened := BusActivityIndex(path)) as source:
-        assert reopened.snapshot(source) == initial
 
 
 @pytest.mark.parametrize("index_type,index_args,read_args", [

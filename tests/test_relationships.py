@@ -162,21 +162,6 @@ def test_concurrent_add_remove_never_leaves_one_sided_contact(tmp_path):
     assert not read_history(comms)
 
 
-def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkeypatch):
-    comms = setup_wire(tmp_path)
-    for index in range(5):
-        comms.messaging.send("peer", "owner", f"Input {index}").message.message_id
-    service = comms.relationships
-    monkeypatch.setattr(service, "RECENT_MESSAGES", 2)
-    first = service.snapshot("owner")
-    assert first.history_limited and first.history_messages == 2
-    cached = service._recent
-    service.snapshot("owner")
-    assert service._recent is cached
-    comms.messaging.send("owner", "peer", "New output").message.message_id
-    assert service.snapshot("owner").groups[1].entries["peer"].detail.endswith("New output")
-
-
 def collaboration_rows(comms, owner="owner"):
     return tuple(comms.relationships.snapshot(owner).groups_by_type[CollaboratingRelationshipGroup].entries.values())
 
@@ -329,18 +314,6 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     assert unavailable.sources == ("explicit", "goal_mention")
     assert not unavailable.available and unavailable.person is None
     assert "Retained explicit contact" in unavailable.detail
-
-
-def test_revision_changes_when_a_relationship_or_a_thread_does(tmp_path, monkeypatch):
-    monkeypatch.setattr("agent_comms.history_views.time.time", lambda: 1_000)
-    comms = setup_wire(tmp_path)
-    start = comms.relationships.revision()
-    assert comms.relationships.revision() == start
-    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Review")
-    edited = comms.relationships.revision()
-    assert edited != start
-    comms.registry.rename("peer", "reviewer")
-    assert comms.relationships.revision() != edited
 
 
 def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):

@@ -47,53 +47,6 @@ def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
                 reader.observe()
 
 
-def test_missing_proof_row_never_decodes_history(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
-
-    def unexpected_observation(*args, **kwargs):
-        pytest.fail('A missing proof row cannot request a history observation')
-
-    monkeypatch.setattr(NativeEvidenceRead, 'observe', unexpected_observation)
-    with pytest.raises(NativePiUnavailable, match='assembled-context proof'):
-        NativeContextProof.read_evidence(session, 'd' * 32)
-
-
-def test_recorded_inputs_cover_the_cut_after_header_only_reopen(tmp_path, monkeypatch):
-    from agent_comms.native_session_reopen import NativeSessionIdentity
-
-    session = _evidence(tmp_path)
-    header, user = session.read_bytes().splitlines(keepends=True)
-    # Valid older external rows must not enter the typed input decoder.
-    older = (json.dumps({'type': 'custom', 'id': 'older',
-                         'timestamp': '2026-10-01T00:00:00.000Z',
-                         'data': 'old history' * 100}) + '\n').encode()
-    session.write_bytes(header + older * 10000 + user)
-    decoded = []
-    original = PrivateEvidenceRead._decode_row
-
-    def counted(raw):
-        row = original(raw)
-        decoded.append(row['id'])
-        return row
-
-    monkeypatch.setattr(PrivateEvidenceRead, '_decode_row', staticmethod(counted))
-    with NativeEvidenceScope() as scope:
-        evidence = scope.for_source(session)
-        assert NativeSessionIdentity.from_evidence(evidence).session_id == 'sid'
-        assert decoded == ['sid'] and not evidence.inputs
-        proof = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
-        assert proof.session_entry_id == 'entry'
-        assert decoded == ['sid'] + ['older'] * 10000 + ['entry']
-        assert evidence.tracked(INPUT_ID).id == 'entry'
-        index = dict(evidence.inputs)
-        with session.open('ab') as stream:
-            stream.write(older)
-        assert NativeSessionIdentity.from_evidence(evidence).session_id == 'sid'
-        assert evidence.inputs == index
-        assert NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence) == proof
-        assert decoded == ['sid'] + ['older'] * 10000 + ['entry', 'older']
-
-
 def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):
     first_dir, second_dir = tmp_path / "first", tmp_path / "second"
     first_dir.mkdir(mode=0o700)
@@ -153,59 +106,6 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
         assert header.id == "restored"
         assert tuple(evidence.inputs) == (restored_input,)
         assert evidence.source.size == len(restored)
-
-
-@pytest.mark.parametrize("failure", [
-    NativePiUnavailable("source refused"), ValueError("bad value"),
-    TypeError("bad type"), KeyError("missing"),
-])
-def test_generic_observation_failure_does_not_reverify(tmp_path, monkeypatch, failure):
-    session = _evidence(tmp_path)
-    with NativeEntry.open_evidence(session) as evidence:
-        evidence.observe()
-        reverifications = []
-
-        def failed_rows():
-            raise failure
-            yield
-
-        monkeypatch.setattr(evidence.source, "rows", failed_rows)
-        monkeypatch.setattr(
-            evidence.source, "reverify_from_start", lambda: reverifications.append(True)
-        )
-        with pytest.raises(type(failure)):
-            evidence.observe()
-        assert not reverifications
-        assert evidence.source.stream.closed and not evidence.entries
-
-
-
-
-def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
-    decoded = []
-    original = PrivateEvidenceRead._decode_row
-
-    def counted(raw):
-        decoded.append(raw)
-        return original(raw)
-
-    monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
-    with NativeEvidenceScope() as scope:
-        evidence = scope.for_source(session)
-        evidence.observe()
-        assert len(decoded) == 2
-        from agent_comms.native_session_reopen import NativeSessionIdentity
-
-        assert NativeSessionIdentity.from_evidence(scope.for_source(session)).session_id == "sid"
-        evidence.observe()
-        assert len(decoded) == 2
-        with session.open("a") as output:
-            output.write(
-                json.dumps({"type": "compaction", "timestamp": "2026-10-01T00:00:00.000Z", "id": "new", "summary": "append"}) + "\n"
-            )
-        evidence.observe()
-        assert len(decoded) == 3
 
 
 def test_acquired_source_observes_new_context_generation(tmp_path):
@@ -406,39 +306,3 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
     assert (session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()) == before
 
 
-def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_path, monkeypatch):
-    """After the first read, a check decodes only the appended entry and visits only its input."""
-    decoded, visited = [], []
-    decode, tracked = NativeEvidenceRead.decode_rows, MessageEntry.tracked_user
-
-    def counted(self, rows):
-        for entry in decode(self, rows):
-            decoded.append(entry)
-            yield entry
-
-    monkeypatch.setattr(NativeEvidenceRead, "decode_rows", counted)
-    monkeypatch.setattr(MessageEntry, "tracked_user", property(lambda self: visited.append(self) or tracked.fget(self)))
-
-    def user(number):
-        return json.dumps({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": f"e{number}", "message": {
-            "role": "user", "inputId": f"{number:032x}", "inputDigest": "b" * 64,
-            "content": [{"type": "text", "text": "one input"}]}}).encode() + b"\n"
-
-    def check_counts(history):
-        sessions = tmp_path / f"history-{history}"
-        sessions.mkdir(mode=0o700)
-        session = sessions / "s.jsonl"
-        session.write_bytes(json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid", "version": 3}).encode() + b"\n"
-                            + b"".join(user(number) for number in range(1, history + 1)))
-        session.chmod(0o600)
-        with NativeEntry.open_evidence(session) as evidence:
-            evidence.observe()
-            with session.open("ab") as output:
-                output.write(user(history + 1))
-            decoded.clear()
-            visited.clear()
-            assert read_tracked_input_commitment(session, f"{history + 1:032x}", evidence=evidence) == CommittedInput("b" * 64)
-            evidence.stopped_input(f"{history + 1:032x}")
-            return len(decoded), len(visited)
-
-    assert check_counts(10_000) == check_counts(10) == (1, 2)

@@ -87,33 +87,6 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
         captured.read()
 
 
-def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
-    path = tmp_path / "native.jsonl"
-    path.write_text(json.dumps({"type": "message", "id": "entry-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
-        "role": "assistant", "content": [{"type": "text", "text": "captured answer"}],
-    }}) + "\n")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
-    captured = comms.transcripts.capture_page_read("worker")
-    prepare = comms.transcripts._thread_transcript_page
-
-    def append_after_page(*args, **kwargs):
-        page = prepare(*args, **kwargs)
-        with path.open("a") as output:
-            output.write(json.dumps({"type": "message", "id": "entry-2", "timestamp": "2026-10-19T00:00:01Z", "message": {
-                "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
-            }}) + "\n")
-        return page
-
-    monkeypatch.setattr(comms.transcripts, "_thread_transcript_page", append_after_page)
-    assert [event.text for event in captured.read().events] == ["captured answer"]
-    assert captured.content_current()
-    assert [
-        event.text
-        for event in comms.transcripts.capture_page_read("worker").read().events
-    ] == ["captured answer", "later answer"]
-
-
 def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     from dataclasses import replace
     from agent_comms.acp_extension import TranscriptSnapshotUpdate

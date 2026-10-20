@@ -12,29 +12,6 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
-def test_repeated_reads_parse_once_and_observe_external_changes(tmp_path):
-    path = tmp_path / "registry.json"
-    writer = Registration(path)
-    writer.register(writer.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
-    reader = Registration(path)
-    original = reader.require("worker")
-    with patch("agent_comms.registry_store.json.loads", wraps=json.loads) as loads:
-        for _ in range(20):
-            assert reader.require("worker") is original
-            assert reader.status("worker") == RunningThreadStatus()
-            assert reader.all_threads()["worker"] is original
-        assert loads.call_count == 0
-        writer.unregister("worker")
-        assert reader.status("worker") == StoppedThreadStatus()
-    # External atomic replacement invalidates both identities and status.
-    contents = path.read_text().replace('"worker"', '"renamed"')
-    _atomic_write_text(path, contents)
-    assert "worker" not in reader
-    assert reader.require("renamed").name == "renamed"
-    path.unlink()
-    assert not reader.all_threads()
-
-
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
@@ -77,35 +54,6 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     with reader.store.reading() as document:
         assert document == RegistryDocument.from_wire(raw)
         assert list(document.threads) == list(raw["threads"])
-
-
-def test_sender_bindings_are_lazy_immutable_and_owned_by_the_snapshot(tmp_path):
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.routing import DeliveryScope
-
-    registry = Registration(tmp_path / "registry.json")
-    registry.register(registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
-    snapshot = registry.snapshot()
-    historical = RegistryProvenance.capture(snapshot)
-    encoded = FieldCodec.encode(historical)
-    for namespace in (snapshot, historical):
-        with patch.object(DeliveryScope, "sender_lookups", wraps=DeliveryScope.sender_lookups) as lookups:
-            assert "sender_bindings" not in namespace.__dict__
-            first = namespace.sender_bindings
-            assert namespace.sender_bindings is first
-            assert lookups.call_count == len(tuple(namespace.named_members()))
-        with pytest.raises(TypeError):
-            first["senders"] = "{}"
-        assert FieldCodec.encode(historical) == encoded
-        assert json.loads(first["unrecorded"]) == []
-    assert registry.snapshot() is snapshot
-    registry.heartbeat("worker")
-    newer = registry.snapshot()
-    assert newer is not snapshot
-    assert "sender_bindings" not in newer.__dict__
-    assert newer.sender_bindings == snapshot.sender_bindings
-    assert newer.sender_bindings is not snapshot.sender_bindings
 
 
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):

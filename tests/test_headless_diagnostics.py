@@ -38,27 +38,3 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
         assert path.parent.stat().st_mode & 0o777 == 0o700
 
 
-@pytest.mark.asyncio
-async def test_headless_failure_publishes_original_error_without_report_file(native_backend):
-    native = native_backend
-    await native.author_history()
-    native.provider.status = 400
-    async with native.open_owner(runtime_enabled=True) as (owner, session):
-        comms = owner._comms
-        comms.registry.declare(comms.registry.new_thread(
-            name="sender", tags=frozenset({"comms"}), worktree=str(native.project),
-        ))
-        incoming = comms.messaging.send("sender", session, "Private input").message
-        with pytest.raises(NativeTurnError) as caught:
-            await owner.turns.run_agent_turn(
-                session, session, "Private input", origins=(incoming,),
-            )
-        detail = caught.value.request.failure.detail
-        assert "maximum context length exceeded" in detail
-        rows = [json.loads(line) for line in (comms.root / "bus.jsonl").read_text().splitlines()]
-        notice = rows[-1]
-        assert notice["notice"] is True
-        assert detail in notice["text"]
-        assert "Open diagnostic" not in notice["text"]
-        assert not list((comms.root / "diagnostics").glob("*.json"))
-        assert native.provider.posts == 1

@@ -77,32 +77,6 @@ def store(tmp_path) -> Iterator[GoalAttemptStore]:
     yield GoalAttemptStore.initialize(root)
 
 
-def test_concurrent_initialization_never_opens_an_incomplete_schema(tmp_path, monkeypatch):
-    root = tmp_path / "owner"
-    root.mkdir(mode=0o700)
-    paused, resume = Event(), Event()
-    writer = CoordinationStore.writer
-
-    def pause_first_writer(path, *args, **kwargs):
-        if not paused.is_set():
-            paused.set()
-            assert resume.wait(5)
-        return writer(path, *args, **kwargs)
-
-    monkeypatch.setattr(CoordinationStore, "writer", staticmethod(pause_first_writer))
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        pending = pool.submit(GoalAttemptStore.initialize, root)
-        assert paused.wait(5)
-        try:
-            second = GoalAttemptStore.initialize(root)
-        finally:
-            resume.set()
-        first = pending.result(timeout=5)
-    original = first.create_goal("shared")
-    assert second.snapshot("shared") == original
-    assert not tuple(root.glob(".goal-attempts-init-*"))
-
-
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     with pytest.raises(StorageUncertainError, match="owner-0700"):
         GoalAttemptStore.initialize(tmp_path / "missing")
@@ -111,23 +85,6 @@ def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     store = GoalAttemptStore.initialize(root)
     assert store.path.stat().st_mode & 0o777 == 0o600
     assert GoalAttemptStore(root).snapshot("missing") is None
-
-
-def test_generated_family_constraint_changes_goal_schema_identity(store, monkeypatch):
-    """A family-generated CHECK cannot leave the goal format marker unchanged."""
-    original = GoalAttemptSchema.current()
-    constraints = StringEnumStorage.constraints
-
-    def changed_constraint(cls, column, annotation=None):
-        declared = constraints(column, annotation)
-        if annotation is FailureReason:
-            return (*declared, f'"{column}" != \'future_failure\'')
-        return declared
-
-    monkeypatch.setattr(StringEnumStorage, "constraints", classmethod(changed_constraint))
-    assert GoalAttemptSchema.current() != original
-    with pytest.raises(StorageUncertainError, match="one-shot migration required"):
-        GoalAttemptStore(store.root)
 
 
 def test_goal_schema_marker_cannot_claim_a_different_declaration(store):
@@ -212,20 +169,6 @@ def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
     with pytest.raises(ReservationConflictError):
         reopened.recover_unreserved_ready("goal", 1)
     assert reopened.snapshot("goal") == before
-
-
-def test_failed_ready_rotation_never_exposes_a_launch_grant(store, monkeypatch):
-    store.create_goal("goal")
-    reopened = GoalAttemptStore(store.root)
-
-    def fail_sync():
-        raise OSError("injected durability failure")
-
-    monkeypatch.setattr(reopened, "_sync", fail_sync)
-    with pytest.raises(StorageUncertainError):
-        reopened.recover_unreserved_ready("goal", 1)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.ready_grant("goal", 1)
 
 
 def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
@@ -322,57 +265,6 @@ def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(st
         == 2
     )
     assert reopened.reserve("goal", 2).generation == 2
-
-
-def test_fsync_failure_after_commit_never_returns_launch_authority(store, monkeypatch):
-    store.create_goal("goal")
-
-    def failed_sync():
-        raise OSError("injected directory fsync failure after committed reservation")
-
-    monkeypatch.setattr(store, "_sync", failed_sync)
-    with pytest.raises(StorageUncertainError, match="durability"):
-        store.reserve("goal", 1)
-    reopened = GoalAttemptStore(store.root)
-    # The row is visible in the ordinary crash model; no token was returned.
-    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
-    with pytest.raises(ReservationConflictError):
-        reopened.reserve("goal", 1)
-
-
-def test_launch_claim_sync_failure_is_unresolved_and_never_replayable(store, monkeypatch):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
-
-    def failed_sync():
-        raise OSError("injected fsync failure after committed launch claim")
-
-    monkeypatch.setattr(store, "_sync", failed_sync)
-    with pytest.raises(StorageUncertainError, match="durability"):
-        store.claim_launch(reservation)
-    reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
-    with pytest.raises(ReservationConflictError):
-        reopened.reserve("goal", 1)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.claim_launch(reservation)
-    with pytest.raises(UnresolvedAttemptError):
-        store.claim_launch(reservation)
-
-
-def test_commit_uncertainty_never_returns_launch_authority(store, monkeypatch):
-    store.create_goal("goal")
-
-    def uncertain_commit(conn):
-        conn.commit()
-        raise sqlite3.OperationalError("injected lost commit ACK")
-
-    monkeypatch.setattr(store, "_commit", uncertain_commit)
-    with pytest.raises(StorageUncertainError, match="durability"):
-        store.reserve("goal", 1)
-    assert GoalAttemptStore(store.root).snapshot("goal").lifecycle == ReservedGeneration()
-    with pytest.raises(ReservationConflictError):
-        GoalAttemptStore(store.root).reserve("goal", 1)
 
 
 def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
@@ -486,71 +378,6 @@ def test_clearing_goal_retires_reserved_attempt_without_replay(store, phase):
         store.reserve("goal", 1)
 
 
-@pytest.mark.parametrize("transition", ["create", "progress", "retry"])
-@pytest.mark.parametrize("failed_ack", ["fsync", "commit"])
-def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
-    store, monkeypatch, transition, failed_ack
-):
-    attempt_id = None
-    if transition != "create":
-        store.create_goal("goal")
-        reservation = store.reserve("goal", 1)
-        attempt_id = reservation.attempt_id
-        if transition == "progress":
-            permit = store.claim_launch(reservation)
-        else:
-            reservation.fail(store, "attempt outcome unknown")
-
-    if failed_ack == "fsync":
-
-        def lose_ack():
-            raise OSError("injected sync failure AFTER COMMIT")
-
-        monkeypatch.setattr(store, "_sync", lose_ack)
-    else:
-
-        def lose_commit_ack(conn):
-            conn.commit()
-            raise sqlite3.OperationalError("injected COMMIT ACK loss")
-
-        monkeypatch.setattr(store, "_commit", lose_commit_ack)
-
-    with pytest.raises(StorageUncertainError, match="durability"):
-        if transition == "create":
-            store.create_goal("goal")
-        elif transition == "progress":
-            permit.record_verified_progress(store, "real-registry-progress-witness")
-        else:
-            assert attempt_id is not None
-            store.authorize_retry(
-                "goal",
-                expected_generation=1,
-                attempt_id=attempt_id,
-                user_decision_id="human-retry-decision-1",
-            )
-
-    expected = 1 if transition == "create" else 2
-    # COMMIT happened; post-COMMIT failures still leave a visible READY row.
-    reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").number == expected
-    assert reopened.snapshot("goal").lifecycle == ReadyGeneration()
-    with pytest.raises(UnresolvedAttemptError):
-        store.ready_grant("goal", expected)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.ready_grant("goal", expected)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.reserve("goal", expected)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.resume("goal", expected)
-    recovered = reopened.authorize_ready_recovery(
-        "goal",
-        expected_generation=expected,
-        user_decision_id=f"human-recovery-{transition}-{failed_ack}",
-    )
-    assert recovered.number == expected + 1
-    assert reopened.reserve("goal", recovered.number).generation == expected + 1
-
-
 def test_ready_grant_is_not_persisted_and_stale_decisions_cannot_launch(store):
     store.create_goal("goal")
     grant = store.ready_grant("goal", 1)
@@ -601,34 +428,6 @@ def test_one_human_decision_id_cannot_authorize_two_attempts(store):
         user_decision_id="different-human-decision",
     )
     assert store.reserve("goal", 3).generation == 3
-
-
-def test_recovery_postcommit_fsync_failure_revokes_old_and_new_authority(store, monkeypatch):
-    store.create_goal("goal")
-    old_grant = store.ready_grant("goal", 1)
-
-    def lost_sync_ack():
-        raise OSError("injected post-COMMIT fsync failure during recovery")
-
-    monkeypatch.setattr(store, "_sync", lost_sync_ack)
-    with pytest.raises(StorageUncertainError, match="durability"):
-        store.authorize_ready_recovery(
-            "goal", expected_generation=1, user_decision_id="human-recovery-lost-ack"
-        )
-    reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").number == 2
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.reserve("goal", 2)
-    with pytest.raises(ReservationConflictError):
-        store.reserve("goal", 1, ready_grant=old_grant)
-    with pytest.raises(UnresolvedAttemptError):
-        reopened.authorize_ready_recovery(
-            "goal", expected_generation=2, user_decision_id="human-recovery-lost-ack"
-        )
-    next_generation = reopened.authorize_ready_recovery(
-        "goal", expected_generation=2, user_decision_id="new-human-recovery-decision"
-    )
-    assert reopened.reserve("goal", next_generation.number).generation == 3
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):

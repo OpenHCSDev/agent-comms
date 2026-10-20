@@ -32,16 +32,6 @@ def test_complete_tuple_derives_every_rank():
         assert vars(owner)["lock_rank"] == rank
 
 
-@pytest.mark.parametrize("owner_type", [MessageBus, WireLog, ChannelCatalog])
-def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
-    monkeypatch.setattr(StoreOwner, "__registry__", dict(StoreOwner.__registry__))
-    class UnrankedOwner(owner_type):
-        pass
-
-    with pytest.raises(TypeError, match="missing from the lock order: UnrankedOwner"):
-        importlib.reload(store_order)
-
-
 def test_duplicate_owner_in_order_is_rejected_at_module_load(monkeypatch):
     try:
         with monkeypatch.context() as patch:

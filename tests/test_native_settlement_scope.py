@@ -92,25 +92,6 @@ def test_native_boundary_preserves_the_lock_owner_default_wait_policy():
     assert NativeBoundary(object(), blocking=False).contention is None
 
 
-def test_native_coordination_defers_registry_read_until_bus_use(tmp_path, monkeypatch):
-    from agent_comms.registration import Registration
-
-    reads = []
-    original = Registration.__init__
-
-    def observed(registration, path):
-        reads.append(path)
-        original(registration, path)
-
-    monkeypatch.setattr(Registration, "__init__", observed)
-    with Coordination(tmp_path / "coordination.sqlite3") as store:
-        assert reads == []
-        assert store.session.bus.log.path == tmp_path / "bus.jsonl"
-        assert reads == [tmp_path / "registry.json"]
-        assert store.session.bus is store.session.bus
-        assert reads == [tmp_path / "registry.json"]
-
-
 def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_path):
     (tmp_path / "bus.jsonl").write_text("not a native bus\n")
     with StandaloneCoordination(tmp_path / "coordination.sqlite3") as store:

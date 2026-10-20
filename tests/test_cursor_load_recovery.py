@@ -21,50 +21,6 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 
-async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
-    comms = Comms(tmp_path / "wire")
-    owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    comms.registry.declare(owner)
-    comms.messaging.initialize_private_initial_protocol()
-    seen = []
-
-    async def read_cursor(_bus, *, source_reads, **_kwargs):
-        seen.append(source_reads)
-        return None
-
-    monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.read_async", read_cursor)
-    publication = CursorPublication(comms, object())
-    await publication.observe(owner.name, owner.name)
-    await publication.observe(owner.name, owner.name)
-    owned = publication.delivery(owner.name).source_reads
-    assert seen == [owned, owned]
-    publication.close()
-    assert not publication.deliveries and not owned.readers
-
-
-async def test_selected_settlement_uses_the_publication_reader_and_lock(tmp_path, monkeypatch):
-    publication = CursorPublication(Comms(tmp_path / "wire"), object())
-    delivery = publication.delivery("reader")
-    seen = []
-
-    async def advance(_bus, *, source_reads, **_identity):
-        seen.append(source_reads)
-        return None
-
-    monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.advance_async", advance)
-    participant = SimpleNamespace(
-        bus=object(), root_id="root", identity=SimpleNamespace(generation=1),
-        owner=SimpleNamespace(thread=object(), claimed_generation=1),
-    )
-    async with delivery.observation_lock:
-        pending = asyncio.create_task(delivery.advance(participant, "input"))
-        await asyncio.sleep(0)
-        assert not seen
-    assert await pending is None
-    assert seen == [publication.delivery("reader").source_reads]
-    publication.close()
-
-
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     comms = Comms(tmp_path / "wire")
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

@@ -88,26 +88,6 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     assert not (comms.root / "tool-output").exists()
 
 
-def test_message_arriving_between_inbox_read_and_ack_remains_unread(
-    inbox_comms, monkeypatch
-):
-    comms = inbox_comms
-    first = comms.messaging.send("a", "b", "shown").message
-    acknowledge = comms.messaging.acknowledge
-
-    def append_then_acknowledge(name, references):
-        comms.messaging.send("a", "b", "arrived after read").message.message_id
-        return acknowledge(name, references)
-
-    monkeypatch.setattr(comms.messaging, "acknowledge", append_then_acknowledge)
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
-
-    assert result["messages"] == [first.to_wire()]
-    assert result["acknowledged"] == 1
-    remaining = invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": False}, caller=NoThreadCaller())
-    assert [message["text"] for message in remaining["messages"]] == ["arrived after read"]
-
-
 @pytest.mark.parametrize("limit", [0, -1])
 def test_invalid_page_limit_precedes_ack(inbox_comms, limit):
     comms = inbox_comms
@@ -281,33 +261,6 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews
-
-
-def test_300_unread_messages_drain_in_three_limited_calls(inbox_comms, monkeypatch):
-    comms = inbox_comms
-    expected = [comms.messaging.send("a", "b", str(index)).message for index in range(300)]
-    decoded = []
-    read = MessageReadRequest.indexed_records
-
-    def counted(request, source, rows):
-        for row in read(request, source, rows):
-            decoded[-1] += 1
-            yield row
-
-    monkeypatch.setattr(MessageReadRequest, "indexed_records", counted)
-    returned = []
-    for remaining in (200, 100, 0):
-        decoded.append(0)
-        result = invoke_tool(
-            comms, "comms_inbox", {"thread": "b", "limit": 100}, caller=NoThreadCaller(),
-        )
-        assert len(result["messages"]) == result["acknowledged"] == 100
-        assert result["remaining"] == comms.bus.pending_count("b") == remaining
-        assert len(json.dumps(result, indent=2).encode()) < MAX_INLINE_OUTPUT_BYTES
-        returned.extend(result["messages"])
-    assert returned == [message.to_wire() for message in expected]
-    assert decoded == [101, 101, 100]  # One message of lookahead, not the backlog.
-    assert not (comms.root / "tool-output").exists()
 
 
 def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):

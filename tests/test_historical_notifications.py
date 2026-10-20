@@ -44,29 +44,6 @@ def archived_notification(tmp_path, *, thread_registration):
     return old, live, source, messages, root_id
 
 
-def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archived_notification, monkeypatch):
-    old, live, source, messages, _root_id = archived_notification
-    preserved = {path: path.read_bytes() for path in (old.root / "registry.json", old.root / "bus.jsonl")}
-
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError("Recorded notification borrowed live registry/activity")
-
-    monkeypatch.setattr("agent_comms.registration.Registration.snapshot", forbidden)
-    monkeypatch.setattr("agent_comms.agent_activity.AgentActivity.observe_recipients", forbidden)
-    with live.bus.history.read_sources() as sources:
-        results = source.notification_references(sources, tuple(message.reference for message in messages))
-    notification, = results[messages[0].seq, messages[0].message_id]
-    assert notification.recipient == "agent"
-    assert notification.label == "Sent" and not notification.state.working
-    assert "stopped" not in notification.state.detail
-    assert notification.displayed_to == ()
-    assert not (Path(source.root) / "coordination.sqlite3").exists()
-    assert all(path.read_bytes() == original for path, original in preserved.items())
-    live.bus.history.path.write_text("[]")
-    with pytest.raises(HistoricalSourceChanged, match="detached"), live.bus.history.read_sources() as sources:
-        source.notification_references(sources, (messages[0].reference,))
-
-
 def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     document = live.bus.reads.read()

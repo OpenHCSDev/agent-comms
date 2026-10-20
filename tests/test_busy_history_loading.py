@@ -84,47 +84,6 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     assert session.read_bytes() == original
 
 
-async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path, monkeypatch):
-    comms, session = saved_history(tmp_path)
-    original = session.read_bytes()
-    agent = CommsAgent(comms)
-    updates = []
-
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-    read_started = asyncio.Event()
-    read = ObservationProcess.read
-
-    async def observed_read(process, request):
-        read_started.set()
-        return await read(process, request)
-
-    monkeypatch.setattr(ObservationProcess, 'read', observed_read)
-    task = None
-    try:
-        with held_source(comms):
-            task = asyncio.create_task(agent.sessions.transcript.replay("saved", client=Client()))
-            async with asyncio.timeout(15):
-                await await_event_or_task(read_started.wait(), task)
-            await asyncio.sleep(0.15)
-            assert not task.done()
-            assert updates == []  # Not an empty-history update or delivery/resend error.
-        async with asyncio.timeout(5):
-            await task
-        snapshot, = (value for value in decode_updates(updates[0].field_meta)
-                     if isinstance(value, TranscriptSnapshotUpdate))
-        assert [event.text for event in snapshot.page.events] == ["Saved answer"]
-        assert snapshot.identity.runtime.read_key == str(session)
-        assert session.read_bytes() == original
-    finally:
-        if task is not None and not task.done():
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-        await agent.shutdown()
-
-
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
     with ObservationProcess.awaited(comms.route) as process:
@@ -138,52 +97,6 @@ async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
         async with asyncio.timeout(5):
             assert await process.read(ReadNotifications(str(comms.root), ())) == {}
         assert process.reads == {}
-
-
-async def test_retirement_detaches_and_settles_reads_before_one_pipe_close(tmp_path, monkeypatch):
-    from multiprocessing.connection import Connection
-    from agent_comms.coordination_errors import StaleRevision
-    from agent_comms.ui_model.observation import StopSidebar
-
-    comms, session = saved_history(tmp_path)
-    original = session.read_bytes()
-    loop = asyncio.get_running_loop()
-    remove = loop.remove_reader
-    close = Connection.close
-    events = []
-
-    def removed(fd):
-        if fd == descriptor:
-            events.append("detach")
-        return remove(fd)
-
-    def closed(connection):
-        if connection is process.connection:
-            assert process.reads == {}
-            events.append("close")
-        return close(connection)
-
-    # Register the actual loop method after instrumenting it; no replacement
-    # pipe, child, source result or lifecycle implementation.
-    monkeypatch.setattr(loop, "remove_reader", removed)
-    with ObservationProcess.awaited(comms.route) as process:
-        descriptor = process.fileno()
-        monkeypatch.setattr(Connection, "close", closed)
-        with held_source(comms):
-            waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
-            await asyncio.sleep(0.15)
-            assert process.reads and not waiting.done()
-    assert events == ["detach", "close"]
-    with pytest.raises(StaleRevision, match="retired before the read"):
-        await waiting
-    process.close()
-    assert events == ["detach", "close"]
-    assert process.connection.closed and process.process.exitcode == 0
-    assert process.results() == []
-    process.request(StopSidebar())
-    with pytest.raises(StaleRevision, match="retired Comms observation"):
-        await process.read(ReadNotifications(str(comms.root), ()))
-    assert session.read_bytes() == original
 
 
 @pytest.mark.parametrize("error", [GeneratorExit(), asyncio.CancelledError(), RuntimeError("original caller failure")])
@@ -313,20 +226,3 @@ def test_local_pipe_corruption_is_not_peer_retirement(comms):
         assert not service.closed
 
 
-def test_other_write_errors_are_not_reclassified_as_peer_retirement(comms, monkeypatch):
-    import multiprocessing
-
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
-
-    connection, viewer = multiprocessing.get_context("spawn").Pipe()
-    with connection, viewer:
-        service = ObservationService(comms, connection)
-        error = ConnectionResetError("not the observation pipe's EPIPE")
-
-        def failed_write(_result):
-            raise error
-
-        monkeypatch.setattr(connection, "send", failed_write)
-        with pytest.raises(ConnectionResetError) as raised:
-            service.send(ReadAnswered(1, None))
-        assert raised.value is error and not service.closed

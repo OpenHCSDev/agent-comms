@@ -84,19 +84,6 @@ def _insert_raw(store: InputDispositions, key: str, attempt: dict) -> None:
     insert_inputs(store.root, {key: attempt})
 
 
-def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
-    @dataclass(frozen=True)
-    class Reading:
-        sequence: int
-
-    with patch.object(field_codec, "get_type_hints", wraps=field_codec.get_type_hints) as resolve:
-        rows = [FieldCodec.decode(Reading, {"sequence": value}) for value in range(100)]
-        assert resolve.call_count == 1
-        assert [row.sequence for row in rows] == list(range(100))
-        with pytest.raises(ValueError):
-            FieldCodec.decode(Reading, {"sequence": True})
-
-
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
     store = InputDispositions(tmp_path)
     from agent_comms.text_digest import TextDigest

@@ -81,16 +81,6 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     return comms, coordinator, root_id, lookups
 
 
-def _intent(message: Message, execution_id: str = "execution-1") -> PublicationIntents:
-    return PublicationIntents(
-        execution_id=execution_id,
-        exact_target=message.target,
-        message=message,
-        publication_key=canonical_publication_key(execution_id, message.target),
-        expected_message_id=message.message_id,
-    )
-
-
 def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_path: Path) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
     assert len(root_id) == 32

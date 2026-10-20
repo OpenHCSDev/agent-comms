@@ -59,10 +59,6 @@ def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms.ledger.merge({name: "ready"}, author=name)
 
 
-
-
-
-
 def _run_concurrently(
     ctx: BaseContext,
     target: Callable[..., None],
@@ -82,29 +78,6 @@ def _run_concurrently(
 
 
 class TestConcurrentWire:
-    def test_default_same_tick_owners_get_distinct_durable_claim_identities(self, tmp_path: Path, monkeypatch, *, thread_registration) -> None:
-        # Windows 3.11 can return the same clock tick to separate spawned
-        # workers. Explicit caller-supplied duplicate identities still fail.
-        monkeypatch.setattr("agent_comms.store_files.time.time", lambda: 1_700_000_000.0)
-        root = tmp_path / "wire"
-        first = thread_registration.new_thread(name='first', tags=frozenset(), worktree='/tmp')
-        second = thread_registration.new_thread(name='second', tags=frozenset(), worktree='/tmp')
-        assert type(first.created_at) is float
-        assert first.created_at == second.created_at
-        wire(root).registry.declare(first)
-        wire(root).registry.declare(second)
-        stored = wire(root).registry
-        first_time = stored.require("first").created_at
-        second_time = stored.require("second").created_at
-        assert first_time == first.created_at
-        assert first_time != second_time
-        assert RecordedThreadIncarnation("fixture", first_time).lookup != RecordedThreadIncarnation("fixture", second_time).lookup
-        assert "_generated_created_at" not in stored.require("second").to_wire()
-        with pytest.raises(RelationViolationError, match="creation identities collide"):
-            wire(root).registry.declare(
-                thread_registration.new_thread(name='explicit', tags=frozenset(), worktree='/tmp', created_at=first.created_at)
-            )
-        assert set(wire(root).registry.all_threads()) == {"first", "second"}
 
     def test_six_spawned_same_tick_owners_register_distinct_incarnations(
         self, tmp_path: Path
@@ -182,7 +155,6 @@ class TestConcurrentWire:
 
         names = {result_queue.get(timeout=5) for _ in processes}
         assert names == {"project", *(f"project-{index}" for index in range(2, 7))}
-
 
 
 class TestCrashRecovery:

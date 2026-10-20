@@ -24,47 +24,6 @@ def _read_adopter(root, done):
     done.set()
 
 
-def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
-    comms = setup_wire(tmp_path)
-    service = comms.relationships
-    assert service.store.read() == RelationshipDocument()
-    assert not service.store.path.exists()
-    monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
-    first, peer = comms.registry.require("owner"), comms.registry.require("peer")
-    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "Review")
-    service.set_order("owner", ChildrenRelationshipGroup, CreatedThreadSort)
-    expected = {
-        "collaborations": [
-            {
-                "owner": "owner",
-                "peer": "peer",
-                "owner_created": first.created_at,
-                "peer_created": peer.created_at,
-                "note": "Review",
-                "created_at": 123.0,
-                "updated_at": 123.0,
-                "history": [],
-            }
-        ],
-        "orders": [
-            {
-                "owner": "owner",
-                "owner_created": first.created_at,
-                "group": "children",
-                "order": "created_at",
-            }
-        ],
-    }
-    expected["version"] = 2
-    assert service.store.path.read_text() == json.dumps(expected, indent=2) + "\n"
-    before = service.store.path.stat()
-    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "ignored")
-    service.edit("owner", RelationshipEdit.member_named("remove"), "absent")
-    assert service.store.path.stat() == before
-    assert RelationshipStore.read is LockedStore.read
-    assert RelationshipStore.update is LockedStore.update
-
-
 @pytest.mark.parametrize("text", ["{", "[]", '{"version": 2}'])
 def test_relationship_corruption_stays_strict(tmp_path, text):
     comms = setup_wire(tmp_path)

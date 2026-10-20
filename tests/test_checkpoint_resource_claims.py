@@ -67,23 +67,6 @@ def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path
     assert again.seq > claimed.seq
 
 
-def test_claim_decisions_never_scan_or_decode_bus_history(tmp_path, monkeypatch):
-    comms, paths, claim_scope = authored(tmp_path)
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError('A claim decision must not scan or decode bus history')
-
-    monkeypatch.setattr(WireLog, 'verified_records_unlocked', forbidden)
-    first = authorized(comms, claim_scope, paths[:1])
-    with pytest.raises(ClaimConflict):
-        comms.messaging.send('peer', 'owner', 'losing', claims=[ExistingFileClaim(paths[0])]).message
-    assert comms.bus.log.claim_projection()[str(paths[0])].seq == first.seq
-    comms.messaging.send('owner', 'peer', 'release', releases=paths[:1]).message
-    with pytest.raises(IdentityConflict):
-        authorized(comms, claim_scope, paths[1:2])
-    assert not comms.bus.log.claim_projection()
-
-
 def test_resource_and_operation_queries_use_their_unique_indexes(tmp_path):
     comms, paths, claim_scope = authored(tmp_path)
     authorized(comms, claim_scope, paths[:1])

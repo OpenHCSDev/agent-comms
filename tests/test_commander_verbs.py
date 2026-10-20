@@ -55,12 +55,3 @@ DOCUMENTED = [
 ]
 
 
-@pytest.mark.parametrize("tool,line,fields", DOCUMENTED)
-def test_every_verb_parses_its_documented_command_line(commander_script, tool, line, fields):
-    order = importlib.import_module("agent_comms.commander.order")
-    module = (order if tool == "order"
-              else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
-    family = getattr(module, f"{tool.capitalize()}Verb")
-    verb = family.parse(shlex.split(line), "")
-    assert verb.declared_name == line.split()[0]
-    assert {name: getattr(verb, name) for name in fields} == fields

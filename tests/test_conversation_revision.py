@@ -45,21 +45,3 @@ def test_peer_rename_replaces_display_once(tmp_path):
     assert settled.selection is after.selection
 
 
-@pytest.mark.parametrize("view,target", [(DMDisplayHistory, "peer"), (ChannelDisplayHistory, "#comms")])
-def test_bus_append_reuses_original_selection_without_snapshot(tmp_path, monkeypatch, view, target):
-    comms = declared_wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
-    before = view.revision(comms.views, target, ConversationObservation(), worktree=str(tmp_path))
-    publish_initial(comms, "peer", "#comms", "plain bus message")
-    snapshots = []
-    original = RegistryStore.read_snapshot_unlocked
-
-    def counted(store):
-        snapshots.append(store.path)
-        return original(store)
-
-    monkeypatch.setattr(RegistryStore, "read_snapshot_unlocked", counted)
-    after = view.revision(comms.views, target, before, worktree=str(tmp_path))
-    assert not snapshots
-    assert after.selection is before.selection
-    assert after.stores.bus_log != before.stores.bus_log

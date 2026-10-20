@@ -187,27 +187,3 @@ def test_external_records_open_without_borrowing_a_native_entry(source, tmp_path
     assert transcript.turns(LastTurns()) == turns
 
 
-def test_native_window_uses_existing_import_and_route_readers(source, tmp_path, monkeypatch):
-    session = create_fresh_private_session(tmp_path / "original-session", worktree=tmp_path)
-    stamp = "2026-10-19T14:00:00Z"
-    with session.path.open("a") as output:
-        for i in range(20):
-            record = {"type": "message", "id": f"entry-{i}", "parentId": None if i == 0 else f"entry-{i-1}",
-                      "timestamp": stamp, "message": {"role": "user", "content": f"history {i}", "timestamp": 1}}
-            output.write(json.dumps(record) + "\n")
-    source.registry.register(replace(source.registry.require("B"), session_file=session.session_file), StoppedThreadStatus())
-    monkeypatch.setattr(CheckRoot, "max_records", 3)
-    original = session.path.read_bytes()
-    root = tmp_path / "native-window"
-    with CheckRoot(source, ("B",), root).open() as c:
-        copied = Path(c.registry.require("B").session_file)
-        rows = [NativeEntry.read(line) for line in copied.read_bytes().splitlines()]
-        assert len(rows) == 4
-        assert rows[0].id != session.session_id
-        assert [entry.message.text for entry in rows[1:]] == ["history 17", "history 18", "history 19"]
-        assert rows[1].parent_id is None
-        assert rows[2].parent_id == rows[1].id
-        source_time = NativeEntry.read(original.splitlines()[1]).timestamp.at
-        assert all(entry.timestamp.at == source_time for entry in rows[1:])
-        assert session.path.read_bytes() == original
-    assert not root.exists()

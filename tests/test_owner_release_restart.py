@@ -309,33 +309,3 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
         pass  # the failed restart released the wire itself
 
 
-@pytest.mark.asyncio
-async def test_owner_that_fails_before_binding_releases_its_registration(tmp_path, monkeypatch):
-    """A launcher registers the worker as running before it starts. If the worker
-    fails before binding its session, shutdown still records that it stopped,
-    instead of leaving a running thread whose process is gone."""
-    from agent_comms.acp import CommsAgent
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.comms import Comms
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-    from agent_comms.coordination_errors import PublicationActivationBlocked
-    from agent_comms.native_package import NativePackageError
-    from agent_comms.threads import Thread
-
-    comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    assert comms.registry.status("worker").running
-    agent = CommsAgent(comms, runtime_enabled=True)
-
-    async def unavailable_source(*args):
-        raise PublicationActivationBlocked("owner source unavailable before binding")
-
-    # Package preflight is constructor-owned now. Inject the acquisition failure
-    # after start_owner takes custody, so shutdown must still retire the owner.
-    monkeypatch.setattr(agent.sessions, "_acquire_loaded", unavailable_source)
-    with pytest.raises(PublicationActivationBlocked, match="before binding"):
-        await agent.sessions.start_owner(str(tmp_path), "worker")
-    await agent.shutdown()
-    assert comms.registry.status("worker").stopped

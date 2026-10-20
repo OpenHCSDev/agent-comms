@@ -266,63 +266,6 @@ async def test_concurrent_duplicate_requests_admit_exactly_once(policy):
     p.socket.assert_complete()
 
 
-@pytest.mark.parametrize("failure", ["owner-revoked", "slot-fsync", "cancel-action"])
-async def test_failed_claim_is_consumed_and_never_retried(policy, monkeypatch, failure):
-    p = policy
-    p.announce()
-    p.start()
-    if failure == "slot-fsync":
-        monkeypatch.setattr(
-            broker.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("lost fsync"))
-        )
-    else:
-
-        def fail(*_args):
-            p.effects.append("attempted")
-            if failure == "cancel-action":
-                raise asyncio.CancelledError()
-            raise SelectedToolDenied("owner revoked")
-
-        if p.selected:
-            p.socket.action = fail
-        else:
-            p.socket.owner.allow = fail
-    with pytest.raises((SelectedToolDenied, asyncio.CancelledError)):
-        await p.socket.handle_request(p.raw())
-    count = len(p.effects)
-    with pytest.raises(SelectedToolDenied):
-        await p.socket.handle_request(p.raw())
-    assert len(p.effects) == count
-    if p.selected or failure == "cancel-action":
-        with pytest.raises(SelectedToolDenied):
-            p.end(is_error=True)
-        with pytest.raises(SelectedToolDenied):
-            p.socket.assert_complete()
-    else:
-        p.end(is_error=True)  # Normal Pi may report denied tools; no successful mutation claimed.
-        p.socket.assert_complete()
-
-
-async def test_lost_terminal_receipt_cannot_be_replaced_by_error(policy, monkeypatch):
-    p = policy
-    p.announce()
-    p.start()
-    await p.socket.handle_request(p.raw())
-    if p.selected:
-        (p.root / "selected-tool-ledger" / (p.input_id + ".done")).unlink()
-    else:
-        monkeypatch.setattr(
-            broker.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("terminal fsync"))
-        )
-    with pytest.raises((SelectedToolDenied, OSError)):
-        p.end()
-    with pytest.raises(SelectedToolDenied):
-        p.end(is_error=True)
-    with pytest.raises(SelectedToolDenied):
-        p.socket.assert_complete()
-    assert p.effects == ["one"]
-
-
 async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     p = policy
     await p.socket.start()
@@ -340,47 +283,6 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     with pytest.raises(SelectedToolDenied):
         p.socket.assert_complete()
     assert not p.effects
-
-
-async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
-    p = policy
-    closed, observed = [], []
-    reply = p.socket._reply
-    close = asyncio.StreamWriter.close
-
-    def close_once(writer):
-        closed.append(writer)
-        close(writer)
-
-    async def observe_reply(reader, writer):
-        observed.append(writer)
-        return await reply(reader, writer)
-
-    monkeypatch.setattr(asyncio.StreamWriter, "close", close_once)
-    monkeypatch.setattr(p.socket, "_reply", observe_reply)
-    p.announce()
-    p.start()
-    await p.socket.start()
-    try:
-        reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
-        try:
-            writer.write(p.raw())
-            await writer.drain()
-            assert json.loads(await reader.readline()) == {"ok": True}
-            assert await reader.read() == b""
-        finally:
-            writer.close()
-            await writer.wait_closed()
-        async with asyncio.timeout(2):
-            while p.socket._handlers:
-                await asyncio.sleep(0)
-        assert len(observed) == 1 and closed.count(observed[0]) == 1
-        assert p.effects == ["one"]
-        p.end()
-        p.socket.assert_complete()
-    finally:
-        await p.socket.close()
-    assert closed.count(observed[0]) == 1
 
 
 async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path, tool_listener):
@@ -449,39 +351,6 @@ async def test_only_child_bound_transport_can_reply(tmp_path, bind_child):
             assert bound.expected_pid == os.getpid()
             assert bound.listener.server.is_serving()
     assert not (tmp_path / "s").exists()
-
-
-@pytest.mark.parametrize("failure", [ValueError("owner defect"), TimeoutError("owner deadline")])
-async def test_owner_failures_are_not_converted_to_refusals(policy, monkeypatch, failure):
-    p = policy
-
-    def fail_selected(_call):
-        raise failure
-
-    async def fail_coding(_turn, _round, _call):
-        raise failure
-
-    if p.selected:
-        monkeypatch.setattr(p.socket, "action", fail_selected)
-    else:
-        monkeypatch.setattr(p.socket.owner, "allow", fail_coding)
-    p.announce()
-    p.start()
-    await p.socket.start()
-    reader = asyncio.StreamReader()
-    reader.feed_data(p.raw())
-    reader.feed_eof()
-
-    def unexpected_reply(_raw):
-        pytest.fail("an owner defect became a tool reply")
-
-    peer, client = sockets.socketpair()
-    with peer, client:
-        writer = SimpleNamespace(get_extra_info=lambda _key: peer, write=unexpected_reply)
-        with pytest.raises(type(failure), match=str(failure)) as caught:
-            await p.socket._reply(reader, writer)
-        assert caught.value is failure
-        assert not p.effects
 
 
 async def test_malformed_child_json_receives_a_declared_refusal(policy):

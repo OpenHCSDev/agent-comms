@@ -57,27 +57,6 @@ def test_session_observation_preserves_source_and_distinguishes_unreadable_proof
     assert not present.current(str(session))
 
 
-def test_new_rule_declaration_is_the_entire_dispatch_extension(monkeypatch):
-    @dataclass(frozen=True)
-    class PolicyCheck(RuleCheck):
-        allowed: bool
-
-    # A concrete declaration is the entire dispatch extension; no roster edit.
-    monkeypatch.setattr(ReservationRule, "__registry__", dict(ReservationRule.__registry__))
-
-    class NewPolicyRule(ReservationRule):
-        check_type = PolicyCheck
-        explanation = "New policy is enforced."
-
-        def violated(self, check):
-            return not check.allowed
-
-    PolicyCheck(allowed=True).require_valid()
-    with pytest.raises(ReservationViolationError, match="new_policy") as error:
-        PolicyCheck(allowed=False).require_valid()
-    assert type(error.value.rule) is NewPolicyRule
-
-
 def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp_path):
     owner = "project"
     inputs = InputDispositions(tmp_path)

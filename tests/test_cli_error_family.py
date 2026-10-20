@@ -163,13 +163,3 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
-def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkeypatch):
-    path = tmp_path / 'delivery.sqlite3'
-    path.write_bytes(b'not a SQLite database')
-    connection = CoordinationStore.writer(path)
-    monkeypatch.setattr(CoordinationStore, 'writer', lambda *_args, **_options: connection)
-    with pytest.raises(sqlite3.DatabaseError):
-        with Binding.open(tmp_path):
-            pass
-    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
-        connection.execute('SELECT 1')

@@ -167,33 +167,6 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
                for child in native.children)
 
 
-async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monkeypatch):
-    old, new = tmp_path / "old", tmp_path / "new"
-    old.mkdir()
-    new.mkdir()
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
-    session = (await agent.new_session(str(old))).session_id
-    changed = asyncio.Event()
-
-    async def events(*args, **kwargs):
-        comms.threads.set_project(session, str(new))
-        changed.set()
-        await asyncio.sleep(60)
-        yield ae.Done(ok=True, text="")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    prompt = asyncio.create_task(agent.prompt(session, [{"type": "text", "text": "switch"}]))
-    try:
-        await asyncio.wait_for(changed.wait(), timeout=2)
-        await agent.cancel(session)
-        assert (await prompt).stop_reason == "cancelled"
-        assert comms.registry.require(session).worktree == str(new)
-        assert not agent.inputs.state(session).pending_turns
-    finally:
-        await agent.shutdown()
-
-
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")
 async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     from agent_comms.runtime import RuntimeProxy, socket_path

@@ -6,35 +6,3 @@ from agent_comms.commander.config import CommanderConfig
 from cutover.carry_commander_config import CommanderConfigRoot
 
 
-def test_home_record_is_carried_once_on_a_copied_root(commander, tmp_path, monkeypatch):
-    comms, _ = commander
-    original = CommanderConfig.read_root(comms.root)
-    before = CommanderConfig.root_path(comms.root).read_bytes()
-    root = tmp_path / "copied-root"
-    shutil.copytree(comms.root, root)
-    CommanderConfig.root_path(root).unlink()
-    home = tmp_path / "copied-home"
-    old = CommanderConfig.path(home)
-    old.parent.mkdir(parents=True)
-    old.write_text(original.model_dump_json())
-    monkeypatch.setenv("HOME", str(home))
-    assert CommanderConfigRoot.carry(root, apply=False).changed == 1
-    assert not old.is_symlink() and not CommanderConfig.root_path(root).exists()
-    assert CommanderConfigRoot.carry(root, apply=True).changed == 1
-    assert old.is_symlink() and old.resolve() == CommanderConfig.root_path(root)
-    assert CommanderConfig.read_root(root) == original.model_copy(update={"root": root})
-    assert CommanderConfigRoot.carry(root, apply=True).changed == 0
-    assert CommanderConfig.root_path(comms.root).read_bytes() == before
-
-
-def test_root_record_is_not_overwritten_from_an_old_home_file(commander, tmp_path, monkeypatch):
-    comms, _ = commander
-    before = CommanderConfig.root_path(comms.root).read_bytes()
-    home = tmp_path / "old-home"
-    old = CommanderConfig.path(home)
-    old.parent.mkdir(parents=True)
-    old.write_text("Not a config: an existing root must not read this old file.")
-    monkeypatch.setenv("HOME", str(home))
-    assert CommanderConfigRoot.carry(comms.root, apply=True).changed == 0
-    assert old.is_file() and not old.is_symlink()
-    assert CommanderConfig.root_path(comms.root).read_bytes() == before

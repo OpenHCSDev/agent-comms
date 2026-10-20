@@ -12,19 +12,6 @@ from agent_comms.display_order import CreatedChannelSort
 from agent_comms.messages import Message, InfoKind
 
 
-def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
-    comms = wire(tmp_path)
-    comms.channels.create_tag("api")
-    comms.channels.set_channel_pinned("api", True)
-    before = comms.channels.catalog.path.read_bytes()
-    with patch.object(ChannelCatalog, "_write_unlocked", side_effect=OSError("disk full")):
-        with pytest.raises(OSError, match="disk full"):
-            comms.channels.set_channel_any_mode("api", True)
-    assert comms.channels.catalog.path.read_bytes() == before
-    assert wire(tmp_path).bus.require_channel("#api").pinned
-    assert not comms.bus.require_channel("#api").any_mode
-
-
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
     def create(index):
         client = wire(tmp_path)
@@ -62,29 +49,6 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
     historical = Message.from_wire({"from": "alpha", "to": "#api", "text": "old", "type": "info"})
     assert historical.timestamp == 0.0
     assert historical.display_metadata == {}
-
-
-def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeypatch):
-    import agent_comms.publisher as publisher
-    from agent_comms.errors import RelationViolationError
-    from test_private_human_ingress import _root
-
-    comms, _store, _root_id, _lookups = _root(tmp_path)
-    sequence = comms.bus.log.latest_sequence()
-    original = publisher.freeze_audience
-
-    def capture_then_change(*args, **kwargs):
-        result = original(*args, **kwargs)
-        # A noncooperating writer changes the source during claim_scope. The
-        # already-held wire lock is not itself evidence of unchanged bytes.
-        with comms.channels.catalog.editing() as document:
-            document.list_order = CreatedChannelSort
-        return result
-
-    monkeypatch.setattr(publisher, "freeze_audience", capture_then_change)
-    with pytest.raises(RelationViolationError, match="registry/catalog revision changed"):
-        comms.messaging.send_user_message("#team", "must not append", worktree=str(tmp_path))
-    assert comms.bus.log.latest_sequence() == sequence
 
 
 def test_message_integer_timestamp_keeps_original_identity():

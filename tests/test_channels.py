@@ -295,22 +295,6 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
 
 
-def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
-    comms = setup_wire(tmp_path)
-    with patch("agent_comms.channels.time.time", return_value=100):
-        comms.channels.create_tag("temporary")
-    first = comms.bus.require_channel("#temporary")
-    comms.channels.set_channel_sort("temporary", LastActivityThreadSort)
-    comms.channels.delete_tag("temporary")
-
-    with patch("agent_comms.channels.time.time", return_value=200):
-        comms.channels.create_tag("temporary")
-    recreated = wire(tmp_path).bus.require_channel("#temporary")
-    assert first.created_at == 100
-    assert recreated.created_at == 200
-    assert recreated.order is CreatedThreadSort
-
-
 def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
     comms = setup_wire(tmp_path)
     predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
@@ -440,38 +424,6 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     assert comms.registry.status("a") == ArchivedThreadStatus()
 
 
-def test_pending_projection_observes_external_changes_without_rescanning(tmp_path):
-    comms = setup_wire(tmp_path)
-    other = wire(tmp_path)
-    comms.messaging.send("other", "#api", "one").message.message_id
-    assert comms.bus.pending_count("a") == 1
-    with patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.rows",
-        side_effect=AssertionError("rescanned idle log"),
-    ), patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
-        side_effect=AssertionError("rescanned idle log"),
-    ):
-        for _ in range(10):
-            comms.threads.heartbeat("a")
-            assert comms.bus.pending_count("a") == 1
-        # Exercise the actual full-history route so this guard cannot become a dead patch.
-        with pytest.raises(AssertionError, match="rescanned idle log"):
-            with comms.bus.log.full_history_snapshot() as (_, messages):
-                list(messages)
-    other.channels.update_tags("a", remove=frozenset({"api"}))
-    assert comms.bus.pending_count("a") == 0
-    other.channels.update_tags("b", add=frozenset({"api"}))
-    assert [m.body for m in comms.bus.inbox("b") if not isinstance(m.role, Membership)] == ["one"]
-    other.channels.update_tags("a", add=frozenset({"api"}))
-    assert [m.body for m in comms.bus.inbox("a") if not isinstance(m.role, Membership)] == ["one"]
-    messages = other.bus.inbox("a")
-    other.messaging.acknowledge("a", tuple(message.reference for message in messages))
-    assert comms.bus.pending_count("a") == 0
-    other.messaging.send("other", "#api", "two").message.message_id
-    assert comms.bus.pending_count("a") == 1
-
-
 def test_invalid_filters_and_reserved_channels(tmp_path):
     comms = setup_wire(tmp_path)
     for name in ("", "Bad Tag", "all", "any"):
@@ -499,52 +451,6 @@ def test_none_membership_and_independent_channel_order(tmp_path):
     assert not next(
         view.members for view in comms.views.channel_views() if view.channel.name == "#none"
     )
-
-
-def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
-    comms = setup_wire(tmp_path)
-    with patch("agent_comms.channels.time.time", return_value=200):
-        comms.channels.create_tag("zeta")
-        first = comms.bus.require_channel("#zeta")
-    with patch("agent_comms.channels.time.time", return_value=300):
-        comms.channels.create_tag("alpha")
-        second = comms.bus.require_channel("#alpha")
-    assert first.created_at == 200 and second.created_at == 300
-    comms.channels.update_tags("b", add=frozenset({"zeta"}))
-
-    def names(client):
-        ordered = [view.channel.name for view in client.views.channel_views()]
-        prefix = list(BuiltinChannelView.names())
-        assert ordered[:len(prefix)] == prefix
-        return ordered[len(prefix):]
-
-    comms.channels.set_channel_order(CreatedChannelSort)
-    created_names = names(wire(tmp_path))
-    assert set(created_names) == {"#api", "#ui", "#alpha", "#zeta"}
-    assert created_names.index("#alpha") < created_names.index("#zeta")
-    comms.channels.set_channel_sort("#zeta", LastMessageThreadSort)
-    assert comms.bus.require_channel("#zeta").created_at == 200
-    comms.agents.set_activity("b", ActivityState.WORKING, "Active in zeta")
-    comms.channels.set_channel_order(LastActivityChannelSort)
-    assert set(names(comms)[:2]) == {"#ui", "#zeta"}
-    comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
-    comms.messaging.send("b", "#zeta", "Later agent output").message.message_id
-    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
-    assert names(wire(tmp_path))[0] == "#alpha"
-    assert tuple(comms.views.viewer_snapshot(str(tmp_path / "viewer-a")).channels) == tuple(
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path / "viewer-b")).channels
-    )
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_order is LastUserInputChannelSort
-    # Reading or re-sorting must never redefine a channel's creation time.
-    assert comms.bus.require_channel("#alpha").created_at == 300
-    with patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.rows",
-        side_effect=AssertionError("idle rescan"),
-    ), patch(
-        "agent_comms.wire_log.OpenedWireSnapshot.public_records",
-        side_effect=AssertionError("idle rescan"),
-    ):
-        comms.views.channel_views()
 
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):

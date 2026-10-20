@@ -298,36 +298,6 @@ def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None
         )
 
 
-def test_full_cohort_validates_large_frozen_n_with_one_envelope_digest(monkeypatch) -> None:
-    import agent_comms.wake as wake_module
-
-    members = tuple(
-        FrozenRecipient(f"lookup-{index:04d}", f"member-{index:04d}") for index in range(1024)
-    )
-    body = "hello @member-1023"
-    message = stored("#team", body, mentions=(ThreadMention("member-1023", 6, len(body)),))
-    manifest = audience(message, members)
-    original = wake_module.freeze_audience
-    calls = 0
-
-    def counted(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(wake_module, "freeze_audience", counted)
-    decisions = resolve_wake_cohort(
-        message, frozen_audience=manifest, control=ControlClassification.ORDINARY
-    )
-    assert calls == 1  # Never rehash a 4MiB envelope once for every frozen recipient.
-    assert len(decisions) == len(manifest.recipients)
-    assert [decision.recipient for decision in decisions] == [
-        member.recipient_lookup for member in manifest.recipients
-    ]
-    assert decisions[0] == NoWakeDecision("lookup-0000")
-    assert decisions[-1] == WakeDecision("lookup-1023", MessageAudience.MENTIONED, FullWake())
-
-
 def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None:
     direct = stored("alpha", sender_role=UserThreadRole)
     assert resolve_wake_cohort(

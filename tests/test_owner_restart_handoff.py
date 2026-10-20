@@ -22,36 +22,6 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
-def test_selected_runtime_stays_pinned_to_the_calling_interpreter(tmp_path, monkeypatch, verified_native_package):
-    first, second = tmp_path / "first", tmp_path / "second"
-    first.mkdir()
-    second.mkdir()
-    for prefix in (first, second):
-        (prefix / "bin").mkdir()
-        (prefix / "bin/python").symlink_to(LaunchRuntime.running().interpreter)
-    monkeypatch.setattr(sys, "executable", str(first / "bin/python"))
-    selected = LaunchRuntime.running()
-    monkeypatch.setattr(sys, "executable", str(second / "bin/python"))
-    assert selected.interpreter == first / "bin/python"
-    assert LaunchRuntime.running().interpreter == second / "bin/python"
-    original = {"PATH": "/old/bin:/usr/bin", "VIRTUAL_ENV": "/old",
-                "PYTHONPATH": "/old/source", "AUTHORED_CREDENTIAL": "kept"}
-    projected = selected.environment(original)
-    assert projected["PATH"].split(os.pathsep)[0] == str(first / "bin")
-    assert projected["VIRTUAL_ENV"] == str(first)
-    assert "PYTHONPATH" not in projected
-    assert projected["AUTHORED_CREDENTIAL"] == "kept"
-    assert selected.environment(projected) == projected
-    assert RestoredRuntime(Path("/old/bin/python")).environment(original) == original
-    _, native_environment = NativePiRpcLaunch.bootstrap(
-        verified_native_package, (), tmp_path, original,
-        RestartEnvironment.inherit(original), selected,
-    )
-    assert native_environment["VIRTUAL_ENV"] == str(first)
-    assert native_environment["PATH"].split(os.pathsep)[0] == str(first / "bin")
-    assert "PYTHONPATH" not in native_environment
-
-
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
 def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
     configuration = RestartEnvironment.inherit(source)

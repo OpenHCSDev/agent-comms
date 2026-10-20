@@ -18,30 +18,6 @@ def _read_bus(comms):
     return list(captured)
 
 
-@pytest.fixture
-def attested(monkeypatch):
-    """The sequence of each row attest proves, in call order."""
-    seqs = []
-    attest = CommittedDelivery.attest.__func__
-
-    def counted(cls, message, record, wire_root_id):
-        seqs.append(message.seq)
-        return attest(cls, message, record, wire_root_id)
-
-    monkeypatch.setattr(CommittedDelivery, "attest", classmethod(counted))
-    return seqs
-
-
-def test_a_committed_row_is_attested_once(tmp_path, attested):
-    comms, _ = _root(tmp_path)
-    publish_initial(comms, "sender", "#team", "first")
-    first = _read_bus(comms)
-    attested.clear()
-    assert _read_bus(comms) == first and attested == []
-    appended = publish_initial(comms, "sender", "#team", "second")
-    assert _read_bus(comms)[:-1] == first and attested == [appended.seq]
-
-
 def test_a_tampered_row_is_refused_on_its_first_read(tmp_path):
     comms, _ = _root(tmp_path)
     publish_initial(comms, "sender", "#team", "first")

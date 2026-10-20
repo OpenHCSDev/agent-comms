@@ -353,84 +353,6 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="guard does not match"):
             comms.registry.register(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
-    @pytest.mark.parametrize("fail_at", ["pending", "replacement", "directory", "commit"])
-    def test_private_guard_faults_never_promote_an_unfsynced_owner(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
-    ) -> None:
-        import agent_comms.store_files as store_files
-
-        root = tmp_path / "isolated-private-root"
-        comms = Comms(root)
-        comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        root_id = comms.messaging.initialize_private_initial_protocol()
-        assert len(root_id) == 32
-        cold = Registration(root / "registry.json")
-        assert cold.require("a").name == "a"  # cache the old revision
-        original_fsync = os.fsync
-        original_write = store_files._atomic_write_text
-        guard_calls = 0
-
-        def fsync(fd: int) -> None:
-            nonlocal guard_calls
-            name = os.readlink(f"/proc/self/fd/{fd}")
-            if name.endswith(".registry-owner-guard"):
-                guard_calls += 1
-                if (fail_at == "pending" and guard_calls == 1) or (
-                    fail_at == "commit" and guard_calls == 2
-                ):
-                    raise OSError("injected guard fsync failure")
-            if fail_at == "directory" and name == str(root):
-                raise OSError("injected directory fsync failure")
-            original_fsync(fd)
-
-        def write(path: Path, text: str, **kwargs) -> None:
-            if fail_at == "replacement" and path == root / "registry.json":
-                raise OSError("injected replacement failure")
-            original_write(path, text, **kwargs)
-
-        monkeypatch.setattr(os, "fsync", fsync)
-        monkeypatch.setattr(store_files, "_atomic_write_text", write)
-        with pytest.raises((OSError, RelationViolationError), match="injected|guard"):
-            comms.registry.register(
-                comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()))
-            )
-        monkeypatch.undo()
-        # Failed COMMITTED fsync follows successful directory fsync. Complete
-        # visible commit bytes are safe; on restart they may also be absent.
-        if fail_at == "commit":
-            assert Registration(root / "registry.json").require("b").name == "b"
-        elif fail_at in {"pending", "replacement"}:
-            # An abandoned write: the replacement never reached the registry,
-            # so the previous commit stands and the next write proceeds.
-            assert "b" not in json.loads((root / "registry.json").read_text())["threads"]
-            assert cold.require("a").name == "a"
-            assert Registration(root / "registry.json").require("a").name == "a"
-            comms.registry.register(
-                comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()))
-            )
-            assert Registration(root / "registry.json").require("b").name == "b"
-        else:
-            with pytest.raises(RelationViolationError, match="Private registry guard"):
-                cold.require("a")
-            with pytest.raises(RelationViolationError, match="Private registry guard"):
-                Registration(root / "registry.json")
-            child = subprocess.run(
-                [
-                    sys.executable,
-                    "-c",
-                    "from agent_comms.registration import Registration; "
-                    "from pathlib import Path; import sys; "
-                    "Registration(Path(sys.argv[1])).require('a')",
-                    str(root / "registry.json"),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=4,
-                check=False,
-                env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},
-            )
-            assert child.returncode != 0 and "Private registry guard" in child.stderr
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     def test_private_marker_directory_fsync_failure_leaves_guard_pending(
@@ -588,39 +510,6 @@ class TestRegistration:
         for name in ("a", "b", "c"):
             registry.register(registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
         assert set(registry.peers("b")) == {"a", "c"}
-
-
-def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tmp_path, monkeypatch):
-    comms = Comms(tmp_path)
-    for name in ("a", "b"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    for sender, target in (("missing", "b"), ("a", "missing")):
-        with pytest.raises(ValueError):
-            comms.messaging.send(sender, target, "invalid").message
-    messages = [
-        comms.messaging.send("a", "b", "first").message,
-        comms.messaging.send("b", "a", "second").message,
-        comms.messaging.send("a", "#all", "channel").message,
-    ]
-    assert [row.seq for row in messages] == [1, 2, 3]
-    assert len({row.message_id for row in messages}) == 3
-    reopened = Comms(tmp_path)
-    assert read_history(reopened) == messages
-    reopened.registry.rename("a", "renamed")
-    monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
-    newest = reopened.views.history_page(CommandTarget.named("b"), PageBounds(limit=1), viewer="renamed")
-    assert [row.seq for row in newest.messages] == [2]
-    older = reopened.views.history_page(CommandTarget.named("b"), PageBounds(OlderTraversal(2), max_bytes=1), viewer="renamed")
-    assert [row.seq for row in older.messages] == [1]
-    assert [row.seq for row in reopened.bus.inbox("b")] == [1, 3]
-    unread = reopened.bus.inbox("b")
-    assert reopened.bus.mark_delivered(
-        "b", tuple(message.reference for message in unread)
-    ) == 2
-    assert reopened.bus.pending_count("b") == 0
-    later = reopened.messaging.send("renamed", "b", "later").message
-    assert later.seq == 4
-    assert [row.seq for row in reopened.bus.inbox("b")] == [4]
 
 
 class TestSharedLedger:

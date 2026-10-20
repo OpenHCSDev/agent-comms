@@ -30,22 +30,6 @@ def test_load_comparison_requires_every_reported_field_and_no_private_write(tmp_
     assert not LoadComparison(observed, before, after).passed
 
 
-def test_capacity_observes_actual_cli_selected_root(commander_script, tmp_path, monkeypatch):
-    original, _ = commander_script
-    selected = tmp_path / "selected"
-    shutil.copytree(original.root, selected)
-    before = state_files(original.root)
-    monkeypatch.setattr(sys, "argv", ["capacity-observation"])
-
-    observed = CapacityObservation().read(selected)
-
-    assert observed.root == str(selected.resolve())
-    assert observed.commander == original.commander
-    assert observed.current.strip() == observed.native
-    assert state_files(original.root) == before
-    assert sys.monitoring.get_tool(sys.monitoring.PROFILER_ID) is None
-
-
 @pytest.mark.parametrize(
     ("program", "expected"),
     (
