@@ -1777,21 +1777,25 @@ class _RecordDecoder(ValueDecoder[Any]):
         )
         return result
 
-    def checked(self, data: object) -> dict:
-        target = self.target
-        plan = FieldCodec._record_plan(target)
-        if not isinstance(data, dict):
-            raise MalformedRecord("Expected a record object.")
+    def problems(self, data: dict) -> list[str]:
+        plan = FieldCodec._record_plan(self.target)
         missing = dict.fromkeys(
             key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
         )
-        if missing:
-            raise MalformedRecord(
-                f"Missing required fields for {target.__name__}: {', '.join(missing)}"
-            )
+        schemas = FieldCodec.record_schema(self.target)["properties"] if missing else {}
+        problems = [f"Missing required field {key}; fix: supply {key} as "
+                    f"{json.dumps(schemas[key])}" for key in missing]
         unknown = data.keys() - plan.accepted_keys
         if unknown:
-            raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            problems.append(f"Unknown fields for {self.target.__name__}: {sorted(unknown)}; "
+                            "fix: remove those fields")
+        return problems
+
+    def checked(self, data: object) -> dict:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
+        if problems := self.problems(data):
+            raise MalformedRecord("\n".join(problems))
         return data
 
     @property
@@ -1805,15 +1809,23 @@ class _RecordDecoder(ValueDecoder[Any]):
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
-        data = self.checked(data)
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
+        problems = self.problems(data)
         target = self.target
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
             if entry.name not in fields:
                 continue
             key = (target, entry.name)
-            values.update(entry.decoded_selected(data, selections[key], selections)
-                          if key in selections else entry.decoded_bound(data, context))
+            try:
+                values.update(entry.decoded_selected(data, selections[key], selections)
+                              if key in selections else entry.decoded_bound(data, context))
+            except MalformedRecord as error:
+                problems.append(f"{entry.key}: {error}; fix: supply "
+                                f"{json.dumps(entry.schema_fields())}")
+        if problems:
+            raise MalformedRecord("\n".join(problems))
         return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)
