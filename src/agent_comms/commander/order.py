@@ -51,7 +51,8 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
-from .config import CommanderConfig, CommanderRole, Repo
+from ..repo import Repo
+from .config import CommanderConfig, CommanderRole
 from pydantic import PrivateAttr
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, TYPE_CHECKING
+from typing import ClassVar, Self, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
@@ -27,6 +27,16 @@ class StallExempt:
     """Model progress does not end this excursion; its own events do."""
 
     def model_progress(self) -> TurnPhase:
+        return self
+
+
+class ClosingTurn:
+    """Native tail observations cannot reopen a closing turn."""
+
+    accepts_followup: ClassVar[bool] = False
+    can_cancel: ClassVar[bool] = False
+
+    def observed(self, phase: TurnPhase) -> Self:
         return self
 
 
@@ -145,34 +155,19 @@ class FailedPhase(IdlePhase):
     error: ProviderDiagnosticError
 
 
-class CancellingPhase(TurnPhase):
-    accepts_followup = False
+class CancellingPhase(ClosingTurn, TurnPhase):
     keeps_project_resume = False
     label = "Cancelling"
-    can_cancel = False
 
-    def observed(self, phase: TurnPhase) -> TurnPhase:
-        return self
-
-class ShutdownPhase(TurnPhase):
+class ShutdownPhase(ClosingTurn, TurnPhase):
     """Native shutdown cannot allow follow-ups or resume model activity."""
 
-    accepts_followup = False
-    can_cancel = False
     activity_state = ActivityState.WORKING
     label = "Stopping"
 
-    def observed(self, phase: TurnPhase) -> TurnPhase:
-        return self
 
-
-class PublishingPhase(TurnPhase):
-    accepts_followup = False
+class PublishingPhase(ClosingTurn, TurnPhase):
     label = "Finishing turn"
-    can_cancel = False
-
-    def observed(self, phase: TurnPhase) -> TurnPhase:
-        return self
 
 
 class ModelWaitPhase(ActivityWord, TurnPhase):
