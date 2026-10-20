@@ -1,7 +1,5 @@
 """Declared CLI and tool replies share their JSON behavior."""
 
-from typing import ClassVar
-
 from .field_codec import FieldCodec
 
 
@@ -9,7 +7,6 @@ class DeclaredReply:
     """A declared reply record; the one sender that owns its transport encodes it."""
 
     __slots__ = ()
-    wire_view: ClassVar[str] = "wire"
 
     def to_wire(self) -> object:
         """Declared records use the shared codec; specialized replies own their form."""
