@@ -1,55 +1,43 @@
-"""Comparison invariants; the configured LifecycleRun journey supplies native proof."""
+"""Observation invariants; the configured LifecycleRun journey supplies native proof."""
 
 from dataclasses import replace
 
 from agent_comms.commander_parity.rows import VerdictParityRow
 from agent_comms.commander_parity.verdicts import (
-    AcceptedCase,
-    SendBackCase,
     VerdictComparison,
-    VerdictEffect,
+    VerdictMutation,
+    VerdictObservation,
 )
 
 
-def test_verdict_family_requires_the_actual_call_event_goal_and_strike_together():
-    accepted = VerdictEffect(
-        call_id="one-call",
-        verdicts=1,
-        todo_revisions=1,
-        strikes=0,
-        goal_revisions=0,
-        goal_transitions=0,
-        goal_retained=True,
-        goal_state_retained=True,
-        progress="P1: Open",
-        native_calls=1,
-        native_result_retained=True,
-        strike_matches_verdict_event=True,
-        declared_verdict_recorded=True,
-        goal_transition_retained=True,
-    )
+def observation(mutation: VerdictMutation, changes: int) -> VerdictObservation:
+    return VerdictObservation("native verdict owner", 1, mutation.checks(changes), "", mutation)
+
+
+def test_verdict_requires_the_actual_call_event_goal_and_strike_together():
+    accepted = VerdictMutation("one-call", 1, 1, 0, 0, 0, "P1: Open · Accepted")
     back = replace(
-        accepted, strikes=1, goal_revisions=1, goal_transitions=1, progress=SendBackCase.why
+        accepted, strikes=1, goal_revisions=1, goal_transitions=1, progress="P1: Open · Sent back"
     )
-    compared = VerdictComparison(accepted, accepted, back, back)
-    assert compared.passed and AcceptedCase.valid(accepted) and SendBackCase.valid(back)
+    ok, sent_back = observation(accepted, 0), observation(back, 1)
+    compared = VerdictComparison(ok, ok, sent_back, sent_back)
+    assert compared.passed
     for changed in (
         replace(back, verdicts=0),
         replace(back, todo_revisions=2),
         replace(back, strikes=0),
         replace(back, goal_revisions=0),
         replace(back, goal_transitions=2),
-        replace(back, native_calls=0),
-        replace(back, goal_retained=False),
-        replace(back, goal_state_retained=False),
-        replace(back, native_result_retained=False),
-        replace(back, strike_matches_verdict_event=False),
-        replace(back, declared_verdict_recorded=False),
-        replace(back, goal_transition_retained=False),
-        replace(back, progress=""),
     ):
-        assert not SendBackCase.valid(changed)
+        observed = observation(changed, 1)
+        assert not observed.passed
+        assert not replace(compared, back_current=observed, back_native=observed).passed
+    for changed in (
+        replace(sent_back, invocations=0),
+        replace(sent_back, checks=(*sent_back.checks, ("retained native identity", False))),
+    ):
         assert not replace(compared, back_current=changed, back_native=changed).passed
-    assert not replace(compared, accepted_native=replace(accepted, call_id="other-call")).passed
+    for changed in (replace(back, call_id="other-call"), replace(back, progress="")):
+        assert not replace(compared, back_native=observation(changed, 1)).passed
     assert "verify" not in VerdictParityRow.__dict__
     assert VerdictParityRow.comparison == VerdictComparison.read
