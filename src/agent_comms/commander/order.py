@@ -345,26 +345,14 @@ class Commander(CommanderContext):
                     problems += check.result.distance(ran).unproven(check.command, 0)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
-        references = tuple(dict.fromkeys((
+        references = list(dict.fromkeys((
             *FileLine.scan('\n'.join((document.prose, *edits))),
             *(reference for slop in document.slop for reference in (slop.at, slop.by)),
         )))
-        for reference in references:
-            try:
-                with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(self.source_repository(
-                        Path(check.directory) / reference.file).checkout)
-            except MalformedRecord as error:
-                problems.append(f'{error}; fix: cite an existing source line')
         deleted = {Path(module).stem for module in order.deletes.modules}
         if check and deleted and (unread := self.importers(deleted, check)):
             problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                             'the check must also count their `from agent_comms` imports')
-        if any(Path(reference.file).resolve().is_relative_to(Path(check.directory) / 'tools/')
-               for reference in references) and not all(
-                said in body for said in ('--root tools', '--root src')):
-            problems.append('the order changes tools/: say "ratchet with --root tools and with '
-                            '--root src, each as its own command"')
         # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
         holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
         replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
@@ -373,16 +361,29 @@ class Commander(CommanderContext):
             try:
                 with MalformedRecord.refusing('--traced'):
                     trace = FileLine.from_wire(traced)
+                    references.append(trace)
             except MalformedRecord as error:
                 problems.append(f'--traced: {error}; fix: supply PATH:LINE')
+        for reference in references:
+            try:
+                with MalformedRecord.refusing(reference.to_wire()):
+                    reference.require_exists(self.source_repository(
+                        Path(check.directory) / reference.file).checkout)
+            except MalformedRecord as error:
+                problems.append(f'{error}; fix: cite an existing source line')
+        if any((Path(check.directory) / reference.file).resolve().is_relative_to(
+                   Path(check.directory) / 'tools/')
+               for reference in references) and not all(
+                said in body for said in ('--root tools', '--root src')):
+            problems.append('the order changes tools/: say "ratchet with --root tools and with '
+                            '--root src, each as its own command"')
         for pid in group:
             try:
                 with MalformedRecord.refusing(pid):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed and listed[pid].assignment:
-                        listed[pid].assignment.require_trace(
-                            unit, trace, Path(listed[pid].order.checked().check.directory))
+                        listed[pid].assignment.require_trace(unit, trace)
             except MalformedRecord as error:
                 problems.append(str(error))
         if replaces and not replacing:
