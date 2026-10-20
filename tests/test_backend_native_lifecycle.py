@@ -43,8 +43,8 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert owner.persistent.child_state.idle().current
     reopened_child = owner.persistent.child_state.child.proc
     # The deliberately oversized output tests framing and exceeds Core's
-    # immutable retained-context limit. Pi compacts it before settling; the
-    # history and split-turn prefix each require a summary provider request.
+    # immutable context limit. The SDK compacts before the next response,
+    # rather than while settling the response that exceeded the limit.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
     original_chunks = owner.provider.response_chunks
 
@@ -58,8 +58,10 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
         else:
             yield from original_chunks()
 
+    response_tokens = 500000
+
     def usage():
-        output = 8 if summary_request(owner.provider.requests[-1]) else 500000
+        output = 8 if summary_request(owner.provider.requests[-1]) else response_tokens
         return {'prompt_tokens': 8, 'completion_tokens': output, 'total_tokens': 8 + output}
 
     monkeypatch.setattr(owner.provider, 'response_chunks', chunks)
@@ -70,22 +72,31 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert len(owner.saved_inputs()) == 4
     print(f"ordinary_native_response_bytes={len(second[-1].text.encode())}")
 
-    assert len(owner.starts) == len(owner.saved_inputs()) == 4
-    assert owner.provider.posts == len(owner.provider.requests) == 6
+    assert owner.provider.posts == len(owner.provider.requests) == 4
+    response_tokens = 8
+    owner.provider.text = 'Answer after compacting the large response.'
+    following = await owner.run('after large response')
+    assert following[-1].ok and following[-1].text == owner.provider.text, following[-1]
+    assert owner.persistent.child_state.child.proc is reopened_child
+    assert len(owner.starts) == len(owner.saved_inputs()) == 5
+    assert owner.provider.posts == len(owner.provider.requests) == 7
     original_texts = ["first", "queued followup", "after validated reopen", "large response"]
     for request, text in zip(owner.provider.requests[:4], original_texts, strict=True):
         assert request["messages"][-1] == {
             "role": "user", "content": [{"type": "text", "text": text}]
         }
-    for request in owner.provider.requests[4:]:
+    for request in owner.provider.requests[4:-1]:
         assert summary_request(request)
+    assert owner.provider.requests[-1]['messages'][-1] == {
+        'role': 'user', 'content': [{'type': 'text', 'text': 'after large response'}],
+    }
     compacted = [
         row for row in map(json.loads, owner.session.read_text().splitlines())
         if row["type"] == "compaction"
     ]
     assert len(compacted) == 1
     assert compacted[0]["tokensBefore"] > 300_000
-    assert len({row[1] for row in owner.starts}) == 4
+    assert len({row[1] for row in owner.starts}) == 5
     proofs = read_proof_rows(owner.session)
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
 
@@ -171,7 +182,7 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
 
     monkeypatch.setattr(owner.provider, "response_chunks", fail_after_tool)
     async with owner.open_owner(native_options=("--tools", "bash")) as (agent, session):
-        with pytest.raises(RequestError):
+        with pytest.raises(RequestError) as refused:
             await agent.prompt(session, [TextContentBlock(
                 type="text", text="Distinct isolated native terminal verification."
             )])
@@ -186,10 +197,14 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
     tools = [message for message in messages if message.get("role") == "toolResult"]
     assert len(tools) == 1
     assert len([message for message in messages if message.get("role") == "user"]) == 2
-    reports = list((owner.root / "diagnostics").glob("*.json"))
-    failures = [json.loads(path.read_text()) for path in reports]
-    assert len(failures) == 1
-    assert failures[0]["reason"] == "model_request_failed"
+    from agent_comms.acp_failure import RequestFailure, RequestACPFailure
+    from agent_comms.input_attempt import StartedInput
+
+    # Normal model refusals belong to the request result, not crash reports.
+    request = RequestFailure.from_error(refused.value)
+    assert isinstance(request.failure, RequestACPFailure)
+    assert request.failure.input_state is StartedInput
+    assert 'controlled failure after actual tool effect' in request.failure.detail
 
 
 @pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])

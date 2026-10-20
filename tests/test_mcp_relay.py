@@ -293,7 +293,11 @@ send({{"type":"extension_ui_request","id":"late","method":"setStatus",
             program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
         )
     ]
-    assert any(isinstance(event, ae.StreamSettled) for event in events), events
+    from agent_comms.turn_phase import SettlingStatsPhase
+
+    assert any(isinstance(event, ae.NativePhaseChanged)
+               and isinstance(event.phase, SettlingStatsPhase) for event in events), events
+    assert isinstance(events[-1], ae.Done) and events[-1].ok, events
     assert not any(isinstance(event, ae.McpLiveStatus) for event in events)
 
 

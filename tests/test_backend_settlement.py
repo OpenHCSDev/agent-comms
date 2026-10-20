@@ -23,8 +23,8 @@ async def test_followup_outlives_previous_native_settlement(
     tmp_path, start_before_settlement, inject_during_stats
 ):
     from agent_comms.fresh_private_session import create_fresh_private_session
-    session = create_fresh_private_session(tmp_path / 'sessions', worktree=tmp_path).path
-    session_id = json.loads(session.read_text().splitlines()[0])['id']
+    identity = create_fresh_private_session(tmp_path / 'sessions', worktree=tmp_path)
+    session, session_id = identity.path, identity.session_id
     stub = tmp_path / "pi-stub"
     stub.write_text(f"#!{sys.executable}\n" + f"""
 import json, sys, threading, time
