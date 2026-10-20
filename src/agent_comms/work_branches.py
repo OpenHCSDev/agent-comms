@@ -18,9 +18,9 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .cli_protocol import WireModel
-from .commander.config import Repo
 from .declared_family import DeclaredFamily
 from .field_codec import projected
+from .repo import Repo
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
