@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -17,7 +19,7 @@ from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import Goal, RequestDirective
+    from .goals import RequestDirective
     from .storage_rules import MemoryUse, StorageRule
     from .todos import Todo
 
@@ -35,6 +37,35 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
+
+    def heartbeat_group(self) -> object:
+        """Ordinary violations each own one heartbeat line."""
+        return self
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        return self.line()
+
+    @staticmethod
+    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
+        groups: dict[object, list[StandingRule]] = defaultdict(list)
+        for rule in rules:
+            groups[rule.heartbeat_group()].append(rule)
+        return groups
+
+    @classmethod
+    def heartbeat_changes(cls, previous: Iterable[StandingRule],
+                          current: Iterable[StandingRule]) -> tuple[str, ...]:
+        """Render changed groups through their owning rule, without replaying unchanged ones."""
+        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
+        lines = []
+        for group in dict.fromkeys((*after, *before)):
+            old, new = before.get(group, []), after.get(group, [])
+            if frozenset(old) == frozenset(new):
+                continue
+            rule = (new or old)[0]
+            prefix = "RULE" if new else "NO LONGER CURRENT:"
+            lines.append(f"{prefix} {rule.heartbeat_line(new)}")
+        return tuple(lines)
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
@@ -117,14 +148,14 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 class DirectiveUnacted(DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
-    goal: Goal
+    request: str
     directive: RequestDirective
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(goal, directive)
+            cls(goal.id, directive)
             for goal in thread.goal.active()
             for directive in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
@@ -135,10 +166,25 @@ class DirectiveUnacted(DatedStandingRule):
         return self.directive.deadline
 
     def line(self) -> str:
-        due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
-            f" due {due} -> order its next step or mark the request done"
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f" due {self.directive.due_time} -> order its next step or mark the request done"
+        )
+
+    def heartbeat_group(self) -> object:
+        return type(self), self.request
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        if not current:
+            return (f"DIRECTIVE UNACTED: request {self.request}: 0 claude-ai directives; "
+                    "oldest none; newest none")
+        oldest = min(current, key=lambda rule: rule.directive.seq).directive
+        newest = max(current, key=lambda rule: rule.directive.seq).directive
+        return (
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
+            f"oldest {oldest.seq} due {oldest.due_time}; "
+            f"newest {newest.seq} due {newest.due_time} "
+            "-> order the next step or mark the request done"
         )
 
 

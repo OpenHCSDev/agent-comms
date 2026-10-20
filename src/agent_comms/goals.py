@@ -9,6 +9,7 @@ import shlex
 import signal
 import subprocess
 import tempfile
+import time
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -471,6 +472,10 @@ class RequestDirective:
     window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
     seq: int
     deadline: float
+
+    @property
+    def due_time(self) -> str:
+        return time.strftime("%H:%M", time.localtime(self.deadline))
 
     def original(self, goals: Goals) -> Message:
         source: CheckedRead
