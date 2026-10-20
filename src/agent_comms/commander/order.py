@@ -476,8 +476,7 @@ class Commander(CommanderContext):
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
-        ThreadCaller(self.commander).invoke(CommsProblemCloseTool(problem=pid,
-            works=works, artifact=evidence), self.comms)
+        self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         self.write_board()
         print(f'{pid} closed')
 
