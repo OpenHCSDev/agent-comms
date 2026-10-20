@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class OwnerRestartRequest:
-    names: tuple[str, ...] | None = None
+    names: Sequence[str] | None = None
     command: NoLaunchChange | CommandLaunchChange = field(default_factory=NoLaunchChange)
     arguments: NoLaunchChange | ArgumentsLaunchChange = field(default_factory=NoLaunchChange)
     expected: OwnerRestartSelection | None = None

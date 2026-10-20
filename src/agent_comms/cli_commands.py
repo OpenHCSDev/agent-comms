@@ -1624,12 +1624,12 @@ class RestartCliCommand(CliCommand):
         target_bound=True,
     )
     agent_bin: NoLaunchChange | CommandLaunchChange = option(
-        "--agent-bin", type=CommandLaunchChange,
+        "--agent-bin", type=CommandLaunchChange, choices=None,
         default_factory=NoLaunchChange, parser_default_factory=NoLaunchChange,
         normalize=FieldCodec.encode,
     )
     agent_args: NoLaunchChange | ArgumentsLaunchChange = option(
-        "--agent-args", type=lambda text: ArgumentsLaunchChange(tuple(shlex.split(text))),
+        "--agent-args", type=lambda text: ArgumentsLaunchChange(tuple(shlex.split(text))), choices=None,
         default_factory=NoLaunchChange, parser_default_factory=NoLaunchChange,
         normalize=FieldCodec.encode,
     )

@@ -49,6 +49,9 @@ from .turn_lease import NoTurnRecord
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 
 _LOG = logging.getLogger(__name__)
+_NO_LAUNCH_CHANGE = NoLaunchChange()
+_NO_CONFIGURATION_CHANGE = NoConfigurationLaunchChange()
+_ANY_SOURCE_INTERPRETER = AnySourceInterpreter()
 
 
 class LaunchInput:
@@ -332,13 +335,13 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: tuple[str, ...] | None = None,
+        names: Sequence[str] | None = None,
         *,
-        agent_bin: NoLaunchChange | CommandLaunchChange = NoLaunchChange(),
-        agent_args: NoLaunchChange | ArgumentsLaunchChange = NoLaunchChange(),
+        agent_bin: NoLaunchChange | CommandLaunchChange = _NO_LAUNCH_CHANGE,
+        agent_args: NoLaunchChange | ArgumentsLaunchChange = _NO_LAUNCH_CHANGE,
         expected: OwnerRestartSelection | None = None,
-        runtime: ConfigurationLaunchChange = NoConfigurationLaunchChange(),
-        source_interpreter: SourceInterpreter = AnySourceInterpreter(),
+        runtime: ConfigurationLaunchChange = _NO_CONFIGURATION_CHANGE,
+        source_interpreter: SourceInterpreter = _ANY_SOURCE_INTERPRETER,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
     ) -> tuple[OwnerRestartResult, ...]:
         """Retain one batch through stop, optional quiet maintenance and launch.
