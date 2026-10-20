@@ -19,11 +19,11 @@ from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms_hooks import ClaudeBashHook, ClaudeFileEditHook
+from agent_comms_hooks import ClaudeBashHook
 
 from ..declared_family import DeclaredFamily
 from ..errors import RelationViolationError
-from ..storage_rules import GitProgram, ShellInvocation
+from ..storage_rules import ShellInvocation
 from ..todos import InstallDeadline
 
 if TYPE_CHECKING:
@@ -240,42 +240,6 @@ class CarryCommand(TacticalCommand):
     shapes = (("cutover",),)
 
 
-@dataclass(frozen=True)
-class SourceChangeCommand(TacticalCommand):
-    """Direct fixes are refused independently of planned installation authority."""
-
-    work = "source change"
-    reason: ClassVar[str] = (
-        "the commander does not write fixes: order the edit to a unit or start a fork"
-    )
-    landing_tool: ClassVar[Path] = Path(__file__).resolve().parents[3] / "tools/batch_land.sh"
-
-    @classmethod
-    def protected(cls, path: Path, ctx: Commander) -> bool:
-        path = path.resolve()
-        if any(path.is_relative_to(root.resolve()) for root in (ctx.scratch, ctx.state)):
-            return False
-        return any(
-            path.is_relative_to(root.resolve())
-            for root in (ctx.worktrees, *(repo.checkout for repo in ctx.repos))
-        )
-
-    @classmethod
-    def refused(cls, words: Words, session: CommanderSession, cwd: Path) -> tuple[str, ...]:
-        if Path(words[0]).name not in GitProgram.names:
-            return ()
-        invocation = GitProgram.invocation(list(words[1:]), cwd)
-        if invocation.writes_source and any(
-            cls.protected(path, session.commander) for path in invocation.directories
-        ):
-            return session.refusals(cls)
-        return ()
-
-    @classmethod
-    def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:
-        return (cls.reason,)
-
-
 class GuardTool(DeclaredFamily, affix="GuardTool"):
     @classmethod
     @abstractmethod
@@ -296,23 +260,6 @@ class BashGuardTool(GuardTool):
             raise SystemExit(0) from error
         if reasons:
             hook.deny(" ".join(reasons))
-
-
-class EditGuardTool(GuardTool, declared_name="edit-guard"):
-    @classmethod
-    def run(cls, ctx: Commander) -> None:
-        hook = ClaudeFileEditHook.read()
-        try:
-            protected = SourceChangeCommand.protected(
-                hook.resolve_path(hook.tool_input.file_path), ctx
-            )
-        except (ValueError, OSError) as error:
-            hook.deny(f"Cannot resolve edit safely: {error}")
-            raise SystemExit(0) from error
-        if protected:
-            reasons = CommanderSession(hook.session_id, ctx).refusals(SourceChangeCommand)
-            if reasons:
-                hook.deny(" ".join(reasons))
 
 
 def main(a: list[str], ctx: Commander) -> None:

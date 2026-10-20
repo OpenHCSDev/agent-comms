@@ -127,17 +127,6 @@ class BashInput(ToolInput):
 
 
 @dataclass(frozen=True)
-class FileEditInput(ToolInput):
-    tool = "Edit|Write|MultiEdit"
-    file_path: str
-
-
-@dataclass(frozen=True)
-class ClaudeFileEditHook(ClaudeWorkspaceHook):
-    tool_input: FileEditInput
-
-
-@dataclass(frozen=True)
 class ClaudeBashHook(ClaudeWorkspaceHook):
     """A hook on a Bash tool call, carrying the command line Claude is about to run."""
 
