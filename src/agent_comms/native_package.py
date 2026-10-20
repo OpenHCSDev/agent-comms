@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
-from .field_codec import FieldCodec, MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
@@ -251,8 +251,8 @@ def write_native_manifest(root: Path) -> None:
 class NativeSourceDeclaration:
     """The package's source receipt, decoded before any filesystem work."""
 
-    path: Path
-    snapshot: Path
+    path: Annotated[Path, PathText]
+    snapshot: Annotated[Path, PathText]
     sha256: Annotated[str, Sha256Text]
     byte_count: int = field(metadata={"wire_name": "bytes"})
 
