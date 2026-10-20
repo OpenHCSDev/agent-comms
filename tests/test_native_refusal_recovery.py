@@ -13,7 +13,6 @@ import agent_comms.native_pi as native_pi
 import agent_comms.pi_events as pi_events
 from agent_comms.acp_extension import RequestFailedUpdate
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.tracked_turn import PendingTrackedTerminal, TrackedTurnSession
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from test_acp import facts
@@ -163,22 +162,23 @@ async def test_exhausted_provider_retries_become_typed_provider_failure():
     reason = "503 overloaded after native provider retries"
     from agent_comms.turn_output import TurnOutput
 
-    from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
 
-    turn = object.__new__(TrackedTurnSession)
-    turn.output = TurnOutput()
-    turn.terminal = PendingTrackedTerminal()
-    await turn.native_retry_finished(pi_events.NativeRetryEnd.from_wire({
+    output = TurnOutput()
+    event = pi_events.NativeRetryEnd.from_wire({
         "type": "native_retry_end",
         "success": False,
         "attempt": 3,
         "finalError": reason,
-    }))
-
+    })
+    output.retry_result = event.outcome.result(event.attempt, output.redact)
+    # Retry metadata alone is not a failed assistant terminal. Its existing
+    # output owner refines the actual native terminal when that arrives.
+    output.record_failure(ModelRequestFailed(reason))
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
-        turn.output.raise_if_failed(None, SelectedModel("provider", "model"))
+        output.raise_if_failed(None, SelectedModel("provider", "model"))
     assert reason in str(caught.value)
-    assert caught.value.failure == ModelRequestFailed(reason)
+    assert caught.value.failure == ProviderRetryExhausted(reason)
 
 
 @pytest.mark.asyncio

@@ -236,7 +236,9 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             from agent_comms.agent_events import PromptAccepted
 
             await observer(PromptAccepted())
-            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
+            context = dict(proof_rows[-1])
+            del context["schema"]  # The proof-file envelope is not a native event field.
+            await observer(PiEvent.from_wire(context))
         return NativeTurnResult(
             reply,
             NativeContextProof(

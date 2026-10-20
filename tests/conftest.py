@@ -246,7 +246,7 @@ def private_comms(private_directory):
     from agent_comms.launch_root import LaunchRoot
 
     LaunchRoot.from_path(root).install()
-    comms.route.launch.require_private().check()
+    comms.route.launch().require_private().check()
     return comms
 
 

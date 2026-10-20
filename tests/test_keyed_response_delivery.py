@@ -217,20 +217,21 @@ def test_new_policy_declaration_uses_full_and_checked_record_readers(tmp_path):
 
     case = _ready(tmp_path, direct=True)
     try:
-        marker = case.bus.log.private_marker_unlocked()
-        raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
-        policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
-        raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
-            ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
-        )
-        # Explicit cold setup on this disposable root. No old seal is claimed
-        # for changed bytes; the real installation scans and certifies them.
-        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-        marker.checkpoint_version = None
-        marker.checkpoint_seal = None
-        case.bus.log.write_metadata_unlocked(marker)
-        case.bus.log.path.write_text(json.dumps(raw) + "\n")
-        install_private_bus_checkpoint(case.bus.log)
+        # Acquire the existing checked writer before replacing this disposable
+        # source. Bootstrap cannot acquire a missing checkpoint as a live bus.
+        with case.bus.log.locked():
+            marker = case.bus.log.private_marker_unlocked()
+            raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+            policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
+            raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
+                ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
+            )
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            case.bus.log.path.write_text(json.dumps(raw) + "\n")
+            install_private_bus_checkpoint(case.bus.log, _bus_locked=True)
         public = read_history(case.comms)
         assert len(public) == 1
         with case.bus.log.checked_read() as source:
@@ -264,7 +265,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
         raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
         case.bus.log.path.write_text(raw)
         before = case.bus.log.path.read_bytes()
-        with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
+        with pytest.raises(StoredHistoryUnreadable, match="Unreadable bus row") as raised:
             list(case.bus.log.verified_records_unlocked(marker))
         assert type(raised.value.__cause__) is MalformedRecord
         assert 'Duplicate JSON field' in str(raised.value.__cause__)
