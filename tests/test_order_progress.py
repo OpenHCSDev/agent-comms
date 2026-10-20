@@ -193,7 +193,7 @@ def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
 
 def test_a_merge_not_yet_installed_waits_only_on_install(checkout):
     progress = read(checkout, Listed(merged=(MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)))
-    assert progress == MergedProgress('d' * 40)
+    assert progress == MergedProgress('d' * 40, at=RecordedEventTime(500.0))
     assert progress.line == 'merged as ddddddddd, waiting on install'
 
 
@@ -430,7 +430,7 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
                         (foreign, merged) if state == "merged" else ())
     assert not storage.order_checkout("worker", pid).exists()
     work = OrderProgress.read(todo, storage, PullRequests())
-    assert work == MergedProgress("d" * 40)
+    assert work == MergedProgress("d" * 40, at=RecordedEventTime(500.0))
     script.write_board()
     assert "merged as ddddddddd, waiting on install" in (tmp_path / "board.md").read_text()
     for state in (work, PushedProgress("b" * 9, at=500.0), NoCommitProgress()):

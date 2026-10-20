@@ -22,7 +22,8 @@ from ..standing_rules import (
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import (
-    FlatTrend, OrderProgress, PullRequests, StrikeReason, Todo, VerdictAudience,
+    FlatTrend, MeasuredProgressSource, OrderProgress, ProgressSource, PullRequests,
+    StrikeReason, Todo, VerdictAudience,
 )
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from .config import CommanderConfig
@@ -140,6 +141,80 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             CommanderContext.read_root(comms.root).post(VerdictAudience(()),
                 f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling "
                 f"since {RecordedEventTime(self.since).clock()}; struck, still held")
+
+
+@dataclass(frozen=True)
+class CommanderAlarm(DatedStandingRule, declared_name=None):
+    """A measured commander failure, reported by the existing rule invocation."""
+
+    todo: Todo
+    since: float
+    source_type: ClassVar[type[ProgressSource]] = ProgressSource
+
+    def began(self) -> float:
+        return self.since
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        CommanderContext.read_root(comms.root).post(
+            VerdictAudience(()), f"COMMANDER {commander}: {self.line()}")
+
+    @classmethod
+    def observed(cls, comms: Comms, commander: str) -> Iterator[tuple[Todo, OrderProgress]]:
+        todos = cls.todos(comms, commander)
+        pulls = PullRequests(todos)
+        for todo in todos:
+            yield todo, OrderProgress.from_source(cls.source_type.of(
+                todo, comms.registry.storage_rule, pulls))
+
+
+@dataclass(frozen=True)
+class MergedInstallLate(CommanderAlarm):
+    seconds: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[MergedInstallLate, ...]:
+        now = time.time()
+        return tuple(cls(waiting, since) for todo, progress in cls.observed(comms, commander)
+                     for waiting in todo.order.waiting_on_install(todo, {todo.id: progress})
+                     for since in progress.install_late(now, cls.seconds))
+
+    def line(self) -> str:
+        return f"MERGED NOT INSTALLED: {self.todo.id}, ten-minute merge ceiling passed"
+
+
+@dataclass(frozen=True)
+class ReadyReviewLate(CommanderAlarm):
+    seconds: ClassVar[int] = 5 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[ReadyReviewLate, ...]:
+        now = time.time()
+        return tuple(cls(todo, since) for todo, progress in cls.observed(comms, commander)
+                     for since in progress.review_late(now, cls.seconds))
+
+    def line(self) -> str:
+        return f"READY PR NOT TAKEN: {self.todo.id}, five-minute review ceiling passed"
+
+
+@dataclass(frozen=True)
+class WorkTimeBeyondDue(CommanderAlarm):
+    seconds: ClassVar[int] = 0
+    source_type: ClassVar[type[ProgressSource]] = MeasuredProgressSource
+    finish: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[WorkTimeBeyondDue, ...]:
+        found = []
+        for todo, progress in cls.observed(comms, commander):
+            readings = progress.distance_readings()
+            for finish in readings.trend.beyond_ceiling(
+                    todo.deadline.recorded_at("An order deadline"), cls.seconds):
+                found.append(cls(todo, readings.readings[-1].at, finish))
+        return tuple(found)
+
+    def line(self) -> str:
+        return (f"WORK TIME PAST DUE: {self.todo.id}, projected "
+                f"{RecordedEventTime(self.finish).clock()}, due {self.todo.deadline.clock()}")
 
 
 @dataclass(frozen=True)

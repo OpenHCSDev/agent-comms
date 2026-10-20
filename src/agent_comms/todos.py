@@ -296,8 +296,9 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     updated_at: float = 0.0
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
+    ready: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
 
-    def merged_commits_since(self, since: float) -> Iterator[str]:
+    def merged_points_since(self, since: float) -> Iterator[ProgressPoint]:
         return iter(())
 
     async def delivery_merges(self, delivery: CommitDelivery,
@@ -314,9 +315,9 @@ class MergedPullRequest(PullRequest):
     merge: str
     merged_at: float
 
-    def merged_commits_since(self, since: float) -> Iterator[str]:
+    def merged_points_since(self, since: float) -> Iterator[ProgressPoint]:
         if self.merged_at >= since:
-            yield self.merge
+            yield ProgressPoint(self.merge, self.merged_at)
 
     async def delivery_merges(self, delivery: CommitDelivery,
                               check: OrderCheck) -> tuple[DeliveryMerge, ...]:
@@ -337,6 +338,19 @@ class PullRequestCommit:
 
 
 @dataclass(frozen=True)
+class ReviewReadyEvent:
+    created: str
+
+
+@dataclass(frozen=True)
+class ReviewReadyEvents:
+    nodes: tuple[ReviewReadyEvent, ...]
+
+    def since(self, created: str) -> RecordedEventTime:
+        return RecordedEventTime(_github_time(self.nodes[-1].created if self.nodes else created))
+
+
+@dataclass(frozen=True)
 class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     """The external query row; conversion lives here, never in its consumers."""
     number: int
@@ -345,6 +359,12 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     body: str
     base: str
+    draft: bool = field(kw_only=True)
+    created: str = field(kw_only=True)
+    review: ReviewReadyEvents = field(kw_only=True)
+
+    def ready_time(self) -> EventTime:
+        return UnrecordedEventTime() if self.draft else self.review.since(self.created)
 
     @abstractmethod
     def parsed(self) -> PullRequest: ...
@@ -353,7 +373,8 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 class UnmergedListedPullRequest(ListedPullRequest):
     def parsed(self) -> UnmergedPullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   ProblemOrder.pull_request_ids(self.body), base=self.base)
+                                   ProblemOrder.pull_request_ids(self.body), base=self.base,
+                                   ready=self.ready_time())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -364,7 +385,8 @@ class MergedListedPullRequest(ListedPullRequest):
     def parsed(self) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  ProblemOrder.pull_request_ids(self.body), base=self.base,
-                                 merge=self.merge.oid, merged_at=_github_time(self.merged))
+                                 merge=self.merge.oid, merged_at=_github_time(self.merged),
+                                 ready=self.ready_time())
 
 
 class PullRequests:
@@ -398,7 +420,9 @@ class PullRequests:
                 f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
                 '... on PullRequest { number branch: headRefName head: headRefOid body '
                 'base: baseRefName merge: mergeCommit { oid } merged: mergedAt '
-                'updated: updatedAt } } }')
+                'updated: updatedAt draft: isDraft created: createdAt '
+                'review: timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) { '
+                'nodes { ... on ReadyForReviewEvent { created: createdAt } } } } } }')
         listed = subprocess.run(
             ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
              "--jq", '.data | map_values(.nodes | map(if .merged == null then '
@@ -471,6 +495,9 @@ class DistanceReadings:
 class DistanceTrend(DeclaredFamily, affix="Trend"):
     """What the order's distance readings say about its finish."""
 
+    def beyond_ceiling(self, ceiling: float, seconds: int) -> tuple[float, ...]:
+        return ()
+
     @property
     @abstractmethod
     def projection(self) -> str: ...
@@ -480,6 +507,9 @@ class DistanceTrend(DeclaredFamily, affix="Trend"):
 class MovingTrend(DistanceTrend):
     distance: int
     done: float
+
+    def beyond_ceiling(self, ceiling: float, seconds: int) -> tuple[float, ...]:
+        return (self.done,) if self.done > ceiling + seconds else ()
 
     @property
     def projection(self) -> str:
@@ -678,6 +708,12 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
+    def install_late(self, now: float, seconds: int) -> tuple[float, ...]:
+        return ()
+
+    def review_late(self, now: float, seconds: int) -> tuple[float, ...]:
+        return ()
+
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
@@ -805,11 +841,16 @@ class OpenPrProgress(GitProgress):
     precedence: ClassVar[int] = 3
     number: int
     head: str
+    ready: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.number, pr.head[:9], at=pr.updated_at,
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at, ready=pr.ready,
                     readings=source.readings()) for pr in source.requests("open"))
+
+    def review_late(self, now: float, seconds: int) -> tuple[float, ...]:
+        return ((self.ready.recorded_at("Review readiness") + seconds,)
+                if self.ready.before(now - seconds) else ())
 
     @property
     def state(self) -> str:
@@ -824,11 +865,17 @@ class MergedProgress(FoundProgress):
     """A linked merge closes its order once the installed checkout contains it."""
     precedence: ClassVar[int] = 1
     sha: str
+    at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha) for pr in source.requests("merged")
-                for sha in pr.merged_commits_since(source.since))
+        return (cls(point.sha, at=RecordedEventTime(point.at))
+                for pr in source.requests("merged")
+                for point in pr.merged_points_since(source.since))
+
+    def install_late(self, now: float, seconds: int) -> tuple[float, ...]:
+        return ((self.at.recorded_at("A merge") + seconds,)
+                if self.at.before(now - seconds) else ())
 
     @property
     def state(self) -> str:
