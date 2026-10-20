@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from .launch_runtime import LaunchRoot
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,8 +146,9 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
-    if "AGENT_COMMS_ROOT" in os.environ:
-        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
+    launch = LaunchRoot.current()
+    if launch is not None:
+        return LocalRoute(launch.path.expanduser().absolute())
     return CommsRoute.current()
 
 

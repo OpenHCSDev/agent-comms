@@ -53,7 +53,7 @@ class RootLaunch(ABC):
     @property
     @abstractmethod
     def child_root(self) -> Path:
-        """The root a launched child names in ``AGENT_COMMS_ROOT``."""
+        """The root a launched child receives in its launch arguments."""
 
     @abstractmethod
     def require_private(self) -> PrivateNkLaunch:
