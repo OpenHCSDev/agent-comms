@@ -7,13 +7,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated, Self
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .field_codec import (
-    FieldCodec, NullMember, RecordMember, SubclassUnion, WireName, WireTransient,
+    NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireName, WireTransient,
 )
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
@@ -148,19 +148,8 @@ class TurnGeneration(SubclassUnion, affix="Generation"):
 
 
 @dataclass(frozen=True, slots=True)
-class RecordedGeneration(TurnGeneration):
+class RecordedGeneration(SingleFieldValue, TurnGeneration):
     value: int
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(int, data))
-
-    def to_wire(self) -> int:
-        return self.value
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(int)
 
     def matches(self, generation: int) -> bool:
         return self.value == generation

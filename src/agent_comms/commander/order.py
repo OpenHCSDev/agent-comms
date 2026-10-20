@@ -41,6 +41,7 @@ from ..field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
+    SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
     Argument,
@@ -325,20 +326,9 @@ class Reassignment(SubclassUnion, affix="Reassignment"):
 
 
 @dataclass(frozen=True, slots=True)
-class ReassignReason(Reassignment):
+class ReassignReason(SingleFieldValue, Reassignment):
     text: str
     strikes_send_back = False
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.text
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
         return () if len(self.text.split()) >= 8 else (
@@ -379,19 +369,8 @@ class StrikeSelector(SubclassUnion, affix="Strike"):
 
 
 @dataclass(frozen=True, slots=True)
-class ClockedStrike(StrikeSelector):
+class ClockedStrike(SingleFieldValue, StrikeSelector):
     clock: str
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.clock
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def selects(self, strike: StrikeTodo) -> bool:
         return strike.at.clock() == self.clock

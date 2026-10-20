@@ -77,7 +77,7 @@ from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
-from .page_traversal import PageCursor
+from .page_traversal import NewestCursor, PageCursor
 from .owner_lifecycle import OwnerStartResult, OwnerRestartSelection
 from .presentation import ChannelView
 from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
@@ -1390,8 +1390,8 @@ class CommsHistoryTool(ReadTool, ToolRequest):
     ] = ""
     limit: Annotated[int, *tool_field("Maximum messages in this page")] = 20
     before: Annotated[
-        PageCursor | None, *tool_field("Exclusive older-page cursor from the previous result")
-    ] = None
+        PageCursor, *tool_field("Exclusive older-page cursor from the previous result")
+    ] = NewestCursor()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HistoryPageResult:
         target = CommandTarget.named(self.peer)

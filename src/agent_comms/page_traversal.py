@@ -8,7 +8,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, RecordMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
@@ -49,6 +49,17 @@ class LiveCursor(PageCursor):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(int)
+
+
+@dataclass(frozen=True)
+class NewestCursor(NullMember, PageCursor):
+    """No cursor given: a page starts at the newest message, or the oldest for newer pages."""
+
+    def older(self) -> OlderTraversal:
+        return OlderTraversal()
+
+    def newer(self) -> NewerTraversal:
+        return NewerTraversal()
 
 
 @dataclass(frozen=True)

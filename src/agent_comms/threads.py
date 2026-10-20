@@ -41,6 +41,7 @@ from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
+    NO_THREAD_TEXT,
     AgentThreadRole,
     NoThreadText,
     ThreadProvenance,

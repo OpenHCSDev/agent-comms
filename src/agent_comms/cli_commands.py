@@ -91,7 +91,7 @@ from .messages import (
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .page_traversal import OlderTraversal, PageCursor
+from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
@@ -981,7 +981,7 @@ class SendCliCommand(Send, CliCommand):
         return False
 
     def apply(self, ctx: Comms) -> MessageSentResult:
-        return MessageSentResult(self.report.send(ctx, self))
+        return MessageSentResult(self.sent(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1332,17 +1332,16 @@ class HistoryCliCommand(CliCommand):
         Argument(flags=("--limit",), options={"help": "Maximum messages in this page"}),
     ] = 20
     before: Annotated[
-        PageCursor | None,
+        PageCursor,
         Argument(
             flags=("--before",),
             options={"help": "Exclusive older-page cursor (JSON)", "type": json.loads},
         ),
-    ] = None
+    ] = NewestCursor()
 
     def apply(self, ctx: Comms) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
-        traversal = self.before.older() if self.before is not None else OlderTraversal()
-        bounds = PageBounds(traversal, self.limit)
+        bounds = PageBounds(self.before.older(), self.limit)
         page = ctx.views.history_page(target, bounds, viewer=self.me)
         return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
 

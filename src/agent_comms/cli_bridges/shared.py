@@ -412,12 +412,13 @@ class Send(Operation):
         ),
     ] = NoChangeReport()
 
+    def sent(self, comms: Comms) -> SendResult:
+        return comms.messaging.send(self.sender, self.target, self.body, self.type,
+                                    role=self.role(), report=self.report)
+
     async def execute(self, bridge: CliBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
-        await bridge.show_sent(await asyncio.to_thread(
-            bridge.comms.messaging.send, request.sender, request.target, request.body,
-            request.type, role=request.role(), report=request.report,
-        ))
+        await bridge.show_sent(await asyncio.to_thread(request.sent, bridge.comms))
 
 
 class Inbox(Operation[OperationBridge]):

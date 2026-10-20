@@ -8,7 +8,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import BaseModel
 
@@ -22,6 +22,7 @@ from .field_codec import (
     JsonShapeMember,
     NullMember,
     PathText,
+    SingleFieldValue,
     SubclassUnion,
     TextRepresentation,
     boundary_decoder,
@@ -179,19 +180,8 @@ class EnvironmentValue(SubclassUnion, affix="Variable"):
 
 
 @dataclass(frozen=True, slots=True)
-class SetVariable(EnvironmentValue):
+class SetVariable(SingleFieldValue, EnvironmentValue):
     text: str
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.text
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def otherwise[Default](self, default: Default) -> str:
         return self.text

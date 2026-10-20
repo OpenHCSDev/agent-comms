@@ -50,6 +50,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     RecordMember,
+    SingleFieldValue,
     SubclassUnion,
     WireValue,
     boundary_decoder,
@@ -1392,19 +1393,8 @@ class Successor(SubclassUnion, affix="Successor"):
 
 
 @dataclass(frozen=True, slots=True)
-class SupersedingProblem(Successor):
+class SupersedingProblem(SingleFieldValue, Successor):
     problem: str
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.problem
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def withdrawal_note(self) -> str:
         return f" (superseded by {self.problem})"
@@ -1427,19 +1417,8 @@ class Replacement(SubclassUnion, affix="Replacement"):
 
 
 @dataclass(frozen=True, slots=True)
-class ReplacedMessage(Replacement):
+class ReplacedMessage(SingleFieldValue, Replacement):
     message_id: str
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.message_id
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def names_latest(self, todo: Todo) -> bool:
         return todo.sent_in(self.message_id)
