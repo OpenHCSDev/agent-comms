@@ -696,23 +696,25 @@ def test_rehearsal_uses_and_cleans_the_requested_parent(tmp_path, monkeypatch):
     requested.mkdir()
     destinations = []
 
-    def refused_copy(source, destination):
-        assert source == root
-        assert destination.parent.parent == requested
-        destinations.append(destination)
+    (root / "storage.json").write_text(json.dumps({"scratch_base": str(requested)}))
+
+    def refused_copy(practice):
+        assert practice.source.root == root
+        assert practice.into.parent.parent == requested / "worker"
+        destinations.append(practice.into)
         raise RuntimeError("copy refused")
 
-    monkeypatch.setattr(upgrade_bus, "copy_bus", refused_copy)
+    monkeypatch.setattr(upgrade_bus.PracticeCopy, "open", refused_copy)
     with pytest.raises(RuntimeError, match="copy refused"):
-        upgrade_bus.rehearse(root, (), Stack(tmp_path), None, requested)
+        upgrade_bus.rehearse(root, (), Stack(tmp_path), None, "worker")
     assert len(destinations) == 1
-    assert list(requested.iterdir()) == []
+    assert list((requested / "worker").iterdir()) == []
     assert root.is_dir()
 
 
 def rehearsed(stack: Stack, root: Path) -> dict:
     from upgrade_bus import rehearse
-    return rehearse(root, (), stack, None, root.parent)
+    return rehearse(root, (), stack, None, "worker")
 
 
 def installed_live(stack: Stack, root: Path) -> dict:

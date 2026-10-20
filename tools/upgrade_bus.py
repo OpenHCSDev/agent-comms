@@ -46,6 +46,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
+from agent_comms.active_route import ActiveRoute, publish_active_route
+from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, Id128Text
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -55,9 +57,10 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
 import publish_runtime
-from cutover.backup import Backup, StoreBackup, UpgradeRefused, bus_files, transcripts_held
+from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
 from cutover.runtime_resolution import RuntimeResolution
+from install_gate import PracticeCopy, prepare_runtime_home
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -122,7 +125,8 @@ class Stack:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
 
     def prepare_native(self) -> None:
-        run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout)
+        run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout,
+            env=self.environment())
 
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
@@ -237,47 +241,32 @@ def carry_all(
     return results
 
 
-def copy_bus(root: Path, copy: Path) -> None:
-    """Hold the wire; SQLite owns each committed database copy and its companions."""
-    # The maintenance files describe the live root; a copy is a new root and starts open.
-    held = MaintenanceBarrier(root / "registry.json").witness_paths
-    with _store_lock(root / "wire"):
-        StoreBackup.copy_tree(root, copy, excluded=held)
-
-
-def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
-    """A home whose route is the real one, selecting the copy wherever it selected the bus."""
-    home = scratch / "home"
-    route = ROUTE.relative_to(Path.home())
-    (home / route).parent.mkdir(mode=0o700, parents=True)
-    if ROUTE.exists():
-        record = json.loads(ROUTE.read_text())
-        if Path(record["root"]).resolve() == root.resolve():
-            record["root"] = str(copy)
-        (home / route).write_text(json.dumps(record))
-        (home / route).chmod(0o600)
-    # Claude Code's transcripts are read-only input that carries date from;
-    # the copy reads the real ones.
-    (home / ".claude").symlink_to(Path.home() / ".claude")
-    return home
-
-
 def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions,
-             spill_dir: Path) -> dict:
-    with tempfile.TemporaryDirectory(dir=spill_dir, prefix=f".{root.name}.rehearsal.") as scratch:
-        copy = Path(scratch) / root.name
-        copy_bus(root, copy)
-        stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
-        stack.prepare_native()
-        # Hold the copy before reading it, exactly as the live run holds the bus.
-        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copy / "registry.json").begin(
-            MaintenanceOperator.current()).nonce
-        with transcripts_held(copy):
-            before = bus_files(copy)
-        stopping = before_stop(copy, pending, stack, revisions)
-        # Optional connector qualification belongs to its own round_trip command;
-        # a native-only bus must not acquire a fabricated director to update.
-        return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
+             installer: str) -> dict:
+    source = Comms(root)
+    parent = source.registry.storage_rule.initial_roots(installer).scratch
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch:
+        started = time.monotonic()
+        with PracticeCopy(source=source, into=Path(scratch) / "bus").open() as copied:
+            size = sum(path.stat().st_size for path in copied.root.rglob("*") if path.is_file())
+            elapsed = time.monotonic() - started
+            print(f"upgrade-bus: rehearsal copy {size} bytes in {elapsed:.3f} seconds",
+                  file=sys.stderr, flush=True)
+            home = Path(scratch) / "home"
+            prepare_runtime_home(home)
+            marker = copied.bus.log.private_marker_unlocked()
+            publish_active_route(ActiveRoute(copied.root, marker.root_id),
+                                 home / ROUTE.relative_to(Path.home()))
+            (home / ".claude").symlink_to(Path.home() / ".claude")
+            stack = replace(stack, home=home)
+            stack.prepare_native()
+            os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied.root / "registry.json").begin(
+                MaintenanceOperator.current()).nonce
+            with transcripts_held(copied.root):
+                before = bus_files(copied.root)
+            stopping = before_stop(copied.root, pending, stack, revisions)
+            return carry_and_read(copied.root, before, pending, stack, stack, revisions, stopping)
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
@@ -358,7 +347,7 @@ class Install(ABC):
 
 class ChangedInstall(Install):
     def rehearsal(self) -> dict:
-        return rehearse(self.root, self.pending, self.staged, self.revisions, self.spill_dir)
+        return rehearse(self.root, self.pending, self.staged, self.revisions, self.installer)
 
     def live(self) -> dict:
         return live(self.checkout, self.root, self.current, self.target, self.pending,

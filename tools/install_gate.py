@@ -278,10 +278,9 @@ class PracticeCopy:
         self, target: Path, previous: Path, head: str, python: Path, log: Path, work: Path
     ) -> CompletedRehearsal:
         """The practice command and desktop gate use the same private-root lifetime."""
-        with self.open() as copied:
-            home = self.into.parent
-            prepare_runtime_home(home)
-            return rehearse(target, previous, head, copied.root, home, python, log, work)
+        home = self.into.parent
+        prepare_runtime_home(home)
+        return rehearse(target, previous, head, self.source.root, home, python, log, work)
 
 
 class SnapshotCopy(SnapshotHome):
@@ -490,7 +489,9 @@ def prepare_runtime_home(home: Path) -> None:
     uv.symlink_to(Path.home() / ".local/state/agent-comms/upgrade-bus/uv")
     cache = Path(run("npm", "config", "get", "cache"))
     if not (home / ".npm").exists() and cache.is_dir():
-        shutil.copytree(cache, home / ".npm", symlinks=True)
+        (home / ".npm").symlink_to(cache, target_is_directory=True)
+    elif not (home / ".npm").exists():
+        (home / ".npm").mkdir(mode=0o700)
 
 
 @contextmanager
@@ -558,7 +559,7 @@ def rehearse(
     )
     common = Path(run("git", "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=target))
     sandbox = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--die-with-parent"]
-    for directory in dict.fromkeys((work, home, bus.parent, common, uv_cache)):
+    for directory in dict.fromkeys((work, home, common, uv_cache, (home / ".npm").resolve())):
         sandbox.extend(("--bind", str(directory), str(directory)))
     help_text = run(*sandbox, python, target / INSTALLER, "--help", cwd=target, env=environment)
     repo_option = "--repo" if "--repo " in help_text else "--checkout"
