@@ -121,13 +121,9 @@ class StoppedOwnerInstallation(OwnerCutover):
         self.after_stopped(stopped.lifecycle)
         return stopped.launch(self.launch_runtime(stopped))
 
-    @staticmethod
-    def current_pointer() -> Path:
-        return Path.home() / ".local/share/agent-comms/current"
-
     def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
         """Only installation selects the runtime after publishing its pointer."""
-        selected = LaunchRuntime(self.current_pointer().resolve(strict=True) / "bin/python")
+        selected = LaunchRuntime.installed()
         selected.require_available()
         return selected
 

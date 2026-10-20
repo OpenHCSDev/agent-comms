@@ -11,6 +11,8 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .delivery import DeliveredCommitCase
+from .handoff import FinishedHandoffCase
 from .lifecycle import (
     AssignOrderCase,
     BuildBoundProofCase,
@@ -50,6 +52,7 @@ class DeliveredCommitParityRow(ParityRow):
     current = "`order.py done`"
     native = "`CommsOrderDoneTool`: merged to main, another branch, or not merged"
     phases = (OneOrderOwnerPhase, RecordPlanePhase)
+    comparison = DeliveredCommitCase.read
 
 
 class InstalledEvidenceParityRow(ParityRow):
@@ -288,6 +291,8 @@ class FinishedWorkTransferParityRow(ParityRow):
     native = "Transfer refuses delivered checked work; that owner merges; check is reused"
     phases = (RecordPlanePhase,)
 
+    comparison = FinishedHandoffCase.read
+
 
 class BuildBoundProofParityRow(ParityRow):
     number = 30
@@ -297,14 +302,6 @@ class BuildBoundProofParityRow(ParityRow):
     phases = (RecordPlanePhase,)
 
     comparison = BuildBoundProofCase.read
-
-
-class DeletionTargetParityRow(ParityRow):
-    number = 31
-    capability = "An order states its intent as a deletion target"
-    current = "none; P520 renamed a decision rather than deleting it"
-    native = "Order owns deletion family/site/count; delivery refuses nonzero or renamed decisions"
-    phases = (RecordPlanePhase,)
 
 
 class UnitTimeParityRow(ParityRow):

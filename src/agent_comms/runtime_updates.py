@@ -96,7 +96,7 @@ class TextDraft(DraftAccumulator):
         )
         return (
             (self.event_type(text, position=self.position,
-                             timestamp=self.started_at.transcript_timestamp()),) if text else ()
+                             timestamp=self.started_at.recorded_at("A transcript event")),) if text else ()
         )
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:

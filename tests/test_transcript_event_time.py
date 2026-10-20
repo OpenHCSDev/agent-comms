@@ -56,10 +56,10 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
 
 def test_new_native_entry_inherits_original_clock_projection():
     class ExternalNoteEntry(NativeEntry):
-        def _events(self, context):
-            return [AssistantTranscript("a new external note", position=context.position)]
+        def _events(self, context, timestamp):
+            return [AssistantTranscript("a new external note", position=context.position, timestamp=timestamp)]
 
-    # Adding a content declaration does not add another clock propagation site.
+    # The inherited entry owner decodes the source clock before constructing any content.
     stamp = "2026-09-28T23:12:33.123Z"
     expected = datetime.fromisoformat(stamp).timestamp()
     note = ExternalNoteEntry(timestamp=RecordedTimestamp(stamp))
@@ -153,3 +153,41 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
     print(
         f"actual native clocks={expected}; ACP snapshot + rebuild exact; native history/proof unchanged"
     )
+
+
+@pytest.mark.parametrize('source', ('claude', 'codex'))
+@pytest.mark.parametrize('stamp', (None, 'missing'))
+def test_external_source_without_a_time_refuses_before_event_construction(source, stamp):
+    from pydantic import ValidationError
+    from agent_comms.cli_bridges.claude_protocol import TimedRecord
+    from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD
+    from agent_comms.recorded_time import UnrecordedTimeError
+
+    record = ({'uuid': 'record', 'position': 0} if source == 'claude' else
+              {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': []}})
+    if stamp is None:
+        record['timestamp'] = None
+    decode = TimedRecord.model_validate if source == 'claude' else ROLLOUT_RECORD.validate_python
+    with pytest.raises(ValidationError) as refused:
+        decode(record)
+    assert any(isinstance(error.get('ctx', {}).get('error'), UnrecordedTimeError)
+               for error in refused.value.errors())
+
+
+def test_codex_rollout_projects_the_enclosing_record_clock():
+    from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, RolloutState
+
+    record = ROLLOUT_RECORD.validate_python({
+        'type': 'response_item', 'timestamp': '2026-10-19T18:00:00Z',
+        'payload': {'type': 'message', 'role': 'assistant', 'id': 'item',
+                    'content': [{'text': 'saved source text'}]},
+    })
+    update, = record.updates(RolloutState(), 17)
+    assert update.events[0].timestamp == datetime.fromisoformat('2026-10-19T18:00:00Z').timestamp()
+
+
+def test_malformed_shell_words_refuse_instead_of_reaching_any_rule(tmp_path):
+    from agent_comms.storage_rules import ShellInvocation
+
+    with pytest.raises(ValueError):
+        tuple(ShellInvocation.parse('uv pip install package "unterminated', tmp_path))

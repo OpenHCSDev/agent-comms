@@ -205,7 +205,7 @@ from agent_comms.active_route import active_route_path
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.store_files import _store_lock
 barrier = MaintenanceBarrier(Path(sys.argv[1]) / 'registry.json')
-held = barrier.begin(MaintenanceOperator('P717 copied-root proof'))
+held = barrier.begin(MaintenanceOperator.current())
 try:
     with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path):
         directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)

@@ -17,7 +17,7 @@ from .declared_family import DeclaredFamily
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .field_codec import TimestampText
-from .recorded_time import MissingTranscriptTimestampError
+from .recorded_time import UnrecordedTimeError
 from .external_transcript import RequestedEarlierPage
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class TimestampedWire(WireModel):
     @classmethod
     def require_source_time(cls, value):
         if isinstance(value, dict) and value.get('timestamp') is None:
-            raise MissingTranscriptTimestampError(f'{cls.__name__} has no recorded timestamp')
+            raise UnrecordedTimeError(f'{cls.__name__} has no recorded timestamp')
         return value
 
     @field_validator('timestamp', mode='before')

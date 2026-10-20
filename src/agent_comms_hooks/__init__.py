@@ -57,7 +57,7 @@ class ClaudeHook(HookRecord):
         hook = cls.decode(json.load(sys.stdin))
         for kind in cls.__subclasses__():
             if hook.hook_event_name in kind.events:
-                return kind(hook.session_id, hook.hook_event_name)
+                return kind(**{field.name: getattr(hook, field.name) for field in fields(hook)})
         return hook
 
     def warn(self, reason: str) -> None:
@@ -84,6 +84,13 @@ class ClaudeHook(HookRecord):
                 }
             )
         )
+
+
+@dataclass(frozen=True)
+class ClaudeTranscriptHook(ClaudeHook):
+    """A hook that reads the session's transcript, which Claude Code names on every event."""
+
+    transcript_path: str
 
 
 @dataclass(frozen=True)

@@ -229,6 +229,9 @@ class Step:
 
     name: str
     revision: str
+    """The revision whose chain holds this step."""
+    written: str
+    """The main-line revision that last wrote the step; it runs with that tree's src."""
     declaration: str
     family: type[Carry]
     """The family the step's class inherits from, as its module names it."""
@@ -268,7 +271,8 @@ class Step:
 
     @classmethod
     def declared(
-        cls, name: str, source: bytes, revision: str, parents: Mapping[str, type[Carry]]
+        cls, name: str, source: bytes, revision: str, written: str,
+        parents: Mapping[str, type[Carry]],
     ) -> Step:
         """The step a module declares, read without importing it. A ``carry_*`` module
         holding no Carry is refused: a conversion outside the chain never runs."""
@@ -276,9 +280,8 @@ class Step:
             if isinstance(node, ast.ClassDef):
                 for base in node.bases:
                     if (parent := parent_name(base)) in parents:
-                        return cls(
-                            name, revision, node.name, parents[parent], cls.declared_columns(source)
-                        )
+                        return cls(name, revision, written, node.name, parents[parent],
+                                   cls.declared_columns(source))
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
 
@@ -372,7 +375,8 @@ class CarryChain:
         }
         while pending:
             declared = {
-                name: Step.declared(name, source, revision, parents)
+                name: Step.declared(name, source, revision, cls.source(repo, revision, name)[0],
+                                    parents)
                 for name, source in pending.items() if Step.holds_carry(source, parents)
             }
             if not declared:
@@ -559,8 +563,7 @@ class NoConversion(PreparedCarries):
             # No data or route changes: existing readers can keep their shared lock.
             with comms.route.hold_client_route():
                 print('Acquired shared route lock for unchanged-format switch', flush=True)
-                if not publication.published():
-                    publication.publish_links()
+                publication.publish_links()
             publication.release_if_safe(self, comms.owners.maintenance, hold)
             # Existing exact-incarnation queue owns idle admission and settlement.
             for original in OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):

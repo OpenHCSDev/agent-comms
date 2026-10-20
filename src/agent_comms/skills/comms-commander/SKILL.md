@@ -9,7 +9,12 @@ The commander spends its tokens on judgment: what is stupid, what changes where 
 
 All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, board, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
 
-## Start of session
+## Start of session, and after every compaction
+
+Read these files themselves, in full, before acting. A summary or memory note of them is a paraphrase that drifts; it never counts as having read them:
+- `src/agent_comms/commander/indictment.md`
+- every file in `src/agent_comms/commander/rules/`
+- the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
 Arm one Monitor per loop, each printing to the session:
 - `agent-comms-claude-bridge watch` (messages to the commander; see the `comms` skill for the first binding)
@@ -25,7 +30,7 @@ Then `agent-comms-commander rules review` and answer each drawn rule.
 
 - **The commander cannot trust itself to remember these rules.** `rules review` prints every bold rule here, every packaged and project feedback rule and the correct-maintenance results, and draws three; answer each with what this tick does about it. `order` refuses every send, strike, done, close, problem, hunt and say until the last review is answered and under 20 minutes old.
 - **A roast says why the slop is stupid, to the unit that wrote it.** `judge back` needs `--roast` (blunt, with "because": the fact it restates and what already answers it) and `--fix` (owner and replacing shape); the roast goes to the unit and #comms.
-- **Overloaded means fork, enforced.** `capacity` measures load (open orders + 2 per overdue + unjudged/10; 6 per commander). While live forks do not cover it, `order` refuses send, say, problem, hunt and fold. Every fork passes `--fork NAME` on each call.
+- **Fork a backlog slice when it helps; nothing refuses orders for load.** `capacity` reports load and live forks. A gate that refuses the commander's own orders and posts under load stops command exactly when the fleet needs it (2026-10-20).
 - **Hate jargon.** One jargon list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts, and Core answers any commanded unit message using it with a correction on its open orders when the message is published.
 
 - **Answer the owner and claude-ai on the bus, the same tick.** A reply only on the owner's screen is not an answer. When the owner escalates, match the owner's level: name what broke as bluntly as the owner does and act in that turn.

@@ -300,7 +300,11 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     from agent_comms.commander.config import CommanderConfig
 
     comms, _ = commander
+    installed = LaunchRuntime.current_pointer().resolve(strict=True)
     monkeypatch.setenv("HOME", str(tmp_path))
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    pointer.symlink_to(installed)
     repo = tmp_path / "repo"
     repo.mkdir()
     for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
