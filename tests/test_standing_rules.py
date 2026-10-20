@@ -185,6 +185,7 @@ async def test_order_alarm_family_is_delivered_once_without_a_monitor_and_resolv
     with comms.goals.todos.writing() as db:
         replace(first, order=replace(first.order,
             first_call_deadline=RecordedEventTime(11000))).upsert(db)
+    assert all(not rules for rules in alarms().values())
     heartbeat = CommanderHeartbeat()
     lead = replace(comms.registry.require('lead'), execution=ExternalThreadExecution)
     comms.registry.register(lead)

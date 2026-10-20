@@ -61,4 +61,3 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
     verb = family.parse(shlex.split(line), "")
     assert verb.declared_name == line.split()[0]
     assert {name: getattr(verb, name) for name in fields} == fields
-
