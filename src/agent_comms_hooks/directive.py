@@ -9,13 +9,12 @@ from agent_comms.commander.order import Commander
 from agent_comms.commander.send_guard import CommanderSession
 from agent_comms.connector import DirectorCaller
 from agent_comms.errors import RelationViolationError
-from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
+from agent_comms_hooks import ClaudeHookProgram, ClaudeWorkspaceHook
 
 
 @dataclass(frozen=True)
-class CommanderPrompt(ClaudeHook):
+class CommanderPrompt(ClaudeWorkspaceHook):
     prompt: str
-    cwd: str
 
     def record(self, commander: Commander) -> None:
         session = CommanderSession(self.session_id, commander)

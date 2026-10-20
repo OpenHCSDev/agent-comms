@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from agent_comms.commander import cli, send_guard
-from agent_comms_hooks import BashInput, ClaudeToolHookProgram
+from agent_comms_hooks import BashInput, ClaudeToolHookProgram, FileEditInput, ToolInput
 
 
 class SendGuard(ClaudeToolHookProgram):
     """Refuses the commander's raw sends and tactical work in the Bash command about to run."""
 
     events = ("PreToolUse",)
-    reads = BashInput
+    reads: ClassVar[type[ToolInput]] = BashInput
 
     @classmethod
     def command(cls) -> str:
         commander = cls.console_script(f"{cli.__name__}:{cli.main.__name__}")
         return f"{commander} {cli.tool_name(send_guard.main.__module__)}"
+
+
+class EditGuard(SendGuard):
+    """The same classified commander cannot edit protected source with file tools."""
+
+    reads = FileEditInput
+
+    @classmethod
+    def command(cls) -> str:
+        return f"{super().command()} {send_guard.EditGuardTool.declared_name}"
