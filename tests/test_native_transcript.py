@@ -143,7 +143,7 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
 
 @pytest.mark.parametrize("raw, error, match", [
     (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
-     ValueError, r"^Expected a JSON array\.$"),
+     ValueError, r"^message\.content: Expected a JSON array\.; fix: supply tuple\[agent_comms\.pi_payloads\.PiContent, \.\.\.\]$"),
     (b'{"type":"message"\n', json.JSONDecodeError,
      r"^Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
 ])

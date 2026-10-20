@@ -28,7 +28,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
     assert state.counts('viewer', registry=registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": IndexingUnread()}
     for future in state.watch(frozenset(), lambda _: None):
         future.result(timeout=10)
-    workers = tuple(state._pool._processes.values())
+    workers = tuple(state._pool._threads)
     database, cancelled = state._connection, state._cancelled
     reference = weakref.ref(state)
     del state
@@ -49,7 +49,7 @@ def test_database_without_worker_is_closed_when_reader_dies(tmp_path):
     idle.retire((str(tmp_path / "missing.jsonl"),))
     idle.commit(database, ())
     assert state.watch(frozenset(), lambda _: None) == frozenset()
-    assert not state._pool._processes  # Constructed, but no worker started without a submit.
+    assert not state._pool._threads  # Constructed, but no worker started without a submit.
     reference = weakref.ref(state)
     del state
     gc.collect()

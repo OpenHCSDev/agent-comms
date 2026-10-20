@@ -18,7 +18,7 @@ def _session(path: Path, count: int) -> None:
                     transcript_records.message({
                             "role": "assistant",
                             "content": [{"type": "text", "text": f"answer {index}"}],
-                        }, id=f"entry-{index}").to_wire()
+                        }, id=f"entry-{index}")
                 )
                 + "\n"
             )

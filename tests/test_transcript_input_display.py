@@ -5,6 +5,7 @@ import sqlite3
 
 import pytest
 
+from conftest import transcript_records
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
@@ -23,12 +24,9 @@ def saved_row(native_id, text, *, images=False, role="user"):
     content = [{"type": "text", "text": text}]
     if images:
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
-    return {
-        "type": "message",
-        "timestamp": "2026-10-19T00:00:00.000Z",
-        "id": native_id[:8],
-        "message": {"role": role, "inputId": native_id, "content": content},
-    }
+    return transcript_records.message(
+        {"role": role, "inputId": native_id, "content": content}, id=native_id[:8]
+    )
 
 
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
@@ -138,7 +136,7 @@ def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
                 {"type": "text", "text": "After reasoning."},
             ],
         }
-    ).transcript_events(TranscriptProjection(position="assistant"))
+    ).transcript_events(TranscriptProjection(position="assistant"), transcript_records.at)
     assert [(event.declared_name, event.text) for event in events] == [
         ("assistant", "## Summary\n\n**Bold text**\n\n- First\n- Second\n"),
         ("thinking", "separate reasoning"),

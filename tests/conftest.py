@@ -26,23 +26,26 @@ class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
     def __init__(self):
-        from datetime import UTC, datetime
         from agent_comms.field_codec import RecordedTimestamp
 
-        self.timestamp = RecordedTimestamp(datetime(2026, 10, 1, tzinfo=UTC))
+        self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
+
+    @property
+    def at(self):
+        return self.timestamp.at.timestamp()
 
     def event(self, declaration, *args, **facts):
-        return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
+        return declaration(*args, timestamp=self.at, **facts)
 
     def entry(self, declaration, **facts):
         return declaration(timestamp=self.timestamp, **facts)
 
     def message(self, payload, **coordinates):
-        from agent_comms.field_codec import FieldCodec
         from agent_comms.native_entries import MessageEntry
         from agent_comms.pi_payloads import PiMessage
 
-        return self.entry(MessageEntry, message=FieldCodec.decode(PiMessage, payload), **coordinates)
+        entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
+        return {**entry.to_wire(), "message": payload}
 
     def session(self, **coordinates):
         from agent_comms.native_entries import SessionEntry

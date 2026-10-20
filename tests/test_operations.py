@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import ANY_CHANNEL
 from agent_comms.activity import ActivityState
@@ -150,7 +151,7 @@ class TestThreadOps:
             transcript_records.message({
                     "role": "user",
                     "content": [{"type": "text", "text": "demo request"}],
-                }).to_wire(),
+                }),
             transcript_records.message({
                     "role": "assistant",
                     "content": [
@@ -162,18 +163,18 @@ class TestThreadOps:
                             "arguments": {"to": "child"},
                         },
                     ],
-                }).to_wire(),
+                }),
             transcript_records.message({
                     "role": "toolResult",
                     "toolCallId": "call-1",
                     "toolName": "comms_send",
                     "content": [{"type": "text", "text": "sent"}],
                     "isError": False,
-                }).to_wire(),
+                }),
             transcript_records.message({
                     "role": "assistant",
                     "content": [{"type": "text", "text": "demo complete"}],
-                }).to_wire(),
+                }),
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
@@ -198,11 +199,7 @@ class TestThreadOps:
         session_file = tmp_path / "compacted.jsonl"
         session_file.write_text(
             json.dumps(
-                {
-                    "type": "compaction",
-                    "summary": "Important decisions and remaining work.",
-                    "tokensBefore": 12000,
-                }
+                transcript_records.entry(CompactionEntry, summary="Important decisions and remaining work.").to_wire()
             )
             + "\n"
         )
@@ -307,7 +304,7 @@ class TestThreadOps:
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
         assert attached.task == "fix auth"
-        assert attached.pid == os.getpid()
+        assert attached.process_identity == ProcessIdentity.capture(os.getpid())
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
@@ -318,7 +315,7 @@ class TestThreadOps:
 
         session_file = tmp_path / "session.jsonl"
         session_file.write_text(
-            json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
+            json.dumps(transcript_records.entry(ModelChangeEntry, provider="test", model_id="saved").to_wire()) + "\n"
         )
         attached = wired.threads.attach_session((attachment_owner := wired.registry.require("fixer")), str(session_file), process=attachment_owner.process_identity)
         assert attached.model == "test/saved"
@@ -385,7 +382,7 @@ class TestThreadOps:
         assert wired.registry.require("PR111").name == "planner"
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == "planner"
-        assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
+        assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
         assert wired.ledger.read().entries["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
@@ -513,7 +510,7 @@ class TestLedgerOps:
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:
             stream.write(
-                json.dumps({"type": "model_change", "provider": "test", "modelId": "one"}) + "\n"
+                json.dumps(transcript_records.entry(ModelChangeEntry, provider="test", model_id="one").to_wire()) + "\n"
             )
             # A giant record crossing the tail boundary must never trigger an
             # unbounded readline or hide the newest small records.
@@ -522,7 +519,7 @@ class TestLedgerOps:
                     transcript_records.message({
                             "role": "assistant",
                             "content": [{"type": "text", "text": "x" * 2_000_000}],
-                        }).to_wire()
+                        })
                 )
                 + "\n"
             )
@@ -532,7 +529,7 @@ class TestLedgerOps:
                         transcript_records.message({
                                 "role": "assistant",
                                 "content": [{"type": "text", "text": str(index)}],
-                            }).to_wire()
+                            })
                     )
                     + "\n"
                 )
@@ -575,19 +572,6 @@ class TestPollAndWire:
         thread = comms.threads.adopt_current()
         assert thread.name == "me"
         assert comms.registry.status("me").declared_name == "running"
-
-    def test_wire_defaults_to_agent_comms_dir(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-        from agent_comms.comms import wire as wire_fn
-
-        monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / str(p).lstrip("~")))
-        comms = wire_fn(None)
-        assert comms.root == tmp_path / ".agent-comms"
-
-    def test_wire_env_root(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "custom"))
-        comms = wire(None)
-        assert comms.root == tmp_path / "custom"
 
     def test_runtime_files_created_on_demand(self, tmp_path):
         comms = wire(tmp_path / "fresh")

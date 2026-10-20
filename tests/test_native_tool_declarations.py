@@ -115,7 +115,7 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.transcript_events import TranscriptEvent
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
-                            kind=UpdatedFile()).events("codex", True)
+                            kind=UpdatedFile()).events("codex", True, transcript_records.at)
     assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
     assert start.tool == FilePatchTool(path="codex.txt")
     assert end.title == "Edit" and end.diff is not None
@@ -125,10 +125,10 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
         "state": {"status": "pending", "input": {"filePath": "open-code.txt"}}})
     call = part.state.call(part)
     assert call.title == "Read open-code.txt" and call.tool == ReadTool(call_id="open-code", path="open-code.txt")
-    recorded, _ = call.finished("saved", True, 0)
+    recorded, _ = call.finished("saved", True, 0, transcript_records.at)
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
     opaque = {"external": ["not", "Pi"]}
-    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True, 0)
+    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True, 0, transcript_records.at)
     assert scalar.title == "external_custom" and scalar.raw_input == opaque
 
 
