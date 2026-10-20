@@ -74,6 +74,8 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     )
     phase = pi.CompactionStart().on(ModelWaitPhase())
     assert isinstance(phase, CompactionPhase) and phase.pauses_input_clock
+    assert phase.model_wait(360.0) is None
+    assert CompactionPhase.model_wait is ToolRunningPhase.model_wait
     # Compaction completion exits even if a tool was already present.
     assert isinstance(pi.CompactionEnd().on(phase), ModelWaitPhase)
     phase = pi.ToolExecutionStart(tool_call_id="a").on(ModelWaitPhase())
