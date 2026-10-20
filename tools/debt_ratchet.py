@@ -9,6 +9,7 @@ import enum
 import importlib
 import io
 import json
+import multiprocessing
 import os
 import re
 import subprocess
@@ -19,9 +20,10 @@ import tomllib
 import typing
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from pathlib import Path
 
 sys.path.insert(0, str(
@@ -46,6 +48,13 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
 
 
+class Side(enum.Enum):
+    """The two revisions a comparison measures; the value names a checker's cache."""
+
+    BASE = "base"
+    HEAD = "head"
+
+
 class Measure(DeclaredFamily, affix="Measure"):
     @classmethod
     def blocks(cls, delta: dict[str, int]) -> bool:
@@ -53,29 +62,127 @@ class Measure(DeclaredFamily, affix="Measure"):
                    if key.partition(":")[0] == cls.__name__)
 
     @staticmethod
-    def environment(root: str) -> dict[str, str]:
+    def environment(root: str, tree: Path) -> dict[str, str]:
+        """The environment of a tool run in a revision extracted to the tree."""
         return dict(os.environ)
 
     @classmethod
     @abstractmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        """Return independent before/after measurements for this declaration."""
-
-class GitMeasure(Measure):
-    """Shared Git collection and alignment for declaration-owned snapshots."""
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        """Independent pieces of the comparison; compare() runs each in a separate process."""
 
     @classmethod
-    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
-        return changed & present
+    @abstractmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        """The before/after measurements from the results of parts(), in order."""
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+        return base, head
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        """Return independent before/after measurements for this declaration."""
+        parts = cls.parts(repo, base, head, changed, root)
+        return cls.combine([part() for part in parts], repo, base, head, changed, root)
+
+
+class ChangeMeasure(Measure):
+    """A count of the change as a whole, taken in one piece."""
+
+    @classmethod
+    @abstractmethod
+    def counted(cls, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        """The before/after counts."""
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        return (partial(cls.counted, repo, base, head, changed, root),)
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        before, after = results[0]
+        return before, after
+
+
+class RevisionMeasure(Measure):
+    """Each revision measured on its own, so the two run at once; align() pairs them."""
+
+    @classmethod
+    @abstractmethod
+    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
+           root: str) -> dict[str, int]:
+        """This revision's measurements."""
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        return tuple(partial(cls.at, repo, ref, base, head, changed, root) for ref in (base, head))
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        return cls.align(*results)
+
+
+class InventoryMeasure[Reading](Measure):
+    """A measure of every file a revision holds, not only the changed ones. A file the change
+    did not touch reads the same at both revisions, so it is read once; the reading is split
+    across processes."""
+
+    @classmethod
+    @abstractmethod
+    def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
+        """The paths measured at this revision."""
+
+    @classmethod
+    @abstractmethod
+    def reading(cls, path: str, source: bytes) -> Reading:
+        """What the measure needs from one file, independent of the revision holding it."""
+
+    @classmethod
+    @abstractmethod
+    def measured(cls, repo: Path, ref: str, base: str, head: str, readings: dict[str, Reading],
+                 root: str) -> dict[str, int]:
+        """This revision's measurements from its files' readings, in path order."""
+
+    @classmethod
+    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
+        return {path: cls.reading(path, source)
+                for path, source in GitMeasure.sources(repo, ref, set(paths))}
+
+    @classmethod
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        before, after = cls.inventory(repo, base, root), cls.inventory(repo, head, root)
+        shared = sorted((before & after) - touched_paths(repo, base, head))
+        shards = os.process_cpu_count() or 1
+        return (partial(cls.read, repo, base, sorted(before.difference(shared))),
+                partial(cls.read, repo, head, sorted(after.difference(shared))),
+                *(partial(cls.read, repo, head, shared[shard::shards]) for shard in range(shards)))
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        before, after, *shards = results
+        shared = {path: reading for shard in shards for path, reading in shard.items()}
+        return cls.align(*(cls.measured(repo, ref, base, head,
+                                        dict(sorted({**shared, **own}.items())), root)
+                           for ref, own in ((base, before), (head, after))))
+
+
+class GitMeasure(RevisionMeasure):
+    """Shared Git collection and alignment for declaration-owned snapshots."""
 
     @classmethod
     @abstractmethod
     def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
         """Measure the selected source declarations."""
-
-    @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
-        return base, head
 
     @staticmethod
     def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
@@ -110,11 +217,9 @@ class GitMeasure(Measure):
         return [(path, blobs[identities[path]]) for path in sorted(selected)]
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        def snapshot(ref: str) -> dict[str, int]:
-            selected = cls.scope(changed, python_paths(repo, ref, root))
-            return cls.snapshot(cls.sources(repo, ref, selected))
-        return cls.align(snapshot(base), snapshot(head))
+    def at(cls, repo: Path, ref: str, base: str, head: str, changed: set[str],
+           root: str) -> dict[str, int]:
+        return cls.snapshot(cls.sources(repo, ref, changed & python_paths(repo, ref, root)))
 
 
 class CountedSource(GitMeasure):
@@ -176,33 +281,59 @@ class CheckedRevision(Measure):
 
     @staticmethod
     @abstractmethod
-    def command(root: str, selected: list[str]) -> list[str]:
-        """The checker's arguments after `python -m`."""
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+        """The checker's arguments after `python -m`, run in the revision extracted to the tree."""
+
+    @staticmethod
+    def batches(selected: list[str]) -> list[list[str]]:
+        """The files checked by one run of the checker."""
+        return [selected]
+
+    @staticmethod
+    def extract(repo: Path, ref: str, scratch: Path, selected: list[str]) -> None:
+        """Write the revision's files the checker reads."""
+        subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True,
+                       timeout=60)
 
     @classmethod
-    def findings(cls, repo: Path, ref: str, head: str, root: str, changed: set[str]) -> Counter[str]:
-        selected = sorted(changed & python_paths(repo, ref, root))
-        if not selected:
-            return Counter()
+    def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                 side: Side) -> tuple[Side, Counter[str]]:
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
-            subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True, timeout=60)
-            configuration = Path(scratch) / "pyproject.toml"
+            tree = Path(scratch)
+            cls.extract(repo, ref, tree, selected)
+            configuration = tree / "pyproject.toml"
             configuration.unlink(missing_ok=True)
             if git(repo, "ls-tree", "--name-only", head, "--", "pyproject.toml"):
                 configuration.write_bytes(git(repo, "show", f"{head}:pyproject.toml"))
-            result = subprocess.run([sys.executable, "-m", *cls.command(root, selected)],
-                                    cwd=scratch, env=cls.environment(root), capture_output=True, text=True,
-                                    timeout=600)
+            result = subprocess.run([sys.executable, "-m", *cls.command(tree, selected, side)],
+                                    cwd=tree, env=cls.environment(root, tree), capture_output=True,
+                                    text=True, timeout=600)
         if result.returncode not in (0, 1):
             raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
-        return Counter(match[1] for match in cls.finding.finditer(result.stdout + result.stderr))
+        # A checker reports each file under the path it was given, inside the tree or relative to
+        # it; mypy also reports the modules it follows outside the tree, which are not measured.
+        output = result.stdout + result.stderr
+        reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
+        return side, Counter(path.relative_to(tree).as_posix()
+                             for path in reported if path.is_relative_to(tree))
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        def snapshot(ref: str) -> dict[str, int]:
-            found = cls.findings(repo, ref, head, root, changed)
-            return {f"{cls.__name__}:{path}": found[path] for path in sorted(changed)}
-        return snapshot(base), snapshot(head)
+    def parts(cls, repo: Path, base: str, head: str, changed: set[str],
+              root: str) -> tuple[Callable[[], object], ...]:
+        return tuple(partial(cls.findings, repo, ref, head, root, batch, side)
+                     for side, ref in zip(Side, (base, head), strict=True)
+                     for batch in cls.batches(sorted(changed & python_paths(repo, ref, root)))
+                     if batch)
+
+    @classmethod
+    def combine(cls, results: list, repo: Path, base: str, head: str, changed: set[str],
+                root: str) -> tuple[dict[str, int], dict[str, int]]:
+        found: dict[Side, Counter[str]] = {side: Counter() for side in Side}
+        for side, counted in results:
+            found[side] += counted
+        before, after = ({f"{cls.__name__}:{path}": found[side][path] for path in sorted(changed)}
+                         for side in Side)
+        return before, after
 
 
 class Unformatted(CheckedRevision):
@@ -211,7 +342,19 @@ class Unformatted(CheckedRevision):
     finding = re.compile(r"^would reformat (.+)$", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str]) -> list[str]:
+    def batches(selected: list[str]) -> list[list[str]]:
+        # One process per file runs the files at once without Black starting its own workers.
+        return [[path] for path in selected]
+
+    @staticmethod
+    def extract(repo: Path, ref: str, scratch: Path, selected: list[str]) -> None:
+        # Black reads only the file and the configuration.
+        for path, source in GitMeasure.sources(repo, ref, set(selected)):
+            (scratch / path).parent.mkdir(parents=True, exist_ok=True)
+            (scratch / path).write_bytes(source)
+
+    @staticmethod
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         return ["black", "--check", *selected]
 
 
@@ -221,29 +364,33 @@ class LintFindings(CheckedRevision):
     finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str]) -> list[str]:
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
 
 
 class TypeErrors(CheckedRevision):
-    """Mypy errors per changed file. Mypy reads the whole root, so a file's count can change when
-    another file does."""
+    """Mypy errors per changed file. Mypy checks the changed files and every module they import,
+    so a file's count can change when a module it imports does."""
 
     finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
 
     @staticmethod
-    def command(root: str, selected: list[str]) -> list[str]:
-        # Mypy validates each cached module against its file, so the analysis of installed packages
-        # carries from one revision to the next while the checked tree is read fresh.
-        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy"
-        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary", root]
+    def command(tree: Path, selected: list[str], side: Side) -> list[str]:
+        # Mypy reuses a cached module whose path, size and whole-second mtime match its file, and
+        # hashes the file otherwise. Every extracted tree has a new path, so each module is checked
+        # against its content while unchanged analysis carries from one run to the next. Each side
+        # keeps its own cache: the two revisions run at once, and a base usually matches the
+        # previous run's base.
+        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy" / side.value
+        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary",
+                *(str(tree / path) for path in selected)]
 
     @staticmethod
-    def environment(root: str) -> dict[str, str]:
+    def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed.
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
-        paths = dict.fromkeys((Path(root).parts[0], "src"))
+        paths = dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src"))
         return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
@@ -284,6 +431,13 @@ class CleanChangedLines(OccurrenceMeasure):
     @staticmethod
     def site_lines(node: ast.AST) -> range:
         return range(node.lineno, node.end_lineno + 1)
+
+    @staticmethod
+    def introduced(repo: Path, base: str, head: str, path: str) -> dict[str, list[int]]:
+        """Each strict measure's sites on the path's changed lines."""
+        source = ChangedSource.read(repo, base, head, path)
+        return {f"{measure.__name__}:{path}": measure.changed_sites(source)
+                for measure in Measure.members_with(CleanChangedLines)}
 
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
@@ -504,6 +658,14 @@ class IdentitySite:
 
 
 @dataclass(frozen=True)
+class ModuleDeclarations:
+    """One module's top-level multi-word function names and its classes with their base names."""
+
+    functions: tuple[str, ...]
+    classes: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
 class DeclaredSpellings:
     """Every spelling a revision's production Python declares as a name.
 
@@ -544,26 +706,35 @@ class DeclaredSpellings:
         return ".".join(parts[:-1] if module.name == Path(DeclaredSpellings.package_marker).stem else parts)
 
     @classmethod
-    def read(cls, sources: list[tuple[str, bytes]]) -> DeclaredSpellings:
+    def declarations(cls, path: str, source: bytes) -> ModuleDeclarations:
+        tree = ast.parse(source, path)
+        functions = (node.name for node in tree.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+        classes = (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
+        return ModuleDeclarations(
+            tuple(filter(cls.multiword, functions)),
+            tuple((node.name, tuple(base.id if isinstance(base, ast.Name) else base.attr
+                                    for base in node.bases
+                                    if isinstance(base, (ast.Name, ast.Attribute))))
+                  for node in classes))
+
+    @classmethod
+    def read(cls, modules: dict[str, ModuleDeclarations]) -> DeclaredSpellings:
+        """The spellings declared by the modules, taken in the dictionary's order."""
         names: dict[str, str] = {}
         bases: dict[str, set[str]] = {}
-        packages = {Path(path).parent for path, _ in sources if Path(path).name == cls.package_marker}
-        for path, source in sources:
+        packages = {Path(path).parent for path in modules if Path(path).name == cls.package_marker}
+        for path, declared in modules.items():
             module = Path(path).with_suffix("")
             if cls.multiword(module.stem):
                 names[module.stem] = f"module {path}"
             if dotted := cls.dotted_name(module, packages):
                 names[dotted] = f"module {path}"
-            tree = ast.parse(source, path)
-            for node in tree.body:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and cls.multiword(node.name):
-                    names.setdefault(node.name, f"function {path}:{node.name}")
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef):
-                    names[node.name] = f"class {path}:{node.name}"
-                    bases.setdefault(node.name, set()).update(
-                        base.id if isinstance(base, ast.Name) else base.attr
-                        for base in node.bases if isinstance(base, (ast.Name, ast.Attribute)))
+            for function in declared.functions:
+                names.setdefault(function, f"function {path}:{function}")
+            for name, parents in declared.classes:
+                names[name] = f"class {path}:{name}"
+                bases.setdefault(name, set()).update(parents)
         enums = set(cls.boundary_enums)
         while grown := {name for name, parents in bases.items() if parents & enums} - enums:
             enums |= grown
@@ -653,14 +824,15 @@ class PytestTestPaths:
         return tuple(declared.get(cls.key, ()))
 
 
-def production_paths(repo: Path, ref: str) -> set[str]:
+@cache
+def production_paths(repo: Path, ref: str) -> frozenset[str]:
     """Every Python path the revision tracks outside its declared test tree."""
     tests = PytestTestPaths.at(repo, ref)
-    return {path for path in python_paths(repo, ref, ".")
-            if not any(Path(path).is_relative_to(tree) for tree in tests)}
+    return frozenset(path for path in python_paths(repo, ref, ".")
+                     if not any(Path(path).is_relative_to(tree) for tree in tests))
 
 
-class StringIdentity(Measure):
+class StringIdentity(InventoryMeasure[ModuleDeclarations]):
     """Literal strings standing for something the code declares, per production file.
 
     A class, module or function named by its spelling, a kind decided by comparing spellings,
@@ -671,16 +843,20 @@ class StringIdentity(Measure):
     """
 
     @classmethod
-    def counts(cls, repo: Path, ref: str, selected: set[str]) -> dict[str, int]:
-        sources = GitMeasure.sources(repo, ref, production_paths(repo, ref))
-        spellings = DeclaredSpellings.read(sources)
-        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
-                for path, source in sources if path in selected}
+    def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
+        return production_paths(repo, ref)
+
+    reading = DeclaredSpellings.declarations
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        touched = touched_paths(repo, base, head)
-        return PerFileMeasure.align(cls.counts(repo, base, touched), cls.counts(repo, head, touched))
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, ModuleDeclarations], root: str) -> dict[str, int]:
+        spellings = DeclaredSpellings.read(readings)
+        selected = readings.keys() & touched_paths(repo, base, head)
+        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
+                for path, source in GitMeasure.sources(repo, ref, selected)}
+
+    align = PerFileMeasure.align
 
 
 class ForeignFieldSpellings(PerFileOccurrenceMeasure):
@@ -961,19 +1137,25 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
         return cls.count_module(ast.parse(source, filename))
 
 
-class GodClassExcess(GitMeasure):
+class GodClassExcess(InventoryMeasure[dict[str, int]]):
     """Independent class lines beyond 500, including newly introduced classes."""
 
     threshold = 500
 
     @classmethod
-    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+    def inventory(cls, repo: Path, ref: str, root: str) -> frozenset[str]:
         # Complete inventories distinguish a moved declaration from another
         # same-named class in an unchanged module.
-        return present
+        return python_paths(repo, ref, root)
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+    def measured(cls, repo: Path, ref: str, base: str, head: str,
+                 readings: dict[str, dict[str, int]], root: str) -> dict[str, int]:
+        return {identity: value
+                for values in readings.values() for identity, value in values.items()}
+
+    @classmethod
+    def reading(cls, path: str, source: bytes) -> dict[str, int]:
         values = {}
         def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
             match node:
@@ -985,8 +1167,7 @@ class GodClassExcess(GitMeasure):
                     scope = (*scope, name)
             for child in ast.iter_child_nodes(node):
                 visit(child, path, scope)
-        for path, source in sources:
-            visit(ast.parse(source, path), path, ())
+        visit(ast.parse(source, path), path, ())
         return values
 
     @classmethod
@@ -1370,7 +1551,7 @@ class AnyAnnotation(PerFileMeasure):
 
 
 
-class EditedCarry(Measure):
+class EditedCarry(ChangeMeasure):
     """Carry steps edited, renamed, or added under a deleted step's name.
 
     A bus that already ran a step never runs its edit, and a bus that had not
@@ -1394,7 +1575,7 @@ class EditedCarry(Measure):
         return ast.dump(tree, include_attributes=False)
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
                           base, head, "--", str(STEPS)).decode().split("\0")[:-1])
         @cache
@@ -1418,7 +1599,7 @@ class EditedCarry(Measure):
                 edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
         return {cls.__name__: 0}, {cls.__name__: edited}
 
-class UncarriedRecordFormat(Measure):
+class UncarriedRecordFormat(ChangeMeasure):
     """A stored record's format changed without its version, or its version without a carry.
 
     Files in the old format stay on disk, so a change to a versioned record's stored form
@@ -1463,12 +1644,13 @@ class UncarriedRecordFormat(Measure):
                 WheelStamp(revision(repo, ref)).write(stamp)
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
-                                     *modules], cwd=scratch, env=cls.environment(root),
+                                     *modules], cwd=scratch,
+                                    env=cls.environment(root, Path(scratch)),
                                     capture_output=True, text=True, check=True, timeout=300)
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def counted(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         added = git(repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS))
         carried = any(Path(path).stem.startswith("carry_") and path.endswith(".py")
                       for path in added.decode().split("\0"))
@@ -1488,21 +1670,24 @@ def revision(repo: Path, ref: str) -> str:
     )
 
 
-def python_paths(repo: Path, ref: str, root: str) -> set[str]:
-    return {
+# Listings are read once per process: the measures pass commit identities, whose trees never change.
+@cache
+def python_paths(repo: Path, ref: str, root: str) -> frozenset[str]:
+    return frozenset(
         path.decode()
         for path in git(repo, "ls-tree", "-rz", "--name-only", ref, "--", root).split(b"\0")
         if path.endswith(b".py")
-    }
+    )
 
 
-def touched_paths(repo: Path, base: str, head: str) -> set[str]:
+@cache
+def touched_paths(repo: Path, base: str, head: str) -> frozenset[str]:
     # Disable rename detection: both sides of a move enter the union, including
     # moves into/out of the declared production source boundary.
-    return {
+    return frozenset(
         path.decode()
         for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
-    }
+    )
 
 
 @dataclass(frozen=True)
@@ -1532,23 +1717,45 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         raise ValueError("--root must be a repository-relative source directory")
     root = source_root.as_posix().rstrip("/") + "/"
     base, head = revision(repo, base), revision(repo, head)
-    paths = touched_paths(repo, base, head) & (python_paths(repo, base, root) | python_paths(repo, head, root))
+    touched = touched_paths(repo, base, head)
+    paths = set(touched & (python_paths(repo, base, root) | python_paths(repo, head, root)))
+    before: dict[str, int] = {}
+    after: dict[str, int] = {}
+    introduced: dict[str, int] = {}
+    introduced_lines: dict[str, list[int]] = {}
+    # Every measure reads production Python paths only, so with none touched each would
+    # report no change.
+    if not touched & (production_paths(repo, base) | production_paths(repo, head)):
+        return Comparison(root, base, head, (), before, after, introduced, introduced_lines)
 
-    before, after = {}, {}
-    for measure in Measure.members_with(Measure):
-        measured_base, measured_head = measure.compare(repo, base, head, paths, root)
-        before.update(measured_base)
-        after.update(measured_head)
-    introduced, introduced_lines = {}, {}
-    strict_measures = Measure.members_with(CleanChangedLines)
-    for path in sorted(paths & python_paths(repo, head, root)):
-        source = ChangedSource.read(repo, base, head, path)
-        for measure in strict_measures:
-            identity = f"{measure.__name__}:{path}"
-            sites = measure.changed_sites(source)
-            introduced[identity] = len(sites)
-            if sites:
-                introduced_lines[identity] = sorted(sites)
+    measures = Measure.members_with(Measure)
+    # Forked workers start from this already-imported module instead of importing it again.
+    with ProcessPoolExecutor(mp_context=multiprocessing.get_context("fork")) as pool:
+        parts = {measure: [pool.submit(part)
+                           for part in measure.parts(repo, base, head, paths, root)]
+                 for measure in measures}
+        sites = [pool.submit(CleanChangedLines.introduced, repo, base, head, path)
+                 for path in sorted(paths & python_paths(repo, head, root))]
+        # Each measure combines as soon as its parts finish, while slower checkers still run.
+        measured = {}
+        owners = {future: measure for measure, futures in parts.items() for future in futures}
+        for measure in measures:
+            if not parts[measure]:
+                measured[measure] = measure.combine([], repo, base, head, paths, root)
+        for future in as_completed(owners):
+            measure = owners[future]
+            if measure not in measured and all(part.done() for part in parts[measure]):
+                measured[measure] = measure.combine([part.result() for part in parts[measure]],
+                                                    repo, base, head, paths, root)
+        for measure in measures:
+            measured_base, measured_head = measured[measure]
+            before.update(measured_base)
+            after.update(measured_head)
+        for path_sites in sites:
+            for identity, found in path_sites.result().items():
+                introduced[identity] = len(found)
+                if found:
+                    introduced_lines[identity] = sorted(found)
     return Comparison(root, base, head, tuple(sorted(paths)), before, after,
                       introduced, introduced_lines)
 
