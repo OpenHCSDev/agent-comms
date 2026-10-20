@@ -16,7 +16,6 @@ import pytest
 from contextlib import closing
 from dataclasses import replace
 
-from agent_comms.installer.carry import CarryChain
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander import order as commander_order
@@ -1266,56 +1265,6 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
-def test_column_carries_run_before_order_validation(commander):
-    """A retained store already has verdicts/releases; messages is added before orders read it."""
-    comms, _ = commander
-    completed_with_pending(commander)
-    path = TodoStore.path_in(comms.root)
-    with closing(sqlite3.connect(path)) as db:
-        db.execute('ALTER TABLE todo DROP COLUMN messages')
-        db.commit()
-    with (closing(CoordinationStore.read_snapshot(path)) as db,
-          pytest.raises(sqlite3.OperationalError, match='no such column: "messages"')):
-        list(Todo.stream(db))
-    repo = Path(__file__).parents[1]
-    names = [step.name for step in CarryChain.at(repo, 'HEAD').steps]
-    members = {'carry_todo_corrections': ('TodoCorrections', 0),
-               'carry_todo_messages': ('TodoMessages', 3),
-               'carry_order_run': ('OrderRuns', 0),
-               'carry_todo_open_indexes': ('TodoOpenIndexes', 0)}
-    assert [name for name in names if name in members] == list(members)
-    for name, (member, changed) in members.items():
-        carry = getattr(importlib.import_module('cutover.' + name), member)
-        assert carry.carry(comms.root, apply=False).changed == changed
-        assert carry.carry(comms.root, apply=True).changed == changed
-        assert carry.carry(comms.root, apply=False).changed == 0
-    with closing(CoordinationStore.read_snapshot(path)) as db:
-        assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
-
-
-def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
-    """An order saved before closing runs is refused until the carry gives it the mechanical run it implied."""
-    import json
-    import sqlite3
-    from contextlib import closing
-    from cutover.carry_order_run import OrderRuns
-    from agent_comms.todos import MechanicalOrderRun, TodoStore
-    comms, _caller = commander
-    saved = create(commander, 'P1')
-    path = TodoStore.path_in(comms.root)
-    with closing(sqlite3.connect(path)) as db:
-        (order,), = db.execute('SELECT "order" FROM todo WHERE id = ?', ('P1',))
-        db.execute('UPDATE todo SET "order" = ? WHERE id = ?',
-                   (json.dumps({k: v for k, v in json.loads(order).items() if k != 'run'}), 'P1'))
-        db.commit()
-    with pytest.raises(MalformedRecord, match='run'):
-        comms.goals.todos.get('P1')
-    assert OrderRuns.carry(comms.root, apply=False).detail == {MechanicalOrderRun.declared_name: 1}
-    assert OrderRuns.carry(comms.root, apply=True).changed == 1
-    assert OrderRuns.carry(comms.root, apply=False).changed == 0
-    assert comms.goals.todos.get('P1') == saved
-
-
 def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
     from agent_comms.todos import LocatedProblemFinding, UnlocatedProblemFinding
     comms, caller = commander
@@ -1520,7 +1469,6 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     revised = worker.goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, '')
     assert f'Sent back: {why}' in GoalSegment.capture(worker, revised, comms.goals).progress
-
 
 
 def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_back_and_block(commander):

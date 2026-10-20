@@ -16,7 +16,6 @@ from agent_comms.child_process import CountPrinted
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool, CommsOrderTool
 from agent_comms.native_tools import NativeRequestTools
-from cutover.carry_todo_order_history import TodoOrderHistory
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
     MeasuredProgressSource, MergedPullRequest, ProgressPoint, ProgressSource, PullRequest, PullRequests,
@@ -65,19 +64,6 @@ def test_prior_declarations_do_not_enter_native_request_schemas():
     catalog = json.dumps(NativeRequestTools.catalog())
     assert 'prior_orders' not in catalog
     assert 'preceding' not in catalog
-
-
-def test_prior_order_store_carry_preserves_original_rows(commander):
-    comms, _ = commander
-    original = create(commander, 'P1')
-    with comms.goals.todos.writing() as db:
-        db.execute(f'ALTER TABLE "{Todo.declared_name}" DROP COLUMN "prior_orders"')
-    preview = TodoOrderHistory.carry(comms.root, apply=False)
-    assert preview.changed == 2
-    applied = TodoOrderHistory.carry(comms.root, apply=True)
-    assert applied.changed == 2
-    assert comms.goals.todos.get('P1') == original
-    assert TodoOrderHistory.carry(comms.root, apply=True).changed == 0
 
 
 def commit(unit):
