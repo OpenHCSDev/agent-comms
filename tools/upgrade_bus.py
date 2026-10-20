@@ -42,7 +42,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated, TextIO, cast
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
@@ -67,7 +67,7 @@ import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity run
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import FieldCodec, Id128Text
+from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
@@ -284,7 +284,8 @@ class Stack:
         tree = revisions.tree(step.family.source_revision(step))
         worker = (
             "import importlib,json,sys; from pathlib import Path; from dataclasses import asdict; "
-            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); root=Path(sys.argv[3]); "
+            "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
+            "root=Path(sys.argv[3]); "
             f"print(json.dumps({expression}))"
         )
         output = run(self.python, "-c", worker, f"cutover.{step.name}", step.declaration,
@@ -295,8 +296,8 @@ class Stack:
     def backup_files(self, root: Path, pending: tuple[Step, ...],
                      revisions: Revisions) -> tuple[Path, ...]:
         return tuple(sorted({
-            Path(path) for step in pending for path in FieldCodec.decode(
-                tuple[str, ...], FieldCodec.parse(self.call_step(
+            path for step in pending for path in FieldCodec.decode(
+                tuple[Annotated[Path, PathText], ...], FieldCodec.parse(self.call_step(
                     step, root, revisions,
                     f"[str(path) for path in step.{Carry.backup_files.__name__}(root)]")))
         }))
