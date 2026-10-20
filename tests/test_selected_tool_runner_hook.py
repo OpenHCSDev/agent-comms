@@ -63,18 +63,17 @@ def nominal_broker_stub(monkeypatch):
 
 
 def test_owner_configuration_requires_nominal_intent_and_private_binding(
-    private_directory, nominal_broker_stub
+    private_directory, private_comms, nominal_broker_stub
 ):
     intent_type, _mode_type, _bound = nominal_broker_stub
-    wire = private_directory / "wire"
+    wire = private_directory / "shared"
     wire.mkdir(mode=0o700)
     comms = Comms(wire)
     with pytest.raises(TypeError, match="nominal owner intent"):
         CommsAgent(comms, private_selected_tool_intent=object())
     with pytest.raises(PublicationActivationBlocked, match="private bus root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
-    comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(comms, private_selected_tool_intent=intent_type())
+    agent = CommsAgent(private_comms, private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 
 

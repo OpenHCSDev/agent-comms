@@ -1,7 +1,4 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_package import pinned_native_package
-
 import asyncio
 import json
 from pathlib import Path
@@ -17,7 +14,6 @@ from agent_comms.acp_failure import (
     RequestFailure,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 
 RATE_LIMIT = "Too many requests for this provider"
@@ -53,7 +49,7 @@ class RateLimitedProvider:
 
 @pytest.mark.asyncio
 async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
-    wired, tmp_path, monkeypatch,
+    private_comms, tmp_path, monkeypatch,
 ):
     provider = RateLimitedProvider()
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
@@ -80,11 +76,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "limit-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
+    agent = canonical_agent(private_comms, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     updates = []
 
     class Client:
@@ -118,7 +110,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
         assert provider.posts == 4
         assert not any(getattr(getattr(update, "content", None), "text", None)
                        for update in updates)
-        saved = Path(wired.registry.require("project").session_file)
+        saved = Path(private_comms.registry.require("project").session_file)
         journal = [json.loads(line) for line in saved.read_text().splitlines()]
         users = [row for row in journal if row.get("type") == "message"
                  and row["message"]["role"] == "user"]

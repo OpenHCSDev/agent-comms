@@ -230,9 +230,9 @@ def test_new_policy_declaration_uses_full_and_checked_record_readers(tmp_path):
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
         case.bus.log.path.write_text(json.dumps(raw) + "\n")
+        install_private_bus_checkpoint(case.bus.log)
         public = read_history(case.comms)
         assert len(public) == 1
-        install_private_bus_checkpoint(case.bus.log)
         with case.bus.log.checked_read() as source:
             marker = case.bus.log.private_marker_unlocked()
             full = tuple(case.bus.log.verified_records_unlocked(marker))
@@ -265,7 +265,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
         case.bus.log.path.write_text(raw)
         before = case.bus.log.path.read_bytes()
         with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
-            read_history(case.comms)
+            list(case.bus.log.verified_records_unlocked(marker))
         assert type(raised.value.__cause__) is MalformedRecord
         assert 'Duplicate JSON field' in str(raised.value.__cause__)
         assert case.bus.log.path.read_bytes() == before

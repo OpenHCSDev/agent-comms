@@ -3,9 +3,6 @@
 The verified native CLI, HTTP provider, Core turn/application, input dispositions
 and saved journal are real. Only HTTP response contents are controlled.
 """
-from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.native_package import pinned_native_package
-
 import asyncio
 import json
 from pathlib import Path
@@ -17,7 +14,6 @@ import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, RequestFailure
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 
@@ -26,7 +22,7 @@ from delivery_owner_fixture import canonical_agent
 @pytest.mark.parametrize("notification_fails", [False, True])
 @pytest.mark.parametrize("refuse_before_terminal", [False, True])
 async def test_actual_native_outcome_classifies_once_and_next_input_is_independent(
-    wired, tmp_path, monkeypatch, notification_fails, refuse_before_terminal,
+    private_comms, tmp_path, monkeypatch, notification_fails, refuse_before_terminal,
 ):
     provider = LoopbackProvider(status=200, text="saved isolated history",
                                 error_message="insufficient_quota")
@@ -52,11 +48,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "outcome-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
-    package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
+    agent = canonical_agent(private_comms, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     updates = []
     attempted = []
 
@@ -82,7 +74,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
             await agent.turns.run_agent_turn("project", "project", "Seed this new isolated session",
                                             original_owner_input=True)
-            saved = Path(wired.registry.require("project").session_file)
+            saved = Path(private_comms.registry.require("project").session_file)
             original = saved.read_bytes()
             # This existing HTTP fixture supports 400/503 errors. The shared
             # classifier's explicit quota exclusion overrides server-error text.
