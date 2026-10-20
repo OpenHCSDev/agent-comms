@@ -80,7 +80,7 @@ def wire(
 
 
 @contextmanager
-def client_wire(root: CommsRoute | Path | None) -> Iterator[Comms]:
+def client_wire(root: CommsRoute | Path) -> Iterator[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Only the UI yields between index units.
