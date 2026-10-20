@@ -24,10 +24,11 @@ def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, argument
     record=TimedRecord(position=0,uuid='record',timestamp='2026-10-17T00:00:00+00:00')
     tool=ToolUse(id='call',name=name,input=arguments)
     active,=tool.updates(record,session)
-    call,source=session.tools['call']
-    assert source is record
+    draft=session.tools['call']
+    call=draft.call
+    assert draft.events == (call.started(record.position, record.timestamp),)
     assert call.name==native and call.arguments==expected and call.title==title
-    assert active.detail == title
+    assert active.phase.summary == title
     result=ToolResult(tool_use_id='call',content=[{'type':'text','text':'done'}])
     completed,_=result.updates(record,session)
     started,ended=completed.events

@@ -3,12 +3,13 @@ from contextlib import nullcontext
 
 import pytest
 
-from agent_comms.turn_phase import ModelWaitPhase
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.cli_bridges.claude_protocol import (
-    CatchUp, ClaudeSession, KnownTurn, Live, RedactedThinking, TimedRecord,
-    ToolUse, UserRecord,
+    CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, RedactedThinking,
+    TimedRecord, ToolUse, UserRecord,
 )
-from agent_comms.runtime_updates import ActiveItem, FinishedItem
+from agent_comms.recorded_time import EventTime
+from agent_comms.runtime_updates import ActiveItem, FinishedItem, StartedItem
 from agent_comms.tool_calls import ToolCall
 from agent_comms.transcript_events import AssistantTranscript
 
@@ -21,7 +22,9 @@ from agent_comms.transcript_events import AssistantTranscript
 def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase, expectation):
     session = ClaudeSession(phase=phase())
     record = TimedRecord(uuid='record', timestamp='2026-10-18T00:00:00Z', position=17)
-    session.started(ToolCall('call', 'read', {'path': 'a.py'}), record)
+    call = ToolCall('call', 'read', {'path': 'a.py'})
+    session.tools['call'] = ClaudeToolDraft(
+        EventTime.capture(record.timestamp), (call.started(record.position, record.timestamp),), call)
     actions = {
         'finished': lambda: session.finished('item', (AssistantTranscript('done', timestamp=record.timestamp, position=17),)),
         'result': lambda: session.tool_result('call', 'done', True, record),
@@ -38,8 +41,10 @@ def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
                         promptId='turn-id', message={'content': []})
     prompt.updates(session)
     assert session.turn == KnownTurn('turn-id')
-    call = ToolCall('call', 'read', {'path': 'a.py'})
-    session.started(call, prompt)
+    (started,) = ToolUse(id='call', name='Read', input={'file_path': 'a.py'}).updates(prompt, session)
+    assert isinstance(started, StartedItem)
+    assert started.phase == ToolRunningPhase(tools=(('call', started.accumulator.call.title),))
+    call = started.accumulator.call
     result = TimedRecord(uuid='result', timestamp='2026-10-18T00:00:01Z', position=18)
     completed, active = session.tool_result('call', 'done', True, result)
     assert completed == FinishedItem('turn-id', 'call', (

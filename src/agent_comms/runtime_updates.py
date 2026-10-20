@@ -19,7 +19,6 @@ from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
     LiveTextTranscript,
-    NoticeTranscript,
     ToolStartTranscript,
     TranscriptEvent,
 )
@@ -40,7 +39,6 @@ class DraftAccumulator:
         return replacement
 
     def started(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
-        self._start = update
         return (
             *self.activity(ActiveItem(update.turn_id, update.item_id, update.phase)),
             *self.snapshot(update.turn_id, update.item_id),
@@ -49,14 +47,8 @@ class DraftAccumulator:
     def activity(self, update: ActiveItem) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
-    @property
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(
-            self._start.phase.summary, position=self._start.item_id,
-            timestamp=self.started_at.recorded_at('A draft notice')),)
-
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
-        return (DraftItem(turn_id, item_id, self),)
+        return ()
 
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         raise ValueError("Received a text delta for a non-text item")
@@ -88,6 +80,9 @@ class ToolDraft(DraftAccumulator):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.prefix
 
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
+
 
 @dataclass
 class TextDraft(DraftAccumulator):
@@ -111,6 +106,9 @@ class TextDraft(DraftAccumulator):
     def append(self, update: AppendDraftItem) -> tuple[RuntimeUpdate, ...]:
         self.sections.setdefault(update.section, []).append(update.text)
         return self.snapshot(update.turn_id, update.item_id)
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
