@@ -716,8 +716,7 @@ def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_sc
     tools.mkdir()
     measure = tools / 'debt_ratchet.py'
     measure.write_text('# Existing measure owner\n')
-    monkeypatch.chdir(repo)
-    edit = 'Count the measure at tools/debt_ratchet.py:1.'
+    edit = f'Count the measure at {measure}:1.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
         problem(script, order_body(repo, edit=edit))
     problem(script, order_body(repo, edit=edit, extra='Ratchet with --root tools and with --root src, each as its own command.\n'))
