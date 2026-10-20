@@ -2542,9 +2542,11 @@ class TodoStore(TypedStore):
     def writer_connection(
         self, *, check_same_thread: bool = True
     ) -> Iterator[sqlite3.Connection]:
-        with MaintenanceBarrier(self.root / "registry.json").allow_input():
-            with super().writer_connection(check_same_thread=check_same_thread) as connection:
-                yield connection
+        with (
+            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            super().writer_connection(check_same_thread=check_same_thread) as connection,
+        ):
+            yield connection
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)

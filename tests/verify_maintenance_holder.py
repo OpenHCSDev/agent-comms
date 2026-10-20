@@ -25,7 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import DeadHolderReleasedPhase, MaintenanceState
 from upgrade_bus import Revisions, Stack, copy_bus, detached_live, live
 
-SCRATCH = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p281-live-proof-v4")
+SCRATCH = Path("/home/ts/.cache/agent-scratch/pi-worker-cpu/p281/holder-death")
 BUS = SCRATCH / "copy"
 
 
@@ -68,7 +68,7 @@ def live_worker() -> None:
     # steps need no new revision worktree. The real busy owner holds its drain.
     head = subprocess.check_output(('git', 'rev-parse', 'HEAD'), cwd=ROOT, text=True).strip()
     live(ROOT, BUS, head, head, (), STACK, STACK,
-         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-install-gate')
+         Revisions(ROOT, SCRATCH / 'unused-revisions'), 'pi-worker-cpu')
 
 
 def caller() -> None:

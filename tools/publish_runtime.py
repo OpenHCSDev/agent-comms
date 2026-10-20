@@ -42,8 +42,8 @@ from agent_comms.owner_lifecycle import OwnerRestartResult, OwnerRestartSelectio
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
 from agent_comms.store_files import _atomic_write_text, _store_lock
 
-from .cutover.backup import StoreBackup
-from .cutover.carry import PendingConversion, PreparedCarries
+from cutover.backup import StoreBackup
+from cutover.carry import PendingConversion, PreparedCarries
 
 
 class PublicationIntent(SubclassUnion, affix=''):
@@ -243,10 +243,9 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
                                      stopped.handoff, self.maintenance_hold,
                                      self.carries.checkout)
         result = subprocess.run([
-            self.runtime / 'bin/python', '-I', '-B', '-c',
-            'import sys; sys.path.insert(0, sys.argv.pop(1)); '
-            'from tools.publish_runtime import main; main()',
-            str(request.checkout), '--complete-stopped',
+            self.runtime / 'bin/python', '-E', '-s', '-B',
+            str(request.checkout / Path(__file__).parent.name / Path(__file__).name),
+            '--complete-stopped',
             str(stopped.wire_descriptor), str(self.route_descriptor),
         ], input=json.dumps(FieldCodec.encode(request)), text=True, stdout=subprocess.PIPE,
             pass_fds=(stopped.wire_descriptor, self.route_descriptor), check=True)

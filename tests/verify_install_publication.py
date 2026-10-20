@@ -18,14 +18,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = Path("/home/ts/code/projects/agent-comms")
-sys.path[:0] = [str(MAIN / "src"), str(ROOT), str(ROOT / "tools")]
+sys.path[:0] = [str(MAIN / "src"), str(ROOT / "tools")]
 
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.field_codec import FieldCodec
 from install_gate import ExternalRecord
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.skill import SkillText
-from tools.upgrade_bus import Stack
+from upgrade_bus import Stack
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class HookResult:
 
 
 def main() -> None:
-    home = Path("/home/ts/.cache/agent-scratch/pi-install-gate/p275-publication-proof-final")
+    home = Path("/home/ts/.cache/agent-scratch/pi-worker-cpu/p281/publication-proof")
     home.mkdir(mode=0o700)
     settings = home / ".claude/settings.json"
     settings.parent.mkdir()

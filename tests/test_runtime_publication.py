@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.active_route import LocalRoute
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from tools.publish_runtime import RuntimePublication
+from publish_runtime import RuntimePublication
 
 
 @pytest.mark.parametrize("command", ["exit 17", "echo broken >&2; exit 0"])
