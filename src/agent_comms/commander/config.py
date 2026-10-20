@@ -61,6 +61,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_skill() -> Path:
         return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
 
+    @staticmethod
+    def packaged_indictment() -> Path:
+        return Path(str(files('agent_comms.commander') / 'indictment.md'))
+
     @classmethod
     def read(cls, path: Path | str) -> Self:
         return cls.model_validate_json(Path(path).read_text())
