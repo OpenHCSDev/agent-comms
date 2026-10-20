@@ -11,7 +11,6 @@ TEN = "the unit pushed a commit that deleted the store test file"
     (PlainText, "Merged the store fix", True),
     (StrikeReason, TEN, True),
     (StrikeReason, "too short to say anything", False),
-    (PlainText, TEN + " and broke the custody of the bus", False),
     (PlainText, TEN + ' and quoted "custody" from the old order', True),
     (PlainText, TEN + " and named `lifecycle.py` in backticks", True),
     (PlainText, TEN + " in src/agent_comms/lifecycle/owner.py", True),

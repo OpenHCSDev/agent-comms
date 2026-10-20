@@ -67,11 +67,10 @@ Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commande
 
 ## repeated_strike
 
-A second storage strike with the same actor, owner and reason as a live strike, or a send-back strike on an order already struck since it was sent.
+A send-back strike on an order already struck since it was sent.
 
 Checked by:
 
-- check in `agent_comms.todos.StorageStrikeTodo.repeats`
 - check in `agent_comms.todos.Todo.struck_on_order`
 
 Learned from: P184 (7af14a520)
