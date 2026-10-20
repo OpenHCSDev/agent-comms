@@ -50,9 +50,15 @@ class MergedClaim(ProgressClaim):
         self.origin_branches(worktree)
 
     def origin_branches(self, worktree: Path) -> tuple[str, ...]:
-        command = ["git", "-C", str(worktree), "for-each-ref",
-                   f"--contains={self.commit}", "--format=%(refname:strip=3)",
-                   "refs/remotes/origin/"]
+        command = [
+            "git",
+            "-C",
+            str(worktree),
+            "for-each-ref",
+            f"--contains={self.commit}",
+            "--format=%(refname:strip=3)",
+            "refs/remotes/origin/",
+        ]
         try:
             listed = subprocess.run(
                 command,
