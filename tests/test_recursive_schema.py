@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
+
+import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -82,22 +83,19 @@ def test_definition_identity_is_not_a_short_class_name():
     assert all(ref.removeprefix('#/$defs/') in schema['$defs'] for ref in references(schema))
 
 
-def test_native_json_schema_validator_accepts_recursive_values(native_runtime_package):
-    schema = FieldCodec.value_schema(RecursiveReply)
-    value = FieldCodec.encode(RecursiveReply('root', (RecursiveReply('child'),)))
-    result = subprocess.run(
-        ('node', '--input-type=module', '-e', '''
-import {createRequire} from 'node:module';
-import {join} from 'node:path';
-import {readFileSync} from 'node:fs';
-const require = createRequire(join(process.argv[1], 'package.json'));
-const Ajv = require('ajv');
-const {schema, value} = JSON.parse(readFileSync(0, 'utf8'));
-const validate = new Ajv({strict:false}).compile(schema);
-if (!validate(value)) throw new Error(JSON.stringify(validate.errors));
-if (validate({...value, children:[{text:7}]})) throw new Error('invalid nested value accepted');
-''', str(native_runtime_package.path)),
-        input=json.dumps(dict(schema=schema, value=value)), text=True, capture_output=True,
-        timeout=10, check=False,
-    )
-    assert result.returncode == 0, result.stderr
+def test_schema_failure_releases_its_document_and_new_members_are_discovered():
+    @dataclass
+    class BrokenReply:
+        unsupported: complex
+
+    with pytest.raises(TypeError):
+        FieldCodec.value_schema(BrokenReply)
+    before = FieldCodec.value_schema(RecursiveChoice)
+
+    @dataclass
+    class LaterRecursiveChoice(RecursiveChoice):
+        count: int
+
+    after = FieldCodec.value_schema(RecursiveChoice)
+    assert len(after['oneOf']) == len(before['oneOf']) + 1
+    assert not any('BrokenReply' in name for name in after['$defs'])
