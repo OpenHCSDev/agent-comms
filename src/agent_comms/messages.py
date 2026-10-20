@@ -10,14 +10,21 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, Type, cast
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import (
+    FieldCodec,
+    InlineRecord,
+    MalformedRecord,
+    NullMember,
+    compile_decoder,
+    projected,
+)
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
@@ -45,8 +52,8 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     conversation_message: ClassVar[bool] = True
 
     @classmethod
-    def message_record(cls) -> type[Message]:
-        return Message
+    def decode_message(cls, data: Mapping) -> Message:
+        return FieldCodec.decode(Message, data)
 
     @classmethod
     def require_sendable(cls) -> None:
@@ -68,8 +75,8 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     conversation_message = False
 
     @classmethod
-    def message_record(cls) -> type[Message]:
-        return ClaimMessage
+    def decode_message(cls, data: Mapping) -> Message:
+        return FieldCodec.decode(ClaimMessage, data)
 
     @classmethod
     def claimed(cls, owner: Thread) -> Message:
@@ -82,12 +89,15 @@ class ClaimHistoryKind(ClaimNoticeKind, declared_name="claim-history"):
     """A copied claim notice has display facts, not a live claim envelope."""
 
     @classmethod
-    def message_record(cls) -> type[Message]:
-        return Message
+    def decode_message(cls, data: Mapping) -> Message:
+        return FieldCodec.decode(Message, data)
 
 
 class InfoKind(SendableMessageKind):
-    pass
+    @classmethod
+    def decode_message(cls, data: Mapping) -> Message:
+        """Committed info rows include the original claim-bearing envelopes."""
+        return cast(Message, compile_decoder(Message | ClaimMessage).decode(data))
 
 
 class QuestionKind(SendableMessageKind):
@@ -464,7 +474,7 @@ class Message:
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
         kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
-        return FieldCodec.decode(kind.message_record(), {"ts": 0.0, **public})
+        return kind.decode_message({"ts": 0.0, **public})
 
     @classmethod
     def from_committed_wire(cls, record: Mapping) -> Message:

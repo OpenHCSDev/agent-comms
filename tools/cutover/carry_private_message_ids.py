@@ -4,6 +4,9 @@ Run only after native owners have stopped. The existing checked prefix proves th
 old bus before the current source rebuilds the index and publishes its new seal.
 """
 
+# This step's source revision must include the Message codec for original info-kind
+# claim envelopes: rebuilding reads committed history, not only recent notices.
+
 from __future__ import annotations
 
 from contextlib import closing
