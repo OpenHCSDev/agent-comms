@@ -189,16 +189,15 @@ class InputForwarding:
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message
-        if not message.user:
+        if not message.user or not message.input_id.reported:
             return False, None
-        for native_id in message.input_id.present():
-            entry = self.pending.get(native_id)
-            if entry is None or message.text != entry.message:
-                return False, None
-            public_id = entry.require_id()
-            if not session.input_start.following(public_id, native_id, entry.message):
-                return False, None
-            self.retire(native_id)
-            self.started = True
-            return True, public_id
-        return False, None
+        native_id = message.input_id.require()
+        entry = self.pending.get(native_id)
+        if entry is None or message.text != entry.message:
+            return False, None
+        public_id = entry.require_id()
+        if not session.input_start.following(public_id, native_id, entry.message):
+            return False, None
+        self.retire(native_id)
+        self.started = True
+        return True, public_id
