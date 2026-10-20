@@ -203,7 +203,7 @@ class BusPageIndex(TypedStore):
                 last_rows = BusPageRow.select(db, order_by=("seq",), descending=True, limit=1)
                 last_sequence = last_rows[0].seq if last_rows else None
                 for record, row_offset, _ in opened.rows(offset, min(size, offset + self.batch_bytes)):
-                    for message in opened.messages(record):
+                    for message in WireRecord.public_from_wire(record).messages():
                         if last_sequence is not None and message.seq <= last_sequence:
                             raise RelationViolationError("Wire sequences are not increasing.")
                         BusPageRow(message.seq, row_offset, message.sender, message.target,
