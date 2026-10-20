@@ -13,6 +13,7 @@ from ..plan_phases import (
 from . import ParityComparison, ParityRow, UnverifiedParity
 from .load import LoadComparison
 from .measurements import RuleComparison, StorageComparison, measured_load
+from .lifecycle import verify_order_progress
 
 
 class CreateProblemParityRow(ParityRow):
@@ -311,6 +312,10 @@ class OrderProgressParityRow(ParityRow):
         "later progress 15 min STALL; units see no due time"
     )
     phases = (OneOrderOwnerPhase, ControlPlanePhase)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return verify_order_progress()
 
 
 class MultipleCommandersParityRow(ParityRow):
