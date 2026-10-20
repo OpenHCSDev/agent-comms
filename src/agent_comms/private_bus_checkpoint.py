@@ -106,7 +106,9 @@ class PrefixWitness(PrefixSeal):
         if self.revision.identity != current.identity:
             raise CheckpointNeedsRepairError("Private bus checkpoint source relocated.")
         if self.revision != current:
-            raise CheckpointNeedsRepairError("Bus revision requires exclusive checkpoint validation.")
+            raise CheckpointNeedsRepairError(
+                "Bus revision requires exclusive checkpoint validation."
+            )
 
     def require_prefix(self, bus: WireLog, info: os.stat_result) -> None:
         """Prove the old byte cut before any recovery publishes rows or a marker."""
