@@ -288,6 +288,8 @@ class SettledTick(TickState):
 class InputObservation:
     """File-driven observation and process-local wake behavior."""
 
+    comms: Comms
+    sessions: SessionLifecycle
     closing: bool
 
     def _tick_paths(self) -> TickRevisionPaths:
