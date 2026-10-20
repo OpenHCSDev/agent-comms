@@ -1154,7 +1154,9 @@ class FieldCodec(Sealed):
                            if target in owner.referenced}
             return {**schema, "$defs": definitions} if definitions else schema
 
-        def declared(self, target: type, build: Callable[[], dict[str, object]]) -> dict[str, object]:
+        def declared(
+            self, target: type, build: Callable[[], dict[str, object]],
+        ) -> dict[str, object]:
             if target in self.definitions:
                 self.referenced.add(target)
                 name, _ = self.definitions[target]
@@ -1193,7 +1195,7 @@ class FieldCodec(Sealed):
         return cls._SchemaDefinitions.document(lambda: cls._value_schema(annotation))
 
     @classmethod
-    def _value_schema(cls, annotation: object) -> dict[str, Any]:
+    def _value_schema(cls, annotation: object) -> dict[str, object]:
         annotation, representation = cls._representation(annotation)
         definitions = cls._SchemaDefinitions.current.get()
         if representation is not None:
