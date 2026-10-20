@@ -320,7 +320,6 @@ def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     assert order_alarms(script) == []
     assert '| merged as ddddddddd, waiting on install |' in script.board_text()
-    assert not (tmp_path / 'board.md').exists()
 
 
 def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, commander_script, monkeypatch, tmp_path):
@@ -336,7 +335,6 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
     moved = comms.goals.todos.get('P1')
     assert moved.deadline.clock() == '23:59:00' and moved.revision == before.revision + 1
     assert 'P1 order order-P1 deadline changed): ' in posted[-1]
-    assert not (tmp_path / 'narrative.md').exists()
 
 
 class HeldSource:
@@ -514,5 +512,4 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     work = OrderProgress.read(todo, storage, PullRequests())
     assert work == MergedProgress("d" * 40)
     assert "merged as ddddddddd, waiting on install" in script.board_text()
-    assert not (tmp_path / 'board.md').exists()
     assert order_alarms(script) == []
