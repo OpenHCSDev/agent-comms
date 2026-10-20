@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 
-from agent_comms.commander.config import Commander, CommanderConfig
-from agent_comms.commander.send_guard import CommanderSession
+from agent_comms.commander.config import CommanderConfig
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
 
@@ -19,20 +18,21 @@ class SkillText(ClaudeHookProgram):
 
 def main() -> None:
     hook = ClaudeHook.read()
-    config = CommanderConfig.installed()
-    if not CommanderSession(hook.session_id, Commander.of(config)).is_commander():
-        return
-    sources = (config.packaged_skill(), *config.packaged_rules_files())
+    sources = (CommanderConfig.packaged_skill(), *CommanderConfig.packaged_rules_files())
     text = "\n\n".join(
         f"# Commander file: {path.name}\n{path.read_text(encoding='utf-8', newline='')}"
         for path in sources
     )
+    try:
+        notice = f"Commander: {CommanderConfig.installed().commander}."
+    except (OSError, ValueError):
+        notice = "No commander is configured (installed configuration is missing or invalid)."
     print(
         json.dumps(
             {
                 "hookSpecificOutput": {
                     "hookEventName": hook.hook_event_name,
-                    "additionalContext": text,
+                    "additionalContext": f"{notice}\n\n{text}",
                 }
             }
         )
