@@ -125,8 +125,8 @@ class Stack:
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
         run(
-            self.python, "-m", publish_runtime.__name__, "--refresh",
-            cwd=self.checkout, env=self.environment(self.checkout / "tools"),
+            self.python, publish_runtime.__file__, "--refresh",
+            cwd=self.checkout, env=self.environment(),
         )
 
     def environment(self, *paths: Path) -> dict:
