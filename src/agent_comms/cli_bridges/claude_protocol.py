@@ -16,7 +16,6 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -39,6 +38,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
     MONITOR_FRAME,
@@ -173,7 +173,7 @@ class ClaudeTurn(ABC):
 
     @abstractmethod
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]: ...
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class UnknownTurn(ClaudeTurn):
@@ -182,7 +182,7 @@ class UnknownTurn(ClaudeTurn):
         return phase.unturned_finish()
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
 
 
@@ -195,8 +195,8 @@ class KnownTurn(ClaudeTurn):
         return (FinishedItem(self.id, item, events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
-        return (ActiveItem(self.id, tool_id, state, detail),)
+               turn_phase: TurnPhase) -> tuple[RuntimeUpdate, ...]:
+        return (ActiveItem(self.id, tool_id, turn_phase),)
 
 
 @dataclass
@@ -223,7 +223,7 @@ class ClaudeSession:
         return (*self.finished(tool_id, (
                     call.started(started.position, started.timestamp),
                     call.ended(text, ok, record.position, record.timestamp))),
-                *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
+                *self.turn.active(tool_id, self.phase, ModelWaitPhase()))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
@@ -303,7 +303,7 @@ class RedactedThinking(AssistantBlock):
     wire_tag = 'redacted_thinking'
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.turn.active(record.uuid, session.phase, ActivityState.THINKING, '')
+        return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
 
 
 class ThinkingBlock(RedactedThinking):
@@ -327,7 +327,8 @@ class ToolUse(AssistantBlock):
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
         session.started(call, record)
-        return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
+        return session.turn.active(self.id, session.phase,
+                                   ToolRunningPhase(tools=((self.id, call.title),)))
 
 
     def call(self) -> ToolCall:

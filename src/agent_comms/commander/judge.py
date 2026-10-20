@@ -178,7 +178,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
             self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = ctx.call(CommsVerdictTool(id=todo.id,
+            result = ctx.call(CommsVerdictTool(problem=todo.id,
                               operation=self.operation(ctx, current[todo.id], i)))
             current[todo.id] = result.todo
         left = len(Edit.unjudged(ctx.comms, ctx.commander))
