@@ -674,11 +674,15 @@ def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(
 
     def run(*command):
         commands.append(command)
+        if command[3:5] == ("worktree", "add"):
+            (command[-2] / STEPS).mkdir(parents=True)
         return ""
 
     monkeypatch.setattr(upgrade_bus, "run", run)
     revisions = Revisions(tmp_path / "repo", tmp_path / "trees")
     selected = revisions.tree("abcdef123456")
+    assert (selected / STEPS / "step_worker.py").read_bytes() == (
+        REPO / STEPS / "step_worker.py").read_bytes()
     assert commands == [
         ("git", "-C", revisions.repo, "worktree", "add", "--detach", "-q", selected, "abcdef123456"),
         ("git", "-C", selected, "submodule", "update", "--init", "--recursive", "--checkout"),
