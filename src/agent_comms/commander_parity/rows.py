@@ -11,6 +11,7 @@ from ..plan_phases import (
     StoryPhase,
 )
 from . import ParityComparison, ParityRow, UnverifiedParity
+from .delivery import DeliveredCommitCase
 from .handoff import FinishedHandoffCase
 from .lifecycle import (
     AssignOrderCase,
@@ -51,6 +52,7 @@ class DeliveredCommitParityRow(ParityRow):
     current = "`order.py done`"
     native = "`CommsOrderDoneTool`: merged to main, another branch, or not merged"
     phases = (OneOrderOwnerPhase, RecordPlanePhase)
+    comparison = DeliveredCommitCase.read
 
 
 class InstalledEvidenceParityRow(ParityRow):
