@@ -190,7 +190,7 @@ class DirectiveUnacted(DatedStandingRule):
 
 @dataclass(frozen=True)
 class RulesDue(DatedStandingRule):
-    """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
+    """A reviewer whose last review is stale or has an unanswered drawn rule; reported, never refused."""
 
     max_age: ClassVar[int] = 20 * 60
     why: str = field(compare=False)
@@ -206,7 +206,7 @@ class RulesDue(DatedStandingRule):
     def line(self) -> str:
         return (
             f"RULES DUE ({self.why}) -> agent-comms-commander rules review"
-            " and answer the drawn rules before any order"
+            " and answer the drawn rules"
         )
 
 

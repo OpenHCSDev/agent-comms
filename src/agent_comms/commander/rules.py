@@ -1,16 +1,17 @@
-"""Forced rule review for the commander (HARD RULE: the commander cannot trust itself to remember the rules alone).
+"""Rule review for the commander: a report, never a gate.
 
-The rules have one source each: the commander skill's bold-lead lines, every packaged feedback rule,
-and paper 1's correct-maintenance results
-(the packaged correct-maintenance rule). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. Core records each
-review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
-RULES DUE in rotate until the last review is answered and fresh.
+The rules have one source each: the commander skill's bold-lead lines, every packaged rule file
+in `rules/`, and paper 1's correct-maintenance results (the packaged correct-maintenance rule).
+`review` prints every rule with its file:line and draws three, two always from the paper, to be
+answered with how the current tick obeys or breaks each. Core records each review and answer
+(CommsRuleReviewTool); a stale or unanswered review shows as RULES DUE in rotate and in
+`rules stale`. No commander action is refused for it. The archived originals in `rules-archive/`
+are never read.
 
   agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
   agent-comms-commander rules answer N "<8+ quoted rule words and file:line or P-number>" [--fork FORK]
 
-Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
-actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
+Every fork reviews for itself, and all three of a fork's drawn rules come from paper 1.
 """
 import random, re, sys
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ from .rule_file import RuleFile
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
-PINNED = ('branch-vs-polymorphism', 'factor-into-parent-hard-rule', 'paper-is-law-no-dogma')
+PINNED = ('slop-and-polymorphism',)
 
 
 def principles() -> list[str]:
@@ -38,23 +39,27 @@ def principles() -> list[str]:
     return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
 
 
-def rules() -> list[str]:
-    found = [(m.group(1) + m.group(2)).strip() for m in re.finditer(
-        r'^\s*- \*\*(.+?)\*\*(.*)$', CommanderConfig.packaged_skill().read_text(), re.M)]
+def rules() -> list[tuple[str, str]]:
+    """Every rule as (file:line, text)."""
+    skill = CommanderConfig.packaged_skill()
+    text = skill.read_text()
+    found = [(f'{skill.name}:{text.count(chr(10), 0, m.start()) + 1}', (m.group(1) + m.group(2)).strip())
+             for m in re.finditer(r'^\s*- \*\*(.+?)\*\*(.*)$', text, re.M)]
     for rule in RuleFile.packaged():
-        found.extend(rule.review_rules())
+        found.extend((f'rules/{rule.name}.md:1', line) for line in rule.review_rules())
     return found
 
 
 def record(ctx: Commander, who: str, entry: RuleReviewEntry) -> None:
     read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), ctx.comms)
-    print('\n'.join(read.broken) or 'review complete; commander actions allowed')
+    print('\n'.join(read.broken) or 'review complete')
 
 
 def review(ctx: Commander, who: str) -> None:
-    every = rules()
-    for i, r in enumerate(every, 1):
-        print(f'{i:3}. {r}')
+    located = rules()
+    for i, (where, r) in enumerate(located, 1):
+        print(f'{i:3}. {where}  {r}')
+    every = [r for _, r in located]
     paper = principles()
     print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
     for r in paper:

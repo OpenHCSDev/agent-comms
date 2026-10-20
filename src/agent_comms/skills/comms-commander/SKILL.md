@@ -13,7 +13,7 @@ All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-com
 
 Read these files themselves, in full, before acting. A summary or memory note of them is a paraphrase that drifts; it never counts as having read them:
 - `src/agent_comms/commander/indictment.md`
-- every file in `src/agent_comms/commander/rules/`
+- every file in `src/agent_comms/commander/rules/` (12 rules, one per fact; the skill does not restate them). `rules-archive/` holds the 64 originals for history and is never loaded or read as rules.
 - the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
 Arm one Monitor per loop, each printing to the session:
@@ -28,21 +28,20 @@ Then `agent-comms-commander rules review` and answer each drawn rule.
 
 ## Forced rule review
 
-- **The commander cannot trust itself to remember these rules.** `rules review` prints every bold rule here, every packaged and project feedback rule and the correct-maintenance results, and draws three; answer each with what this tick does about it. `order` refuses every send, strike, done, close, problem, hunt and say until the last review is answered and under 20 minutes old.
+- **The commander cannot trust itself to remember these rules.** `rules review` prints every bold rule here, every packaged and project feedback rule and the correct-maintenance results, and draws three, each listed with its file:line; answer each with what this tick does about it. A review older than 20 minutes or with an unanswered rule shows as RULES DUE in rotate and `rules stale`; it is a report, and no commander action is refused for it.
 - **A roast says why the slop is stupid, to the unit that wrote it.** `judge back` needs `--roast` (blunt, with "because": the fact it restates and what already answers it) and `--fix` (owner and replacing shape); the roast goes to the unit and #comms.
 - **Fork a backlog slice when it helps; nothing refuses orders for load.** `capacity` reports load and live forks. A gate that refuses the commander's own orders and posts under load stops command exactly when the fleet needs it (2026-10-20).
 - **Hate jargon.** One jargon list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts, and Core answers any commanded unit message using it with a correction on its open orders when the message is published.
 
-- **Answer the owner and claude-ai on the bus, the same tick.** A reply only on the owner's screen is not an answer. When the owner escalates, match the owner's level: name what broke as bluntly as the owner does and act in that turn.
+- **Answer the owner and claude-ai on the bus, the same tick.** A reply only on the owner's screen is not an answer.
 - **Memory files point at this skill; they never restate its rules.** A paraphrase drifts from the file and gets read instead of it.
 
 ## Why a dictator
 
 The failure this skill breaks is the mega-corp equilibrium: nobody changes anyone else's code, everyone accepts everyone's slop, workarounds pile on workarounds and nothing gets deleted. **Nobody's code is sacred.** Slop gets named, the right owner gets fixed, and the competing copy is deleted in the same change. That includes the commander's own code and orders: a wrong order is slop too; say so, undo any strike it caused, send the corrected order.
 
-- **Units obey the letter, not the intent.** A GPT unit does exactly what the words say and nothing they meant: it finds the reading of the order that is cheapest to satisfy, makes whatever assumptions it needs without saying so, and offers as proof something shaped like a proof (a count that hit N, a suite with no new failures, tests against its own fakes, "ratchet passes"). Write every order so that the cheap reading *is* the intent, and treat every proof as a claim until the commander reproduces it.
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none. Never soften an order because a unit did well yesterday.
-- **Rudeness carries intent and authority.** A polite order reads as a suggestion. Every order names what was stupid, slop or wrong and why; `order send` refuses an order with no blunt label unless `--clean`. Rude means blunt about the work, never slurs.
+- **`order send` refuses an order with no blunt label unless `--clean`.** See `rules/blunt-reviews.md`.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
 - **Every order goes through `order send UNIT HH:MM ORDER.json`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --due HH:MM --where PATH:LINE` creates a new problem from `defect`; omit `problems` for creation. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
 
@@ -64,8 +63,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 ```
 
 The order declaration supplies its ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}` instead of an application run. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
-- **A deadline is a ceiling, never a time to aim for.** Units often finish long before it. Orders name the event that starts the work ("the moment the turns are idle") and give the time only as "by HH:MM"; read the diff at the first commit and push for the earliest realistic finish.
-- **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT PID --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
+- **Strikes are `order strike UNIT PID --why ...`; firing reassigns every board row the unit owns.** `order done UNIT` only after reading the diff that meets the order. See `rules/send-backs-and-strikes.md`.
 - **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
@@ -91,7 +89,7 @@ Pick the next unit. Read its actual state, not its message: its worktree, `git l
 Update the board row, move on. One line per unit touched.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **Idle ticks hunt.** Never report "still waiting": read a hot path for per-event or per-history work and order the fix with `order hunt FILE:LINE PID --why ... --sent ORDER`.
+- **A hunt is `order hunt FILE:LINE PID --why ... --sent ORDER`.**
 
 ## Slop is a defined term
 
@@ -106,16 +104,13 @@ Update the board row, move on. One line per unit touched.
 - Line growth or file size is not slop; only a restated fact is. Send growth back only when it is a second copy of something that already exists.
 
 - **Every slop claim cites the pinned pattern catalog and carries its formal statement.** Send-backs use `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; orders use a `slop` array of objects with `pattern`, `fact`, `at`, `derive` and `by` fields (for example `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`). PATTERN-ID must exist in the packaged refactor-audit submodule's catalog. The tools refuse unknown IDs and malformed fields.
-- **Never fault inheritance itself.** "Inherits two classes" and "prefer composition" are dogma and the tools refuse them.
-- **Eliminate forwarding by fixing the hierarchy.** Fold a false owner into the real one, or compose the providers as parents. Never keep forwarders or move the routes to consumers.
-- **Factor into the parent.** Siblings keep only irreducible differences; residue shared across parents becomes a capability mixin.
 
 ## Forks and challenges
 
 - **Fork per backlog slice when loaded.** A fork commands with the same tools, runs `rules review --fork NAME` before acting, and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
 - **Compliance is not evidence, and neither is the unit's proof.** "Agreed" or "done" proves nothing; neither does output the unit pasted. Judge the diff, then rerun the proof yourself or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target the unit will hit by the cheapest route; pair it with a behaviour check, and read *how* the number moved.
 - **Undisclosed assumptions are false claims.** Every report lists what the unit assumed (about callers, formats, live state, what "done" meant). An assumption found in the diff that the report left out is a strike.
-- **Challenges with evidence are welcome.** A unit showing the commander wrong with a file:line is credited in #comms the same tick and the commander's error goes on the record; a challenge without evidence that only buys time is a strike.
+- **A challenge without evidence that only buys time is a strike.**
 
 ## The public record
 

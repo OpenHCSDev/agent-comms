@@ -16,7 +16,7 @@ from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
-from .order import Commander, CommanderVerb, RuledVerb
+from .order import Commander, CommanderVerb
 
 
 def open_requests(ctx: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
@@ -31,7 +31,7 @@ class RequestVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
+class RequestAddVerb(RequestVerb, declared_name="add"):
     help = "record an owner request as the commander's Goal; prints its id"
     text: str = option("text")
 
@@ -42,7 +42,7 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
+class RequestCompleteVerb(RequestVerb, declared_name="complete"):
     help = "close a request; refused while an order serving it is open"
     id: str = option("id")
     why: str = option("--why")
