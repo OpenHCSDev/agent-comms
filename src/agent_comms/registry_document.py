@@ -223,8 +223,8 @@ class WholeDocumentValue(ThreadSlice[int]):
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
-    version: Literal[2] = field(
-        default=2, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
+    version: Literal[1] = field(
+        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
     statuses: dict[str, ThreadStatus] = field(
         default_factory=dict, metadata={"thread_slice": OwnRow})
