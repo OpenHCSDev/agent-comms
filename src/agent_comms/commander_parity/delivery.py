@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import io
 import json
-import os
 import subprocess
-import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..child_process import BoundedRun, ChildOutcome, ChildResult, ExitedOutcome
+from ..child_process import ChildOutcome, ChildResult, ExitedOutcome
 from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..progress_claims import MergedClaim
@@ -134,17 +131,6 @@ class DeliveryRepository:
 
 
 class DeliveredCommitCase:
-    @staticmethod
-    def invoke(program: str, *arguments: str) -> ChildResult:
-        source = str(Path(__file__).resolve().parents[2])
-        return asyncio.run(
-            BoundedRun.run(
-                (sys.executable, "-c", program, *arguments),
-                timeout=120,
-                env={**os.environ, "PYTHONPATH": source},
-            )
-        )
-
     @classmethod
     def create_order(cls, run: LifecycleRun, repository: DeliveryRepository) -> Todo:
         document = OrderFile.read(run.document.read_text())
@@ -182,7 +168,7 @@ class DeliveredCommitCase:
             )
             for name, commit in repository.cases():
                 current_order = cls.create_order(run, repository)
-                process = cls.invoke(
+                process = run.invoke(
                     "from agent_comms.commander.order import Commander; import sys; "
                     "Commander.model_validate_json(sys.argv[1]).done("
                     "sys.argv[2],sys.argv[3],seen=sys.argv[4])",
@@ -205,7 +191,7 @@ class DeliveredCommitCase:
                     ),
                     claims=(MergedClaim(commit),),
                 )
-                process = cls.invoke(
+                process = run.invoke(
                     "from pathlib import Path; import sys; "
                     "from agent_comms.comms import Comms; "
                     "from agent_comms.field_codec import FieldCodec; "
