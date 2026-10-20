@@ -118,7 +118,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
             await agent.inputs.drain_inbox("beta")
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
-        assert current.thread.active_turn.executing
+        assert current.thread.turn_record.read().executing
         assert current.presentation.status.working
         assert not current.presentation.status.details
         activity = (comms.root / "activity.jsonl").read_bytes()
