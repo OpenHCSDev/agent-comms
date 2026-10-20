@@ -1004,9 +1004,11 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
-        checkout = ctx.comms.registry.storage_rule.order_checkout(todo.holder, todo.id)
+        checkout = Repo.of(Path.cwd())
+        if checkout.github.lower() != todo.repo.lower():
+            sys.exit(f'Refused: current checkout belongs to {checkout.github}, not {todo.repo}.')
         print(todo.order.open_pull_request(
-            todo, checkout, self.title, Path(self.body_file).read_text()))
+            todo, checkout.checkout, self.title, Path(self.body_file).read_text()))
 
 
 @dataclass(frozen=True, kw_only=True)

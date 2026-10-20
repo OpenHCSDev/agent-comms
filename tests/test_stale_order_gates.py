@@ -12,7 +12,9 @@ from agent_comms.commander.order import OrderFile, OrderVerb, StaleOrderGate
 from agent_comms.plan_phases import PlanPhase, RecordPlanePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.todos import AssignTodo, CommitDelivery, OperationDelivery, WithdrawTodo
+from agent_comms.todos import (
+    AssignTodo, CheckedProblemOrder, CommitDelivery, OperationDelivery, WithdrawTodo,
+)
 from agent_comms.tools import CommsOrderDoneTool
 from test_commander_problem_orders import create, order_body, working
 
@@ -97,6 +99,23 @@ def test_second_plan_order_gate_names_the_busy_order_and_running_unowned_units(
     assert 'running units holding no order: free-unit' in str(refused.value)
     assert [todo.id for todo in comms.goals.todos.for_commander(
         comms.registry.require('lead').incarnation)] == ['P1']
+
+
+def test_pr_uses_actual_owned_checkout_instead_of_an_invented_problem_directory(
+        commander, commander_script, monkeypatch, tmp_path):
+    comms, _ = commander
+    context, repo = commander_script
+    todo = create(commander, 'P287')
+    body = tmp_path / 'pull-request.md'
+    body.write_text('The retained order owns its immutable pull request identity.')
+    seen = []
+    def publish(order, current, checkout, title, text):
+        seen.append((current.id, checkout, order.pull_request_body(text)))
+        return 'https://github.com/OpenHCSDev/agent-comms/pull/1'
+    monkeypatch.setattr(CheckedProblemOrder, 'open_pull_request', publish)
+    monkeypatch.chdir(repo)
+    OrderVerb.parse(['pr', 'P287', '--title', 'P287', '--body-file', str(body)], '').apply(context)
+    assert seen == [('P287', repo, todo.order.pull_request_body(body.read_text()))]
 
 
 @pytest.mark.parametrize('commit_delivery', (True, False))
