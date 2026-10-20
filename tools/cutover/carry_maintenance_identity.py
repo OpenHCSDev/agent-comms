@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, Id128Text
+from agent_comms.field_codec import FieldCodec, Id128Text, compile_decoder
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -84,8 +84,11 @@ class MaintenanceIdentity(Carry):
             if barrier.marker_path.exists():
                 raise RelationViolationError("Maintenance has a marker but no stored holder")
             return Carried(0)
-        state = FieldCodec.decode(
-            StoredMaintenanceState, FieldCodec.parse(barrier.state_path.read_text())
+        state = cast(
+            StoredMaintenanceState,
+            compile_decoder(StoredMaintenanceState).decode(
+                FieldCodec.parse(barrier.state_path.read_text())
+            ),
         )
         return state.carried(barrier, apply=apply)
 
