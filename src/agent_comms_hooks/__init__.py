@@ -77,6 +77,7 @@ class ClaudeHookProgram(ABC):
     """A program Claude Code runs on each of `events`, whatever tool is involved."""
 
     events: ClassVar[tuple[str, ...]]
+    writer: ClassVar[str] = "agent-comms"
 
     @classmethod
     def members(cls) -> tuple[type[ClaudeHookProgram], ...]:
@@ -106,6 +107,11 @@ class ClaudeHookProgram(ABC):
         return name
 
     @classmethod
+    def owns_entry(cls, entry: Mapping[str, object]) -> bool:
+        """Ownership survives deletion of a program and its console script."""
+        return entry.get("writer") == cls.writer
+
+    @classmethod
     def entry(cls) -> dict[str, object]:
-        """This program's entry in a Claude Code hook event's list."""
-        return {"hooks": [{"type": "command", "command": cls.command()}]}
+        """This program's entry, marked so install can replace what it wrote."""
+        return {"writer": cls.writer, "hooks": [{"type": "command", "command": cls.command()}]}

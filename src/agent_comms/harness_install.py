@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import shutil
 import sys
 import uuid
 from abc import abstractmethod
 from dataclasses import dataclass
-from importlib.metadata import distribution
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -124,23 +122,11 @@ class ClaudeCodeHarness(Harness):
         settings = self.home / '.claude/settings.json'
 
         def reconcile_hooks(document: dict) -> None:
-            scripts = {point.name for point in distribution('agent-comms').entry_points.select(
-                group='console_scripts')}
             events = document.setdefault('hooks', {})
             for event, entries in events.items():
-                retained_entries = []
-                for entry in entries:
-                    hooks = entry.get('hooks', ())
-                    retained = []
-                    for hook in hooks:
-                        arguments = shlex.split(hook.get('command', ''))
-                        if not arguments or Path(arguments[0]).name not in scripts:
-                            retained.append(hook)
-                    if retained or not hooks:
-                        if len(retained) != len(hooks):
-                            entry.update(hooks=retained)
-                        retained_entries.append(entry)
-                events[event] = retained_entries
+                events[event] = [
+                    entry for entry in entries if not ClaudeHookProgram.owns_entry(entry)
+                ]
             for program in ClaudeHookProgram.members():
                 for event in program.events:
                     events.setdefault(event, []).append(program.entry())
