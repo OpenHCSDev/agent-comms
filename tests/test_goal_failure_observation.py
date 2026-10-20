@@ -4,6 +4,7 @@ import json
 import multiprocessing
 import os
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import replace
 
 import pytest
@@ -240,7 +241,16 @@ def _crash_recording(root, observation, after_commit):
     def crash(*args):
         os._exit(17)
 
-    setattr(store, "_sync" if after_commit else "_commit", crash)
+    @contextmanager
+    def crash_before_commit(connection):
+        store._begin_transaction(connection)
+        yield connection
+        crash()
+
+    if after_commit:
+        store._sync = crash
+    else:
+        store.write_transaction = crash_before_commit
     observation.reservation.fail(store, "crashed failure", observation=observation)
 
 
