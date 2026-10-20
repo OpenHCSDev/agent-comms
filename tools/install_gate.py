@@ -274,6 +274,15 @@ class PracticeCopy:
                 raise GateError(f"Insufficient free space for rehearsal of {size} copied bytes")
             yield copied
 
+    def rehearse(
+        self, target: Path, previous: Path, head: str, python: Path, log: Path, work: Path
+    ) -> CompletedRehearsal:
+        """The practice command and desktop gate use the same private-root lifetime."""
+        with self.open() as copied:
+            home = self.into.parent
+            prepare_runtime_home(home)
+            return rehearse(target, previous, head, copied.root, home, python, log, work)
+
 
 class SnapshotCopy(SnapshotHome):
     def place(self, home: Path, bus: Path) -> Path:
@@ -394,6 +403,22 @@ class Machine(DeclaredFamily, affix="Machine"):
             raise GateError(f"{self.name} snapshot has no bus")
         return context
 
+    def rehearse(
+        self,
+        args: GateArguments,
+        target: Target,
+        previous: Path,
+        tree: Path,
+        log: Path,
+        work: Path,
+    ) -> CompletedRehearsal:
+        with tempfile.TemporaryDirectory(dir=args.scratch, prefix=self.name + "-") as copy:
+            root = Path(copy)
+            context = self.capture(root / "snapshot", log)
+            home = root / "home"
+            bus = prepare_home(home, root / "snapshot/bus", context)
+            return rehearse(tree, previous, target.head, bus, home, args.python, log, work)
+
 
 class Laptop(Machine):
     name = "laptop"
@@ -421,6 +446,23 @@ class Desktop(Machine):
     hostname = "desktop"
     address = "ts@192.168.2.11"
     root = "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+
+    def rehearse(
+        self,
+        args: GateArguments,
+        target: Target,
+        previous: Path,
+        tree: Path,
+        log: Path,
+        work: Path,
+    ) -> CompletedRehearsal:
+        if self.transport:
+            raise GateError("Run the desktop practice route on the desktop host")
+        with tempfile.TemporaryDirectory(dir=args.scratch, prefix=self.name + "-") as copy:
+            home = Path(copy) / "home"
+            return PracticeCopy(Comms(CommsRoute.current().root), home / ".agent-comms").rehearse(
+                tree, previous, target.head, args.python, log, work
+            )
 
 
 def storage_floor() -> float:
@@ -996,29 +1038,20 @@ class PracticeGateCommand(RevisionGateCommand):
         with tempfile.TemporaryDirectory(dir=args.scratch, prefix="practice-") as directory:
             private = Path(directory)
             home = private / "home"
-            with PracticeCopy(
-                Comms(CommsRoute.current().root), home / ".agent-comms"
-            ).open() as copied:
-                prepare_runtime_home(home)
-                with tempfile.TemporaryDirectory(
-                    dir=Path.home() / "wt", prefix="practice-source-"
-                ) as source:
-                    work = Path(source)
-                    with (
-                        checkout(args.repo, target.base, work / "base") as previous,
-                        checkout(args.repo, target.head, work / "target") as tree,
-                    ):
-                        completed = rehearse(
-                            tree,
-                            previous,
-                            target.head,
-                            copied.root,
-                            home,
-                            args.python,
-                            report.with_suffix(".log"),
-                            work,
-                        )
-                return PracticeGateResult(completed)
+            with tempfile.TemporaryDirectory(
+                dir=Path.home() / "wt", prefix="practice-source-"
+            ) as source:
+                work = Path(source)
+                with (
+                    checkout(args.repo, target.base, work / "base") as previous,
+                    checkout(args.repo, target.head, work / "target") as tree,
+                ):
+                    completed = PracticeCopy(
+                        Comms(CommsRoute.current().root), home / ".agent-comms"
+                    ).rehearse(
+                        tree, previous, target.head, args.python, report.with_suffix(".log"), work
+                    )
+            return PracticeGateResult(completed)
 
 
 @dataclass(frozen=True)
@@ -1050,22 +1083,9 @@ def run_machines(
             for machine in machines:
                 log = report.with_name(report.stem + f"-{machine.name}.log")
                 try:
-                    with tempfile.TemporaryDirectory(
-                        dir=args.scratch, prefix=machine.name + "-"
-                    ) as copy:
-                        root = Path(copy)
-                        context = machine.capture(root / "snapshot", log)
-                        home = work / "home"
-                        bus = prepare_home(home, root / "snapshot/bus", context)
-                        try:
-                            results[machine.name] = PassedMachineResult(
-                                rehearse(
-                                    tree, previous, target.head, bus, home, args.python, log, work
-                                )
-                            )
-                        finally:
-                            if bus.is_relative_to(home):
-                                shutil.rmtree(bus)
+                    results[machine.name] = PassedMachineResult(
+                        machine.rehearse(args, target, previous, tree, log, work)
+                    )
                 except (GateError, subprocess.CalledProcessError, MalformedRecord) as error:
                     results[machine.name] = FailedMachineResult(str(error))
     return results
