@@ -112,7 +112,17 @@ class FinalSeal(CheckpointSeal):
             self.require_rebuilt(saved, saved)
             copied = FileRevision.from_stat(path.stat())
             if (copied.size, copied.mtime_ns) != (self.db_revision.size, self.db_revision.mtime_ns):
-                raise RelationViolationError("Private bus copied index content revision changed.")
+                from .private_bus_checkpoint import CheckpointTable, PrefixWitness
+                from .typed_table import TypedTable
+
+                empty = PrefixWitness.empty(saved.root_id, info)
+                # Retain the original cut as the intent: rebuilding must prove its
+                # digest before publishing either index rows or a new marker.
+                marker.seal_with(PendingSeal.capture(empty, saved, path))
+                with db:
+                    for table in reversed(TypedTable.members_with(CheckpointTable)):
+                        table.delete(db)
+                    return empty.index_tail(bus, marker, db, path, info)
             saved = saved.rebind_source(bus, marker, db, info)
         else:
             self.check_final(saved, path)

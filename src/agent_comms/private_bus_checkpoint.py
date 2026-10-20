@@ -106,6 +106,12 @@ class PrefixWitness(PrefixSeal):
         rebound = replace(self, revision=replace(FileRevision.from_stat(info), size=self.offset))
         return CheckedPrefix.commit_tail(bus, marker, db, self, rebound, [])
 
+    @classmethod
+    def empty(cls, root_id: str, info: os.stat_result) -> PrefixWitness:
+        """The proved zero-byte cut from which the existing indexer can start."""
+        return cls(root_id, replace(FileRevision.from_stat(info), size=0), 0,
+                   _SEED.hex(), hashlib.sha256(b"").hexdigest())
+
     def index_tail(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                    path: Path, info: os.stat_result) -> PrefixWitness:
         """Continue the proved cut, committing bounded chunks without a prefix rescan."""
