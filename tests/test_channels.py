@@ -20,7 +20,7 @@ from agent_comms.display_order import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RosterVisibility
-from agent_comms.thread_management import ForkSpec
+from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 
 
@@ -350,7 +350,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     )
     with pytest.raises(ValueError):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="task", tags=frozenset({"reserved"})),
+            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
         )
 
     after = comms.registry.snapshot()
