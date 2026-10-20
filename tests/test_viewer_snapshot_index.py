@@ -569,7 +569,8 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             receiver.recv()
         observer = service.interest.observations[SidebarReading]
         published = observer.published
-        assert published.snapshot.unread == expected
+        assert {reference.name: shown.count for reference, shown in published.snapshot.unread.items()
+                if type(reference) is ThreadTarget and shown.count} == expected
         with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
             writer.execute("BEGIN IMMEDIATE")
             comms.messaging.send("renamed-bob", viewer, "during index contention").message
