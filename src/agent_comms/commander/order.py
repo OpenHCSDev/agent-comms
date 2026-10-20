@@ -57,18 +57,14 @@ from ..todos import (
     CommitDelivery,
     DirectiveText,
     FileDeliveryEvidence,
-    InstallDeadline,
     LocatedProblemFinding,
     NoDeliveryEvidence,
-    NotifiedFirstCallEvent,
-    ObservedFirstCallEvent,
     OperationDelivery,
     OrderedHunt,
     OrderMessage,
     OrderProgress,
     PendingProblemOrder,
     PlannedInstallDeadline,
-    RecordFirstCallTodo,
     Slop,
     StrikeReason,
     StrikeTodo,
@@ -287,20 +283,6 @@ class CommanderContext(CommanderConfig):
     def last_activity(self, unit):
         thread = self.comms.registry.require(unit)
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
-
-    def hunts(self):
-        return self.comms.goals.todos.hunts_for_commander(self.incarnation)
-
-    def reply(self, unit: str, since: float) -> str:
-        """The newest reply suffix for this command's overdue alarm."""
-        with self.comms.bus.log.opened_wire_snapshot() as source:
-            for message in source.newest_messages():
-                if (message.sender == unit and message.timestamp > since
-                        and message.target in (self.commander, '#comms')):
-                    at = time.strftime('%H:%M', time.localtime(message.timestamp))
-                    return (f'; REPLIED {at} [{message.message_id}]: '
-                            f'{" ".join(message.body.split())[:160]} -- read it before pushing')
-        return '; no reply since the order'
 
 
 class Commander(CommanderContext):
@@ -616,22 +598,6 @@ class Commander(CommanderContext):
             order_id=todo.order.id, delivery=delivery, claims=(claim,)))
         print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
-    def first_calls(self, held, activity):
-        missing = []
-        for todo in held:
-            unit, order = todo.assignment.owner, todo.order
-            if not todo.pending:
-                continue
-            acted = activity[unit].since(order.at.recorded_at("An order"))
-            if not acted and time.time() < order.first_call_deadline.at:
-                continue
-            event = ObservedFirstCallEvent if acted else NotifiedFirstCallEvent
-            self.call(CommsChangeProblemTool(problem=todo.id, operation=RecordFirstCallTodo(
-                todo.revision, self.incarnation, event)))
-            if not acted and self.comms.goals.todos.get(todo.id).revision != todo.revision:
-                missing.append(f'{unit} (order {order.id}, sent {order.at.clock()})')
-        return missing
-
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
         path, _, line = where.rpartition(':')
@@ -644,72 +610,11 @@ class Commander(CommanderContext):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-    def next_hunt(self):
-        """Least-recently hunted file among the most-churned production files on origin/main."""
-        hunted = {}
-        for h in self.hunts():
-            hunted[h.where.file] = max(hunted.get(h.where.file, 0), h.at.at)
-        candidates = []
-        for repo, root in [(str(repo.checkout), repo.source) for repo in self.repos]:
-            log = subprocess.run(['git', '-C', repo, 'log', 'origin/main',
-                '--since=7.days', '--name-only', '--format=', '--', root],
-                                 capture_output=True, text=True).stdout.split()
-            churn = {}
-            for f in log:
-                full = os.path.realpath(os.path.join(repo, f))
-                if os.path.exists(full) and f.endswith('.py'):
-                    churn[full] = churn.get(full, 0) + 1
-            candidates += sorted(churn, key=churn.get, reverse=True)[:15]
-        return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
-
-    def deadline_lines(self, pending: list[Todo], read: dict[str, OrderProgress],
-                       since: float = 0.0) -> list[str]:
-        """Past-due unfinished orders alarm; installed merges have already closed.
-        Core records a stalled order's strike and release; this view reports deadlines."""
-        now = time.time()
-        late = []
-        for t in pending:
-            ordered, work = t.order.at.recorded_at('An order'), read[t.id]
-            if not t.overdue(now):
-                continue
-            answer = self.reply(t.holder, ordered)
-            due = f'due {t.deadline.clock()}, order {t.order.id}'
-            late.append(f'OVERDUE: {t.id} {t.holder} ({due}, {work.line}{answer}) '
-                        '-> push or merge unfinished work now')
-        return late
-
-    def install_lines(self, held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
-        """One INSTALL line naming every held order that waits on the fleet's install."""
-        waiting = [f'{w.id} {w.holder}' for t in held for w in t.order.waiting_on_install(t, read)]
-        return InstallDeadline.read(self.comms.root).alarm(waiting, now)
-
     def overdue(self):
-        since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
-        installs: list[str] = []
+        """Close installed merges periodically; Core's heartbeat owns every alarm."""
         while True:
             self.comms.goals.todos.reconcile_merges(
                 self.incarnation, self.repos, self.comms.registry.storage_rule)
-            now = time.time()
-            held = self.held_orders()
-            activity = {unit: self.last_activity(unit) for unit in {t.assignment.owner for t in held}}
-            if missing := self.first_calls(held, activity):
-                print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
-                      flush=True)
-            stale = [f'{t.id} {t.assignment.owner} (last {activity[t.assignment.owner].clock()})' for t in held
-                     if activity[t.assignment.owner].before(now - 1200)]
-            if stale:
-                print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-            pending = [t for t in held if t.pending]
-            read = self.progress() if pending else {}
-            for line in self.deadline_lines(pending, read, since):
-                print(line, flush=True)
-            if (lines := self.install_lines(held, read, now)) != installs:
-                for line in lines:
-                    print(line, flush=True)
-                installs = lines
-            for _ in HuntDue.broken(self.comms, self.commander, since):
-                print(HuntVerb.due(self.next_hunt()), flush=True)
-            since = now
             time.sleep(60)
 
     @boundary_decoder
@@ -1097,11 +1002,6 @@ class HuntVerb(OrderVerb):
     sent: str = option("--sent", default="", metavar="ORDER",
                        help="the open order the hunt became; omitted means clean")
 
-    @classmethod
-    def due(cls, where: str | None) -> str:
-        return (f'HUNT DUE (none in 15 min): read {where} for per-event or per-history work '
-                f'or slop, then {cls.usage()}')
-
     def run(self, ctx: Commander) -> None:
         ctx.hunt(self.where, self.why, self.sent)
 
@@ -1110,7 +1010,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
     def run(self, ctx: Commander) -> None:
-        print(ctx.next_hunt())
+        print(HuntDue.next_hunt(ctx.comms, ctx.commander))
 
 
 class PeerSyncVerb(OrderVerb, declared_name=PeerSync.verb):
