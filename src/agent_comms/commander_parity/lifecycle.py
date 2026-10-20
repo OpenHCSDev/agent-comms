@@ -7,6 +7,7 @@ import io
 import json
 import os
 import shlex
+import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -179,6 +180,17 @@ class LifecycleRun:
                 )
             )
             yield cls(commander, worker.name, decisions, document, root / "application.json")
+
+    @staticmethod
+    def invoke(program: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+        source = str(Path(__file__).resolve().parents[2])
+        return subprocess.run(
+            (sys.executable, "-c", program, *arguments),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "PYTHONPATH": source},
+        )
 
     @property
     def due(self) -> str:
