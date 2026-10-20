@@ -126,7 +126,6 @@ class LifecycleRun:
             commander = MeasuredCommander(
                 commander=config.commander,
                 root=root,
-                cli=config.cli,
                 state=root / "commander-state",
                 board=root / "board.md",
                 narrative=root / "narrative.md",
