@@ -25,7 +25,7 @@ def completed_counts(state, viewer):
 def completed_snapshot(comms, worktree, **options):
     for _ in range(50):
         snapshot = comms.views.viewer_snapshot(worktree, **options)
-        if not snapshot.unread_pending and comms.views.transcript_reads.preparation is comms.views.transcript_reads._idle:
+        if not any(unread.pending for unread in snapshot.unread.values()) and comms.views.transcript_reads.preparation is comms.views.transcript_reads._idle:
             return snapshot
         futures = comms.views.transcript_reads.watch(frozenset(), lambda _: None)
         assert futures, "Snapshot is pending without native preparation"

@@ -1,6 +1,6 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, NativeThreadTarget
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.read_basis import NamedViewer
 from agent_comms.read_ledger import ReadLedger
@@ -49,7 +49,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot()).for_conversation(ReadLedger.conversation(message, comms.registry.snapshot()))
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
+    assert completed_snapshot(comms, str(tmp_path)).unread[NativeThreadTarget('worker')].count == 1
     document = comms.bus.reads.read()
     assert document.transcripts and not document.messages
     index_owner = comms.views.transcript_reads

@@ -30,7 +30,8 @@ def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
     assert model.observation.require_snapshot() is snapshot
     assert model.observation.channel_order() is snapshot.channel_order
     assert model.observation.channel_unread("#any") == ExactUnread(0)
-    assert model.observation.bus_unread("missing") == ExactUnread(0)
+    with pytest.raises(KeyError, match="missing"):
+        model.observation.bus_unread("missing")
     assert set(model.channels.rows) == set(snapshot.channels)
     failure = ValueError("original sidebar read failure")
     model.clear(failure)

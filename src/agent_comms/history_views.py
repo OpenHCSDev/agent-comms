@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
-from .channel_targets import NativeThreadTarget
+from .channel_targets import ConversationPreparation, NativeThreadTarget
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
@@ -20,7 +20,6 @@ from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
@@ -111,16 +110,16 @@ class ThreadPoll(CliResult):
 
 
 @dataclass(frozen=True)
-class ThreadViewRead(ConversationPreparation):
+class ThreadViewRead(ConversationPreparation[None]):
     views: HistoryViews
     thread: Thread
     viewer: Thread
     through: TranscriptCursor
 
-    def native(self):
+    def native(self) -> None:
         self.through.mark_read(self.views.transcript_reads, self.viewer.name, self.thread.runtime)
 
-    def external(self):
+    def external(self) -> None:
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,

@@ -12,30 +12,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import NoReturn
 
-from agent_comms.channel_targets import ChannelTarget, NativeThreadTarget, ThreadTarget
+from agent_comms.channel_targets import ChannelTarget, ThreadTarget
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.read_ledger import NoReadNotice, ReadNotice
-from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
+from agent_comms.thread_execution import ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnobservedUnread, UnreadPresentation
-
-
-@dataclass(frozen=True)
-class PersonUnread(ConversationPreparation):
-    """Native people keep their saved-reply count even while stopped; external people use the bus."""
-
-    person: ThreadView
-    snapshot: CoordinationSnapshot
-
-    def native(self) -> UnreadPresentation:
-        return UnreadPresentation.for_view(self.snapshot, NativeThreadTarget(self.person.thread.name))
-
-    def external(self) -> UnreadPresentation:
-        return UnreadPresentation.for_view(
-            self.snapshot, ThreadTarget(self.person.thread.name))
 
 
 @dataclass(frozen=True)
@@ -180,7 +165,8 @@ class SidebarModel:
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {name: ThreadRowModel.of(
-            person, person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)))
+            person, UnreadPresentation.for_view(snapshot, person.thread.execution.prepare_conversation(
+                ThreadTarget(person.thread.name))))
             for name, person in snapshot.threads.items()}
         working = frozenset(name for name, row in threads.items() if row.status.working)
         channels = {name: ChannelRowModel.of(view, snapshot, working)

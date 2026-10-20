@@ -1,3 +1,4 @@
+from agent_comms.channel_targets import ChannelTarget
 from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
@@ -82,7 +83,7 @@ def test_real_human_display_counts_do_not_borrow_another_channel_prefix(tmp_path
     comms, messages = setup_conversations(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     seed_prefix(comms, viewer, messages[2].seq)
-    counts = comms.views.viewer_snapshot(str(tmp_path)).channel_unread
+    counts = {reference.name: shown.count for reference, shown in comms.views.viewer_snapshot(str(tmp_path)).unread.items() if isinstance(reference, ChannelTarget)}
     assert counts["#a"] == 0
     assert counts["#b"] == 2
 

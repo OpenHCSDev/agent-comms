@@ -301,8 +301,10 @@ class BusPageIndex(TypedStore):
         ).fetchone()
         return through if missing is None else missing - 1
 
-    def display_unread(self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[CommandTarget, int]:
+    def display_unread(
+        self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
+        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance,
+    ) -> dict[CommandTarget, int]:
         counts = {}
         for reference, scope in scopes.items():
             bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
@@ -338,6 +340,8 @@ class EmptyBusPageIndex(BusPageIndex):
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)
 
-    def display_unread(self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[CommandTarget, int]:
+    def display_unread(
+        self, scopes: Mapping[CommandTarget, MessageDisplayScope], viewer_names: frozenset[str],
+        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance,
+    ) -> dict[CommandTarget, int]:
         return dict.fromkeys(scopes, 0)

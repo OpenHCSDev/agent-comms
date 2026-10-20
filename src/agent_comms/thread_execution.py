@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .channel_targets import ConversationPreparation
 from .child_process import ProcessState
 from .errors import RelationViolationError
 from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
@@ -52,14 +52,6 @@ class ArchiveOwnerControl(OwnerLifecycleControl):
         return status.stopped
 
 
-class ConversationPreparation(ABC):
-    @abstractmethod
-    def native(self): ...
-
-    @abstractmethod
-    def external(self): ...
-
-
 class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
 
@@ -72,7 +64,7 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         raise RelationViolationError("Only an external CLI can publish a bridge process.")
 
     @classmethod
-    def prepare_conversation(cls, preparation: ConversationPreparation):
+    def prepare_conversation[Result](cls, preparation: ConversationPreparation[Result]) -> Result:
         return preparation.external()
 
     @classmethod
@@ -123,7 +115,7 @@ class NativeThreadExecution(ThreadExecution):
         return thread.role.executor(thread) if status.active and thread.process_alive else ()
 
     @classmethod
-    def prepare_conversation(cls, preparation: ConversationPreparation):
+    def prepare_conversation[Result](cls, preparation: ConversationPreparation[Result]) -> Result:
         return preparation.native()
 
     @classmethod

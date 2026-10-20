@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.channel_targets import ChannelTarget, ThreadTarget
 from agent_comms.wire_log import WireLog
 
 from conftest import publish_initial
@@ -61,8 +62,8 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     comms.bus.reads.mark_displayed(viewer, displayed)
     comms.channels.set_channel_any_mode("#extra", True)
     after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-    assert after.channel_unread["#team"] == 1
-    assert after.channel_unread["#extra"] == 2
+    assert after.unread[ChannelTarget('#team')].count == 1
+    assert after.unread[ChannelTarget('#extra')].count == 2
     def clock(snapshot):
         return snapshot.channels["#team"].last_activity
 
@@ -118,7 +119,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent.items(), registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
     latest = comms.views.viewer_snapshot(str(tmp_path))
-    assert latest.unread == {"renamed-bob": 1}
+    assert {reference.name: shown.count for reference, shown in latest.unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
 
 
@@ -184,7 +185,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         while receiver.poll():
             results.append(receiver.recv())
         first = next(value for value in results if isinstance(value, SidebarObserved))
-        assert first.snapshot.unread_pending >= {"bob", "#team"}
+        assert {reference.name for reference, shown in first.snapshot.unread.items() if shown.pending} >= {"bob", "#team"}
         assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
         if not attempts:
             assert projection_bytes() == before
@@ -207,7 +208,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
             results.append(receiver.recv())
         completed = [value for value in results if isinstance(value, SidebarObserved)][-1]
         assert completed.snapshot == expected
-        assert completed.snapshot.unread_pending == frozenset()
+        assert {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending} == frozenset()
         assert len(attempts) == 2
         assert FileRevision.from_stat(comms.bus.activity_index.path.stat()) == activity_revision
         assert service.interest.observations[SidebarReading].request is request
@@ -242,13 +243,13 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         while receiver.poll():
             answers.append(receiver.recv())
         initial = [answer for answer in answers if isinstance(answer, SidebarObserved)]
-        assert len(initial) == 1 and initial[0].snapshot.unread_pending
+        assert len(initial) == 1 and {reference.name for reference, shown in initial[0].snapshot.unread.items() if shown.pending}
         await service.observe(set())
         while receiver.poll():
             answers.append(receiver.recv())
         completed = [answer for answer in answers if isinstance(answer, SidebarObserved)][-1]
-        assert completed.snapshot.unread == {"sender": 2}
-        assert not completed.snapshot.unread_pending
+        assert {reference.name: shown.count for reference, shown in completed.snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"sender": 2}
+        assert not {reference.name for reference, shown in completed.snapshot.unread.items() if shown.pending}
         assert service.interest.observations[SidebarReading].request is request
     finally:
         connection.close()
@@ -273,8 +274,8 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
 
     monkeypatch.setattr(comms.bus.log, "opened_wire_snapshot", observed)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
-    assert snapshot.unread == {"bob": 1}
-    assert snapshot.channel_unread["#team"] == 1
+    assert {reference.name: shown.count for reference, shown in snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"bob": 1}
+    assert snapshot.unread[ChannelTarget('#team')].count == 1
     assert snapshot.last_sent["bob"] > 0
     assert len(opened) == 1 and opened[0].stream.closed
 
@@ -296,7 +297,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
         while receiver.poll():
             results.append(receiver.recv())
         published = service.interest.observations[SidebarReading].published
-        assert published.snapshot.channel_unread["#team"] == 1
+        assert published.snapshot.unread[ChannelTarget('#team')].count == 1
         observer = service.interest.observations[SidebarReading]
         original = comms.views.presentation.display_view_metrics
         comms.messaging.send("bob", "#team", "second").message.message_id
@@ -324,7 +325,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
         while receiver.poll():
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
-        assert latest.snapshot.channel_unread["#team"] == 2
+        assert latest.snapshot.unread[ChannelTarget('#team')].count == 2
         assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.log.path.read_bytes() == preserved
@@ -341,7 +342,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     for number in range(100):
         comms.messaging.send("bob", "#team", f"message {number}").message.message_id
     expected = comms.views.viewer_snapshot(str(tmp_path))
-    assert expected.channel_unread["#team"] == 100
+    assert expected.unread[ChannelTarget('#team')].count == 100
 
     fresh = wire(tmp_path)
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
@@ -351,7 +352,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms.messaging.send("bob", "#team", "one new message").message.message_id
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         latest = fresh.views.viewer_snapshot(str(tmp_path))
-        assert latest.channel_unread["#team"] == 101
+        assert latest.unread[ChannelTarget('#team')].count == 101
         # Every decode belongs to the appended row; retained history is not replayed.
         assert decode.call_count > 0
         assert all(call.args[0]["text"] == "one new message" for call in decode.call_args_list)
@@ -367,7 +368,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     comms.messaging.send("bob", "#team", "first").message.message_id
     comms.messaging.send("bob", "#team", "second").message.message_id
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 2
 
     checkpoint = BusDisplayIndex(
         comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name
@@ -375,7 +376,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     cached = json.loads(checkpoint.read_text())
     cached["activity"]["#team"]["last_message"] = 0
     checkpoint.write_text(json.dumps(cached))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 2
 
     bus_path = comms.bus.log.path
     two = bus_path.read_bytes()
@@ -390,7 +391,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     replacement.write_bytes(three)
     replacement.chmod(0o600)
     os.replace(replacement, bus_path)
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 3
 
 
 def test_display_read_progress_preserves_append_index(tmp_path):
@@ -414,13 +415,13 @@ def test_display_read_progress_preserves_append_index(tmp_path):
     stored = saved.read_bytes()
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-        assert after.channel_unread["#team"] == 98
+        assert after.unread[ChannelTarget('#team')].count == 98
         assert decode.call_count == 0
     assert saved.read_bytes() == stored
     assert after.channels == before.channels
     # A new row still contributes once, after the unchanged old prefix.
     comms.messaging.send("bob", "#team", "appended").message
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 99
 
 
 def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
@@ -429,7 +430,7 @@ def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     messages = [comms.messaging.send("bob", "#team", f"message {n}").message for n in range(8)]
     comms.messaging.send_user_message("#team", "my message", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 8
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 8
     saved = BusDisplayIndex(comms.bus.log.path, viewer).path
     stored = saved.read_bytes()
     document = comms.bus.reads.read()
@@ -437,7 +438,7 @@ def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
         displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer, (*messages[:4], messages[6]), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, displayed)
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 3
     assert saved.read_bytes() == stored
 
 
@@ -469,7 +470,7 @@ def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
         patch.object(OpenedWireSnapshot, "public_records", no_full_scan),
     ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-        assert after.channel_unread["#team"] == 9
+        assert after.unread[ChannelTarget('#team')].count == 9
         assert decode.call_count == len(messages)  # Build once; SQL needs no extra body decode.
         assert {call.args[0]["seq"] for call in decode.call_args_list} == {
             message.seq for message in messages
@@ -493,12 +494,12 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
             viewer.name, (message,), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer.name, displayed)
     read = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-    assert read.channel_unread["#team"] == 0
+    assert read.unread[ChannelTarget('#team')].count == 0
     # Metadata updates preserve identity; removal and a new declaration do not.
     comms.registry.remove(viewer.name)
     comms.registry.register(replace(viewer, created_at=viewer.created_at + 1))
     returned = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-    assert returned.channel_unread["#team"] == 1
+    assert returned.unread[ChannelTarget('#team')].count == 1
     assert returned.channels == read.channels
 
 
@@ -527,7 +528,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     monkeypatch.setattr(comms.bus.log, 'opened_wire_snapshot', append_before_open)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     team = snapshot.channels["#team"]
-    assert snapshot.channel_unread["#team"] == 2
+    assert snapshot.unread[ChannelTarget('#team')].count == 2
     assert team.last_activity == appended[0].timestamp
 
 
@@ -552,7 +553,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, displayed)
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"bob": 2}
+    assert {reference.name: shown.count for reference, shown in wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread.items() if type(reference) is ThreadTarget and shown.count} == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
@@ -601,8 +602,8 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         while receiver.poll():
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
-        assert latest.snapshot.unread == {"renamed-bob": 3}
-        assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"renamed-bob": 3}
+        assert {reference.name: shown.count for reference, shown in latest.snapshot.unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 3}
+        assert {reference.name: shown.count for reference, shown in wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread.items() if type(reference) is ThreadTarget and shown.count} == {"renamed-bob": 3}
         assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger

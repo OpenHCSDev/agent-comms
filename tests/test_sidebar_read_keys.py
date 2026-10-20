@@ -1,4 +1,5 @@
 """The existing transcript reader consumes file changes, not every sidebar event."""
+from agent_comms.channel_targets import NativeThreadTarget
 from unittest.mock import patch
 
 from agent_comms.agent_backend import RuntimeLocation
@@ -43,7 +44,7 @@ def test_idle_sidebar_does_not_read_keys_and_append_only_reads_changed_thread(tm
         for number in range(10):
             snapshot = comms.views.viewer_snapshot(
                 str(tmp_path), RosterVisibility(archived=number % 2 == 0))
-            assert snapshot.thread_unread == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
+            assert {reference.name: shown.count for reference, shown in snapshot.unread.items() if isinstance(reference, NativeThreadTarget)} == ({'worker': 1, 'other': 1} if number % 2 == 0 else {'worker': 1})
         assert calls == []
         append(source, content="Only the worker changed")
         comms.views.viewer_snapshot(str(tmp_path))

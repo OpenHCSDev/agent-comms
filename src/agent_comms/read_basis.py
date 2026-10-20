@@ -351,7 +351,7 @@ class ReadCursor:
 
     conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
 
-    def lower_bound(self, scope: ChannelDisplayScope, snapshot: RegistryProvenance) -> int:
+    def lower_bound(self, scope: MessageDisplayScope, snapshot: RegistryProvenance) -> int:
         return scope.lower_bound(self, snapshot)
 
     @staticmethod
@@ -837,6 +837,9 @@ class MessageDisplayScope(ABC):
     @abstractmethod
     def index_targets(self) -> frozenset[str]:
         """The explicitly addressed targets included by this scope."""
+
+    def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
+        return cursor.for_conversation(AllConversation()).high_water
 
     def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
                 ) -> Iterable[tuple[Conversation, ConversationCursor]]:

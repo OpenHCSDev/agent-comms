@@ -712,7 +712,8 @@ class CoordinationSnapshot:
             registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
             activities, sent, messages, visibility,
         ))
-        counts = {ChannelTarget(name): unread(ChannelTarget(name)) for name in channels}
+        counts: dict[CommandTarget, UnreadPresentation] = {
+            ChannelTarget(name): unread(ChannelTarget(name)) for name in channels}
         counts.update((target, unread(target)) for target in map(ThreadTarget, threads))
         counts.update((NativeThreadTarget(name), UnobservedUnread()) for name in threads)
         return cls(

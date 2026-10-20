@@ -22,6 +22,14 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class ConversationPreparation[Result](ABC):
+    @abstractmethod
+    def native(self) -> Result: ...
+
+    @abstractmethod
+    def external(self) -> Result: ...
+
+
 class ChannelSelection(ABC):
     """Decoded menu context; container shapes stop at this input boundary."""
     needs_catalog: ClassVar[bool] = True
@@ -199,10 +207,16 @@ class NamedTarget(CommandTarget):
         """Non-direct targets impose no exact-recipient requirement."""
 
 
-class ThreadTarget(NamedTarget):
+class ThreadTarget(NamedTarget, ConversationPreparation["ThreadTarget"]):
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
+
+    def native(self) -> NativeThreadTarget:
+        return NativeThreadTarget(self.name)
+
+    def external(self) -> ThreadTarget:
+        return self
 
     def require_frozen_recipients(self, message, audience):
         message.role.require_recipients(self, audience)

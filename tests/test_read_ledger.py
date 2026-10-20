@@ -1,6 +1,6 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.wire_log import WireLog
 
 import random
@@ -140,7 +140,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
         comms.messaging.send("alice", "#team", f"message {i}").message.message_id
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=2))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 3
 
 
 def test_displayed_message_is_read_in_every_projection(tmp_path):
@@ -148,7 +148,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms.messaging.send("alice", "#team", "visible in both views").message.message_id
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#any')].count == 0
 
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
@@ -166,7 +166,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     key = ReadLedger.conversation(hidden, reopened.registry.snapshot())
     assert hidden.seq not in seen.for_conversation(key) and shown.seq in seen.for_conversation(key)
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count >= 1
 
 
 def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path):
@@ -303,7 +303,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
         basis = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer, page.messages, comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, basis)
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 3
     assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
 
 
@@ -357,13 +357,13 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     replacement.replace(comms.bus.log.path)
     reopened = wire(tmp_path)
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor()
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 1
     from agent_comms.coordination_errors import DMScopeChanged
     with pytest.raises(DMScopeChanged, match="Display incarnation changed"):
         reopened.views.mark_page_read(page, worktree=str(tmp_path))
     fresh = reopened.views.channel_display_page("#team", viewer=NamedViewer(viewer))
     reopened.views.mark_page_read(fresh, worktree=str(tmp_path))
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 0
 
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
@@ -378,7 +378,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     ledger = comms.bus.reads
     assert ledger.read().bus_identity == NoRecordedBus()
     assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.log.path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ThreadTarget('alice')].count == 1
 
     page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
@@ -391,7 +391,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     unrecorded = FieldCodec.decode(ReadDocument, {**old, "bus_identity": None})
     assert unrecorded.bus_identity == NoRecordedBus()
     assert unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path)) == ReadCursor()
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread[ThreadTarget('alice')].count == 0
 
     replacement = tmp_path / "restored-bus.jsonl"
     replacement.write_bytes(comms.bus.log.path.read_bytes())
@@ -402,12 +402,12 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     snapshot = reopened.registry.snapshot()
     assert message.seq not in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(
         ReadLedger.conversation(message, snapshot))
-    assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ThreadTarget('alice')].count == 1
     with pytest.raises(DMScopeChanged, match="bus was replaced"):
         reopened.views.mark_page_read(page, worktree=str(tmp_path))
     fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
     reopened.views.mark_page_read(fresh, worktree=str(tmp_path))
-    assert reopened.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ThreadTarget('alice')].count == 0
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
@@ -430,7 +430,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(messages[2].seq, messages[4].seq))})
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread[ChannelTarget('#team')].count == 3
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])

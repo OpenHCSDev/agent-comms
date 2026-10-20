@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .thread_execution import ConversationPreparation
+from .channel_targets import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .external_transcript import ExternalTranscript
 from .transcript_events import TurnDigest
@@ -81,7 +81,7 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
-class TranscriptRead[Result](ConversationPreparation):
+class TranscriptRead[Result](ConversationPreparation[Result]):
     """The original native/external source selection, shared by typed readers."""
 
     root: Path

@@ -3,6 +3,7 @@
 The old prefix-resume/time-budget tests described deleted owners. These checks
 exercise the current suffix, read marks, per-source publication and retirement.
 """
+from agent_comms.channel_targets import NativeThreadTarget
 import json
 import sqlite3
 from concurrent.futures import Future
@@ -67,7 +68,7 @@ def test_count_coverage_is_preserved_when_sources_are_combined(left, right, expe
 
 @pytest.mark.parametrize('count,label', [(0, ''), (1, '(1+)'), (32, '(32+)')])
 def test_capped_labels_never_claim_at_least_zero(count, label):
-    shown = CappedReplyUnread.for_count(count)
+    shown = CappedReplyUnread.from_count(count)
     assert shown.label == label
     assert shown.highlighted == bool(count)
     assert ReplyUnread(count).label == f'({count})'
@@ -103,16 +104,16 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     append(source, content=[{'type': 'toolCall', 'id': 'tool', 'name': 'read', 'arguments': {}}])
     append(source, 'toolResult', 'tool output')
     append(source, content=[{'type': 'text', 'text': 'one'}, {'type': 'text', 'text': 'two'}])
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
+    assert completed_snapshot(comms, str(tmp_path)).unread[NativeThreadTarget('worker')] == ReplyUnread(1)
     shown = comms.transcripts.transcript_checkpoint('worker')
     append(source, content='Arrived after the displayed cut')
     comms.views.mark_thread_view_read('worker', worktree=str(tmp_path), through=shown)
-    assert completed_snapshot(wire(comms.root), str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
-    assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
+    assert completed_snapshot(wire(comms.root), str(tmp_path)).unread[NativeThreadTarget('worker')] == ReplyUnread(1)
+    assert completed_snapshot(comms, str(tmp_path / 'other-project')).unread[NativeThreadTarget('worker')] == ReplyUnread(1)
     comms.messaging.send('worker', '#ci', 'Channel reply')
     comms.views.mark_user_view_read('#ci', worktree=str(tmp_path))
     comms.messaging.acknowledge('worker', tuple(m.reference for m in comms.bus.inbox('worker')))
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
+    assert completed_snapshot(comms, str(tmp_path)).unread[NativeThreadTarget('worker')] == ReplyUnread(1)
 
 
 def test_idle_reads_use_the_index_and_changed_source_recounts_only_the_cap(tmp_path):
