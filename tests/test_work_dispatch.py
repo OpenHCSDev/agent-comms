@@ -1,4 +1,5 @@
 """State-level sanity checks, not the required native startup/first-reply proof."""
+from agent_comms.repository_name import RepositoryName
 
 from dataclasses import replace
 
@@ -61,7 +62,7 @@ def test_invalid_request_refuses_dispatch_before_allocating_anything(commander):
     comms, _ = commander
     checked = order(comms.root, "full-phase-order")
     action = CreateProblemGoalAction(
-        problem="P1", repo="OpenHCSDev/agent-comms", text="Repair the full phase",
+        problem="P1", repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Repair the full phase",
         order=checked, request="not-the-active-request", commander="lead",
         deadline=RecordedEventTime(1000),
     )

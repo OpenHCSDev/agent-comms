@@ -1,6 +1,7 @@
 """Real hook entrypoints and /proc session classification; no classifier substitution."""
 
 from __future__ import annotations
+from agent_comms.repository_name import RepositoryName
 
 import json
 import os
@@ -22,7 +23,7 @@ def guard_entry(commander, commander_script, tmp_path):
     context, repo = commander_script
     context = context.model_copy(
         update={
-            "repos": (Repo(checkout=repo, github="OpenHCSDev/agent-comms"),),
+            "repos": (Repo(checkout=repo, github=RepositoryName.from_wire("OpenHCSDev/agent-comms")),),
         }
     )
     context.write(tmp_path)

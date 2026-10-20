@@ -9,19 +9,23 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.commander import order as commander_order
 from agent_comms.child_process import CountPrinted
-from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
-from agent_comms.tools import CommsOrderDoneTool
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.tools import CommsOrderDoneTool, CommsOrderTool
+from agent_comms.native_tools import NativeRequestTools
+from cutover.carry_todo_order_history import TodoOrderHistory
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    MergedPullRequest, PresentCheckout, ProgressPoint, ProgressSource, PullRequest, PullRequests,
-    PushedProgress, UnmergedPullRequest, UnreadProgress)
+    MeasuredProgressSource, MergedPullRequest, ProgressPoint, ProgressSource, PullRequest, PullRequests,
+    PushedProgress, Todo, UnmergedListedPullRequest, UnmergedPullRequest, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
 from agent_comms.work_branches import WorkBranchError
-from test_commander_problem_orders import create, working
+from test_commander_problem_orders import create, order, working
 
 
 class Listed(PullRequests):
@@ -56,6 +60,26 @@ def checkout(commander, tmp_path):
     return create(commander, 'P1'), unit
 
 
+def test_prior_declarations_do_not_enter_native_request_schemas():
+    import json
+    catalog = json.dumps(NativeRequestTools.catalog())
+    assert 'prior_orders' not in catalog
+    assert 'preceding' not in catalog
+
+
+def test_prior_order_store_carry_preserves_original_rows(commander):
+    comms, _ = commander
+    original = create(commander, 'P1')
+    with comms.goals.todos.writing() as db:
+        db.execute(f'ALTER TABLE "{Todo.declared_name}" DROP COLUMN "prior_orders"')
+    preview = TodoOrderHistory.carry(comms.root, apply=False)
+    assert preview.changed == 2
+    applied = TodoOrderHistory.carry(comms.root, apply=True)
+    assert applied.changed == 2
+    assert comms.goals.todos.get('P1') == original
+    assert TodoOrderHistory.carry(comms.root, apply=True).changed == 0
+
+
 def commit(unit):
     git(unit, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'P1 work')
     return git(unit, 'rev-parse', 'HEAD')[:9]
@@ -77,7 +101,7 @@ def test_unfinished_check_keeps_other_overdue_orders_visible(
     monkeypatch.setattr(OrderCheck, "timeout", 0.05)
     todo = replace(todo, order=replace(todo.order,
         check=OrderCheck(str(unit), "sleep 0.2; echo 0", CountCheckResult(0))))
-    monkeypatch.setattr(script.COMMS.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
+    monkeypatch.setattr(script.comms.registry, "storage_rule", StorageRule(checkout_base=unit.parent))
     # The child really exceeds its timeout; partial stdout must never become a count.
     outcome = TimedOutOutcome(SignaledOutcome(9))
     assert isinstance(outcome.printed_count(b"0"), NoCountYetPrinted)
@@ -120,8 +144,10 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
     lines = deadline_lines(script)
-    alarm = next(line for line in lines if line.startswith('OVERDUE:'))
-    assert "order order-P1" in alarm and "order order-P2" in alarm
+    alarm = next(line for line in lines if line.startswith('OVERDUE: P1 '))
+    assert len(lines) == 2
+    assert 'order order-P1' in alarm
+    assert any(line.startswith('OVERDUE: P2 ') and 'order order-P2' in line for line in lines)
     assert "check prints no integer: printf 'no count here'" in alarm
     assert 'distance 0' not in alarm and 'projected done' not in alarm
     missing = NoIntegerPrinted()
@@ -182,8 +208,43 @@ def test_a_detached_checkout_still_reads_its_order_pr(checkout):
     assert read(checkout, Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0, orders=('order-P1',)),))) == OpenPrProgress(7, 'a' * 9, at=400.0)
 
 
-def test_an_open_pr_untouched_since_the_order_belongs_to_an_earlier_one(checkout):
-    assert read(checkout, Listed(open=(UnmergedPullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0, orders=('order-P1',)),))) == NoCommitProgress()
+def test_reused_checkout_replaced_order_and_retired_checkout_keep_problem_progress(
+        checkout, commander, tmp_path):
+    first, named = checkout
+    repository = tmp_path / 'repository'
+    named.rename(repository)
+    reused = named.parent / 'worker--P41'
+    git(repository, 'worktree', 'add', '-q', '-b', 'fix/reused', str(reused))
+    sha = commit(reused)
+    git(reused, 'push', '-q', 'origin', 'HEAD:fix/reused')
+    assert not named.exists()
+    assert read((first, reused)).sha == sha
+    assert isinstance(read((first, reused)), PushedProgress)
+
+    comms, caller = commander
+    replacement = replace(order(repository, 'replacement-P1'), at=RecordedEventTime(2000))
+    CommsOrderTool(owner='worker', order=OrderGoalAction(
+        problem='P1', order=replacement, request='request',
+        deadline=RecordedEventTime(3000), commander='lead', expected_revision=first.revision,
+        assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
+    current = comms.goals.todos.get('P1')
+    assert current.held_order_ids == ('order-P1', 'replacement-P1')
+    assert current.prior_orders == (first.order,)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(current)) == current
+
+    bodies = (first.order.pull_request_body('Original working PR'), 'Problem: P1\n')
+    for body in bodies:
+        request = UnmergedListedPullRequest(7, 'unrelated-branch-name', 'a' * 40,
+            updated='1970-01-01T00:00:50Z', body=body, base='main').parsed()
+        foreign = replace(request, number=8, orders=('order-P10',), problems=('P10',))
+        progress = read((current, reused), Listed(open=(foreign, request)))
+        assert isinstance(progress, OpenPrProgress) and progress.number == 7
+        assert progress.line == 'PR #7 open at aaaaaaaaa'
+
+    git(repository, 'worktree', 'remove', str(reused))
+    published = read((current, reused))
+    assert isinstance(published, PushedProgress) and published.sha == sha
+    assert not reused.exists()
 
 
 def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
@@ -210,7 +271,8 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
     check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
                        CountCheckResult(0))
     todo = replace(todo, order=replace(todo.order, check=check))
-    source = ProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
+    commit(unit)
+    source = MeasuredProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
     assert not source.readings().readings
     assert not marker.exists()
     check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
@@ -223,10 +285,8 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
 def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
     bad = tmp_path / 'not-a-repository' / 'worker--P1'
     bad.mkdir(parents=True)
-    source = ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
-    assert isinstance(source.checkout, PresentCheckout)
-    with pytest.raises(GitCommandFailed):
-        source.readings()
+    with pytest.raises(WorkBranchError, match='not a git repository'):
+        ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
 
 
 def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_script, monkeypatch, tmp_path):
@@ -260,11 +320,13 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
 class HeldSource:
     """A source holding an unpushed commit, a pushed commit, an open PR and a merged PR."""
     since = 100.0
+    pushes = ()
 
     def commits(self, *excluded):
-        commits = {('--remotes',): ProgressPoint('a' * 40, 1000.0),
-                   ('origin/HEAD',): ProgressPoint('e' * 40, 1000.0)}
-        yield commits[excluded]
+        yield ProgressPoint('a' * 40, 1000.0)
+
+    def published(self):
+        yield ProgressPoint('e' * 40, 1000.0)
 
     def readings(self):
         return DistanceReadings()
@@ -276,8 +338,12 @@ class HeldSource:
 
 class EmptySource:
     since = 100.0
+    pushes = ()
 
     def commits(self, *excluded):
+        return iter(())
+
+    def published(self):
         return iter(())
 
     def requests(self, state):
@@ -346,11 +412,11 @@ def test_overdue_remains_announced_until_recorded(commander, commander_script):
     polls, since = [], 800.0
     for _ in range(3):
         polls, since = polls + deadline_lines(script, since), time.time()
-    assert len(polls) == 3 and all(line.startswith('OVERDUE: worker (due ') for line in polls)
+    assert len(polls) == 3 and all(line.startswith('OVERDUE: P1 worker (due ') for line in polls)
     comms.messaging.send('worker', 'lead', 'on it', InfoKind).message
     replied = deadline_lines(script, since)
     assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
-    assert deadline_lines(script, time.time())[0].startswith("OVERDUE:")
+    assert deadline_lines(script, time.time())[0].startswith("OVERDUE: P1 worker")
 
 
 def test_install_due_reads_the_schedule_time_alone(commander):
@@ -409,6 +475,11 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     todo = create(commander, pid, deadline=1)
     storage = StorageRule(checkout_base=tmp_path / "wt")
     monkeypatch.setattr(script.comms.registry, "storage_rule", storage)
+    reused = storage.order_checkout("worker", "P999")
+    reused.mkdir(parents=True)
+    git(reused, "init", "-q", "-b", branch)
+    git(reused, "remote", "add", "origin", f"https://github.com/{todo.repo.to_wire()}.git")
+    monkeypatch.chdir(reused)
     body_file = tmp_path / "pr-body.md"
     body_file.write_text(subject)
     bodies = []

@@ -6,6 +6,7 @@ Retains request/response/timing/trace files under the supplied owned output path
 """
 
 from __future__ import annotations
+from agent_comms.repository_name import RepositoryName
 
 import argparse
 import json
@@ -82,7 +83,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         request="request",
         deadline=RecordedEventTime(time.time() + 600),
         commander="claude-ai",
-        repo="OpenHCSDev/agent-comms",
+        repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         text="Measure the connector order.",
     )
     order_tools = {

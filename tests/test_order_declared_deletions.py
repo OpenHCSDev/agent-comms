@@ -1,4 +1,5 @@
 """Declared module deletions reach the real commander CLI and saved order codec."""
+from agent_comms.repository_name import RepositoryName
 import json
 import os
 import subprocess
@@ -49,7 +50,7 @@ def test_order_send_cli_refuses_declared_module_imported_by_toad(
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
-    script = script.model_copy(update={'repos': (Repo(checkout=toad, github='OpenHCSDev/toad'),)})
+    script = script.model_copy(update={'repos': (Repo(checkout=toad, github=RepositoryName.from_wire('OpenHCSDev/toad')),)})
     script.write(tmp_path)
     body = Path(order_body(repo, edit='Remove the obsolete ingress implementation.',
                            deletes=ModuleDeletion(('src/agent_comms/acp_ingress.py',))))

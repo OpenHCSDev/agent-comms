@@ -265,7 +265,7 @@ class CommanderContext(CommanderConfig):
         return replace(check, directory=str(directory))
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_for_commander(self.incarnation)
+        return tuple(todo for todo in self.todos() if todo.holder)
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(self.incarnation, unit)
@@ -677,9 +677,9 @@ class Commander(CommanderContext):
                 continue
             answer = self.reply(t.holder, ordered)
             due = f'due {t.deadline.clock()}, order {t.order.id}'
-            late.append(f'{t.holder} ({due}, {work.line}{answer})')
-        alarm = f'OVERDUE: {", ".join(late)} -> push or merge unfinished work now'
-        return [alarm] * bool(late)
+            late.append(f'OVERDUE: {t.id} {t.holder} ({due}, {work.line}{answer}) '
+                        '-> push or merge unfinished work now')
+        return late
 
     def install_lines(self, held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
         """One INSTALL line naming every held order that waits on the fleet's install."""
@@ -996,18 +996,23 @@ class DoneVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "open the problem's PR with its required immutable order identity"
+    help = ("open the problem's PR from this owned source checkout "
+            "with its immutable order identity")
     pid: str = option("pid")
     title: str = option("--title")
     body_file: str = option("--body-file")
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
-        checkout = Repo.of(Path.cwd())
-        if checkout.github.lower() != todo.repo.lower():
-            sys.exit(f'Refused: current checkout belongs to {checkout.github}, not {todo.repo}.')
-        print(todo.order.open_pull_request(
-            todo, checkout.checkout, self.title, Path(self.body_file).read_text()))
+        source = Repo.of(Path.cwd())
+        holder = todo.held().owner_identity
+        if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
+            raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
+        if not source.holds(todo):
+            sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
+                     f'not {todo.repo.to_wire()}.')
+        print(todo.order.checked().open_pull_request(
+            todo, source.checkout, self.title, Path(self.body_file).read_text()))
 
 
 @dataclass(frozen=True, kw_only=True)

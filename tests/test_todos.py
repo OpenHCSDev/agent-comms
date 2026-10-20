@@ -16,6 +16,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
@@ -59,25 +60,25 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     lead = thread("lead", tmp_path, 1.0)
     goal = GoalRef("lead", 1.0, "goal-1")
     original = store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
+        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
-    assert original.repo == "openhcsdev/agent-comms"
+    assert original.repo == RepositoryName.from_wire("OPENHCSDEV/agent-comms")
     assert original.revision == 1
     assert original.assignment == Assignment("lead", 1.0, "lead", 1.0, "initial")
     assert (
         store.create(
-            "todo-1", "openhcsdev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
+            "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
             owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
         )
         == original
     )
     with pytest.raises(TodoConflict):
         store.create(
-            "todo-1", "openhcsdev/agent-comms", "A different task", creator=lead, goal=goal,
+            "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "A different task", creator=lead, goal=goal,
             owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
         )
-    assert TodoStore(tmp_path).list("openhcsdev/agent-comms") == (original,)
+    assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = thread("lead", tmp_path, 2.0)
     assert store.get(original.id).goal == goal
     with pytest.raises(TodoConflict):
@@ -88,7 +89,7 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
 def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
-    first = store.create("P1", "org/repo", "Open order", creator=lead, owner=lead,
+    first = store.create("P1", RepositoryName.from_wire("org/repo"), "Open order", creator=lead, owner=lead,
         generation="one", goal=GoalRef("lead", 1.0, "request"),
         deadline=RecordedEventTime(1000), order=order(tmp_path))
     second = replace(first, id="P2", state=BlockedTodoState)
@@ -146,7 +147,7 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "One implementation", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "One implementation", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
@@ -162,22 +163,22 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     persisted = TodoStore(tmp_path).get("todo-1")
     assert persisted.assignment.owner == observed[0][1]
     assert persisted.revision == 2
-    assert len(store.list("OpenHCSDev/agent-comms")) == 1
+    assert len(store.list(RepositoryName.from_wire("OpenHCSDev/agent-comms"))) == 1
 
 
 def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     for index, repo in enumerate(("org/repo/branch", "../repo", "org/", "org/repo name")):
-        with pytest.raises(TodoError):
+        with pytest.raises(ValueError):
             store.create(
-                f"invalid-{index}", repo, "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+                f"invalid-{index}", RepositoryName.from_wire(repo), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
                 owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
             )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
     store.create(
-        "todo-1", "org/repo", "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "todo-1", RepositoryName.from_wire("org/repo"), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with pytest.raises(ValueError):
@@ -188,7 +189,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     cells = merged.order.board_cells(merged)

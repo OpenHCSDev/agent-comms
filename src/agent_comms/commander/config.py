@@ -94,7 +94,7 @@ class CommanderConfig(CommanderRole, BaseModel):
     def repo_directory(self, name: str) -> Path:
         """A configured repository name takes precedence over a directory spelling."""
         return next((repo.checkout for repo in self.repos
-                     if repo.github.rsplit('/', 1)[-1] == name), Path(name)).resolve()
+                     if repo.github.named(name)), Path(name)).resolve()
 
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""

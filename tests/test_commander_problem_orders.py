@@ -31,6 +31,7 @@ from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
@@ -56,7 +57,7 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000, ow
     CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
         request='request', deadline=RecordedEventTime(deadline), commander='lead',
-        repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
+        repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
 
@@ -76,9 +77,9 @@ def test_new_native_order_refuses_soft_prose_before_reservation(commander, text)
         CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
             problem='Psoft', order=checked, request='request',
             deadline=RecordedEventTime(1000), commander='lead',
-            repo='OpenHCSDev/agent-comms', text='Repair the store',
+            repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Repair the store',
         )).apply(comms, caller)
-    assert comms.goals.todos.list('OpenHCSDev/agent-comms') == ()
+    assert comms.goals.todos.list(RepositoryName.from_wire('OpenHCSDev/agent-comms')) == ()
     assert comms.registry.require('worker').goal == original
 
 
@@ -107,12 +108,12 @@ def test_direct_creation_checks_defect_prose_before_writing(commander):
     lead = comms.registry.require('lead')
     with pytest.raises(ValueError, match='Soft wording'):
         comms.goals.todos.create(
-            'Psoft', 'OpenHCSDev/agent-comms', 'Please repair the store',
+            'Psoft', RepositoryName.from_wire('OpenHCSDev/agent-comms'), 'Please repair the store',
             creator=lead, owner=comms.registry.require('worker'), generation='ongoing',
             deadline=RecordedEventTime(1000), order=order(comms.root, 'soft-order'),
             goal=GoalRef(lead.name, lead.created_at, 'request'),
         )
-    assert comms.goals.todos.list('OpenHCSDev/agent-comms') == ()
+    assert comms.goals.todos.list(RepositoryName.from_wire('OpenHCSDev/agent-comms')) == ()
 
 
 def working(comms):
@@ -740,7 +741,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
     script = script.model_copy(update={'repos': (
-        Repo(checkout=toad, github='OpenHCSDev/toad'),)})
+        Repo(checkout=toad, github=RepositoryName.from_wire('OpenHCSDev/toad')),)})
     (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
     edit = 'Remove the obsolete ingress implementation.'
     deletes = ModuleDeletion(('src/agent_comms/acp_ingress.py',))
@@ -1146,7 +1147,8 @@ def stray(commander, problem, generation):
     not the unit's open Goal."""
     comms, _ = commander
     lead = comms.registry.require('lead')
-    return comms.goals.todos.create(problem, 'OpenHCSDev/agent-comms', 'Fix ' + problem, creator=lead,
+    return comms.goals.todos.create(
+        problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'), 'Fix ' + problem, creator=lead,
         owner=comms.registry.require('worker'), generation=generation, deadline=RecordedEventTime(1000),
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 
@@ -1282,7 +1284,7 @@ def test_dropped_problem_links_through_the_unordered_lifecycle(commander):
             problem=pid, order=replace(order(comms.root, 'order-' + pid),
                 at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120), finding=finding),
             request='request', deadline=RecordedEventTime(1000), commander='lead',
-            repo='OpenHCSDev/agent-comms', text='Fix ' + pid)).apply(comms, caller)
+            repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Fix ' + pid)).apply(comms, caller)
     old_message = order_message(commander, 'P1', 'The earlier counter order')
     new_message = order_message(commander, 'P2', 'The newer counter order')
     lead = comms.registry.require('lead').incarnation
@@ -1539,7 +1541,7 @@ def test_close_quotes_the_works_line(commander):
     run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
-        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
+        deadline=RecordedEventTime(1000), commander='lead', repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Fix P1',
     )).apply(comms, caller)
     CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     artifact = comms.root / 'installed-evidence'
@@ -1570,7 +1572,7 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem='P520', order=replace(order(comms.root, 'order-P520'), deletes=deletes),
         request='request', deadline=RecordedEventTime(1000), commander='lead',
-        repo='OpenHCSDev/agent-comms', text='Delete the is_set decision',
+        repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Delete the is_set decision',
     )).apply(comms, caller)
     pending = comms.goals.todos.get('P520')
     assert 'Deletes: is_set absence decision at' in pending.order.instructions(pending)
