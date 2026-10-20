@@ -358,7 +358,7 @@ class TestHandlers:
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
         agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         if renamed:
-            agent._comms.registry.rename("proj", "renamed")
+            agent._comms.threads.rename_managed_thread("proj", "renamed", owner_pid=os.getpid())
         sent = []
 
         class Client:
