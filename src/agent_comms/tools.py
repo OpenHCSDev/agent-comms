@@ -924,7 +924,7 @@ class CommsOrderServeTool(CommsTodoTool):
 class CommsProblemCloseTool(CommsTodoTool):
     label = "Close installed problem"
     description = "Record installed application evidence and close only a problem with no open order."
-    works: str = tool_field("What worked in the app, quoting the order's Works when run")
+    works: str = tool_field("What worked in the app, quoting the order's application run")
     artifact: str = tool_field("Existing verification artifact file")
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:

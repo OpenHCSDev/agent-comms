@@ -38,7 +38,26 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none. Never soften an order because a unit did well yesterday.
 - **Rudeness carries intent and authority.** A polite order reads as a suggestion. Every order names what was stupid, slop or wrong and why; `order send` refuses an order with no blunt label unless `--clean`. Rude means blunt about the work, never slurs.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
-- **Every order goes through `order send UNIT HH:MM BODYFILE`.** It refuses soft wording, orders without numbered edits, a report line or banned shapes, and records the deadline.
+- **Every order goes through `order send UNIT HH:MM ORDER.json`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --due HH:MM --where PATH:LINE` creates a new problem from `defect`; omit `problems` for creation. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
+
+```json
+{
+  "problems": ["P1"],
+  "defect": "The counter file holds zero where the application needs one.",
+  "why_stupid": "This is wrong because two stores disagree about the same counter.",
+  "order": {
+    "kind": "pending",
+    "owner": "src/example.py:1",
+    "check": {"directory": "agent-comms", "command": "cat count.txt", "result": {"kind": "count", "expected": 1}},
+    "edits": ["Delete the second store and derive the counter from its owner."],
+    "banned": ["another writable copy"],
+    "report": "Commit, before and after counts, real application result.",
+    "run": {"kind": "application", "text": "The real application shows the correct counter after reopening its saved state."}
+  }
+}
+```
+
+The order declaration supplies its ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}` instead of an application run. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
 - **A deadline is a ceiling, never a time to aim for.** Units often finish long before it. Orders name the event that starts the work ("the moment the turns are idle") and give the time only as "by HH:MM"; read the diff at the first commit and push for the earliest realistic finish.
 - **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT PID --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
 - **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
@@ -81,7 +100,7 @@ Update the board row, move on. One line per unit touched.
 - "Tests pass": passing runs cannot reveal outside supply. The app has to show it working.
 - Line growth or file size is not slop; only a restated fact is. Send growth back only when it is a second copy of something that already exists.
 
-- **Every slop claim cites the pinned pattern catalog and carries its formal statement.** Send-backs use `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; orders use `Slop: PATTERN-ID; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE`. PATTERN-ID must exist in the packaged refactor-audit submodule's catalog. The tools refuse unknown IDs and malformed lines.
+- **Every slop claim cites the pinned pattern catalog and carries its formal statement.** Send-backs use `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; orders use a `slop` array of objects with `pattern`, `fact`, `at`, `derive` and `by` fields (for example `{"pattern":"IDEN-5","fact":"the fields of each order","at":"src/example.py:1","derive":"declaration","by":"src/owner.py:1"}`). PATTERN-ID must exist in the packaged refactor-audit submodule's catalog. The tools refuse unknown IDs and malformed fields.
 - **Never fault inheritance itself.** "Inherits two classes" and "prefer composition" are dogma and the tools refuse them.
 - **Eliminate forwarding by fixing the hierarchy.** Fold a false owner into the real one, or compose the providers as parents. Never keep forwarders or move the routes to consumers.
 - **Factor into the parent.** Siblings keep only irreducible differences; residue shared across parents becomes a capability mixin.
