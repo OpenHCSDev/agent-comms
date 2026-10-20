@@ -342,6 +342,42 @@ def physical_path(value, cwd):
     return (path if path.is_absolute() else cwd / path).resolve()
 
 
+@dataclass(frozen=True)
+class ShellInvocation:
+    """One decoded shell command and the directory its preceding commands select."""
+
+    words: tuple[str, ...]
+    cwd: Path
+
+    @property
+    def program(self) -> str:
+        return Path(self.words[0]).name
+
+    @property
+    def args(self) -> list[str]:
+        return list(self.words[1:])
+
+    @classmethod
+    def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
+        for words in shell_commands(command):
+            while words and '=' in words[0]:
+                words.pop(0)
+            if not words:
+                continue
+            if Path(words[0]).name == 'cd' and len(words) > 1:
+                target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
+                cwd = physical_path(target, cwd)
+                continue
+            yield cls(tuple(words), cwd)
+
+
+@dataclass(frozen=True)
+class GitInvocation:
+    args: list[str]
+    cwd: Path
+    directories: tuple[Path, ...]
+
+
 def shell_commands(command):
     """Shell words, not matches in quoted code or here-document bodies."""
     body = []
@@ -444,14 +480,37 @@ class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTr
     forbidden = (('clone',), ('worktree', 'move'))
     reason = 'git clone and git worktree move are forbidden; add and remove worktrees instead'
 
+    @classmethod
+    def invocation(cls, args: list[str], cwd: Path) -> GitInvocation:
+        directories = [cwd]
+        while args and args[0].startswith('-'):
+            option = args[0]
+            if option in ('-C', '-c', '--git-dir', '--work-tree', '--config-env'):
+                if len(args) < 2:
+                    raise SelectedToolDenied('StorageRule: incomplete git option')
+                if option in ('-C', '--git-dir', '--work-tree'):
+                    path = physical_path(args[1], cwd)
+                    directories.append(path)
+                    if option == '-C':
+                        cwd = path
+                args = args[2:]
+            elif option.startswith('-C'):
+                cwd = physical_path(option[2:], cwd)
+                directories.append(cwd)
+                args = args[1:]
+            elif option.startswith(('--git-dir=', '--work-tree=')):
+                directories.append(physical_path(option.partition('=')[2], cwd))
+                args = args[1:]
+            elif option.startswith(('-c', '--config-env=')) or option in (
+                    '--no-pager', '--paginate', '--literal-pathspecs', '--no-optional-locks'):
+                args = args[1:]
+            else:
+                break
+        return GitInvocation(args, cwd, tuple(directories))
+
     def effects(self, args, cwd):
-        while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
-            if len(args) < 2:
-                raise SelectedToolDenied('StorageRule: incomplete git option')
-            if args[0] == '-C':
-                cwd = physical_path(args[1], cwd)
-            args = args[2:]
-        return super().effects(args, cwd)
+        invocation = self.invocation(args, cwd)
+        return super().effects(invocation.args, invocation.cwd)
 
 
 class PythonProgram(ForbidsCommands, BuildsOnCommands, TestsOnCommands, AllocatesOnCommands):
@@ -512,17 +571,10 @@ class CopyProgram(WritesTargets):
 def shell_storage_effects(command, cwd):
     """Decode known shell operations, not arbitrary interpreter programs."""
     effects = []
-    for words in shell_commands(command):
-        while words and '=' in words[0]:
-            words.pop(0)
-        if not words:
-            continue
-        program, args = Path(words[0]).name, words[1:]
-        if program == 'cd' and args:
-            cwd = physical_path(args[0], cwd)
-            continue
+    for invocation in ShellInvocation.parse(command, cwd):
+        args = invocation.args
         for index, word in enumerate(args[:-1]):
             if word in ('>', '>>'):
-                effects.append(WriteStorageEffect(physical_path(args[index + 1], cwd)))
-        effects.extend(ShellProgram.named(program).effects(args, cwd))
+                effects.append(WriteStorageEffect(physical_path(args[index + 1], invocation.cwd)))
+        effects.extend(ShellProgram.named(invocation.program).effects(args, invocation.cwd))
     return tuple(effects)

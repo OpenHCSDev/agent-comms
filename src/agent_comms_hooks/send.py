@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.commander import cli, send_guard
-from agent_comms_hooks import BashInput, ClaudeToolHookProgram
+from agent_comms_hooks import BashInput, ClaudeToolHookProgram, FileEditInput
 
 
 class SendGuard(ClaudeToolHookProgram):
@@ -16,3 +16,13 @@ class SendGuard(ClaudeToolHookProgram):
     def command(cls) -> str:
         commander = cls.console_script(f"{cli.__name__}:{cli.main.__name__}")
         return f"{commander} {cli.tool_name(send_guard.main.__module__)}"
+
+
+class EditGuard(SendGuard):
+    """The same classified commander cannot edit protected source with file tools."""
+
+    reads = FileEditInput
+
+    @classmethod
+    def command(cls) -> str:
+        return f"{super().command()} {send_guard.EditGuardTool.declared_name}"

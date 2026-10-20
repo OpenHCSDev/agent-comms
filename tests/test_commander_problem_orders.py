@@ -1544,7 +1544,7 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
 
     def guarded(*targets):
         command = 'agent-comms send --from lead ' + ' '.join(f'--to {target}' for target in targets) + ' --body hi'
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([], script)
         return capsys.readouterr().out
 
@@ -1582,7 +1582,7 @@ def test_tactical_refused_from_the_commander_session_only(commander, commander_s
                                        process_identity=ProcessIdentity.capture(process.pid)))
 
         def guarded(command, session):
-            hook = {'session_id': session, 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
+            hook = {'session_id': session, 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}}
             monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
             send_guard.main([], script)
             return capsys.readouterr().out
@@ -1614,7 +1614,7 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
     create(commander, 'P1')
     for command in ('agent-comms send --from user --to lead --body "agent-comms send --from lead --to worker"',
                     'agent-comms send --from user --to lead --body "x; agent-comms send --from lead --to worker"'):
-        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
+        monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'session_id': 's', 'cwd': str(script.root), 'hook_event_name': 'PreToolUse', 'tool_input': {'command': command}})))
         send_guard.main([], script)
         assert capsys.readouterr().out == ''
 

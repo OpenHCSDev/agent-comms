@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from importlib import import_module
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import ClassVar, Self, get_type_hints
 
 
@@ -71,6 +72,30 @@ class ClaudeHook(HookRecord):
             )
         )
 
+    def deny(self, reason: str) -> None:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": self.hook_event_name,
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": reason,
+                    }
+                }
+            )
+        )
+
+
+@dataclass(frozen=True)
+class ClaudeWorkspaceHook(ClaudeHook):
+    """A filesystem-aware hook resolves paths against the caller's actual directory."""
+
+    cwd: str
+
+    def resolve_path(self, value: str) -> Path:
+        path = Path(value).expanduser()
+        return (path if path.is_absolute() else Path(self.cwd) / path).resolve()
+
 
 class ClaudeStopHook(ClaudeHook):
     """A Stop warning asks Claude Code to continue the turn, rather than end it."""
@@ -95,7 +120,18 @@ class BashInput(ToolInput):
 
 
 @dataclass(frozen=True)
-class ClaudeBashHook(ClaudeHook):
+class FileEditInput(ToolInput):
+    tool = "Edit|Write|MultiEdit"
+    file_path: str
+
+
+@dataclass(frozen=True)
+class ClaudeFileEditHook(ClaudeWorkspaceHook):
+    tool_input: FileEditInput
+
+
+@dataclass(frozen=True)
+class ClaudeBashHook(ClaudeWorkspaceHook):
     """A hook on a Bash tool call, carrying the command line Claude is about to run."""
 
     tool_input: BashInput
