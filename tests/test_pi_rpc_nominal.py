@@ -286,7 +286,6 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
         prompt_state=SimpleNamespace(awaiting_start=True),
-        tool_socket=SimpleNamespace(active_tools={"stale"}),
     )
     watchdog.phase = ModelWaitPhase()
     wait = watchdog.wait_for(session)
@@ -298,7 +297,7 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     session.prompt_state.awaiting_start = False
     model_wait = watchdog.wait_for(session)
     assert isinstance(model_wait, ModelWait)
-    assert model_wait.timeout() == 60.0  # The stale socket cannot disable model silence.
+    assert model_wait.timeout() == 60.0  # The phase owns the model-progress budget.
     watchdog.phase = pi.ToolExecutionStart().on(ModelWaitPhase())
     assert watchdog.phase.model_progress() is watchdog.phase
     assert watchdog.wait_for(session).timeout() is None
