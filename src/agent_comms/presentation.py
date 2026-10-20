@@ -800,7 +800,8 @@ class WireRevision(ReadState):
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
         *STATUS_SOURCE)
     work_room: tuple[FileRevision, ...] = revision_source(
-        lambda views: views.registry.storage_rule.room_ledger.source_paths(), *STATUS_SOURCE)
+        lambda views: views.registry.storage_rule.room_ledger.source_paths(
+            views.registry.storage_rule.room_ledger.root), *STATUS_SOURCE)
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),

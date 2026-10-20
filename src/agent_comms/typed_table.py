@@ -771,9 +771,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 class StoreWriter:
     """A transaction capability shared by stores and their turn-owned writers."""
 
-    @staticmethod
+    @property
+    @abstractmethod
+    def store(self) -> TypedStore:
+        """The store whose committed row changes this writer publishes."""
+
     @contextmanager
-    def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        before = connection.total_changes
         try:
             connection.execute("BEGIN IMMEDIATE")
             yield connection
@@ -782,6 +787,8 @@ class StoreWriter:
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+        if connection.total_changes != before:
+            self.store.source_paths(self.store.root)[0].write_bytes(b'')
 
     @abstractmethod
     def writing(self):
@@ -804,6 +811,15 @@ class TypedStore(RootFile, StoreWriter):
     @property
     def path(self) -> Path:
         return self.path_in(self.root)
+
+    @property
+    def store(self) -> TypedStore:
+        return self
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Watch committed row changes, never SQLite reader attachment or retirement."""
+        return (cls.path_in(root).with_suffix('.changed'),)
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:

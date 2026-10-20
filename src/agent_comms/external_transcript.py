@@ -400,11 +400,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def lookup(self) -> str:
         return self.incarnation.require_recorded().lookup
 
-    @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        database = cls.path_in(root)
-        return database, database.with_name(database.name + "-wal")
-
     def tool_call_between(self, since: float, through: float) -> bool:
         """Original tool timestamps decide first-call timeliness, not the last watcher tick."""
         with self.snapshot() as connection:
@@ -521,6 +516,10 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
         self.transcript = transcript
         self.connection = connection
         self.turn_id = turn_id
+
+    @property
+    def store(self) -> ExternalTranscript:
+        return self.transcript
 
     @contextmanager
     def writing(self):

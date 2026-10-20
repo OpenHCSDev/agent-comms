@@ -107,21 +107,6 @@ class RoomLedger(TypedStore):
     filename = "work_room.sqlite3"
     rows = (WorkPeak, RoomClaim)
 
-    def source_paths(self):
-        # SQLite attachment can create/remove WAL files without changing state.
-        # Publish only committed row changes, never wake on reader attachment.
-        return (self.path.with_suffix('.changed'),)
-
-    @contextmanager
-    def writing(self):
-        changed = False
-        with super().writing() as db:
-            before = db.total_changes
-            yield db
-            changed = db.total_changes != before
-        if changed:
-            self.source_paths()[0].write_bytes(b'')
-
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
         with self.snapshot() as db:
@@ -302,7 +287,7 @@ class RoomAllocation:
                     claim.insert(db)
             await asyncio.to_thread(enqueue)
             source = ModifiedWatchSource(ledger.root, frozenset(
-                os.fsencode(path.name) for path in ledger.source_paths()))
+                os.fsencode(path.name) for path in ledger.source_paths(ledger.root)))
             async for _ in WireWatch.observations(source, refresh_seconds=self.room_refresh_seconds):
                 if await asyncio.to_thread(self._admit, ticket):
                     measurement = WorkMeasurement(self, process)

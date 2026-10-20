@@ -50,6 +50,28 @@ def test_first_write_does_not_change_the_opened_empty_snapshot(tmp_path):
     assert store.lookup("first").source_text == "first"
 
 
+def test_change_marker_publishes_only_committed_row_changes(tmp_path):
+    store = InputDispositions(tmp_path)
+    marker, = store.source_paths(tmp_path)
+    with store.writing():
+        pass
+    assert not marker.exists()
+    store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
+    changed = marker.stat().st_mtime_ns
+    with store.snapshot() as connection:
+        assert InputDispositionRow.select(connection)
+    with store.writing() as connection:
+        InputDispositionRow.delete(connection, where="0")
+    assert marker.stat().st_mtime_ns == changed
+    with pytest.raises(ValueError, match="rollback"):
+        with store.writing() as connection:
+            InputDispositionRow.delete(connection)
+            raise ValueError("rollback")
+    assert marker.stat().st_mtime_ns == changed and store.lookup("first").source_text == "first"
+    store.record("second", seq=None, owner="kid", claim_scope=1, target="kid", text="second")
+    assert marker.stat().st_mtime_ns != changed
+
+
 def test_existing_undeclared_schema_is_not_treated_as_missing(tmp_path):
     store = InputDispositions(tmp_path)
     store.path.touch(mode=0o600)

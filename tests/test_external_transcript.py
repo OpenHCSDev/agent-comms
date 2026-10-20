@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -112,6 +113,32 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     old.end_turn(transcript)
     with transcript.reading() as records:
         assert records.current_draft(transcript.root, transcript.incarnation).turn_id == "new"
+
+
+@pytest.mark.asyncio
+async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
+    from agent_comms.external_transcript import TurnDraftPublication
+    from agent_comms.wire_watch import WatchSource, open_wire_watcher
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external('cli')
+    marker, = transcript.source_paths(comms.root)
+    watcher = open_wire_watcher(WatchSource.modified_file(marker))
+    await watcher.prepare()
+    try:
+        with transcript.writer_connection(check_same_thread=False) as connection:
+            publication = TurnDraftPublication(transcript, connection, 'turn')
+            publication.begin_message(1.0)
+            waiting = asyncio.create_task(watcher.wait())
+            publication.publish(('Streaming',))
+            await asyncio.wait_for(waiting, 2)
+            with transcript.reading() as reader:
+                draft = reader.current_draft(transcript.root, transcript.incarnation)
+            assert draft.events[0].text == 'Streaming'
+            publication.retire_message()
+    finally:
+        watcher.close()
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
