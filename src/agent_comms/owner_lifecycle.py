@@ -7,13 +7,13 @@ import os
 import shlex
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from uuid import uuid4
 
-from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState
+from .child_process import ObservedProcess, ParentedProcess, Platform, ProcessIdentity, ProcessState, SynchronousProcess
 from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
 from .tool_result import ToolResult
@@ -365,21 +365,29 @@ class OwnerLifecycle:
             self._require_same_stop_owner(thread, claimed_generation)
             yield
 
-    def _stop_process(self, thread: Thread, claimed_generation: int) -> None:
-        identity = thread.require_process()
-        with suppress(ProcessLookupError):
-            ObservedProcess(identity).stop_sync(
-                guard=lambda: self._signal_guard(thread, claimed_generation),
-            )
+    def _stop_processes(self, owners: Sequence[tuple[Thread, int]]) -> None:
+        """Retire every owner's process together, each signalled under its own guard."""
+        stops = tuple((ObservedProcess(thread.require_process()),
+                       partial(self._signal_guard, thread, generation))
+                      for thread, generation in owners)
+        try:
+            SynchronousProcess.stop_together(stops)
+        except ProcessLookupError:
+            pass
+        except ExceptionGroup as group:
+            _, failed = group.split(ProcessLookupError)
+            if failed is not None:
+                raise failed
 
-    def stop(self, name: str) -> None:
+    def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
+        """Settle an owner that needs no signal, or capture the one that does."""
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             if not snapshot.status(thread.name).active and (
                 thread.process_identity.allows_inactive_stop()
             ):
-                return
+                return None
             if (
                 snapshot.status(thread.name).active
                 and thread.process_identity.runs_here()
@@ -391,19 +399,23 @@ class OwnerLifecycle:
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
-                return
-            generation = snapshot.claimed_generations[thread.name]
-        # The process may already be dead. It still needs the exact release
+                return None
+            return thread, snapshot.claimed_generations[thread.name]
+
+    def stop(self, *names: str) -> None:
+        owners = tuple(owner for name in dict.fromkeys(names)
+                       if (owner := self._stop_selection(name)) is not None)
+        # A process may already be dead. It still needs the exact release
         # acknowledgement before the execution owner can settle its attempted input.
-        if thread.process_alive:
-            self._stop_process(thread, generation)
-        self._finish_stopped_owner(thread, generation)
+        self._stop_processes(tuple(owner for owner in owners if owner[0].process_alive))
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
         from .attempt_recovery import RecoveryMonitorCapability
 
-        RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
+        for thread, generation in owners:
+            self._finish_stopped_owner(thread, generation)
+            RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
     def require_private_launch(self) -> PrivateNkLaunch:
         """The launch authority of a root that must be private."""
