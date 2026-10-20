@@ -117,9 +117,7 @@ class OwnerRestartHandoff:
         def target(thread, source):
             record = replace(source.record, runtime=runtime, configuration=self.runtime,
                 agent_bin=lifecycle.restart_entrypoint(source.record.agent_bin, runtime))
-            record = replace(record,
-                agent_bin=self.agent_bin if self.agent_bin is not None else record.agent_bin,
-                agent_args=self.agent_args if self.agent_args is not None else record.agent_args)
+            record = record.with_command(self.agent_bin, self.agent_args)
             return lifecycle._launch_owner_unlocked(
                 thread, record, environment=self.runtime.apply_runtime(source.environment),
             )

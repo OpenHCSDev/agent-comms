@@ -286,8 +286,7 @@ class OwnerLifecycle:
             )
 
     def start(
-        self, name: str, *, record: LaunchRecord | None = None,
-        agent_bin: str | None = None, agent_args: Sequence[str] | None = None,
+        self, name: str, *, record: LaunchRecord,
     ) -> OwnerStartResult:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -303,11 +302,7 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
-            selected = LaunchRecord.current() if record is None else record
-            selected = replace(selected,
-                agent_bin=selected.agent_bin if agent_bin is None else agent_bin,
-                agent_args=selected.agent_args if agent_args is None else tuple(agent_args))
-            owner = self._launch_owner_unlocked(thread, selected)
+            owner = self._launch_owner_unlocked(thread, record)
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
     @cached_property
@@ -336,7 +331,7 @@ class OwnerLifecycle:
         names: Sequence[str] | None = None,
         *,
         agent_bin: str | None = None,
-        agent_args: Sequence[str] | None = None,
+        agent_args: tuple[str, ...] | None = None,
         expected: OwnerRestartSelection | None = None,
         runtime: RestartEnvironment | None = None,
         source_interpreter: str | None = None,
@@ -351,8 +346,7 @@ class OwnerLifecycle:
         from .owner_restart import OwnerRestartRequest
 
         request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
-            tuple(agent_args) if agent_args is not None else None,
+            None if names is None else tuple(names), agent_bin, agent_args,
             expected, runtime, source_interpreter,
         )
         return cutover.restart(self, request)
@@ -432,8 +426,10 @@ class OwnerLifecycle:
         agent_bin = self.require_launch_authority().prepare_owner(
             thread, record.agent_bin, record.runtime
         )
-        record = OwnerLaunchRecord.from_record(at_root(record, self.launch_authority.child_root),
-                         agent_bin=agent_bin, thread=initial_input.launch(thread.launch()))
+        record = OwnerLaunchRecord.from_record(
+            at_root(record, self.launch_authority.child_root).with_command(agent_bin, None),
+            thread=initial_input.launch(thread.launch()),
+        )
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

@@ -1395,7 +1395,7 @@ class RestartCliCommand(CliCommand):
         target_bound=True,
     )
     agent_bin: str | None = option("--agent-bin", default=None)
-    agent_args: list[str] | None = option(
+    agent_args: tuple[str, ...] | None = option(
         "--agent-args",
         default=None,
         normalize=_shell_words,
@@ -1415,7 +1415,7 @@ class RestartCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         results = ctx.owners.restart_owners(
-            None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
+            None if self.all_ else (self.name,), agent_bin=self.agent_bin, agent_args=self.agent_args
         )
         return OwnersRestartedResult(results)
 

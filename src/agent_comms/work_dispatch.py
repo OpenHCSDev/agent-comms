@@ -19,6 +19,7 @@ from .goal_actions import (
     OrderGoalAction,
     ProblemOrderGoalAction,
 )
+from .launch_runtime import LaunchRecord
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
@@ -88,7 +89,7 @@ class WorkDispatch:
         # A failed publication leaves a stopped unit and its checkout, not an
         # untracked running task. A failed/uncertain start never releases the claim.
         comms.goals.update_goal(child.name, self.action)
-        comms.owners.start(child.name)
+        comms.owners.start(child.name, record=LaunchRecord.current())
         return comms.registry.require(child.name)
 
     @classmethod

@@ -370,6 +370,15 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
                        for key, value in specific.items()})
         return FieldCodec.decode_record(cls, values)
 
+    def with_command(
+        self, agent_bin: str | None, agent_args: Sequence[str] | None,
+    ) -> Self:
+        return replace(
+            self,
+            agent_bin=self.agent_bin if agent_bin is None else agent_bin,
+            agent_args=self.agent_args if agent_args is None else tuple(agent_args),
+        )
+
     @classmethod
     def current(cls) -> LaunchRecord:
         try:
