@@ -260,7 +260,7 @@
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -580,22 +372,99 @@
+@@ -580,22 +372,106 @@
   * Branching moves the leaf to an earlier entry, allowing new branches without
   * modifying history.
   *
@@ -290,35 +290,42 @@
 +    const canonical = existsSync(file) ? realpathSync(file) :
 +        join(realpathSync(dirname(file)), basename(file));
 +    const lock = `${canonical}.pr48-writer.lock`;
-+    let fd;
 +    const refusal = new Error("Native session writer lock unavailable; no replay");
-+    try { fd = openSync(lock, "wx", 0o600); }
-+    catch (error) {
-+        if (error.code !== "EEXIST") throw error;
-+        const holderText = readFileSync(lock, "utf8");
++    const temp = join(dirname(canonical), `.pr48-writer-${randomUUID()}`);
++    const fd = openSync(temp, "wx", 0o600);
++    function claimDead(path) {
++        const holderText = readFileSync(path, "utf8");
 +        const holder = /^([1-9][0-9]*) ([0-9]+)\n?$/.exec(holderText);
 +        if (!holder || pr48WriterStart(Number(holder[1])) === holder[2]) throw refusal;
-+        const claim = `${lock}.dead-${holder[1]}-${holder[2]}`;
-+        try { linkSync(lock, claim); }
++        const digest = createHash("sha256").update(`${path}\0${holderText}`).digest("hex");
++        const claim = join(dirname(canonical), `.pr48-dead-${digest}`);
++        try { linkSync(temp, claim); }
 +        catch (error) {
-+            if (error.code === "EEXIST") throw refusal;
-+            throw error;
++            if (error.code !== "EEXIST") throw error;
++            claimDead(claim);
 +        }
-+        if (readFileSync(claim, "utf8") !== holderText) throw refusal;
-+        unlinkSync(lock);
-+        try { fd = openSync(lock, "wx", 0o600); }
-+        catch (error) {
-+            if (error.code === "EEXIST") throw refusal;
-+            throw error;
-+        }
++        return holderText;
 +    }
 +    try {
-+        writeFileSync(fd, `${process.pid} ${pr48WriterStart(process.pid)}\n`);
-+        fsyncSync(fd);
-+        return write();
-+    } finally {
-+        try { closeSync(fd); } finally { unlinkSync(lock); }
-+    }
++        try {
++            writeFileSync(fd, `${process.pid} ${pr48WriterStart(process.pid)}\n`);
++            fsyncSync(fd);
++        } finally { closeSync(fd); }
++        try { linkSync(temp, lock); }
++        catch (error) {
++            if (error.code !== "EEXIST") throw error;
++            const holderText = claimDead(lock);
++            if (readFileSync(lock, "utf8") !== holderText) throw refusal;
++            unlinkSync(lock);
++            try { linkSync(temp, lock); }
++            catch (error) {
++                if (error.code === "EEXIST") throw refusal;
++                throw error;
++            }
++        }
++        try { return write(); }
++        finally { unlinkSync(lock); }
++    } finally { unlinkSync(temp); }
 +}
 +
 +
