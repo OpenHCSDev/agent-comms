@@ -23,6 +23,8 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
 
+from .runtime_resolution import RuntimeResolution
+
 HOLD_TRANSCRIPTS = """import sys
 from contextlib import closing
 from agent_comms.coordination_database import CoordinationStore
@@ -100,6 +102,7 @@ class Backup:
             return backup
         path.mkdir(mode=0o700, parents=True)
         _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
+        shutil.copy2(RuntimeResolution.record_path(), path / RuntimeResolution.record_path().name)
         contents = backup.capture(files)
         if route.exists():
             shutil.copy2(route, path / 'active-route.json')

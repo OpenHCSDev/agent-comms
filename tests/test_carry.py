@@ -609,13 +609,12 @@ def test_selected_revision_prepares_pins_and_cannot_return_a_failed_cached_tree(
     assert revisions.trees == {"abcdef123456": selected}  # Failed preparation still owns cleanup.
 
 
-def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
+def test_failed_carry_restores_bus_and_reopens_maintenance(comms, tmp_path, monkeypatch):
     import upgrade_bus
     from agent_comms.maintenance_barrier import ReadyPhase
 
     datum = comms.root / "kept.txt"
     datum.write_text("before")
-    original_inode = comms.root.stat().st_ino
     commands = []
 
     class Installed(Stack):
@@ -640,10 +639,11 @@ def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tm
     with pytest.raises(RuntimeError, match="carry failed after writing"):
         upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None,
                          "worker", comms.root.parent)
-    assert datum.read_text() == "changed before failure"
-    assert comms.root.stat().st_ino == original_inode
+    assert datum.read_text() == "before"
+    failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+    assert (failed / "kept.txt").read_text() == "changed before failure"
     assert not any("reset" in command for command in commands)
-    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is not ReadyPhase
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
     assert list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/bus.tar"))
 
 

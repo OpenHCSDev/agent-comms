@@ -17,8 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path("/home/ts/code/projects/agent-comms")
-sys.path[:0] = [str(MAIN / "src"), str(ROOT / "tools")]
+sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tools")]
 
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.field_codec import FieldCodec
@@ -26,16 +25,6 @@ from install_gate import ExternalRecord
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.skill import SkillText
 from upgrade_bus import Stack
-
-
-@dataclass(frozen=True)
-class InstalledCoreStack(Stack):
-    @property
-    def python(self) -> Path:
-        return MAIN / "stack/.venv/bin/python"
-
-    def environment(self, *paths: Path) -> dict[str, str]:
-        return super().environment(MAIN / "src", *paths)
 
 
 @dataclass(frozen=True)
@@ -71,7 +60,7 @@ def main() -> None:
     settings = home / ".claude/settings.json"
     settings.parent.mkdir()
     settings.write_text(json.dumps({"retained_user_setting": "keep", "hooks": {}}))
-    stack = InstalledCoreStack(ROOT, home)
+    stack = Stack(ROOT, home)
     stack.publish()
     first = settings.read_bytes()
     stack.publish()
