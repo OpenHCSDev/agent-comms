@@ -411,8 +411,8 @@ def test_done_distinguishes_non_git_home_from_exact_order_checkout(
 
     comms, _ = commander
     script, _ = commander_script
-    home = tmp_path / 'P197-application'
-    home.mkdir()
+    home = tmp_path / 'wt' / 'scratch'
+    home.mkdir(parents=True)
     comms.registry.declare(comms.registry.new_thread('scratch', frozenset({'comms'}), str(home)))
     rule = StorageRule(checkout_base=tmp_path / 'wt', scratch_base=tmp_path / 'scratch', floor_gib=0)
     comms.registry.storage_rule = script.comms.registry.storage_rule = rule
@@ -982,15 +982,12 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
-@pytest.mark.parametrize('claim', [False, True])
-def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
     """No watch runs: publishing the message is what records the correction on the order."""
     comms, _ = commander
     comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
-    from agent_comms.envelope_claim_transitions import WritableFileClaim
-    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
-    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed', claims=claims).message.message_id
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed').message.message_id
     comms.messaging.send('worker', 'lead', 'The tests pass now.').message.message_id
     comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.').message.message_id
     corrected = comms.goals.todos.get('P1')
@@ -998,10 +995,8 @@ def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
     assert corrected.strike_count == 0
 
 
-@pytest.mark.parametrize('claim', [False, True])
 @pytest.mark.parametrize('body', ['The tests pass now.', 'The canonical ownership changed'])
-def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, body):
-    from agent_comms.envelope_claim_transitions import WritableFileClaim
+def test_old_todo_schema_refuses_before_any_bus_publication(commander, body):
     from agent_comms.errors import RelationViolationError
 
     comms, _ = commander
@@ -1013,9 +1008,8 @@ def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, bo
         db.commit()
     path = comms.root / 'bus.jsonl'
     before = path.read_bytes() if path.exists() else b''
-    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
     with pytest.raises(RelationViolationError, match='todos.sqlite3 differs from its declaration'):
-        comms.messaging.send('worker', 'lead', body, claims=claims).message.message_id
+        comms.messaging.send('worker', 'lead', body).message.message_id
     assert (path.read_bytes() if path.exists() else b'') == before
 
 
