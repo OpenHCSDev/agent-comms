@@ -588,7 +588,7 @@ class TranscriptReadState(ThreadOwnedState):
                 raise RuntimeError("Transcript reader is closed")
             self._refresh_keys(registry)
             keys = {name: keys for name, keys in self._thread_keys.items()
-                    if registry.statuses[name].in_view(visibility)}
+                    if registry.status(name).in_view(visibility)}
             try:
                 return self._counts_locked(viewer, document, keys)
             except sqlite3.DatabaseError as error:
