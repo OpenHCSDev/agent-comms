@@ -8,9 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text
-from .text_digest import TextDigest
-from .thread_identity import GenerationCounter, ThreadIncarnation
+from .field_codec import FieldCodec, Id128Text, NullMember
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -18,6 +16,8 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
+from .text_digest import TextDigest
+from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -154,6 +154,31 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return UndeliveredInput()
 
 
+class InputDeliveryScope(DeclaredFamily, affix="InputDeliveryScope"):
+    """The queue evidence available to this delivery read, not an input outcome."""
+
+    owner_queue: ClassVar[bool] = False
+
+    @abstractmethod
+    def historical_notice(self, row: StoredInput) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name="unobserved"):
+    def historical_notice(self, row: StoredInput) -> bool:
+        return row.notice_dismissed
+
+
+@dataclass(frozen=True)
+class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
+    keys: frozenset[str]
+    owner_queue: ClassVar[bool] = True
+
+    def historical_notice(self, row: StoredInput) -> bool:
+        return row.key not in self.keys
+
+
 @dataclass(frozen=True)
 class UnresolvedInput:
     """An unresolved input as a reply shows it; its owner, claim and origin stay in the store."""
@@ -255,11 +280,6 @@ class StoredInput(InputAttempt):
     def bus_sequences_through(self, through: int) -> tuple[int, ...]:
         """Return this input's bus sequence only if it is within the requested limit."""
         return (self.sequence,) if self.sequence is not None and self.sequence <= through else ()
-
-    def historical_notice(self, awaiting_keys: frozenset[str] | None) -> bool:
-        if awaiting_keys is None:
-            return self.notice_dismissed
-        return self.key not in awaiting_keys
 
     def reviewed_for_goal(self, goal_id: str) -> bool:
         return goal_id in self.goal_reviews

@@ -74,7 +74,7 @@ class InputDelivery:
             decoded.historical_count,
             decoded.dismissed_historical_count,
             tuple(FieldCodec.encode(row) for row in decoded.historical_inputs),
-            decoded.owner_queue,
+            decoded.current_scope.owner_queue,
         )
 
     @property

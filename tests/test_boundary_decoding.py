@@ -7,7 +7,9 @@ import pytest
 from agent_comms.channel_coding_tools import CodingToolRequest
 from agent_comms.cli_bridges.claude_protocol import ClaudeHeader
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_attempt import HistoricalInput, UnresolvedInput
+from agent_comms.input_attempt import (
+    HistoricalInput, OwnerQueueInputDeliveryScope, UnobservedInputDeliveryScope, UnresolvedInput,
+)
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.native_package import NativeSourceDeclaration
 from agent_comms.native_tool_call import SelectedToolDenied
@@ -30,7 +32,7 @@ def test_delivery_uses_declared_overview_and_preserves_current_toad_rows():
     current = UnresolvedInput(4, 'worker', 'retained input', 'input-1', 'unknown')
     historical = HistoricalInput(3, 'worker', 'earlier input', 'input-0', 'unknown',
                                  notice_dismissed=True)
-    overview = DeliveryOverview((current,), 1, 2, (historical,), 'owner_queue')
+    overview = DeliveryOverview((current,), 1, 2, (historical,), OwnerQueueInputDeliveryScope)
     wire = FieldCodec.encode(overview)
     delivery = InputDelivery.from_wire(wire)
     assert delivery.inputs == (FieldCodec.encode(current),)
@@ -38,7 +40,7 @@ def test_delivery_uses_declared_overview_and_preserves_current_toad_rows():
     assert (delivery.historical_count, delivery.dismissed_historical_count) == (1, 2)
     assert delivery.owner_queue and delivery.pending == 'awaiting start'
     assert InputDelivery.from_wire(FieldCodec.encode(
-        replace(overview, current_scope='unobserved'))).pending == 'unconfirmed'
+        replace(overview, current_scope=UnobservedInputDeliveryScope))).pending == 'unconfirmed'
     with pytest.raises(ValueError):
         InputDelivery.from_wire({**wire, 'unexpected': True})
 

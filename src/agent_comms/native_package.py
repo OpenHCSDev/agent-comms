@@ -249,7 +249,7 @@ def write_native_manifest(root: Path) -> None:
 
 @dataclass(frozen=True)
 class NativeSourceDeclaration:
-    """The package's source receipt, decoded before any filesystem work."""
+    """The package's source declaration, decoded before any filesystem work."""
 
     path: Annotated[Path, PathText]
     snapshot: Annotated[Path, PathText]
@@ -349,9 +349,9 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
 
     sources: list[NativeSource] = []
     destinations: set[Path] = set()
-    for declaration in manifest.extension_entries:
-        for receipt in declaration.sources:
-            source = receipt.load(snapshot_root)
+    for entry in manifest.extension_entries:
+        for declaration in entry.sources:
+            source = declaration.load(snapshot_root)
             if source.destination in destinations:
                 raise NativePackageError("Native extension source destination is declared twice")
             destinations.add(source.destination)

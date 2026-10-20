@@ -267,19 +267,19 @@ class TimedRecord(TimestampedWire):
 class ClaudeUserHeader(WireHeader):
     """Claude's sparse user header; Pydantic owns which fields were supplied."""
 
-    promptId: str = ''
+    prompt_id: str = Field(default='', alias='promptId')
     origin: KindHeader = Field(default_factory=lambda: KindHeader(kind=''))
-    isCompactSummary: bool = False
-    isMeta: bool = False
+    is_compact_summary: bool = Field(default=False, alias='isCompactSummary')
+    is_meta: bool = Field(default=False, alias='isMeta')
 
     def record_type(self) -> str:
         if self.origin.type == TaskNotification.wire_tag:
             return TaskUserRecord.wire_tag
-        if 'promptId' not in self.model_fields_set:
+        if 'prompt_id' not in self.model_fields_set:
             return LocalCommandOutput.wire_tag
-        if self.isCompactSummary:
+        if self.is_compact_summary:
             return CompactSummary.wire_tag
-        if self.isMeta and 'origin' not in self.model_fields_set:
+        if self.is_meta and 'origin' not in self.model_fields_set:
             return HarnessNote.wire_tag
         return UserRecord.wire_tag
 

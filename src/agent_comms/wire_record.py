@@ -12,13 +12,13 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, cast
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .messages import Message
 from .thread_identity import ThreadIncarnation
-from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -327,9 +327,11 @@ class WireScan:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import (
-    ContextEntryManifest, ContextEntryReference, ContextSources,
-    RecordedContextManifest, SegmentManifest,
-)
 from .delivery_policy import KeyedResponseAcknowledgement
-from .messages import Message
+from .turn_context import (
+    ContextEntryManifest,
+    ContextEntryReference,
+    ContextSources,
+    RecordedContextManifest,
+    SegmentManifest,
+)

@@ -64,10 +64,12 @@ class BusPageRow(PageIndexTable, TypedTable):
     mentions: tuple[str, ...]
     indexes = (Index(("target", "seq")), Index(("offset",)),)
 
-    def record(self, stream: BinaryIO, *, max_bytes: int | None = None) -> tuple[WireRecord, int]:
+    def record(self, stream: BinaryIO, *, max_bytes: int) -> tuple[WireRecord, int]:
+        if self.offset < 0 or max_bytes <= 0:
+            raise StaleBusPageIndexError("Indexed bus row exceeds its source cut.")
         stream.seek(self.offset)
-        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
-        if max_bytes is not None and len(raw) > max_bytes:
+        raw = stream.readline(max_bytes + 1)
+        if len(raw) > max_bytes:
             raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
         try:
             record = WireRecord.public_from_wire(FieldCodec.parse(raw))

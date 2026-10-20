@@ -9,8 +9,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from acp.schema import (
-    BlobResourceContents, EmbeddedResourceContentBlock, ImageContentBlock,
-    PromptRequest, TextResourceContents,
+    BlobResourceContents,
+    EmbeddedResourceContentBlock,
+    ImageContentBlock,
+    PromptRequest,
+    TextResourceContents,
 )
 from pydantic import TypeAdapter
 
@@ -78,7 +81,9 @@ class PromptImages(MroDispatch):
             raise ValueError("Image input requires base64 data and a MIME type.")
 
 
-_PROMPT_CONTENT = TypeAdapter(PromptRequest.model_fields["prompt"].annotation)
+_PROMPT_CONTENT: TypeAdapter[list[object]] = TypeAdapter(
+    PromptRequest.model_fields["prompt"].rebuild_annotation()
+)
 
 
 def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
