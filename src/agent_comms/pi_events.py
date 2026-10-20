@@ -16,7 +16,7 @@ from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .native_turn_context import NativeContextManifestData
-from .native_pi import NativePiUnavailable
+from .native_pi import NativePiOperationFailed
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -254,7 +254,7 @@ class NativeOperationError(NativePiEvent):
     error: str
 
     async def act(self, session: TurnSession) -> None:
-        raise NativePiUnavailable(self.error)
+        raise NativePiOperationFailed(self)
 
 
 class AgentSettled(NativePiEvent):
