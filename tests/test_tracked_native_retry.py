@@ -1,6 +1,7 @@
 import pytest
 
 from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_startup import NativeStartupPolicy
 
 from agent_comms.agent_backend import WhenBusy
 from agent_comms.pi_events import NativeRetryEnd
@@ -18,8 +19,9 @@ from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 def tracked_turn(output, terminal):
     turn = object.__new__(TrackedTurnSession)
     turn.output, turn.terminal = output, terminal
+    turn.finished = False
     turn.usage, turn.explicit_interrupt = UsageAccount(), False
-    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1, NativeStartupPolicy())
     turn.watchdog.launching(lambda: 0.0, None)
     turn.watchdog.tick()
     return turn
@@ -39,6 +41,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     await turn.apply_native_event(event)
 
     assert turn.output.failure is None
+    assert not turn.finished
     assert turn.output.retry_result is None
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
@@ -62,6 +65,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
     }
     await turn.apply_native_event(event)
 
+    assert turn.finished
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
         turn.output.raise_if_failed(None, SelectedModel("configured", "model"))

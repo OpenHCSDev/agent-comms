@@ -274,7 +274,8 @@ def extend_native_run(core):
     replace_once(session, '    async _runAgentPrompt(messages) {',
         '''    _startNativeRun(messages = []) {
         return new NativeTurnRun(this.agent, event => this._emit(event),
-            message => this._isRetryableError(message))
+            message => this._isRetryableError(message),
+            this.settingsManager.getGlobalSettings().nativeRecoveryBackoffMs)
             .include(messages, this._nativeInputClaims);
     }
     async _runAgentPrompt(messages) {''')

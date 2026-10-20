@@ -547,7 +547,7 @@ class TrackedTurnSession(TurnSession):
         # Pi runs an input it was handed before settling; the turn ends after that run.
         if self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
-                self.finished = True
+                self.finish_request()
         return ()
 
     async def invalidate_identity(self) -> tuple[AgentEvent, ...]:

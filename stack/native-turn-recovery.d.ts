@@ -21,7 +21,7 @@ export declare class InactiveNativeTurnRun {
 /** The committed native run owns production, retry policy and attempt lifetime. */
 export declare class NativeTurnRun {
     constructor(agent: Agent, emit: (event: AgentSessionEvent) => void,
-                retryable: (message: AssistantMessage) => boolean);
+                retryable: (message: AssistantMessage) => boolean, backoffMs?: readonly number[]);
     finishRetry(success: boolean, finalError?: string): void;
     readonly ownerTools: import('./turn-context.js').OwnerToolConnection;
     get tracked(): boolean;

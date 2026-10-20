@@ -84,4 +84,4 @@ class StatsRequest:
             session.skip = True
             return
         yield events.StreamSettled()
-        session.finished = True
+        session.finish_request()
