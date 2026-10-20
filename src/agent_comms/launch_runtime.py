@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Callable, Mapping, MutableMapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -27,12 +28,29 @@ class LaunchRoot:
     environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
     _current: ClassVar[LaunchRoot | None] = None
 
+    def __post_init__(self) -> None:
+        # Fix the caller's cwd/home meaning before any later chdir or await.
+        # Keep symlink components so private-root validation can still refuse them.
+        object.__setattr__(self, "path", self.path.expanduser().absolute())
+
     @classmethod
-    def current(cls) -> LaunchRoot | None:
+    def current(cls) -> LaunchRoot:
+        if cls._current is None:
+            raise RelationViolationError("Comms requires an explicit launch root (--comms-root or --root).")
         return cls._current
 
     def install(self) -> None:
         LaunchRoot._current = self
+
+    @contextmanager
+    def selected(self):
+        """A client invocation borrows its selection without changing later callers."""
+        previous = LaunchRoot._current
+        self.install()
+        try:
+            yield self
+        finally:
+            LaunchRoot._current = previous
 
     def arguments(self) -> tuple[str, str]:
         return self.argument, str(self.path)
@@ -88,7 +106,7 @@ class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        return dict(source)
+        return LaunchRoot.environment(source)
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
@@ -115,8 +133,7 @@ class EnvironmentRecord:
 
     @classmethod
     def inherited(cls, environment: Mapping[str, str]) -> dict[str, str]:
-        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls)
-                 if declaration.metadata.get("environment", True))
+        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls))
         return {name: environment[name] for name in names if name in environment}
 
     @classmethod
@@ -132,8 +149,7 @@ class EnvironmentRecord:
     def encode(self) -> dict[str, str]:
         encoded: dict[str, str] = FieldCodec.encode(self)
         return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
-                for declaration in fields(self) if declaration.metadata.get("environment", True)
-                and FieldCodec.wire_key(declaration) in encoded}
+                for declaration in fields(self) if FieldCodec.wire_key(declaration) in encoded}
 
 
 @dataclass(frozen=True)
@@ -161,11 +177,6 @@ class RestartEnvironment(EnvironmentRecord):
     config: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
     )
-    root: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": LaunchRoot.environment_name,
-                  "environment": False},
-    )
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[Path, PathText] = field(
         default=default_agent_directory,
@@ -187,9 +198,6 @@ class RestartEnvironment(EnvironmentRecord):
     @classmethod
     def inherit(cls, environment: Mapping[str, str]):
         values = cls.inherited(environment)
-        launch = LaunchRoot.current()
-        if launch is not None:
-            values[cls.variable("root")] = str(launch.path)
         native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
         values[native_name] = values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
         return FieldCodec.decode(cls, values)

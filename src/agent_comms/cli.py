@@ -40,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--root",
         default=None,
-        help="Comms root directory (default launch record, active route, or ~/.agent-comms)",
+        help="Explicit Comms root directory (otherwise requires --comms-root at launch)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
@@ -53,9 +53,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments = list(sys.argv[1:] if argv is None else argv)
         LaunchRoot.startup(arguments)
         args = build_parser().parse_args(arguments, namespace=SendArguments())
-        command = CliCommand.member_named(args.command).from_arguments(args)
-        with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
-            return command.run(comms, sys.stdout)
+        root = LaunchRoot(Path(args.root)) if args.root else LaunchRoot.current()
+        with root.selected():
+            command = CliCommand.member_named(args.command).from_arguments(args)
+            with client_wire(root.path) as comms:
+                return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130
     except (ValueError, OSError, CoordinationError) as exc:

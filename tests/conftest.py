@@ -107,6 +107,9 @@ def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer's live managed process is not a test wire or native child."""
+    from agent_comms.launch_runtime import LaunchRoot
+
+    monkeypatch.setattr(LaunchRoot, "_current", None)
     for name in _MANAGED_RUNTIME_ENVIRONMENT:
         monkeypatch.delenv(name, raising=False)
 
@@ -385,8 +388,11 @@ async def native_backend(tmp_path_factory, monkeypatch, selected_model, native_r
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
+    from agent_comms.launch_runtime import LaunchRoot
+
     async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner"), package=native_runtime_package) as owner:
-        yield owner
+        with LaunchRoot(owner.root).selected():
+            yield owner
 
 
 @pytest.fixture
