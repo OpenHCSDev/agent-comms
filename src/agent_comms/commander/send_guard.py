@@ -99,8 +99,7 @@ class RawSendCommand(GuardedCommand):
 
 @dataclass(frozen=True)
 class TacticalCommand(GuardedCommand):
-    """Work the bus's planned installer owns. Each shape is the words a command runs,
-    in order, matched against its words' path parts and stems."""
+    """Work the bus's planned installer owns. Match the invoked program, never argument text."""
 
     work: ClassVar[str] = "tactical work"
     shapes: ClassVar[tuple[Words, ...]] = ()
@@ -111,18 +110,54 @@ class TacticalCommand(GuardedCommand):
 
     @classmethod
     def runs(cls, words: Words) -> bool:
-        parts = [
-            part
-            for word in words
-            if not any(space in word for space in " \n\t")
-            for part in (*Path(word).parts, Path(word).stem)
-        ]
-
-        def ordered(shape: Words) -> bool:
-            remaining = iter(parts)
-            return all(word in remaining for word in shape)
-
-        return any(ordered(shape) for shape in cls.shapes)
+        """ShellInvocation has already split simple commands with shlex and skipped heredocs."""
+        args = list(words)
+        while args:
+            prefix = Path(args[0]).name
+            if prefix not in ('sudo', 'env', 'timeout', 'nice'):
+                break
+            args.pop(0)
+            while args and args[0].startswith('-'):
+                option = args.pop(0)
+                if option == '--':
+                    break
+                if option in ('-u', '-g', '--user', '--group', '-p', '--prompt',
+                              '--unset', '-k', '--kill-after', '-s', '--signal', '-n',
+                              '--adjustment') and args:
+                    args.pop(0)
+            if prefix == 'env':
+                while args and '=' in args[0]:
+                    args.pop(0)
+            elif prefix == 'timeout' and args:
+                args.pop(0)  # the duration, not a command
+        if not args:
+            return False
+        program = Path(args[0]).name
+        target, arguments, namespace = args[0], args[1:], ''
+        if program == 'python' or (program.startswith('python') and
+                                   program[6:].replace('.', '').isdigit()):
+            module = len(args) > 2 and args[1] == '-m'
+            target = args[2] if module else args[1] if len(args) > 1 else ''
+            if not target or target.startswith('-'):
+                return False
+            arguments = args[3:] if module else args[2:]
+            namespace = target.rpartition('.')[0].rsplit('.', 1)[-1] if module else Path(target).parent.name
+            name = target.rsplit('.', 1)[-1] if module else Path(target).stem
+        elif program in ('bash', 'sh'):
+            if len(args) < 2 or args[1].startswith('-'):
+                return False
+            target, arguments = args[1], args[2:]
+            name = Path(target).stem
+        else:
+            name = Path(target).stem
+        if name == 'systemctl':
+            while arguments and arguments[0] in ('--user', '--system', '--no-pager'):
+                arguments = arguments[1:]
+            arguments = [arg.removesuffix('.service') for arg in arguments[:2]]
+        elif name == 'uv' and arguments and arguments[0] in ('pip', 'tool'):
+            arguments = arguments[1:]
+        return any(shape[0] in (name, namespace) and
+                   tuple(arguments[:len(shape) - 1]) == shape[1:] for shape in cls.shapes)
 
     @classmethod
     def install_refusals(cls, ctx: Commander) -> tuple[str, ...]:
