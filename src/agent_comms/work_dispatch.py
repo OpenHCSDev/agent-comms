@@ -39,9 +39,13 @@ class WorkDispatch:
     action: ProblemOrderGoalAction
     revision: int
 
+    @staticmethod
+    def name_for(problem: str, revision: int) -> str:
+        return f"unit-{problem.lower()}-r{revision}"
+
     @property
     def name(self) -> str:
-        return f"unit-{self.action.problem.lower()}-r{self.revision}"
+        return self.name_for(self.action.problem, self.revision)
 
     def publish(self, comms: Comms, child: Thread) -> Thread:
         """Assign the native order before its unit can begin work."""

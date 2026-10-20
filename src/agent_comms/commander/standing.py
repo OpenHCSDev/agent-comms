@@ -135,15 +135,25 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 self.todo, commander, StallWatcherIncarnation.watcher()), self.todo.revision, unit)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
-    """A unit holds no next order while the board has unowned rows."""
+    """A board revision and destination, not a timestamped dispatch attempt."""
 
-    dispatch: WorkDispatch
+    todo: Todo = field(compare=False)
+    unit: str
+    assigner: ThreadIncarnation = field(compare=False)
 
     @property
-    def unit(self) -> str:
-        return self.dispatch.name
+    def key(self) -> tuple[str, int, str]:
+        return self.todo.id, self.todo.revision, self.unit
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, UnownedWheelSpin):
+            return NotImplemented
+        return self.key == other.key
+
+    def __hash__(self) -> int:
+        return hash(self.key)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
@@ -152,9 +162,8 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
                      if todo.pending and not todo.holder)
         paired = cls.paired(comms, commander, rows, actor)
         assigned = {rule.todo.id for rule in paired}
-        return paired + tuple(cls(todo, WorkDispatch(
-            cls.order_for(todo, commander, actor), todo.revision))
-            for todo in rows if todo.id not in assigned)
+        return paired + tuple(cls(todo, WorkDispatch.name_for(todo.id, todo.revision), actor)
+                              for todo in rows if todo.id not in assigned)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
@@ -165,8 +174,7 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(cls(todo, ReusedWorkDispatch(
-                        cls.order_for(todo, commander, assigner), todo.revision, unit)))
+                    found.append(cls(todo, unit.name, assigner))
                     break
         return tuple(found)
 
@@ -175,7 +183,10 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
                 f" -> Core gives it to {self.unit}")
 
     def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
-        return (self.dispatch,)
+        action = self.order_for(self.todo, commander, self.assigner)
+        if self.unit == WorkDispatch.name_for(self.todo.id, self.todo.revision):
+            return (WorkDispatch(action, self.todo.revision),)
+        return (ReusedWorkDispatch(action, self.todo.revision, comms.registry.require(self.unit)),)
 
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
