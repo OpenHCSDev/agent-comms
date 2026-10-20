@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import StrikeTodo, Todo, TodoStore, VoidStrikeTodo
 
 from .carry import Carried, TodoRows
@@ -23,6 +25,7 @@ class StorageRefusals(TodoRows):
         with cls.todo_rows(root, apply=apply) as connection:
             db = cast(sqlite3.Connection, connection)
             table = Todo.declared_name
+            plain_kind = FieldCodec.encode(StrikeTodo, type[StrikeTodo])
             names = db.execute(
                 f'SELECT id FROM "{table}" WHERE '
                 "EXISTS(SELECT 1 FROM json_tree(strikes) WHERE key='kind' AND value=?) OR "
@@ -46,9 +49,9 @@ class StorageRefusals(TodoRows):
                     "FROM json_each(voided) ORDER BY key)) WHERE id=?",
                     (
                         cls.old_kind,
-                        StrikeTodo.declared_name,
+                        plain_kind,
                         cls.old_kind,
-                        StrikeTodo.declared_name,
+                        plain_kind,
                         identity,
                     ),
                 )
@@ -56,9 +59,16 @@ class StorageRefusals(TodoRows):
                 for (index,) in indices:
                     strike = current.strikes[index]
                     if strike in current.live_strikes():
-                        current = VoidStrikeTodo(
+                        # A carry records the owner's exact eight-word reason;
+                        # it does not replay a command with a ten-word minimum.
+                        taken_back = VoidStrikeTodo(
                             current.revision, current.creator_identity, strike, cls.reason
-                        ).apply(current)
+                        )
+                        current = replace(
+                            current,
+                            voided=(*current.voided, taken_back),
+                            revision=current.revision + 1,
+                        )
                         voids += 1
                 current.upsert(db)
                 changed += len(indices)
