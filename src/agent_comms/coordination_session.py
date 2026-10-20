@@ -42,8 +42,7 @@ class CoordinationSession(CoordinationStore):
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
 
-    @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(self, connection: sqlite3.Connection | None = None):
         """Allow a rollback-journal writer only after existing readers retire.
 
         ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
@@ -52,9 +51,12 @@ class CoordinationSession(CoordinationStore):
         before changing state, so contention is handled before writing and
         a successfully authorized transaction owns its complete commit lifetime.
         """
-        with self._transaction_lifetime() as db:
-            db.execute("BEGIN EXCLUSIVE")
-            yield db
+        return super().transaction(self._connection if connection is None else connection)
+
+    def _begin_transaction(self, connection: sqlite3.Connection) -> None:
+        if connection.in_transaction:
+            raise IntegrityViolationError("nested coordinator transaction is not allowed")
+        connection.execute("BEGIN EXCLUSIVE")
 
     @contextmanager
     def settlement(
@@ -66,20 +68,6 @@ class CoordinationSession(CoordinationStore):
 
     def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
         """Standalone attempts cannot acquire native file claims."""
-
-    @contextmanager
-    def _transaction_lifetime(self) -> Iterator[sqlite3.Connection]:
-        """Shared non-nesting, commit and rollback ownership for write scopes."""
-        db = self._connection
-        if db.in_transaction:
-            raise IntegrityViolationError("nested coordinator transaction is not allowed")
-        try:
-            yield db
-            db.execute("COMMIT")
-        except BaseException:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
-            raise
 
     @contextmanager
     def read(self) -> Iterator[None]:

@@ -7,13 +7,12 @@ import pytest
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.errors import RelationViolationError, ToolRefusedError
-from agent_comms.notification_assignment import NotificationAssignment
 from cutover.carry_send_refusals import SendRefusalOutcomes
 
 
 def test_install_preserves_existing_coordination_rows(comms):
     SendRefusal.record(comms.root, "claude-ai", "worker", ToolRefusedError("fresh-root refusal"))
-    path = NotificationAssignment.database_path(comms.root)
+    path = CoordinationStore.path_in(comms.root)
     # Represent the prior installed schema, keeping all other real coordination rows.
     with closing(CoordinationStore.writer(path)) as db, db:
         db.execute(f'DROP TABLE "{SendRefusal.declared_name}"')

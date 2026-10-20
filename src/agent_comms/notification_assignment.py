@@ -248,16 +248,6 @@ class NotificationAssignment(NotificationSource):
             yield original, tuple(sources)
 
     @classmethod
-    def database_path(cls, root: Path) -> Path:
-        return root / "coordination.sqlite3"
-
-    @classmethod
-    def handling_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Handling changes belong to SQLite; wire changes have their own revision."""
-        database = cls.database_path(root)
-        return database, database.with_name(database.name + "-wal")
-
-    @classmethod
     def _recorded_conversation_responses(
         cls, root: Path, sources: tuple[CommittedDelivery, ...],
         rows: tuple[NotificationAssignment, ...],
@@ -354,7 +344,7 @@ class NotificationAssignment(NotificationSource):
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
 
-        with CoordinationStore.observed(cls.database_path(root)).observing(cls, sources) as result:
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, sources) as result:
             return result
 
     @classmethod

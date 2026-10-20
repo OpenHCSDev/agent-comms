@@ -768,19 +768,33 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreWriter:
+class StoreWriter(RootFile):
     """A transaction capability shared by stores and their turn-owned writers."""
 
+    path: Path
+
     @property
-    @abstractmethod
-    def store(self) -> TypedStore:
+    def store(self) -> StoreWriter:
         """The store whose committed row changes this writer publishes."""
+        return self
+
+    @staticmethod
+    def _source_paths(path: Path) -> tuple[Path, ...]:
+        return (path.with_suffix('.changed'),)
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Watch committed row changes, never SQLite reader attachment or retirement."""
+        return cls._source_paths(cls.path_in(root))
+
+    def _begin_transaction(self, connection: sqlite3.Connection) -> None:
+        connection.execute("BEGIN IMMEDIATE")
 
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         before = connection.total_changes
+        self._begin_transaction(connection)
         try:
-            connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.execute("COMMIT")
         except BaseException:
@@ -788,14 +802,14 @@ class StoreWriter:
                 connection.execute("ROLLBACK")
             raise
         if connection.total_changes != before:
-            self.store.source_paths(self.store.root)[0].write_bytes(b'')
+            self._source_paths(self.store.path)[0].write_bytes(b'')
 
     @abstractmethod
     def writing(self):
         """Borrow one committed write transaction from this lifetime owner."""
 
 
-class TypedStore(RootFile, StoreWriter):
+class TypedStore(StoreWriter):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows. A transaction installs an absent
@@ -811,15 +825,6 @@ class TypedStore(RootFile, StoreWriter):
     @property
     def path(self) -> Path:
         return self.path_in(self.root)
-
-    @property
-    def store(self) -> TypedStore:
-        return self
-
-    @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Watch committed row changes, never SQLite reader attachment or retirement."""
-        return (cls.path_in(root).with_suffix('.changed'),)
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:

@@ -14,7 +14,6 @@ from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
@@ -64,7 +63,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
         with guard_original_root_write(root), _store_lock(root / "wire", mode=SharedLock()):
             MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
             with (
-                CoordinationSession(str(NotificationAssignment.database_path(root))) as store,
+                CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.transaction() as db,
             ):
                 cls.require_schema(cls.stored_schema(db))
@@ -84,7 +83,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
     ) -> tuple[SendRefusal, ...]:
         if not 1 <= limit <= 200:
             raise ToolRefusedError("Refusal reads require a limit between 1 and 200")
-        source = CoordinationStore.observed(NotificationAssignment.database_path(root))
+        source = CoordinationStore.observed(CoordinationStore.path_in(root))
         with source.observing(cls, sender, target, limit) as rows:
             return rows
 

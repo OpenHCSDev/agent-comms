@@ -28,6 +28,7 @@ from agent_comms.coordination_schema import (
 from agent_comms.coordination_tables.metadata import SchemaMeta
 from agent_comms.typed_table import (
     SQLiteUserVersion,
+    StoreWriter,
     TypedRow,
 )
 
@@ -116,9 +117,10 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore:
+class CoordinationStore(StoreWriter):
     """Own SQLite read snapshots and the shared writer busy policy."""
 
+    filename = "coordination.sqlite3"
     writer_timeout = 5.0
     header = b"SQLite format 3\0"
 
@@ -340,8 +342,7 @@ class CoordinationStore:
         # another initializer may have installed the schema since the read.
         # SQLite's executescript() implicitly commits an existing transaction; execute
         # complete trigger-aware statements individually under this one lock.
-        self._connection.execute("BEGIN IMMEDIATE")
-        try:
+        with self.writing():
             version = self.schema_version
             if self._empty_schema(version):
                 statement = ""
@@ -356,11 +357,9 @@ class CoordinationStore:
                 self._connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION}")
             else:
                 SchemaMeta.require_current(self._connection, version)
-            self._connection.execute("COMMIT")
-        except BaseException:
-            if self._connection.in_transaction:
-                self._connection.execute("ROLLBACK")
-            raise
+
+    def writing(self):
+        return StoreWriter.transaction(self, self._connection)
 
     def _empty_schema(self, version: int) -> bool:
         return version == 0 and not _TableName.read(

@@ -24,7 +24,7 @@ from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
-from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, StoreWriter, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -334,12 +334,13 @@ class RouteIndexRebuilding(CoordinationReadUnavailable):
         super().__init__(f"Route index covers {through} of {size} bytes")
 
 
-class BusRouteCounts:
+class BusRouteCounts(StoreWriter):
+    filename = f"bus_route_counts.v{RouteTable.schema}.sqlite3"
     rebuild_bytes = 4 * 1024 * 1024
 
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
-        self.path = bus_path.with_name(f"bus_route_counts.v{RouteTable.schema}.sqlite3")
+        self.path = self.path_in(bus_path.parent)
 
     def __enter__(self) -> BusRouteCounts:
         """Open one committed WAL snapshot without taking the writer lock.
@@ -372,11 +373,10 @@ class BusRouteCounts:
         with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("BEGIN IMMEDIATE")
-            if not RecordedRouteSourceRow.present(connection):
-                for owner in TypedTable.members_with(RouteTable):
-                    owner.create(connection)
-            connection.commit()
+            with self.transaction(connection):
+                if not RecordedRouteSourceRow.present(connection):
+                    for owner in TypedTable.members_with(RouteTable):
+                        owner.create(connection)
 
     def prepare(self) -> None:
         """Create the writer-owned WAL store after its publication lock releases."""
@@ -413,21 +413,19 @@ class BusRouteCounts:
                 closing(CoordinationStore.writer(self.path)) as connection,
             ):
                 connection.execute("PRAGMA synchronous=FULL")
-                connection.execute("BEGIN IMMEDIATE")
-                current = RouteSourceRow.current(connection)
-                if current != recorded:
-                    connection.rollback()
-                    return (RouteIndexReady() if current.through >= size
-                            else RouteIndexBehind(current.through, size))
-                if rebuild:
-                    for owner in TypedTable.members_with(RouteTable):
-                        owner.delete(connection)
-                for row in rows:
-                    RouteEntryRow.record(connection, row)
-                RecordedRouteSourceRow.delete(connection)
-                if through:
-                    RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
-                connection.commit()
+                with self.transaction(connection):
+                    current = RouteSourceRow.current(connection)
+                    if current != recorded:
+                        return (RouteIndexReady() if current.through >= size
+                                else RouteIndexBehind(current.through, size))
+                    if rebuild:
+                        for owner in TypedTable.members_with(RouteTable):
+                            owner.delete(connection)
+                    for row in rows:
+                        RouteEntryRow.record(connection, row)
+                    RecordedRouteSourceRow.delete(connection)
+                    if through:
+                        RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
         except BlockingIOError:
             return RouteIndexBlocked()
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)

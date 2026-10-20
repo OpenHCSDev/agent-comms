@@ -4,7 +4,6 @@ from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import StandaloneCoordination
-from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.coordination_tables.refusals import SendRefusal
 
 from .carry import Carried, Carry
@@ -13,11 +12,11 @@ from .carry import Carried, Carry
 class SendRefusalOutcomes(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return (NotificationAssignment.database_path(root),)
+        return (CoordinationStore.path_in(root),)
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        path = NotificationAssignment.database_path(root)
+        path = CoordinationStore.path_in(root)
         if not path.exists():
             return Carried(0)
         with CoordinationStore.observing(path) as db:

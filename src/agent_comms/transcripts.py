@@ -32,7 +32,7 @@ from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
-from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
+from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
     LaterTranscript, LiveAssignedTranscriptSource, TranscriptDraft, TranscriptSource, WireFrontier,
@@ -220,12 +220,9 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     runtime: RuntimeLocation
     records_cut: RecordsCut = field(metadata={"content_exclude": True})
-    route_revision: TranscriptRouteRevision
+    route_revision: FileRevision | None
     bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
     coordination_revision: FileRevision | None = field(
-        metadata={"content_exclude": True}
-    )
-    coordination_journal_revision: FileRevision | None = field(
         metadata={"content_exclude": True}
     )
     reply_revision: PublishedReplyRevision
@@ -560,8 +557,7 @@ class Transcripts:
             records_cut,
             page.routes.revision(),
             FileRevision.capture(page.log.path),
-            FileRevision.capture(root / "coordination.sqlite3"),
-            FileRevision.capture(root / "coordination.sqlite3-wal"),
+            FileRevision.capture(CoordinationStore.source_paths(root)[0]),
             page.projection.reply_revision(records),
             FileRevision.capture(root / self.bus.reads.path.name),
             wire_frontier,

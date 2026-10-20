@@ -791,7 +791,7 @@ class WireRevision(ReadState):
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
         *STATUS_SOURCE, BusSourceView)
     bus_routes: tuple[FileRevision, ...] = revision_source(
-        lambda views: CoordinationStore.files(BusRouteCounts(views.bus.log.path).path),  # type: ignore[has-type]
+        lambda views: BusRouteCounts.source_paths(views.bus.log.path.parent),  # type: ignore[has-type]
         StoresView, SidebarView)
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
         *STATUS_SOURCE)
@@ -806,11 +806,11 @@ class WireRevision(ReadState):
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),
         StoresView, SidebarView)
-    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (GoalWaits.path_in(views.root),),
+    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: GoalWaits.source_paths(views.root),
         *STATUS_SOURCE)
     relationships: tuple[FileRevision, ...] = revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),),
         *STATUS_SOURCE)
-    notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root),
+    notifications: tuple[FileRevision, ...] = revision_source(lambda views: CoordinationStore.source_paths(views.root),
         *STATUS_SOURCE, NotificationsView)
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root),
         StoresView, ExternalTranscriptsView)
