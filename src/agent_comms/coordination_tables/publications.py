@@ -7,6 +7,7 @@ from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
 from typing import ClassVar
 
+from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_PUBLICATION_PAYLOAD_BYTES,
