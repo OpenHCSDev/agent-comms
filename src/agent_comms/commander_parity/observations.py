@@ -97,7 +97,7 @@ class CapacityObservation(NativeObservation):
             returned_values(
                 {
                     method_code(capacity.Load.of): measurement,
-                    method_code(Commander.read): context,
+                    method_code(Commander.read_root): context,
                 }
             ),
             redirect_stdout(output),
