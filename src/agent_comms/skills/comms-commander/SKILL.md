@@ -7,13 +7,13 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why, the board. Mechanical work goes to units by order; a fix small enough that ordering it costs more than writing it, the commander writes, commits and pushes itself. It keeps every unit moving toward an installed fix or deleted slop, and never stops rotating.
 
-All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, board, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
+All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-comms/commander.json`, written by `agent-comms install` (bus root, commander name, state dir, repos, worktree and scratch dirs). Rerun install to change it; never edit the tools for one project.
 
 ## Start of session, and after every compaction
 
 Read these files themselves, in full, before acting. A summary or memory note of them is a paraphrase that drifts; it never counts as having read them:
 - `src/agent_comms/commander/indictment.md`
-- every file in `src/agent_comms/commander/rules/` (12 rules, one per fact; the skill does not restate them). `rules-archive/` holds the 64 originals for history and is never loaded or read as rules.
+- every file in `src/agent_comms/commander/rules/` (one per fact; the skill does not restate them).
 - the refactor-audit pattern catalog at the pinned submodule, `src/agent_comms/skills/refactor-audit/references/patterns/`: `README.md` and every rung file it lists. Orders, send-backs and hunts cite its IDs, so a commander that has not read it guesses them.
 
 Arm the reply bridge Monitor:
@@ -70,7 +70,7 @@ The order declaration supplies its ID and first-call times when omitted. A mecha
 
 ## The board
 
-The configured board file is the only record of fixes; its table is the only state and its git history is the log. One row per fix: priority, fix in plain words, surface (repo, files, PR), owner, target shape in one line, state (`not started | moving | spinning | merged | installed | works in app`), last seen with its artifact. Remove a row once the fix works in the app. A defect with no owner gets one the same tick.
+Core's Todo store is the only record of fixes and their history. `order board` renders its current rows without saving a file. Orders, deadlines, owners, delivery and installed evidence are changed through Core's Todo operations, never a committed board or narrative. A defect with no owner gets one the same tick.
 
 Priority: the user's latest request; crashes, lost or replayed input, wrong messages; things blocking other units; latency in the real app; slop deletion with no visible bug.
 
@@ -112,7 +112,7 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, records the strike in Core's Todo store and posts to #comms. Send-backs strike automatically.
 - **Work lives on main or on a branch with a linked PR or issue.** Core's standing rules report unlinked work through commander-heartbeat; each branch goes to its owner.
 
 ## Merging

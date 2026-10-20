@@ -36,8 +36,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     commander: str
     root: Path
     state: Path
-    board: Path
-    narrative: Path
     repos: tuple[Repo, ...]
     worktrees: Path
     scratch: Path
@@ -110,6 +108,6 @@ class CommanderConfig(CommanderRole, BaseModel):
         path.unlink(missing_ok=True)
         path.symlink_to(record)
         for directory in (self.state, self.state / 'orders', self.worktrees,
-                          self.scratch, self.board.parent):
+                          self.scratch):
             directory.mkdir(parents=True, exist_ok=True)
         return path
