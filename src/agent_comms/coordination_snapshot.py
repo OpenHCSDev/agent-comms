@@ -340,12 +340,13 @@ class RecoverySnapshot:
         attempt = self.require_attempt()
         metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
-            current = source.claim_projection()
+            current = source.claim_projection().live_in(boundary.registry)
         owned = tuple(
             claim for claim in current.values()
             if claim.claim_scope.belongs_to(attempt)
         )
-        bus.publisher.release_resources(boundary, owned, outcome.release_wording)
+        if owned:
+            bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 
     def require_nonpublication_response(self) -> None:
         for obligation in self.obligations:
