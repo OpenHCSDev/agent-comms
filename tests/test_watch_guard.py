@@ -39,8 +39,9 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
     assert {event: [hook['command'] for entry in entries for hook in entry['hooks']]
             for event, entries in hooks.items()} == {
         'PreToolUse': ['agent-comms-commander send-guard'],
-        'UserPromptSubmit': ['agent-comms-watch-guard'],
-        'PostToolUse': ['agent-comms-watch-guard']}
+        'UserPromptSubmit': ['agent-comms-watch-guard', 'agent-comms-peer-sync'],
+        'PostToolUse': ['agent-comms-watch-guard', 'agent-comms-peer-sync'],
+        'Stop': ['agent-comms-peer-sync']}
     assert hooks['PreToolUse'][0]['matcher'] == 'Bash'
     assert 'matcher' not in hooks['PostToolUse'][0]
 
