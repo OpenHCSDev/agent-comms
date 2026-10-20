@@ -30,6 +30,8 @@ from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceStat
 from agent_comms.owner_cutover import StoppedOwnerInstallation, MaintainedOwnerCutover
 from agent_comms.owner_lifecycle import OwnerRestartSelection, OwnerRestartResult
 from agent_comms.owner_restart import OwnerRestartHandoff, OwnerRestartRequest, StoppedOwnerBatch
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.threads import Thread
 from agent_comms.store_files import _atomic_write_text, _store_lock
 from .cutover.carry import PendingConversion, PreparedCarries
 from .cutover.backup import StoreBackup
@@ -220,7 +222,9 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
         object.__setattr__(self, 'route_descriptor', descriptor)
         return self.route_ownership
 
-    def owner_selection(self, snapshot, owner, request) -> OwnerRestartSelection:
+    def owner_selection(
+        self, snapshot: RegistrySnapshot, owner: Thread, request: OwnerRestartRequest,
+    ) -> OwnerRestartSelection:
         return next(original for original in self.selection if original.name == owner.name)
 
     def require_selection(self, snapshot, owners) -> None:

@@ -75,7 +75,8 @@ class OwnerRestartSelection:
         process = owner.require_process()
         platform = Platform.current()
         platform.require(process)
-        interpreter = os.fsdecode(Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0])
+        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+        interpreter = os.fsdecode(command)
         if not interpreter:
             raise RelationViolationError("Selected source owner interpreter is unavailable")
         platform.require(process)
