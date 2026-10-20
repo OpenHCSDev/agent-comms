@@ -827,10 +827,12 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def stored_objects(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """This table's stored SQL and every index or trigger attached to it."""
+        """Every object this row declares, whichever table a trigger guards, and any attached to its table."""
+        declared = tuple(cls.schema_objects())
         return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-            (cls.declared_name,)))
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (tbl_name=? OR name IN ("
+            + ",".join("?" for _ in declared) + "))",
+            (cls.declared_name, *declared)))
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
