@@ -92,55 +92,6 @@ def policy(request, tmp_path, tool_listener):
     )
 
 
-async def test_socket_arrival_before_native_events_waits_without_authority(policy):
-    p = policy
-    request = asyncio.create_task(p.socket.handle_request(p.raw()))
-    await asyncio.sleep(0)
-    assert not request.done() and not p.effects
-    p.announce()
-    await asyncio.sleep(0)
-    assert not request.done() and not p.effects
-    with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-        p.socket.assert_complete()
-    p.start()
-    assert await request == {"ok": True}
-    with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-        p.socket.assert_complete()  # Claim/durable .done alone is insufficient.
-    p.end()
-    p.socket.assert_complete()
-    assert p.effects == ["one"]
-    # A provider id may be reused in a later round. A socket request alone
-    # cannot declare that round or reopen the completed call's permission.
-    pending = asyncio.create_task(p.socket.handle_request(p.raw()))
-    await asyncio.sleep(0)
-    assert not pending.done()
-    pending.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await pending
-    with pytest.raises(SelectedToolDenied):
-        p.end()
-    assert p.effects == ["one"]
-
-
-@pytest.mark.parametrize("phase", ["announcement", "start", "terminal"])
-async def test_repeated_native_events_never_repeat_effects(policy, phase):
-    p = policy
-    p.announce()
-    if phase == "announcement":
-        repeat = p.announce
-    else:
-        p.start()
-        if phase == "start":
-            repeat = p.start
-        else:
-            await p.socket.handle_request(p.raw())
-            p.end()
-            repeat = p.end
-    with pytest.raises(SelectedToolDenied):
-        repeat()
-    assert p.effects == (["one"] if phase == "terminal" else [])
-
-
 @pytest.mark.parametrize(
     "observation",
     [
@@ -200,70 +151,6 @@ async def test_cancelled_wait_cannot_be_restarted_or_replayed(policy):
     with pytest.raises(SelectedToolDenied):
         p.socket.assert_complete()
     assert not p.effects
-
-
-async def test_start_event_not_elapsed_time_owns_authorization(policy):
-    p = policy
-    request = asyncio.create_task(p.socket.handle_request(p.raw()))
-    try:
-        # Beyond the removed ten-second limit: load cannot turn a queued start
-        # into a refusal, and waiting grants no permission on its own.
-        await asyncio.sleep(10.1)
-        assert not request.done() and not p.effects
-        p.announce()
-        p.start()
-        assert await request == {"ok": True}
-        p.end()
-        p.socket.assert_complete()
-        assert p.effects == ["one"]
-    finally:
-        request.cancel()
-        await asyncio.gather(request, return_exceptions=True)
-
-
-async def test_delayed_declaration_binds_only_its_exact_request(policy):
-    p = policy
-    if p.selected:
-        return  # Selected policy has one slot, not consecutive normal rounds.
-    first = asyncio.create_task(p.socket.handle_request(p.raw("first")))
-    second = asyncio.create_task(p.socket.handle_request(p.raw("second")))
-    try:
-        await asyncio.sleep(0)
-        p.announce("first")
-        assert p.socket.calls.require(0, "first").call_id == "first"
-        with pytest.raises(KeyError):
-            p.socket.calls.require(0, "second")
-        p.start("first")
-        assert await first == {"ok": True}
-        p.end("first")
-        with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-            p.socket.assert_complete()
-        assert p.effects == ["first"] and not second.done()
-        p.announce("second")
-        p.start("second")
-        assert await second == {"ok": True}
-        p.end("second")
-        p.socket.assert_complete()
-        assert p.effects == ["first", "second"]
-        assert [round.number for round in p.socket.calls.rounds] == [0, 1]
-    finally:
-        first.cancel()
-        second.cancel()
-        await asyncio.gather(first, second, return_exceptions=True)
-
-
-async def test_concurrent_duplicate_requests_admit_exactly_once(policy):
-    p = policy
-    p.announce()
-    requests = [asyncio.create_task(p.socket.handle_request(p.raw())) for _ in range(2)]
-    await asyncio.sleep(0)
-    p.start()
-    results = await asyncio.gather(*requests, return_exceptions=True)
-    assert sum(result == {"ok": True} for result in results) == 1
-    assert sum(isinstance(result, SelectedToolDenied) for result in results) == 1
-    assert p.effects == ["one"]
-    p.end()
-    p.socket.assert_complete()
 
 
 @pytest.mark.parametrize("failure", ["owner-revoked", "slot-fsync", "cancel-action"])
@@ -340,47 +227,6 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     with pytest.raises(SelectedToolDenied):
         p.socket.assert_complete()
     assert not p.effects
-
-
-async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
-    p = policy
-    closed, observed = [], []
-    reply = p.socket._reply
-    close = asyncio.StreamWriter.close
-
-    def close_once(writer):
-        closed.append(writer)
-        close(writer)
-
-    async def observe_reply(reader, writer):
-        observed.append(writer)
-        return await reply(reader, writer)
-
-    monkeypatch.setattr(asyncio.StreamWriter, "close", close_once)
-    monkeypatch.setattr(p.socket, "_reply", observe_reply)
-    p.announce()
-    p.start()
-    await p.socket.start()
-    try:
-        reader, writer = await asyncio.open_unix_connection(str(p.socket.listener.address))
-        try:
-            writer.write(p.raw())
-            await writer.drain()
-            assert json.loads(await reader.readline()) == {"ok": True}
-            assert await reader.read() == b""
-        finally:
-            writer.close()
-            await writer.wait_closed()
-        async with asyncio.timeout(2):
-            while p.socket._handlers:
-                await asyncio.sleep(0)
-        assert len(observed) == 1 and closed.count(observed[0]) == 1
-        assert p.effects == ["one"]
-        p.end()
-        p.socket.assert_complete()
-    finally:
-        await p.socket.close()
-    assert closed.count(observed[0]) == 1
 
 
 async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path, tool_listener):

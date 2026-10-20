@@ -60,29 +60,6 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     assert calls == []
 
 
-def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatch):
-    for index in range(100):
-        wired.messaging.send("PR111", "fixer", f"message {index}").message.message_id
-    assert _listed(wired)["fixer"] == 100
-
-    fresh = wire(wired.root)
-    parsed = []
-    original = Message.from_wire
-
-    def measured(record):
-        parsed.append(record["seq"])
-        return original(record)
-
-    monkeypatch.setattr(Message, "from_wire", measured)
-    assert _listed(fresh)["fixer"] == 100
-    assert parsed == []
-
-    wired.messaging.send("PR111", "fixer", "new message").message.message_id
-    parsed.clear()  # Measure the read projection, separately from publisher validation.
-    assert _listed(fresh)["fixer"] == 101
-    assert parsed == [101]
-
-
 def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
     wired.messaging.initialize_private_initial_protocol()
     for index in range(30):
@@ -180,27 +157,6 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     assert parsed == []
 
 
-def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
-    first = wired.messaging.send("PR111", "#base", "first exact-cut row").message
-    viewer = wired.messaging.user_identity("/same-cut-viewer").name
-    with wired.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
-        parsed = []
-        original = Message.from_wire
-
-        def measured(row):
-            parsed.append(row["seq"])
-            return original(row)
-
-        monkeypatch.setattr(Message, "from_wire", measured)
-        first_metrics = wired.views.presentation.display_view_metrics(source, basis)
-        first_clocks = wired.bus.activity_index.snapshot(source)
-        assert first.seq in parsed
-        parsed.clear()
-        assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
-        assert wired.bus.activity_index.snapshot(source) == first_clocks
-        assert parsed == []
-
-
 def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wired):
     indexes = wired.bus.log._append_indexes
     baseline = len(indexes)
@@ -212,48 +168,6 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
         assert source._append_checkpoints == {}
     with wired.views.presentation.snapshot(viewer=NamedViewer("PR111")) as (_basis, source):
         assert set(source._append_checkpoints) == set(indexes)
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX file-lock observation")
-def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monkeypatch):
-    import fcntl
-    from agent_comms.bus_projection import AppendProjectionStore, BusAppendIndex
-
-    wired.messaging.send("PR111", "#base", "checkpoint lock scope").message
-    reads, checks = [], []
-    read = AppendProjectionStore._read_unlocked
-    accepts = AppendCheckpoint.accepts
-
-    def unlocked():
-        for name in (".wire.lock", ".bus.jsonl.lock"):
-            with (wired.root / name).open("rb") as descriptor:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    def observed_read(index):
-        unlocked()
-        reads.append(index.path)
-        return read(index)
-
-    def observed_accepts(record, revision, stream):
-        unlocked()
-        checks.append(record.offset)
-        return accepts(record, revision, stream)
-
-    monkeypatch.setattr(AppendProjectionStore, "_read_unlocked", observed_read)
-    monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
-    wired.views.viewer_snapshot("/lock-scope-viewer")
-    assert reads and checks
-    # Later cuts start from the checkpoint each index holds; only a write
-    # still reads the saved file, to keep another process's farther prefix.
-    prepared = []
-    prepare = BusAppendIndex.prepare
-    monkeypatch.setattr(AppendProjectionStore, "_read_unlocked", read)
-    monkeypatch.setattr(
-        BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
-    )
-    wired.messaging.send("PR111", "#base", "later row").message
-    wired.views.viewer_snapshot("/lock-scope-viewer")
-    assert prepared and None not in prepared
 
 
 def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):

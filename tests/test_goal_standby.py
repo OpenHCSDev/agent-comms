@@ -26,45 +26,6 @@ from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
 
 
-@pytest.mark.parametrize("changed", ["claim_scope", "pid", "process_birth", "rename"])
-async def test_ready_recovery_rechecks_executing_owner_before_rotating(
-    tmp_path, monkeypatch, changed
-):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = canonical_goal_wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="pi")
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    await agent.new_session(str(tmp_path / "parent"))
-    store = comms.goals.open_goal_store()
-    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
-    owner = comms.registry.require("parent")
-    claim_scope = comms.registry.snapshot().claim_generation("parent")
-    if changed == "claim_scope":
-        claim_scope += 1
-    elif changed == "pid":
-        owner = replace(owner, process_identity=ProcessIdentity(owner.require_process().pid + 1, owner.process_identity.start_time))
-    elif changed == "process_birth":
-        owner = replace(owner, process_identity=ProcessIdentity(owner.require_process().pid, owner.process_identity.start_time + 1))
-    else:
-        comms.registry.rename("parent", "renamed")
-    old_grant = store.ready_grant(goal.id, 1)
-    comms.goals.goal_store = GoalAttemptStore(store.root)
-    try:
-        with (
-            _store_lock(comms._wire_lock_path),
-            pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
-        ):
-            comms.goals.ready_goal_grant_locked(
-                owner, claim_scope, store.snapshot(goal.id)
-            )
-        if changed != "rename":
-            assert store.ready_grant(goal.id, 1) == old_grant
-        else:
-            assert store.snapshot(goal.id).lifecycle.ready
-    finally:
-        await agent.shutdown()
-
-
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path)))

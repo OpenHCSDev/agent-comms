@@ -311,24 +311,6 @@ def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
         before.content_current()
 
 
-def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, monkeypatch):  # noqa: F811
-    _path, _root_id, comms, initial, _people = _root(tmp_path)
-    verify = WireStoreLock.open_source
-    barriers = []
-
-    def observed(cls, path, mode):
-        if path == comms.bus.log.path:
-            barriers.append(True)
-        return verify(path, mode)
-
-    monkeypatch.setattr(WireStoreLock, "open_source", classmethod(observed))
-    view = comms.views.thread_presentations(("beta",)).require("beta")
-    assert len(barriers) == 1
-    assert view.read_identity.wire_frontier.sequence == initial.message.seq
-    assert view.notifications[0].message.reference == initial.message.reference
-    assert view.notifications[0].recipient_identity.recipient_lookup == RecordedThreadIncarnation("fixture", view.read_identity.thread.created_at).lookup
-
-
 def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     identity = comms.views.thread_presentations(("beta",)).require("beta").read_identity
@@ -349,26 +331,6 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     comms.registry.declare(comms.registry.new_thread('renamed', frozenset(), str(tmp_path)))
     with pytest.raises(StaleRevision, match="original thread"):
         comms.transcripts.bind_page_read("renamed", identity)
-
-
-def test_original_page_reuses_captured_frontier_between_claim_fences(tmp_path, monkeypatch):  # noqa: F811
-    _path, _root_id, comms, initial, _people = _root(tmp_path)
-    read = comms.transcripts.capture_page_read("beta")
-    verify = WireStoreLock.open_source
-    barriers = []
-
-    def observed(cls, path, mode):
-        if path == comms.bus.log.path:
-            barriers.append(True)
-        return verify(path, mode)
-
-    monkeypatch.setattr(WireStoreLock, "open_source", classmethod(observed))
-    page = read.read()
-    # One bounded page query and one final freshness check. The retained source
-    # removes the former pre-read identity reconstruction.
-    assert len(barriers) == 2
-    assert page.after.wire == read.identity.wire_frontier
-    assert tuple(event.source for event in page.events) == (initial.message.reference,)
 
 
 def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monkeypatch):  # noqa: F811

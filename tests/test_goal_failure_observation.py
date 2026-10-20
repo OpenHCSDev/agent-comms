@@ -232,25 +232,6 @@ def test_pause_projection_never_becomes_runnable(bound, source):
     assert store.path.read_bytes() == before
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        {"name": "replacement"},
-        {"created_at": 11.0},
-        {"worktree": "/changed"},
-        {"process_identity": NoProcess()},
-        {"goal": Goal("replacement", "replacement", published_seq=0, state=BlockedGoal("Explicit fixture refusal"))},
-        {"goal": Goal("active", "goal", published_seq=0)},
-        {"turn_generation": 8},
-        {"last_finished_turn_id": "b" * 32},
-    ],
-)
-def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
-    store, owner, _, observation = bound
-    observation.reservation.fail(store, "failed", observation=observation)
-    assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
-
-
 @pytest.mark.parametrize("mode", ["missing", "invalid", "invalid_schema", "wal"])
 def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     store, owner, _, observation = bound

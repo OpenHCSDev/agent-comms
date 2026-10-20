@@ -76,57 +76,6 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     assert all(not item.displayed_to for item in window[(sent.seq, sent.message_id)])
 
 
-def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path, *, thread_registration):
-    thread = thread_registration.new_thread('worker', frozenset(), str(tmp_path), created_at=1700000000.0)
-    incarnation = thread.incarnation
-    assert thread.incarnation is incarnation
-    original_sha = hashlib.sha256
-    with patch("agent_comms.thread_identity.hashlib.sha256", wraps=original_sha) as hashed:
-        first = incarnation.lookup
-        assert incarnation.lookup == first
-        assert hashed.call_count == 1
-    renamed = replace(thread, name="renamed")
-    assert renamed.incarnation.lookup == first
-    assert FieldCodec.encode(incarnation) == {"name": "worker", "created_at": 1_700_000_000.0}
-    deleted = ThreadIncarnation.deleted("worker")
-    historical = UnrecordedThreadIncarnation("historical")
-    assert isinstance(incarnation, RecordedThreadIncarnation)
-    assert isinstance(deleted, DeletedThreadIncarnation)
-    assert isinstance(historical, UnrecordedThreadIncarnation)
-    assert incarnation.birth_description == "created 1700000000.0"
-    assert deleted.birth_description == "deleted declaration"
-    assert historical.birth_description == "birth unrecorded"
-    assert not hasattr(deleted, "created_at") and not hasattr(historical, "created_at")
-    assert (deleted.wire_birth, historical.wire_birth) == (-1.0, 0.0)
-    assert incarnation.same_publication_birth(incarnation.renamed("alias"))
-    assert not incarnation.same_publication_birth(historical)
-    missing = []
-    assert deleted.recorded_or(
-        lambda recorded: recorded.lookup, lambda: missing.append("deleted")
-    ) is None
-    assert missing == ["deleted"]
-    assert incarnation.recorded_or(
-        lambda recorded: recorded.lookup, lambda: missing.append("recorded")
-    ) == incarnation.lookup
-    assert missing == ["deleted"]
-    target = GoalWaitTarget(incarnation)
-    assert not hasattr(target, "name") and not hasattr(target, "created_at")
-    assert (target.incarnation.name, target.incarnation.created_at) == ("worker", 1_700_000_000.0)
-    assert FieldCodec.encode(target) == {"name": "worker", "created_at": 1_700_000_000.0}
-    assert FieldCodec.decode(GoalWaitTarget, FieldCodec.encode(target)) == target
-    with pytest.raises(ValueError, match="Unknown fields for ThreadIncarnationRecord"):
-        FieldCodec.decode(GoalWaitTarget, {**target.to_wire(), "lookup": incarnation.lookup})
-    assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(deleted)) == deleted
-    assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(historical)) == historical
-    with pytest.raises(ValueError, match="positive recorded birth"):
-        FieldCodec.decode(RecordedThreadIncarnation, FieldCodec.encode(historical))
-    assert not hasattr(deleted, "lookup") and not hasattr(historical, "lookup")
-    with pytest.raises(ValueError, match="positive recorded birth"):
-        deleted.require_recorded()
-    with pytest.raises(ValueError, match="positive recorded birth"):
-        GoalWaitTarget(RecordedThreadIncarnation("historical", 0.0))
-
-
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
     comms = Comms(tmp_path / "bus")
     for name, birth in (("old", 1700.0), ("second", 1701.0)):

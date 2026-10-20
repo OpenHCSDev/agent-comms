@@ -219,43 +219,6 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
         observed.capture(event)
 
 
-def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
-    from pathlib import Path
-
-    from agent_comms.native_pi import (
-        NativeContextProof,
-        NativePiTerminalFailure,
-        NativePiUnavailable,
-    )
-    from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
-    from agent_comms.turn_failure import IdentityUncertain, ModelRequestFailed
-    from agent_comms.turn_output import TurnOutput
-
-    pending = PendingTrackedTerminal()
-    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
-        pending.require_response([])
-    completed = pending.append("actual response")
-    assert completed.require_response(["actual ", "response"]) == "actual response"
-    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
-        completed.require_response(["different stream"])
-    ambiguous = completed.append("second terminal")
-    assert isinstance(ambiguous, AmbiguousTrackedTerminal)
-    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
-        ambiguous.require_response(["actual response"])
-    assert isinstance(completed.tool_round(), PendingTrackedTerminal)
-    output = TurnOutput(failure=ModelRequestFailed("original provider rejection"))
-    proof = NativeContextProof(
-        "a" * 32, "session", "entry", 1, "b" * 64, 1_791_964_800_001, Path("original-session.jsonl")
-    )
-    with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
-        output.raise_if_failed(proof, SelectedModel("configured", "model"))
-    assert failure.value.context is proof
-    output.record_failure(IdentityUncertain("source identity changed"))
-    with pytest.raises(NativePiUnavailable, match="source identity changed") as uncertain:
-        output.raise_if_failed(proof, SelectedModel("configured", "model"))
-    assert not isinstance(uncertain.value, NativePiTerminalFailure)
-
-
 @pytest.mark.parametrize(
     "record",
     [

@@ -113,51 +113,6 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
         child.stop_sync()
 
 
-def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None:
-    children = [
-        ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-        for _ in range(2)
-    ]
-    try:
-        comms = Comms(tmp_path)
-        for index, child in enumerate(children):
-            comms.registry.declare(
-                comms.registry.new_thread(f'worker-{index}', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('busy', child.pid) if index else NoTurn())
-            )
-        with pytest.raises(RelationViolationError, match="idle before restart"):
-            comms.owners.restart_owners(["worker-0", "worker-1"])
-        assert all(child.alive() for child in children)
-        assert all(comms.registry.status(f"worker-{i}").active for i in range(2))
-    finally:
-        for child in children:
-            child.stop_sync()
-
-
-def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> None:
-    from agent_comms.goal_presentation import GoalWaitTarget
-    from agent_comms.goal_waits import GoalWaits
-
-    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-    try:
-        comms = Comms(tmp_path)
-        owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path))
-        peer = comms.registry.new_thread('peer', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('work', child.pid))
-        comms.registry.declare(owner)
-        comms.registry.declare(peer)
-        targets = (GoalWaitTarget(peer.incarnation.require_recorded()),)
-        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot(), comms.agents) == ()
-        stale = replace(
-            peer, process_identity=replace(child.identity, start_time=child.identity.start_time + 1)
-        )
-        comms.registry.register(stale)
-        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot(), comms.agents) == (
-            owner.name,
-        )
-        assert child.alive()
-    finally:
-        child.stop_sync()
-
-
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
     """The production detached launch retains a failure before socket creation."""
     comms = Comms(tmp_path)

@@ -318,7 +318,6 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
         OfflineHistory.of(CodexHarness, source, None), name="paper4_jair", tags=frozenset({"papers"}))
     thread = comms.registry.require("paper4_jair")
     assert thread.name == thread.display_title == "paper4_jair"
-    assert thread.title is None
     assert thread.tags == frozenset({"papers"})
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "codex-id"

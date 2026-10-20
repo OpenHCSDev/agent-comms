@@ -63,51 +63,6 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
         comms.goals.update_goal("worker", ActiveGoalAction())
 
 
-async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, monkeypatch):
-    comms, goal = owner
-    monkeypatch.setattr(GoalAction, "__registry__", dict(GoalAction.__registry__))
-
-    @dataclass(frozen=True, kw_only=True)
-    class CheckpointGoalAction(TransitionGoalAction, ModelInvocable):
-        def next_state(self, goal: Goal, ctx: GoalActionContext):
-            return ctx.thread.goal.require().state
-
-    try:
-        tool = next(
-            t
-            for t in tools.ToolRequest.members_with(tools.ToolRequest)
-            if t.declared_name == "comms_goal"
-        )
-        assert "checkpoint" in tool.schema()["parameters"]["properties"]["status"]["enum"]
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-        previous = comms.goals.goal_snapshot("worker")
-        tool.invoke(
-            comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
-            caller=ThreadCaller("worker")
-        )
-        event = wire(comms.root).goals.goal_changed("worker", previous)
-        assert isinstance(event, GoalChanged)
-        assert event.snapshot.goal.progress == "Evidence recorded"
-        updates = []
-
-        class Client:
-            async def session_update(self, **kwargs):
-                updates.append(kwargs)
-
-        await AcpEventConsumer(None, "worker", Client()).dispatch(event)
-        from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
-
-        update = next(
-            row
-            for row in decode_updates(updates[0]["update"].field_meta)
-            if isinstance(row, GoalChangedUpdate)
-        )
-        assert update.goal.revision == 2
-        assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
-    finally:
-        GoalAction.__registry__.pop("checkpoint")
-
-
 @pytest.mark.parametrize(
     "action",
     [

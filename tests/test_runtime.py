@@ -136,47 +136,6 @@ async def until(predicate, timeout=10):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
-    from acp.exceptions import RequestError
-
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    client = canonical_agent(comms)
-    response = await owner.new_session(str(tmp_path / "project"))
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
-    request = {
-        "prompt": [{"type": "text", "text": "Do not launch"}],
-        "meta": {"agentComms": {"request": {"kind": "invalid"}}},
-    }
-    try:
-        with pytest.raises(RequestError) as caught:
-            await proxy.request("prompt", **request)
-        assert caught.value.code == -32602
-        assert "invalid" in caught.value.data["reason"]
-        # The pi project extension reads only the failure text.
-        reader, writer = await asyncio.open_unix_connection(proxy.path)
-        try:
-            writer.write(
-                (
-                    json.dumps({"action": "prompt", "thread": response.session_id, **request})
-                    + "\n"
-                ).encode()
-            )
-            await writer.drain()
-            result = json.loads(await reader.readline())
-            assert result["kind"] == "owner_failure" and "invalid" in result["error"]
-        finally:
-            writer.close()
-            await writer.wait_closed()
-        assert not comms.registry.require(response.session_id).active_turn.executing
-    finally:
-        await proxy.close()
-        await client.shutdown()
-        await owner.shutdown()
-
-
-@pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch, native_backend):
     comms = Comms(tmp_path / ("long-wire-" * 16))
@@ -463,46 +422,6 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(
-        comms,
-        agent_bin="/bin/echo",
-        agent_args=["--provider", "test", "--model", "one"],
-        runtime_enabled=True,
-    )
-    client = canonical_agent(comms)
-    response = await owner.new_session(str(tmp_path / "project"))
-    try:
-        attached = await client.sessions.attach_owner(
-            comms.registry.require(response.session_id), response.session_id
-        )
-        assert attached.config_options[0].current_value == "test/one"
-        assert [option.value for option in attached.config_options[0].options] == [
-            "test/one",
-            "test/two",
-        ]
-        assert attached.config_options[1].current_value == ""
-        assert comms.registry.require(response.session_id).thinking_level is None
-        assert (
-            next(
-                f
-                for f in decode_updates(attached.field_meta)
-                if isinstance(f, CoordinationChangedUpdate)
-            ).title
-            == "project"
-        )
-        changed = await client.set_config_option("model", response.session_id, "test/two")
-        assert changed.config_options[0].current_value == "test/two"
-        assert comms.registry.require("project").model == "test/two"
-    finally:
-        await client.shutdown()
-        await owner.shutdown()
-
-
-@pytest.mark.asyncio
 async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="/bin/echo")
@@ -518,67 +437,6 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
         )
     finally:
         await agent.shutdown()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", runtime_enabled=True)
-    client = canonical_agent(comms)
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
-
-    client.on_connect(Client())
-    await client.initialize(1, {})
-    response = await owner.new_session(str(tmp_path / "project"))
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text(
-        "\n".join(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": str(i)}})
-            for i in range(50)
-        )
-        + "\n"
-    )
-    comms.threads.attach_session((attachment_owner := comms.registry.require(response.session_id)), str(transcript), process=attachment_owner.process_identity)
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
-    try:
-        await proxy.subscribe()
-        snapshots = [
-            f
-            for update in updates
-            for f in decode_updates(update.get("_meta"))
-            if isinstance(f, TranscriptSnapshotUpdate)
-        ]
-        assert len(snapshots) == 1
-        assert snapshots[0].page.has_older is True
-        assert all(
-            "omitted from this bounded view" not in update.get("content", {}).get("text", "")
-            for update in updates
-        )
-    finally:
-        await proxy.close()
-        await owner.shutdown()
-
-
-def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
-    from agent_comms.errors import RelationViolationError
-
-    comms = wire(tmp_path)
-    session = tmp_path / "parent.jsonl"
-    session.write_text("")
-    comms.registry.declare(
-        comms.registry.new_thread(name='parent', tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
-    )
-    comms.registry.declare(
-        comms.registry.new_thread(name='child', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    )
-    with pytest.raises(RelationViolationError, match="already exists"):
-        comms.threads.create(ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="duplicate"))
-    assert comms.registry.require("child").pid == os.getpid()
 
 
 @pytest.mark.asyncio

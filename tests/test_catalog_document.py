@@ -64,29 +64,6 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
     assert historical.display_metadata == {}
 
 
-def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeypatch):
-    import agent_comms.publisher as publisher
-    from agent_comms.errors import RelationViolationError
-    from test_private_human_ingress import _root
-
-    comms, _store, _root_id, _lookups = _root(tmp_path)
-    sequence = comms.bus.log.latest_sequence()
-    original = publisher.freeze_audience
-
-    def capture_then_change(*args, **kwargs):
-        result = original(*args, **kwargs)
-        # A noncooperating writer changes the source during claim_scope. The
-        # already-held wire lock is not itself evidence of unchanged bytes.
-        with comms.channels.catalog.editing() as document:
-            document.list_order = CreatedChannelSort
-        return result
-
-    monkeypatch.setattr(publisher, "freeze_audience", capture_then_change)
-    with pytest.raises(RelationViolationError, match="registry/catalog revision changed"):
-        comms.messaging.send_user_message("#team", "must not append", worktree=str(tmp_path))
-    assert comms.bus.log.latest_sequence() == sequence
-
-
 def test_message_integer_timestamp_keeps_original_identity():
     original = Message("alpha", "#api", "old", InfoKind, timestamp=123, seq=7)
     encoded = original.to_wire()

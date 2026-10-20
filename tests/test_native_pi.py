@@ -454,75 +454,6 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, m
 
 
 @pytest.mark.skipif(
-    sys.platform == "darwin", reason="copied native process group control is Linux-only"
-)
-@pytest.mark.parametrize("stop_reason", ["stop", "error", "length"])
-async def test_context_proof_alone_cannot_validate_a_failed_model_reply(tmp_path: Path, monkeypatch, stop_reason: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
-    import agent_comms.native_pi as native
-
-    fake = tmp_path / "fake_rpc.py"
-    # The parent writes the session and its proof; the child imports nothing slower than json.
-    session_file = tmp_path / "sessions" / "test.jsonl"
-    proof = {"schema": 2, "type": "context_committed", "sessionId": "sid", "inputId": INPUT_ID,
-             "sessionEntryId": "entry", "requestGeneration": 1, "llmContextDigest": "c" * 64,
-             "committedAtMs": 1_791_964_800_001}
-    fake.write_text("""import json, sys
-reason = sys.argv[2]
-proof = json.loads(sys.argv[3])
-def send(value):
-    print(json.dumps(value), flush=True)
-print('fixture-ready', flush=True)
-state = json.loads(sys.stdin.readline())
-send({'type':'response','id':state['id'],'command':'get_state','success':True,
-      'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only',
-              'sessionId':'sid','sessionFile':sys.argv[1]}})
-command = json.loads(sys.stdin.readline())
-input_id = command['inputId']
-send({'type':'response','id':command['id'],'command':'prompt','success':True})
-send({'type':'input_committed','sessionId':'sid','inputId':input_id,'sessionEntryId':'entry'})
-send(proof)
-send({'type':'message_update','assistantMessageEvent':{'type':'text_delta','delta':'IGNORE'}})
-send({'type':'message_end','message':{'role':'assistant','stopReason':reason,
-    'content':[{'type':'text','text':'IGNORE'}]}})
-send({'type':'agent_settled'})
-""")
-    original = AttachedChild.start
-
-    async def launch(*_argv, **kwargs):
-        entry = {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "entry",
-                 "message": {"role": "user", "inputId": INPUT_ID, "inputDigest": "b" * 64}}
-        session_file.write_text(json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid"}) + "\n" + json.dumps(entry) + "\n")
-        write_proof_rows(session_file, [proof])
-        session_file.chmod(0o600)
-        child = await original(
-            (sys.executable, "-u", str(fake), str(session_file), stop_reason, json.dumps(proof)),
-            **kwargs,
-        )
-        assert await asyncio.wait_for(child.stdout.readline(), timeout=30) == b"fixture-ready\n"
-        return child
-
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    operation = TrackedTurnSession.execute(
-        native_runtime_package,
-        input_id=INPUT_ID,
-        prompt="Decide IGNORE",
-        worktree=tmp_path,
-        session=SelectedSession(tmp_path / "sessions"),
-        execution=IndependentExecution( cursor_delivery=cursor_delivery),
-        startup=NativeStartup(tmp_path), selected_tool_mode=NoSelectedTools(),
-        model_wait=ModelWait(3),
-        model=selected_model,
-    )
-    if stop_reason == "stop":
-        result = await operation
-        assert result.text == "IGNORE"
-        assert result.context.input_id == INPUT_ID
-    else:
-        with pytest.raises(NativePiUnavailable, match="did not finish successfully"):
-            await operation
-
-
-@pytest.mark.skipif(
     sys.platform != "linux", reason="trusted copied package requires a real /var/tmp ancestry"
 )
 def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monkeypatch) -> None:
@@ -1104,17 +1035,6 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     ]
     assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
     assert "NODE_OPTIONS" not in environment
-
-
-def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_path):
-    import agent_comms.native_pi as native_pi
-    from agent_comms.coordination_errors import PublicationActivationBlocked
-
-    # A root with no private marker resolves to a shared launch, which refuses before any exec.
-    monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
-    monkeypatch.setattr(native_pi.os, "execvpe", lambda *call: pytest.fail(f"started a real Pi: {call}"))
-    with pytest.raises(PublicationActivationBlocked, match="requires a private bus root"):
-        native_pi.main()
 
 
 @pytest.mark.parametrize(

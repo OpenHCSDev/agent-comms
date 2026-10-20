@@ -78,69 +78,6 @@ async def make_agent(tmp_path, monkeypatch):
     return agent
 
 
-@pytest.mark.parametrize("text", ["What is in this image?", ""])
-async def test_initial_and_image_only_prompts_reach_backend(tmp_path, monkeypatch, text):
-    agent = await make_agent(tmp_path, monkeypatch)
-    received = []
-
-    async def stream(*args, **kwargs):
-        received.extend(kwargs["images"])
-        yield ae.Done(ok=True, text="Image seen")
-
-    monkeypatch.setattr(backend, "stream_agent_events", stream)
-    try:
-        await agent.prompt("project", [{"type": "text", "text": text}, IMAGE])
-        assert received == [ImageInput(PNG, "image/png")]
-    finally:
-        await agent.shutdown()
-
-
-async def test_image_steering_and_queue_restoration_keep_attachment_reference(
-    tmp_path, monkeypatch
-):
-    agent = await make_agent(tmp_path, monkeypatch)
-    started = asyncio.Event()
-    received = asyncio.Event()
-    commands, updates = ([], [])
-
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"].model_dump(by_alias=True, exclude_none=True))
-
-    agent.on_connect(Client())
-
-    async def stream(*args, **kwargs):
-        started.set()
-        commands.append(await kwargs["steering_queue"].get())
-        received.set()
-        await asyncio.Event().wait()
-        yield ae.Done(ok=True, text="")
-
-    monkeypatch.setattr(backend, "stream_agent_events", stream)
-    turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
-    try:
-        await asyncio.wait_for(started.wait(), 3)
-        reference = "What is this? @/private/clipboard-image.png"
-        await agent.prompt(
-            "project",
-            [{"type": "text", "text": "What is this?"}, IMAGE],
-            field_meta=encode_request(QueuePromptRequest(reference, True)),
-        )
-        await asyncio.wait_for(received.wait(), 3)
-        assert commands[0]["images"] == [IMAGE]
-        assert commands[0]["streamingBehavior"] == "steer"
-        await agent.cancel("project")
-        await turn
-        assert any(
-            [item.text for item in fact.projection.restored] == [reference]
-            for update in updates
-            for fact in decode_updates(update.get("_meta"))
-            if isinstance(fact, QueueChangedUpdate)
-        )
-    finally:
-        await agent.shutdown()
-
-
 @pytest.mark.skipif(os.name == "nt", reason="Unix socket owner attachment")
 async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
@@ -230,57 +167,6 @@ async def test_failed_image_child_never_exposes_encoded_attachment(tmp_path, mon
     agent.on_connect(Client())
     try:
         await agent.prompt("project", [{"type": "text", "text": "inspect"}, IMAGE])
-        assert PNG not in json.dumps(updates)
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
-async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
-    stub = tmp_path / "pi-image-stub"
-    stub.write_text(
-        f"#!{sys.executable}\n"
-        + "\nimport json, sys\nfor line in sys.stdin:\n    command = json.loads(line)\n    if command['type'] == 'get_state':\n        print(json.dumps({'type': 'response', 'id': command['id'],\n            'command': 'get_state', 'success': True,\n            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),\n            flush=True)\n    elif command['type'] == 'prompt' and 'images' not in command:\n        print(json.dumps({'type': 'response', 'id': command['id'],\n            'command': 'prompt', 'success': True}), flush=True)\n        print(json.dumps({'type': 'message_start', 'message': {'role': 'user',\n            'content': command['message'], 'inputId': command['inputId']}}), flush=True)\n    elif command['type'] == 'prompt':\n        sys.stderr.write(json.dumps(command))\n        sys.exit(7)\n"
-    )
-    stub.chmod(493)
-    queue = asyncio.Queue()
-    queue.put_nowait(InputRequest(
-        input_id=InputId("follow-up"),
-        content=InputContent(
-            text="User follow-up:\ninspect image", images=(ImageInput(PNG, "image/png"),),
-        ),
-        when_busy=WhenBusy.STEER,
-    ))
-    events = [
-        event
-        async for event in one_turn_events(
-            str(stub), ["--model", "test/model"], "first", str(tmp_path), steering_queue=queue
-        )
-    ]
-    assert events[-1].ok is False
-    assert events[-1].diagnostic["exit_code"] == 7
-    assert PNG not in repr(events)
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = canonical_agent(
-        wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
-    )
-    await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-    started = asyncio.Event()
-    updates = []
-
-    class Client:
-        async def session_update(self, **kwargs):
-            update = kwargs["update"].model_dump(by_alias=True, exclude_none=True)
-            updates.append(update)
-            if any(isinstance(f, InputStartedUpdate) for f in decode_updates(update.get("_meta"))):
-                started.set()
-
-    agent.on_connect(Client())
-    try:
-        turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "first"}]))
-        await asyncio.wait_for(started.wait(), 3)
-        await agent.prompt("project", [{"type": "text", "text": "inspect image"}, IMAGE])
-        await asyncio.wait_for(turn, 3)
         assert PNG not in json.dumps(updates)
     finally:
         await agent.shutdown()

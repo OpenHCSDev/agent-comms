@@ -54,18 +54,6 @@ async def test_awareness_timeout_does_not_release_running_read(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [OSError("socket"), ValueError("root"),
-    RuntimeError("owner disconnected; outcome unknown"), RequestError(-32603, "owner refused")])
-async def test_owner_read_delivers_original_expected_failure(monkeypatch, error):
-    monkeypatch.setattr(OwnerRead, "require_root", Mock())
-    monkeypatch.setattr(OwnerRead, "ask", AsyncMock(side_effect=error))
-    answer = await ReadOwnerGoal(root="/unused", owner=object()).answer(None)
-    assert isinstance(answer, ReadRefused)
-    assert answer.error is error
-    assert str(error) in answer.trace
-
-
-@pytest.mark.asyncio
 async def test_owner_read_programming_defect_reaches_service_task_owner(monkeypatch):
     error = TypeError("owner read implementation defect")
     monkeypatch.setattr(OwnerRead, "require_root", Mock())

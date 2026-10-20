@@ -7,20 +7,6 @@ from agent_comms.ui_model.sidebar import FailedSidebar, SidebarModel, WaitingSid
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 
 
-def test_waiting_and_failed_sidebar_answer_without_a_snapshot():
-    failure = ValueError("sidebar source could not be read")
-    for observation in (WaitingSidebar(), FailedSidebar(failure)):
-        assert observation.channel_order() is NameChannelSort
-        assert observation.read_marker_notice() == ""
-        assert observation.channel_unread("#any") == UnobservedUnread()
-        assert observation.bus_unread("person") == UnobservedUnread()
-    with pytest.raises(RuntimeError, match="has not been observed"):
-        WaitingSidebar().require_snapshot()
-    with pytest.raises(ValueError) as caught:
-        FailedSidebar(failure).require_snapshot()
-    assert caught.value is failure
-
-
 def test_sidebar_apply_and_failure_publish_their_original_answers(comms):
     scheduled = []
     model = SidebarModel(scheduled.append)

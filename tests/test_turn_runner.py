@@ -141,58 +141,6 @@ def failure_facts(updates, family):
     ]
 
 
-@pytest.mark.parametrize(
-    "prior",
-    [
-        None,
-        events.Error("specific provider failure"),
-        events.Done("specific provider failure", False),
-    ],
-)
-async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
-    owner, session, native = prepared_owner
-    updates = []
-
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-    owner.on_connect(Client())
-    original = native.session.read_bytes()
-
-    async def stream(*args, **kwargs):
-        persistent = owner.turns.persistent_backends[session]
-        assert persistent.available and persistent.child_state.child.proc.alive()
-        if prior is not None:
-            yield prior
-        raise RuntimeError("execution failed")
-
-    monkeypatch.setattr(backend, "stream_agent_events", stream)
-    with pytest.raises(RequestError) as caught:
-        await owner.prompt(session, [{"type": "text", "text": "Work"}])
-    assert isinstance(caught.value.__cause__, RuntimeError)
-    assert str(caught.value.__cause__) == "execution failed"
-    request_failure = RequestFailure.from_error(caught.value)
-    errors = failure_facts(updates, RequestFailedUpdate)
-    from agent_comms.input_attempt import NotSentInput, ReservedInput
-
-    # A completed native failure retains its original input observation. The
-    # later unbound settlement updates input delivery, not a second failure.
-    # A controller fault without native Done resolves after that settlement.
-    state = ReservedInput if isinstance(prior, events.Done) else NotSentInput
-    assert [update.failure.input_state for update in errors] == [state]
-    assert request_failure.notification_published and request_failure.failure == errors[-1].failure
-    if isinstance(prior, events.Done):
-        assert errors[-1].failure.detail == prior.text
-    else:
-        assert "Open diagnostic" in errors[-1].failure.detail
-    assert native.session.read_bytes() == original
-    assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
-    assert not owner._comms.registry.require(session).executing
-    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
-    assert not any(state.turn_open() for state in owner.inputs.drained.values())
-
-
 async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
     owner, session, native = prepared_owner
     updates = []

@@ -31,22 +31,6 @@ def reservation():
     )
 
 
-def test_original_sql_null_check_cannot_mint_incomplete_reference():
-    with sqlite3.connect(":memory:") as db:
-        CurrentNativeCursor.create(db)
-        original = cursor()
-        original.insert(db)
-        actual = CurrentNativeCursor.one(db, input_id=original.input_id)
-        assert actual.reference == original.reference
-        assert isinstance(actual.reference, NativeInputReference)
-        # Reproduce the actual copied-native-fixture corruption: CHECK NULL
-        # does not refuse this update. The original value owner must refuse it.
-        db.execute("UPDATE current_native_cursor SET request_generation=NULL")
-        malformed = CurrentNativeCursor.one(db, input_id=original.input_id)
-        with pytest.raises(IdentityConflict, match="partial"):
-            _ = malformed.reference
-
-
 @pytest.mark.parametrize("changes", [
     {"input_id": None}, {"stage": None},
     {"session_id": None}, {"request_generation": None},

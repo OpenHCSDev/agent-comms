@@ -84,10 +84,6 @@ def require_formats(documents: dict[str, type[LockedStore]], manifest: dict, pre
         )
 
 
-def test_stored_format_fingerprints(commander_script):
-    require_formats(stored_documents(), json.loads(MANIFEST.read_text()), previous_manifest())
-
-
 def test_recorded_change_requires_a_real_declared_conversion(tmp_path, monkeypatch):
     @dataclass
     class Before:

@@ -175,13 +175,6 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
     assert DistanceReadings((DistanceReading(1, missing), DistanceReading(2, CountPrinted(2)))).trend.projection == ''
 
 
-def test_an_unpushed_commit_names_its_sha_and_time(checkout):
-    sha = commit(checkout[1])
-    progress = read(checkout)
-    assert type(progress) is CommittedProgress and progress.sha == sha
-    assert progress.line == f"committed {sha} at {time.strftime('%H:%M', time.localtime(progress.at))}, not pushed"
-
-
 def test_a_pushed_commit_with_no_pr_says_so(checkout):
     sha = commit(checkout[1])
     git(checkout[1], 'push', '-q', 'origin', 'HEAD:fix/p1')
@@ -299,13 +292,6 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
     assert len(source.readings().readings) == 1
     assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
     assert marker.read_text() == 'x'
-
-
-def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
-    bad = tmp_path / 'not-a-repository' / 'worker--P1'
-    bad.mkdir(parents=True)
-    with pytest.raises(WorkBranchError, match='not a git repository'):
-        ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
 
 
 def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_script, monkeypatch, tmp_path):

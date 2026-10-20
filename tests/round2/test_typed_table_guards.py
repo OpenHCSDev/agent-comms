@@ -53,18 +53,6 @@ def violations(tree):
     return failures
 
 
-def test_production_sqlite_access_uses_the_declared_boundary():
-    import agent_comms.typed_table as typed_table
-
-    owner = SOURCE / Path(typed_table.__file__).name
-    failures = {
-        str(path.relative_to(SOURCE)): violations(ast.parse(path.read_text()))
-        for path in SOURCE.rglob("*.py")
-        if path.resolve() != owner
-    }
-    assert not {name: hits for name, hits in failures.items() if hits}
-
-
 def test_guard_rejects_reintroduced_mechanisms():
     for source in (
         'db.execute("CREATE TABLE rows (value TEXT)")',

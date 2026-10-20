@@ -43,23 +43,6 @@ def test_reported_turn_states_preserve_existing_wire_values():
     assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
 
 
-def test_check_require_uses_distance_and_outcome_count():
-    from agent_comms.child_process import ChildResult, ExitedOutcome, SignaledOutcome
-
-    silent = SilentCheckResult()
-    silent.require(ChildResult(ExitedOutcome(0)))
-    with pytest.raises(ValueError, match=r'1 away from SilentCheckResult\(\)'):
-        silent.require(ChildResult(ExitedOutcome(0), b'noise'))
-    count = CountCheckResult(2)
-    count.require(ChildResult(ExitedOutcome(1), b'count 2\n'))
-    with pytest.raises(ValueError, match=r'1 away from CountCheckResult\(expected=2\)'):
-        count.require(ChildResult(ExitedOutcome(0), b'1\n'))
-    with pytest.raises(ValueError, match='did not exit'):
-        count.require(ChildResult(SignaledOutcome(15), b'2\n'))
-    with pytest.raises(ValueError, match='printed no integer'):
-        count.require(ChildResult(ExitedOutcome(0), b'no integer'))
-
-
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))

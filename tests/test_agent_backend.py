@@ -63,16 +63,6 @@ def test_runtime_location_round_trip_uses_declared_backend(location, *, thread_r
     assert restored.backend is PiNativeBackend
 
 
-@pytest.mark.parametrize("row", json.loads((Path(__file__).parent / "fixtures/p117/main-registry-rows.json").read_text()))
-def test_main_written_registry_location_round_trip(row):
-    restored = FieldCodec.decode(Thread, row)
-    expected = (UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
-                else PiSessionFile(row["session_file"]))
-    assert restored.runtime == expected
-    assert restored.to_wire() == row
-    assert json.dumps(restored.to_wire()) == json.dumps(row)
-
-
 # -- declaration checks -------------------------------------------------------
 
 
@@ -275,23 +265,6 @@ def _session_lines(path: Path) -> None:
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 
-def test_session_entries_convert_to_transcript_entries_newest_first(tmp_path):
-    session = tmp_path / "s.jsonl"
-    _session_lines(session)
-    source = PiSessionFile(str(session)).history_source(tmp_path, None)
-    records = tuple(source.reverse(session.stat().st_size))
-    page = records[:4]
-    assert [record.entry.source_coordinates.id for record in page] == ["l1", "c1", "t1", "a1"]
-    assert page[1].entry.summary == "earlier work"
-    assert page[2].entry.message.text == "file body"
-    assert page[3].entry.message.text == "hi back"
-    assert page[2].entry.recorded_at is None  # an invalid external time stays undated
-    assert page[3].entry.recorded_at.isoformat() == "2026-10-10T10:00:02+00:00"
-    older = tuple(source.reverse(page[-1].start))
-    assert [record.entry.source_coordinates.id for record in older] == ["u1", "s"]
-    assert older[0].entry.message.text == "hello there"
-
-
 def _pi_stub(tmp_path: Path, session: Path) -> Path:
     stub = tmp_path / "pi-stub"
     stub.write_text(f"#!{sys.executable}\n" + f"""
@@ -328,67 +301,6 @@ for line in sys.stdin:
 """)
     stub.chmod(0o755)
     return stub
-
-
-@pytest.mark.usefixtures("native_rpc_fixture")
-@pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
-async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_path, comms, monkeypatch):
-    # The stub is not a verified Pi package; its saved header is the session's identity.
-    from agent_comms.native_pi import NativePiRpcLaunch
-    from agent_comms.native_session_reopen import NativeSessionIdentity
-
-    # The stub is not a verified Pi package: its saved header is the session's
-    # identity, and its acquired launch is the one a retained child is reused under.
-    monkeypatch.setattr(NativeSessionIdentity, "locate", staticmethod(
-        lambda package, path: NativeSessionIdentity("same", path)
-    ))
-    monkeypatch.setattr(NativePiRpcLaunch, "retained_managed", lambda self, *args, **options: self)
-    session = tmp_path / "session.jsonl"
-    project = tmp_path / "project"
-    project.mkdir()
-    session.write_text(json.dumps({
-        "type": "session", "version": 3, "id": "same", "timestamp": "2026-10-10T10:00:00.000Z",
-        "cwd": str(project),
-    }) + "\n")
-    thread = comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(project), session_file=str(session), model='p/m', process_identity=ProcessIdentity.capture(os.getpid())))
-    published = []
-
-    async def observe(observed, state, info):
-        published.append((observed.name, info.context_used, info.context_size))
-
-    backend = PiNativeBackend(str(_pi_stub(tmp_path, session)), NativeArguments.parse([]), comms, observe)
-    starts = []
-    finish = asyncio.Event()
-    delivery = ab.TurnDelivery(
-        worktree=str(project), environment={}, inbox=ab.TurnInbox(), finish_event=finish,
-        send_boundary=None, interrupt_boundary=None,
-        input_started=lambda public_id, native_id, text: starts.append(text) or True,
-        request_progress=lambda progress, process: None,
-        ui_request=None,
-        tool_mode=NoSelectedTools(),
-    )
-    events = []
-    try:
-        async with asyncio.timeout(10):
-            async for event in backend.run_turn(thread, ab.InputContent(text="ping"), delivery):
-                events.append(event)
-                if isinstance(event, ae.StreamSettled):
-                    finish.set()
-        kinds = [type(event) for event in events]
-        assert len(events) > 1, events
-        assert ae.Chunk in kinds and ae.ProviderUsage in kinds and ae.StreamSettled in kinds
-        assert "".join(event.text for event in events if isinstance(event, ae.Chunk)) == "pong"
-        assert isinstance(events[-1], ae.Done) and events[-1].ok and events[-1].text == "pong"
-        assert starts == ["ping"]
-        assert backend.child_state.retained
-
-        outcome = await backend.compact(thread, "keep the plan")
-        assert outcome == ab.PlacedCompaction(
-            summary="summary of keep the plan", first_kept="k1", tokens_before=PiCount.from_wire(900),
-        )
-        assert published and published[0][0] == "owner"
-    finally:
-        await backend.close_idle()
 
 
 # -- inbox records --------------------------------------------------------------

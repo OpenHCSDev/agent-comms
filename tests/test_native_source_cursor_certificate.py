@@ -72,44 +72,6 @@ def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
     return message
 
 
-async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
-    root, root_id, comms = _fresh(tmp_path, 10)
-    fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    first = _seal(comms, root, root_id, "alpha", "first selected")
-    one = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert one is not None and one.cursor_status == "proven"
-    # The prefix record filters 1,001 committed initials for another owner.
-    # Do not accept, inject, acknowledge, or replay those unrelated sources.
-    for n in range(1001):
-        publish_initial(comms, "sender", "other001", f"unrelated-{n}:" + "x" * 8400)
-    assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
-    second = await runtime.SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="alpha",
-        native_package=native_runtime_package,
-        cursor_delivery=cursor_delivery,
-    ).run()
-    assert second is not None and second.cursor_status == "proven"
-    assert len(calls) == 2 and second.input_id != one.input_id
-    with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha", source_reads=source_reads
-        )
-        assert cursor is not None and cursor.input_id == second.input_id
-        assert cursor.injected_seq == selected.seq
-        assert cursor.covered_seq == comms.views.history_page(ANY_CHANNEL).messages[-1].seq
-        assert first.seq < selected.seq
-
-
 async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms = _fresh(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")

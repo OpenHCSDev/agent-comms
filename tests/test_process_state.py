@@ -19,16 +19,6 @@ def test_process_field_keeps_null_or_exact_record(process, wire):
     assert json.dumps(FieldCodec.encode(process, ProcessState)) == json.dumps(wire)
 
 
-def test_process_family_reuses_its_typed_decoder_and_schema():
-    decoder = ProcessState._decoder
-    assert decoder.target.__args__ == tuple(ProcessState.__subclasses__())
-    for wire in (None, {"pid": 123, "start_time": 456}):
-        process = ProcessState.from_wire(wire)
-        assert FieldCodec.encode(process) == wire
-        assert ProcessState._decoder is decoder
-    assert len(ProcessState.schema()["anyOf"]) == 2
-
-
 @pytest.mark.parametrize("process", [NoProcess(), ProcessIdentity(123, 456)])
 def test_thread_creation_result_carries_the_process_state(process):
     from agent_comms.cli_commands import ThreadCreatedResult

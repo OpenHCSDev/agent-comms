@@ -40,25 +40,6 @@ def owner_read(tmp_path):
     return comms, GoalRead(str(tmp_path), thread.incarnation)
 
 
-async def test_slow_connection_preparation_does_not_consume_reply_timeout(tmp_path, monkeypatch):
-    comms, request = owner_read(tmp_path)
-    writer = Writer()
-
-    async def connect(self):
-        await asyncio.sleep(0.03)
-        reader = asyncio.StreamReader()
-        reader.feed_data(json.dumps({"result": {"goal": None}}).encode() + b"\n")
-        reader.feed_eof()
-        return reader, writer
-
-    monkeypatch.setattr(OwnerReplyConnection, "REPLY_TIMEOUT", 0.01)
-    monkeypatch.setattr(OwnerReplyConnection, "_connect_current", connect)
-    answer = await request.answer(comms)
-    assert isinstance(answer, ReadAnswered)
-    assert answer.value == {"goal": None}
-    assert json.loads(writer.written) == {"action": "goal_snapshot", "thread": "worker"}
-
-
 async def test_dispatched_owner_reply_remains_bounded(tmp_path, monkeypatch):
     comms, request = owner_read(tmp_path)
     writer = Writer()

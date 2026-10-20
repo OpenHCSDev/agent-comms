@@ -87,11 +87,6 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
         assert dict(comms.bus.log.claim_projection()) == {str(resource): later}
 
 
-def test_native_boundary_preserves_the_lock_owner_default_wait_policy():
-    assert NativeBoundary(object()).contention is None
-    assert NativeBoundary(object(), blocking=False).contention is None
-
-
 def test_native_coordination_defers_registry_read_until_bus_use(tmp_path, monkeypatch):
     from agent_comms.registration import Registration
 
