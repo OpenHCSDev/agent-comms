@@ -729,14 +729,15 @@ class RuntimeEngineImports(CleanChangedLines, MroDispatch):
         return module in self.engines or any(
             f"{module}.{alias.name}" in self.engines for alias in node.names)
 
-    def sites(self, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+    def sites(self, tree: ast.AST, filename: str) -> Iterator[ast.stmt]:
         module = self.module_name(filename)
         if self.engine_name(module):
             return
         package = (module if Path(filename).name == DeclaredSpellings.package_marker
                    else module.rpartition(".")[0])
         for node in ast.walk(tree):
-            if any(handler(node, package) for handler in self.handlers_for(node)):
+            if isinstance(node, ast.stmt) and any(
+                    handler(node, package) for handler in self.handlers_for(node)):
                 yield node
 
     @classmethod
