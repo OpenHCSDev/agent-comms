@@ -15,6 +15,8 @@ from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_digests import LastTurns, TurnDigestRead
 
 
 @pytest.fixture
@@ -93,6 +95,24 @@ def test_new_uncertain_input_is_kept_instead_of_erased(source, tmp_path):
     assert list((archive / "native-sessions").rglob("*.jsonl"))
     # No provider/tool was run for this synthetic row.
     shutil.rmtree(archive)
+
+
+def test_external_records_open_without_borrowing_a_native_entry(source, tmp_path):
+    transcript = source.transcripts.external('B')
+    transcript.finish(turn_id='external-turn', item_id='reply',
+                      events=(AssistantTranscript('external reply', timestamp=1.0, position='reply'),))
+    with transcript.reading() as reader:
+        record, = reader.forward(0, reader.cut().offset)
+        assert record.project(lambda native: pytest.fail('external record is not native')) == ()
+    turns = TurnDigestRead(source.root, source.registry.require('B'), LastTurns()).native().turns
+    assert [turn.turn_id for turn in turns] == ['external-turn']
+    assert [event.text for event in turns[0].events] == ['external reply']
+    root = tmp_path / 'external-window'
+    with CheckRoot(source, ('B',), root).open() as copied:
+        assert copied.registry.require('B').name == 'B'
+        assert Path(copied.registry.require('B').session_file).is_file()
+    assert not root.exists()
+    assert transcript.turns(LastTurns()) == turns
 
 
 def test_native_window_uses_existing_import_and_route_readers(source, tmp_path, monkeypatch):

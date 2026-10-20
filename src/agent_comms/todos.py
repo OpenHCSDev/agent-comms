@@ -32,10 +32,9 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
-    boundary_decoder,
 )
 from .channel_targets import CommandTarget
-from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
@@ -43,11 +42,13 @@ from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
+from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
-    from .commander.config import Repo
     from .comms import Comms
     from .goal_management import Goals
+    from .registration import Registration
+    from .repo import Repo
 
 
 @dataclass(frozen=True)
@@ -81,15 +82,20 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     def work(self) -> str:
         return "delivered work"
 
+    @property
+    def line(self) -> str:
+        return self.work
+
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
         if result.outcome != ExitedOutcome(0):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
+    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
-        for each in (check, *deletes.checks):
+        check = todo.order.check
+        for each in (check, *todo.order.deletes.checks):
             await self.require_source(each)
             each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check))
@@ -176,9 +182,101 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
             raise ValueError(
                 f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
+    async def verified(self, todo: Todo, registry: Registration) -> OrderDelivery:
+        verified = await super().verified(todo, registry)
+        merge = await self.merge_state(todo, registry)
+        return CheckedCommitDelivery(commit=self.commit, delivered_commit=self.delivered,
+                                     at=verified.at, evidence=self.evidence, merge=merge)
+
+    async def merge_state(self, todo: Todo, registry: Registration) -> DeliveryMerge:
+        """Observe integration, not merely publication, at the time of completion.
+
+        Git proves ordinary merges to main. The order's merged PR also proves squash merges
+        and names a non-main target. Otherwise the pushed source must still have an open link,
+        whose owner is WorkBranches, not a second branch policy in the delivery tool.
+        """
+        check = todo.order.checked().check
+        branches = (await self.run(
+            check, "git", "for-each-ref", f"--contains={self.delivered}",
+            "--format=%(refname:strip=3)", "refs/remotes/origin/")).splitlines()
+        if WorkBranches.main in branches:
+            return MainDeliveryMerge()
+        requests = await asyncio.to_thread(PullRequests((todo,)).listed,
+                                           todo.repo, "merged", todo.order)
+        for request in requests:
+            for merge in await request.delivery_merges(self, check):
+                return merge
+        linked = await asyncio.to_thread(
+            WorkBranches(Path(check.directory)).read, registry.snapshot())
+        sources = tuple(sorted(branch.name for branch in linked
+                               if branch.name in branches and branch.linked))
+        if not sources:
+            raise ValueError(
+                f"Delivered commit {self.delivered} is not merged and has no branch linked "
+                "to an open PR or issue.")
+        return UnmergedDeliveryMerge(sources)
+
+    async def contains(self, check: OrderCheck, head: str) -> bool:
+        if head == self.delivered:
+            return True
+        result = await BoundedRun.run(
+            ("git", "merge-base", "--is-ancestor", self.delivered, head),
+            cwd=check.directory, timeout=120)
+        if result.outcome not in (ExitedOutcome(0), ExitedOutcome(1)):
+            raise ValueError(result.stderr.decode(errors="replace") or
+                             "Could not check the delivered commit against its PR head.")
+        return result.outcome == ExitedOutcome(0)
+
+
+class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):
+    """The integration observed when Core checked a commit delivery; never a claim of install."""
+
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class MainDeliveryMerge(DeliveryMerge):
+    @property
+    def line(self) -> str:
+        return f"merged to {WorkBranches.main}"
+
+
+@dataclass(frozen=True)
+class BranchDeliveryMerge(DeliveryMerge):
+    branch: str
+    commit: str
+
+    @property
+    def line(self) -> str:
+        return f"merged to {self.branch} as {self.commit}"
+
+
+@dataclass(frozen=True)
+class UnmergedDeliveryMerge(DeliveryMerge):
+    branches: tuple[str, ...]
+
+    @property
+    def line(self) -> str:
+        return f"not merged; linked branches: {', '.join(self.branches)}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedCommitDelivery(CommitDelivery):
+    merge: DeliveryMerge
+
+    @property
+    def line(self) -> str:
+        return f"{self.work}; {self.merge.line}"
+
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(OrderDelivery):
+    @property
+    def line(self) -> str:
+        return "operation checked"
+
     async def require_source(self, check):
         pass
 
@@ -190,27 +288,82 @@ class OperationDelivery(OrderDelivery):
 
 
 @dataclass(frozen=True)
-class PullRequest:
+class PullRequest(DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
-    merge: str | None = None
-    merged_at: float | None = None
     updated_at: float = 0.0
     orders: tuple[str, ...] = ()
+    base: str = field(default=WorkBranches.main, kw_only=True)
 
-    @classmethod
-    @boundary_decoder
-    def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
-               updated: str, body: str) -> Self:
-        """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
-        return cls(int(number), branch, head, merge or None,
-                   _github_time(merged) if merged else None, _github_time(updated),
-                   ProblemOrder.pull_request_ids(body))
+    def merged_commits_since(self, since: float) -> Iterator[str]:
+        return iter(())
+
+    async def delivery_merges(self, delivery: CommitDelivery,
+                              check: OrderCheck) -> tuple[DeliveryMerge, ...]:
+        return ()
+
+
+class UnmergedPullRequest(PullRequest):
+    """An open or closed request has no merge commit or integration time."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedPullRequest(PullRequest):
+    merge: str
+    merged_at: float
+
+    def merged_commits_since(self, since: float) -> Iterator[str]:
+        if self.merged_at >= since:
+            yield self.merge
+
+    async def delivery_merges(self, delivery: CommitDelivery,
+                              check: OrderCheck) -> tuple[DeliveryMerge, ...]:
+        if not await delivery.contains(check, self.head):
+            return ()
+        return (MainDeliveryMerge() if self.base == WorkBranches.main
+                else BranchDeliveryMerge(self.base, self.merge),)
 
 
 def _github_time(text: str) -> float:
     return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+@dataclass(frozen=True)
+class PullRequestCommit:
+    """GitHub's mergeCommit object on a merged request."""
+    oid: str
+
+
+@dataclass(frozen=True)
+class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
+    """The external query row; conversion lives here, never in its consumers."""
+    number: int
+    branch: str
+    head: str
+    updated: str
+    body: str
+    base: str
+
+    @abstractmethod
+    def parsed(self) -> PullRequest: ...
+
+
+class UnmergedListedPullRequest(ListedPullRequest):
+    def parsed(self) -> UnmergedPullRequest:
+        return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
+                                   ProblemOrder.pull_request_ids(self.body), base=self.base)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedListedPullRequest(ListedPullRequest):
+    merge: PullRequestCommit
+    merged: str
+
+    def parsed(self) -> MergedPullRequest:
+        return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
+                                 ProblemOrder.pull_request_ids(self.body), base=self.base,
+                                 merge=self.merge.oid, merged_at=_github_time(self.merged))
 
 
 class PullRequests:
@@ -218,20 +371,23 @@ class PullRequests:
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
-        self._orders: dict[str, dict[str, ProblemOrder]] = {}
+        self._orders: dict[str, dict[str, CheckedProblemOrder]] = {}
         for todo in todos:
             if todo.holder:
-                self._orders.setdefault(todo.repo, {})[todo.order.id] = todo.order
+                order = todo.order.checked()
+                self._orders.setdefault(todo.repo, {})[order.id] = order
 
     def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
-        key = (repo, state, order.id)
+        checked = order.checked()
+        key = (repo, state, checked.id)
         if key not in self._read:
-            self._read[key] = self.read(repo, state, order)
-        return self._read[key]
+            self._read[key] = self.read(repo, state, checked)
+        return tuple(request for request in self._read[key] if checked.id in request.orders)
 
     def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+        checked = order.checked()
         orders = self._orders.setdefault(repo, {})
-        orders[order.id] = order
+        orders[checked.id] = checked
         aliases = {f"o{index}": candidate for index, candidate in enumerate(orders.values())}
         selections = []
         for alias, candidate in aliases.items():
@@ -239,25 +395,39 @@ class PullRequests:
                                 f'"{candidate.pull_request_reference}" sort:updated-desc')
             selections.append(
                 f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
-                '... on PullRequest { number headRefName headRefOid body '
-                'mergeCommit { oid } mergedAt updatedAt } } }')
+                '... on PullRequest { number branch: headRefName head: headRefOid body '
+                'base: baseRefName merge: mergeCommit { oid } merged: mergedAt '
+                'updated: updatedAt } } }')
         listed = subprocess.run(
             ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
-             "--jq", '.data | map_values(.nodes | map([.number, .headRefName, .headRefOid,'
-             ' .mergeCommit.oid // "", .mergedAt // "", .updatedAt, .body]))'),
+             "--jq", '.data | map_values(.nodes | map(if .merged == null then '
+             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} else '
+             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
-        rows = FieldCodec.decode(dict[str, tuple[tuple[int, str, str, str, str, str, str], ...]],
+            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+        rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
         for alias, candidate in aliases.items():
-            self._read[repo, state, candidate.id] = tuple(
-                PullRequest.listed(*row) for row in rows[alias])
-        return self._read[repo, state, order.id]
+            self._read[repo, state, candidate.id] = tuple(row.parsed() for row in rows[alias])
+        return self._read[repo, state, checked.id]
 
 
 def _clock(at: float) -> str:
     return time.strftime("%H:%M", time.localtime(at))
+
+
+@dataclass(frozen=True)
+class ProgressPoint:
+    """A revision and its time in the order's progress; Git rows use committer time."""
+    sha: str
+    at: float
+    format: ClassVar[str] = "%H %ct"
+
+    @classmethod
+    def listed(cls, line: str) -> ProgressPoint:
+        sha, at = line.split()
+        return cls(sha, float(at))
 
 
 @dataclass(frozen=True)
@@ -272,6 +442,7 @@ class DistanceReadings:
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
+    window: ClassVar[int] = 2
 
     @property
     def trend(self) -> DistanceTrend:
@@ -282,8 +453,8 @@ class DistanceReadings:
             self.counted_trend, lambda: UncountedTrend(self.readings[-1].command))
 
     def counted_trend(self, final: int) -> DistanceTrend:
-        last = self.readings[-2:]
-        if len(last) < 2 or not final:
+        last = self.readings[-self.window:]
+        if len(last) < self.window or not final:
             return UnreadTrend()
         first, latest = last
 
@@ -350,7 +521,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     path: Path
 
     @abstractmethod
-    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]: ...
+    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]: ...
 
     @abstractmethod
     def readings(self, source: ProgressSource) -> DistanceReadings: ...
@@ -362,7 +533,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
 class MissingCheckout(ProgressCheckout):
     """A retired checkout contributes no local history, not a failed Git read."""
 
-    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
@@ -374,30 +545,35 @@ class MissingCheckout(ProgressCheckout):
 
 class PresentCheckout(ProgressCheckout):
     def git(self, *args: str) -> str:
-        run = subprocess.run(("git", "-C", str(self.path), *args),
-                             capture_output=True, text=True, timeout=60)
-        if run.returncode:
-            raise ValueError(f"git {args[0]} failed: {run.stderr.strip()}")
-        return run.stdout
+        return CheckedCommit.git(
+            str(self.path), f"--git-dir={(self.path / '.git').absolute()}", *args)
 
-    def commits(self, since: float, *excluded: str) -> Iterator[tuple[str, float]]:
+    def commits(self, since: float, *excluded: str) -> Iterator[ProgressPoint]:
         """Newest branch commit; a Git failure in a present checkout remains an error."""
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(since))
-        for line in self.git("log", "-1", f"--since={after}", "--format=%H %ct",
-                             "HEAD", "--not", *excluded).splitlines():
-            sha, at = line.split()
-            yield sha, float(at)
+        log = self.git("log", "-1", f"--since={after}", f"--format={ProgressPoint.format}",
+                       "HEAD", "--not", *excluded)
+        return (ProgressPoint.listed(line) for line in log.splitlines())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
-        """The order's base and newest branch commit bound its distance trend."""
+        """Read the bounded distance trend only from explicitly recorded check results."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(source.since))
-        commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
-            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
-            "--not", base).splitlines()))]
-        points = [(base, source.since), *commits][-2:]
-        return DistanceReadings(
-            tuple(source.reading(self, base, sha, at) for sha, at in points))
+        commits = [ProgressPoint.listed(line) for line in reversed(self.git(
+            "log", f"--max-count={DistanceReadings.window}", "--first-parent", f"--since={after}",
+            f"--format={ProgressPoint.format}", "HEAD", "--not", base).splitlines())]
+        points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
+        order = source.todo.order.checked()
+        return DistanceReadings(tuple(
+            reading for point in points for reading in self.recorded_distances(order, base, point)))
+
+    def recorded_distances(self, order: CheckedProblemOrder, base: str,
+                           point: ProgressPoint) -> Iterator[DistanceReading]:
+        """Read the check run result; without a recorded result the distance is unknown."""
+        for run in order.check.recorded(point.sha, str(self.path)):
+            touched = self.git("diff", "--name-only", base, point.sha).split()
+            yield DistanceReading(point.at, order.check.result.distance(run).plus(
+                order.untouched(touched)), order.check.command)
 
     def pushes(self, since: float) -> Iterator[tuple[str, float]]:
         """A push-ref update has its own time, not the commit's author time."""
@@ -426,14 +602,14 @@ class ProgressSource:
 
     @property
     def since(self) -> float:
-        return self.todo.order.at.recorded_at("An order")
+        return self.todo.order.checked().at.recorded_at("An order")
 
     def requests(self, state: str) -> list[PullRequest]:
         """Explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
-                if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
+                if pr.updated_at >= self.since]
 
-    def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
+    def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
         return self.checkout.commits(self.since, *excluded)
 
     @cached_property
@@ -442,20 +618,12 @@ class ProgressSource:
 
     @cached_property
     def moved_at(self) -> float:
-        return max((self.since, *(at for _, at in self.commits()),
+        return max((self.since, *(commit.at for commit in self.commits()),
                     *(push.at for push in self.pushes)))
 
     def readings(self) -> DistanceReadings:
         """Progress observation does not run the order's Check."""
         return DistanceReadings()
-
-    def reading(self, checkout: PresentCheckout, base: str, sha: str, at: float) -> DistanceReading:
-        """Keep the check command with its measured or missing distance."""
-        check = self.todo.order.check
-        touched = checkout.git("diff", "--name-only", base, sha).split()
-        run = check.at(sha, str(checkout.path))
-        return DistanceReading(at, check.result.distance(run).plus(
-            self.todo.order.untouched(touched)), check.command)
 
 
 class MeasuredProgressSource(ProgressSource):
@@ -482,7 +650,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except subprocess.TimeoutExpired as unread:
+        except (WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
     @property
@@ -605,8 +773,8 @@ class CommittedProgress(GitProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in source.commits("--remotes"))
+        return (cls(commit.sha[:9], at=commit.at, readings=source.readings())
+                for commit in source.commits("--remotes"))
 
     @property
     def state(self) -> str:
@@ -621,9 +789,9 @@ class PushedProgress(CommittedProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         moves = (*source.commits("origin/HEAD"),
-                 *((push.sha, push.at) for push in source.pushes))
-        return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in sorted(moves, key=lambda move: move[1], reverse=True)[:1])
+                 *(ProgressPoint(push.sha, push.at) for push in source.pushes))
+        return (cls(move.sha[:9], at=move.at, readings=source.readings())
+                for move in sorted(moves, key=lambda move: move.at, reverse=True)[:1])
 
     @property
     def state(self) -> str:
@@ -657,8 +825,8 @@ class MergedProgress(FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.merge) for pr in source.requests("merged")
-                if pr.merge and (pr.merged_at or 0) >= source.since)
+        return (cls(sha) for pr in source.requests("merged")
+                for sha in pr.merged_commits_since(source.since))
 
     @property
     def state(self) -> str:
@@ -1193,6 +1361,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    def checked(self) -> CheckedProblemOrder:
+        raise ValueError("This problem has no checked order.")
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
@@ -1253,6 +1424,9 @@ class FoldedProblemOrder(ProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
+
+    def checked(self) -> CheckedProblemOrder:
+        return self
 
     id: str
     owner: FileLine
@@ -1424,7 +1598,10 @@ class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
 class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
-    line: ClassVar[str] = "Delivered, waiting on install"
+
+    @property
+    def line(self) -> str:
+        return f"Delivered: {self.delivery.line}, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
         owner = (todo.assignment or todo.released[-1].previous).owner
@@ -2024,7 +2201,7 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        verified = self.delivery.verified(current, goals.registry)
         return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):

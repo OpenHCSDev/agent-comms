@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.change_report import FileLine
-from agent_comms.commander.config import Repo
+from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction

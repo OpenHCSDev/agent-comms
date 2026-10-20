@@ -5,10 +5,10 @@ import subprocess
 
 import pytest
 
-from agent_comms.commander.config import Repo
+from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
-                               PullRequest, PullRequests, UnorderedProblemOrder)
+                               MergedPullRequest, PullRequests, UnorderedProblemOrder)
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.recorded_time import RecordedEventTime
 from cutover.carry_merged_orders import MergedOrders
@@ -45,7 +45,8 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     repo = Repo(checkout=installed, github=todo.repo)
     config = script.CONFIG.model_copy(update={'repos': (repo,)})
     monkeypatch.setattr(script, 'CONFIG', config)
-    merge = PullRequest(1, 'fix/p1', sha, sha, 500, 500, (original.id,))
+    merge = MergedPullRequest(1, 'fix/p1', sha, merge=sha, merged_at=500,
+                              updated_at=500, orders=(original.id,))
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order:
                         (merge,) if state == 'merged' else ())
 
@@ -117,7 +118,8 @@ def test_new_revision_is_not_closed_from_an_old_merge_observation(
     script, installed = commander_script
     todo, _ = checkout
     repo = Repo(checkout=installed, github=todo.repo)
-    merge = PullRequest(1, 'fix/p1', 'a' * 40, 'b' * 40, 500, 500, (todo.order.id,))
+    merge = MergedPullRequest(1, 'fix/p1', 'a' * 40, merge='b' * 40, merged_at=500,
+                              updated_at=500, orders=(todo.order.id,))
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: (merge,))
     newer = replace(todo, revision=todo.revision + 1,
                     order=replace(todo.order, id='replacement-order'))

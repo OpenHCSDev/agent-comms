@@ -24,7 +24,7 @@ from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest, ToolStartTranscript
-from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
+from .transcript_sources import NoDraft, TranscriptDraft, TranscriptRecord, TranscriptSource
 from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
@@ -263,8 +263,8 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
 
 
 @dataclass(frozen=True)
-class ExternalRecord:
-    """An item at its page position, in the shape the page merge consumes."""
+class ExternalRecord(TranscriptRecord):
+    """An item at its page position, with events but no decoded native entry."""
 
     seq: int
     events: tuple[TranscriptEvent, ...]
@@ -471,8 +471,13 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             draft = records.current_draft(self.root, self.incarnation)
         draft.end_turn(self)
 
+    def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
+        """The stored CLI turn IDs, not native input entries, own these boundaries."""
+        with self.reading() as reader:
+            return reader.turns(bound)
+
     @contextmanager
-    def reading(self):
+    def reading(self) -> Iterator[StoreRead]:
         """Keep item and draft queries within the same SQL snapshot."""
         with self.snapshot() as connection:
             yield StoreRead(self, connection)
