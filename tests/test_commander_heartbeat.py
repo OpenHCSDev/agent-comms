@@ -154,6 +154,7 @@ async def test_each_registered_request_holder_has_independent_wakes(commander):
 async def test_directive_backlog_ignores_order_revision_and_summarizes_new_directive(
         commander, monkeypatch):
     from agent_comms.connector import CALLER
+    from agent_comms.goal_actions import ActiveGoalAction
     from agent_comms.goals import RequestDirective
     from agent_comms.plan_phases import RecordPlanePhase
     from agent_comms.tools import CommsOrderServeTool, CommsSendTool
@@ -196,6 +197,8 @@ async def test_directive_backlog_ignores_order_revision_and_summarizes_new_direc
 
         create(commander, "P2")
         CommsOrderServeTool(problem="P2", serves=RecordPlanePhase).apply(comms, caller)
+        # Publishing the commander's order progress revises the request, not its directives.
+        comms.goals.update_goal("lead", ActiveGoalAction(progress="Recorded P2 on this request."))
         ordered = comms.registry.require("lead").goal.require()
         assert ordered.revision > initial.revision
         assert ordered.id == initial.id and ordered.order.directives == initial.order.directives
