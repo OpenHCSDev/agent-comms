@@ -268,7 +268,8 @@ class Step:
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef):
                 for base in node.bases:
-                    if (family := parents.get(parent_name(base))) is not None:
+                    if ((parent := parent_name(base)) is not None
+                            and (family := parents.get(parent)) is not None):
                         return cls(name, revision, node.name, family, cls.declared_columns(source))
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
