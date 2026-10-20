@@ -14,6 +14,7 @@ from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegment
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.turn_context import ObservedDispatchRequest, UnobservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
     NativeProvenance, PreviewProvenance, RecordedContextTurn, SystemLayerSegment, TranscriptSegment, TurnContext,
@@ -34,7 +35,8 @@ def identity(tmp_path):
 def recorded(segments):
     owner = RecordedThreadIncarnation("original-owner", 17002.0)
     turn = RecordedContextTurn(TurnId("original-turn"), TurnIdentity(owner, 2))
-    return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens", "request-one")
+    return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens",
+                           ObservedDispatchRequest("request-one"))
 
 
 def test_current_native89_shape_and_authenticated_file_read(tmp_path):
@@ -129,7 +131,7 @@ def test_captured_sdk_value_is_original_and_public_only(tmp_path):
     value = TranscriptSegment(provenance=(source,), messages=messages, tokens=7,
                               sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
     observed = NativeContextManifestData("pi.estimateTokens", (value.measured_manifest(),),
-                                        request_id="request-one", values=(value,))
+                                        request_id=ObservedDispatchRequest("request-one"), values=(value,))
     original = recorded(())
     captured = observed.for_turn(original.thread, original.turn)
     assert captured.segments[0].captured_text == ("Public original answer",)
@@ -160,7 +162,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     comms.contexts.record(original)
     page = comms.contexts.page(owner.name, comms.registry)
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
-                request_id=original.require_request_id(), record=page.reference(page.resources[0].value),
+                request_id=original.request_id.require_id(), record=page.reference(page.resources[0].value),
                 segment=0, contributors=(0,))
     assert RuntimeRequest.from_wire(request.to_wire()) == request
     selected = original.selected_segment(request.segment, request.contributors)
@@ -184,7 +186,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     with pytest.raises(ValueError):
         ContextManifest.for_request((original,), original.turn, "request-other")
     with pytest.raises(ValueError):
-        replace(original, request_id=None).require_request_id()
+        replace(original, request_id=UnobservedDispatchRequest()).request_id.require_id()
 
 
 @pytest.mark.asyncio
