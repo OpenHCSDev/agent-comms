@@ -7,7 +7,7 @@ type: hard-rule
 **Why:** problems scattered across orders lose their owner; on 2026-10-19, 33 of the 34 checks the Core commander switch depended on sat with no owner for nearly two hours.
 
 - Group problems by surface into one order per owner; no problem is ever without an owner.
-- Fixes, features and investigations go to bus units as orders (launch a unit when all are busy), because forked work has no order, deadline, strike or public record. Forks help command: judging, ordering, hunts.
+- Fixes, features and investigations go to bus units as orders (launch a unit when all are busy), because they carry an order, deadline, strike and public record. Test and mechanical work goes to a fork when the commander's context makes it faster; the fork reports its PR and an `Assumed:` list. Tristan, 2026-10-20: use Claude forks for test and mechanical work.
 - Before each order and tick, compare every open PR's files (`gh pr list --state open`) with the order's; merge the overlapping ready PR first.
 - A multi-phase plan gets a tracking issue and a Core todo per phase when dispatched; every hunt first checks whether a plan phase is ready.
 - Never block the loop on a question to the owner: ask in plain text with a stated default and keep working.
