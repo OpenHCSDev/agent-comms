@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .field_codec import WireForm
+from .field_codec import WiredValue, WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification, ThreadRecord
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ThreadListing(ToolResult):
-    threads: tuple[Annotated[ThreadRecord, WireForm], ...]
+    threads: tuple[Annotated[WiredValue, WireForm], ...]
     sent_notifications: tuple[MessageNotification, ...]
 
 

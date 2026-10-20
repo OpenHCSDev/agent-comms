@@ -18,8 +18,10 @@ from enum import Enum
 from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
+from pydantic import JsonValue
 from typing_extensions import TypeAliasType
 from uuid import uuid4
+from urllib.parse import quote
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -408,15 +410,19 @@ class WiredValue(Protocol):
 
 
 class WireForm(FieldRepresentation):
-    """A value shown in its own wire form; a read-only result's field is never decoded."""
+    """A projected value crosses the boundary as JSON, not as its live source object."""
 
     @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(cast(WiredValue, value).to_wire())
 
     @classmethod
-    def decode(cls, value: object) -> object:
-        raise TypeError("A read-only wire form is not decoded")
+    def decode(cls, value: object) -> WireSnapshot:
+        return WireSnapshot.from_wire(value)
+
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        return WireSnapshot.schema()
 
 
 class WireValue(WireForm):
@@ -459,6 +465,13 @@ class SingleFieldValue(WireValue):
     def to_wire(self):
         entry = self.wire_field()
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
+
+
+@dataclass(frozen=True)
+class WireSnapshot(SingleFieldValue):
+    """A received wire value carries no authority to reconstruct its live producer."""
+
+    value: JsonValue
 
 
 class SubclassUnion(DeclaredFamily, WireValue):
@@ -1046,8 +1059,7 @@ class FieldCodec(Sealed):
 
         current: ClassVar[ContextVar[FieldCodec._SchemaDefinitions]] = ContextVar(
             "field_codec_schema_definitions")
-        definitions: dict[type, dict[str, Any]] = field(default_factory=dict)
-        names: dict[type, str] = field(default_factory=dict)
+        definitions: dict[type, tuple[str, dict[str, Any]]] = field(default_factory=dict)
         referenced: set[type] = field(default_factory=set)
 
         @classmethod
@@ -1063,22 +1075,22 @@ class FieldCodec(Sealed):
                 schema = build()
             finally:
                 cls.current.reset(token)
-            definitions = {owner.names[target]: definition
-                           for target, definition in owner.definitions.items()
+            definitions = {name: definition
+                           for target, (name, definition) in owner.definitions.items()
                            if target in owner.referenced}
             return {**schema, "$defs": definitions} if definitions else schema
 
         def declared(self, target: type, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
             if target in self.definitions:
                 self.referenced.add(target)
-                name = self.names[target].replace("~", "~0").replace("/", "~1")
-                return {"$ref": f"#/$defs/{name}"}
+                name, _ = self.definitions[target]
+                pointer = quote(name.replace("~", "~0").replace("/", "~1"), safe="")
+                return {"$ref": f"#/$defs/{pointer}"}
             name = f"{target.__module__}.{target.__qualname__}"
-            while name in self.names.values():
+            while any(name == previous for previous, _ in self.definitions.values()):
                 name += "_"
-            self.names[target] = name
             definition: dict[str, Any] = {}
-            self.definitions[target] = definition
+            self.definitions[target] = (name, definition)
             schema = build()
             definition.update(schema)
             return schema

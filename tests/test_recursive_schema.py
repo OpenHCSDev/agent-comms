@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
+from typing import Annotated
 
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord, WiredValue, WireForm, WireSnapshot
 from agent_comms.todos import ProblemOrder
 
 
@@ -99,3 +101,41 @@ def test_schema_failure_releases_its_document_and_new_members_are_discovered():
     after = FieldCodec.value_schema(RecursiveChoice)
     assert len(after['oneOf']) == len(before['oneOf']) + 1
     assert not any('BrokenReply' in name for name in after['$defs'])
+
+
+def test_native_json_schema_validator_accepts_recursive_values(native_runtime_package):
+    schema = FieldCodec.value_schema(RecursiveReply)
+    value = FieldCodec.encode(RecursiveReply('root', (RecursiveReply('child'),)))
+    result = subprocess.run(
+        ('node', '--input-type=module', '-e', '''
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {readFileSync} from 'node:fs';
+const {validateToolArguments} = await import(pathToFileURL(join(process.argv[1],
+  'node_modules/@earendil-works/pi-ai/dist/utils/validation.js')));
+const {schema, value} = JSON.parse(readFileSync(0, 'utf8'));
+const tool = {name:'recursive_reply', description:'recursive wire declaration', parameters:schema};
+validateToolArguments(tool, {name:tool.name, arguments:value});
+let refused = false;
+try { validateToolArguments(tool, {name:tool.name,
+  arguments:{...value, children:[{text:{invalid:true}}]}}); }
+catch { refused = true; }
+if (!refused) throw new Error('invalid nested value accepted');
+''', str(native_runtime_package.path)),
+        input=json.dumps(dict(schema=schema, value=value)), text=True, capture_output=True,
+        timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_read_only_wire_values_decode_to_json_snapshots_not_live_objects():
+    annotation = Annotated[WiredValue, WireForm]
+    original = {'thread': 'parent', 'nested': [None, True, 3]}
+    snapshot = FieldCodec.decode(annotation, original)
+    assert isinstance(snapshot, WireSnapshot)
+    assert FieldCodec.encode(snapshot, annotation) == original
+    original['nested'].append('later mutation')
+    assert snapshot.to_wire() == {'thread': 'parent', 'nested': [None, True, 3]}
+    for invalid in ({1: 'non-string key'}, {'value': float('nan')}, object()):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(annotation, invalid)
