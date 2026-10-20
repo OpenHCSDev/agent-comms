@@ -106,6 +106,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         """Non-conversation events produce no portable message."""
 
+    def turn_line(self) -> str:
+        """Prompts and silent evidence contribute no work summary."""
+        return ""
+
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
@@ -256,6 +260,9 @@ class UserTranscript(NativeTextTranscript):
 
 
 class AssistantTranscript(AgentTextTranscript):
+    def turn_line(self) -> str:
+        return " ".join(self.text.split())[:240]
+
     @property
     def category(self) -> type[MessageCategory]:
         return OutboundCategory if self.routed else AgentCategory
@@ -351,6 +358,9 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
+    def turn_line(self) -> str:
+        return self.title
+
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         if self.before(since) or self.tool is None:
             return ()
@@ -440,6 +450,11 @@ class TurnDigest:
 
     turn_id: str
     events: tuple[TranscriptEvent, ...]
+
+    @property
+    def line(self) -> str:
+        work = tuple(line for event in self.events if (line := event.turn_line()))
+        return f"{self.turn_id}: " + (" · ".join(work[-3:])[:400] or "No work recorded yet.")
 
     def before(self, at: float) -> bool:
         """The turn's last recorded event precedes ``at``; an empty turn is never before."""

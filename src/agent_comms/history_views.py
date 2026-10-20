@@ -196,7 +196,7 @@ class HistoryViews:
         self.agents = agents
         self.transcripts = transcripts
         self.messaging = messaging
-        self.goals = goals
+        self.goals: Goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)

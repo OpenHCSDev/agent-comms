@@ -22,6 +22,9 @@ class DeliveryProgress(ThreadPresentationStatus):
     def notification_label(self, notification: MessageNotification) -> str:
         return self.label
 
+    def failed_notifications(self, notification: MessageNotification) -> tuple[MessageNotification, ...]:
+        return ()
+
 
 class PendingDelivery:
     delivered: ClassVar[bool] = False
@@ -86,6 +89,9 @@ class InterruptedProgress(ContextualProgress):
 
 class FailedProgress(ContextualProgress):
     label = "Failed"
+
+    def failed_notifications(self, notification: MessageNotification) -> tuple[MessageNotification, ...]:
+        return (notification,)
 
 
 class EngagedProgress(ContextualProgress, WorkingThreadPresentationStatus):
