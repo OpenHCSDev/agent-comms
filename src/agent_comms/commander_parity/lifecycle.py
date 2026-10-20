@@ -205,7 +205,7 @@ class LifecycleRun:
 
     @property
     def due(self) -> str:
-        return RecordedEventTime(time.time() + 3600).clock()
+        return time.strftime("%H:%M", time.localtime(time.time() + 3600))
 
     @property
     def deadline(self) -> RecordedEventTime:
