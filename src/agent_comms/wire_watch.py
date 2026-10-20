@@ -8,17 +8,17 @@ notification is unavailable.
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 import ctypes
 import os
 import struct
 import sys
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .goal_waits import GoalWaits
+from .locked_store import WireWakeFile
 from .private_path import FileRevision
 
 _IN_MODIFY = 0x00000002
@@ -36,14 +36,6 @@ _MASK = (
     | _IN_DELETE_SELF | _IN_MOVE_SELF
 )
 _HEADER = struct.Struct("=iIII")
-_AUTHORITY_FILES = frozenset({
-    b"bus.jsonl",
-    b"registry.json",
-    b".registry-owner-guard",
-    GoalWaits.filename.encode(),
-})
-
-
 @dataclass(frozen=True)
 class WatchSource(ABC):
     """Files in one directory whose declared writes wake a reader."""
@@ -59,7 +51,9 @@ class WatchSource(ABC):
 
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
-        return ReplacedWatchSource(root, _AUTHORITY_FILES)
+        return ReplacedWatchSource(root, frozenset(
+            os.fsencode(path.name) for path in WireWakeFile.watched_paths_in(root)
+        ))
 
     @classmethod
     def file(cls, path: Path) -> WatchSource:

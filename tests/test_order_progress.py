@@ -319,21 +319,22 @@ def test_board_and_overdue_name_a_merge_waiting_on_install(commander, commander_
     merged = (MergedPullRequest(8, 'fix/p1', 'b' * 40, merge='d' * 40, merged_at=500.0, updated_at=500.0, orders=('order-P1',)),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     assert order_alarms(script) == []
-    script.write_board()
-    assert '| merged as ddddddddd, waiting on install |' in (tmp_path / 'board.md').read_text()
+    assert '| merged as ddddddddd, waiting on install |' in script.board_text()
 
 
 def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, commander_script, monkeypatch, tmp_path):
     comms, _ = commander
     script, _ = commander_script
     before = create(commander, 'P1', deadline=1)
-    monkeypatch.setattr(type(script), 'post', lambda self, recipients, body: None)
+    posted = []
+    monkeypatch.setattr(type(script), 'post',
+                        lambda self, recipients, body, answers=(): posted.append(body))
     with pytest.raises(SystemExit, match='8\\+ words'):
         script.due('P1', '23:59', 'too short')
     script.due('P1', '23:59', 'the owner widened the order to the rotation line too')
     moved = comms.goals.todos.get('P1')
     assert moved.deadline.clock() == '23:59:00' and moved.revision == before.revision + 1
-    assert 'P1 order order-P1 deadline changed): ' in (tmp_path / 'narrative.md').read_text()
+    assert 'P1 order order-P1 deadline changed): ' in posted[-1]
 
 
 class HeldSource:
@@ -510,6 +511,5 @@ def test_unrecorded_merge_uses_order_identity_after_checkout_is_removed(
     assert not storage.order_checkout("worker", pid).exists()
     work = OrderProgress.read(todo, storage, PullRequests())
     assert work == MergedProgress("d" * 40)
-    script.write_board()
-    assert "merged as ddddddddd, waiting on install" in (tmp_path / "board.md").read_text()
+    assert "merged as ddddddddd, waiting on install" in script.board_text()
     assert order_alarms(script) == []

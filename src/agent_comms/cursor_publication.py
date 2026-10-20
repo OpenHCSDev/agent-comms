@@ -7,10 +7,10 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
-from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from acp.schema import SessionInfoUpdate
@@ -18,10 +18,10 @@ from acp.schema import SessionInfoUpdate
 from .acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
-    LiveCursorScope,
     CursorScope,
-    NoCursorScope,
     EmptyCursorObservation,
+    LiveCursorScope,
+    NoCursorScope,
     UnavailableCursorObservation,
     VerifiedCursorObservation,
     encode_updates,
@@ -29,15 +29,16 @@ from .acp_extension import (
 from .comms import Comms
 from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
+from .diagnostics import PublicationMeasurements
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .publisher import ResponseWrites
 from .native_entries import NativeEvidenceScope
-from .native_source_cursor import NativeSourceCursor
-from .runtime import RuntimeServer
-from .diagnostics import PublicationMeasurements
-from .thread_identity import ClaimedIdentity
 from .native_runtime_input import CurrentNativeCursor
+from .native_source_cursor import NativeSourceCursor
+from .publisher import ResponseWrites
+from .runtime import RuntimeServer
+from .thread_identity import ClaimedIdentity
+from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -158,7 +159,7 @@ class CursorPublication:
         if not scope.matches_session(session_id):
             return unavailable
         try:
-            bus = MessageBus(self.comms.root / "bus.jsonl", self.comms.registry, ResponseWrites)
+            bus = MessageBus(WireLog.path_in(self.comms.root), self.comms.registry, ResponseWrites)
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )

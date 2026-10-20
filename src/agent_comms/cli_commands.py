@@ -43,6 +43,7 @@ from .config_options import (
     ModelConfigOption,
     ThinkingLevelConfigOption,
 )
+from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .exporting import (
@@ -965,7 +966,7 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
 
         author = ctx.messaging.user_identity(self.worktree).incarnation
         snapshot = ctx.registry.snapshot()
-        with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(ctx.root))) as store:
             return store.annotations.correct(self.label, self.answer, author, snapshot)
 
 
@@ -982,7 +983,7 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
         from .working_memory_annotations import WorkingMemoryAnnotations
 
         return WorkingMemoryAnnotations.calibration(
-            ctx.root / "coordination.sqlite3", self.question, self.classifier)
+            CoordinationStore.path_in(ctx.root), self.question, self.classifier)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1256,7 +1257,6 @@ class InstallCliCommand(CliCommand):
         config = CommanderConfig(
             commander=self.commander, root=ctx.root,
             state=home / ".local/state/agent-comms/commander",
-            board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
@@ -1934,6 +1934,6 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(ctx.root / "bus.jsonl").private_marker_unlocked()
+        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
         route = ActiveRoute(ctx.root, marker.root_id)
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

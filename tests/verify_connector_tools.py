@@ -312,8 +312,6 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                         }
                     ],
                     "state": str(case / "commander"),
-                    "board": str(case / "board.md"),
-                    "narrative": str(case / "narrative.md"),
                     "scratch": str(case),
                 }
             )

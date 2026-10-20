@@ -24,7 +24,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -45,7 +45,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
-from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
+from agent_comms.registry_document import RosterVisibility
+from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
@@ -548,22 +549,25 @@ class NotificationsRead:
     after it for new ones."""
 
     revision: WireRevision
-    activity: Mapping[str, ObservedActivity | None] = field(default_factory=dict)
+    activity: Mapping[str, ObservedActivity | DeletedThread | None] = field(default_factory=dict)
 
     @classmethod
-    def of(cls, revision: WireRevision, comms: Comms, known: Mapping[str, ObservedActivity],
+    def of(cls, revision: WireRevision, comms: Comms,
+           known: Mapping[str, ObservedActivity | DeletedThread],
            outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]],
            ) -> NotificationsRead:
         names = {name for items in outcomes.values()
                  for item in items for name in item.activity_names()}
-        known = {**observed_activity(comms, names - known.keys()), **known}
+        known = {**comms.registry.snapshot().observed_activity(comms.agents, names - known.keys()),
+                 **known}
         return cls(revision, {name: known.get(name) for name in names})
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         """The whole window changed, or one of its participants' activity did."""
         if revision.changed_since(NotificationsView(), self.revision):
             return True
-        current = observed_activity(comms, self.activity) if self.activity else {}
+        current = (comms.registry.snapshot().observed_activity(comms.agents, self.activity)
+                   if self.activity else {})
         return any(current.get(name) != seen for name, seen in self.activity.items())
 
 
@@ -572,16 +576,6 @@ class UnreadableNotificationsRead(NotificationsRead):
 
     def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
         return revision != self.revision
-
-
-def observed_activity(comms: Comms, names: Iterable[str]) -> dict[str, ObservedActivity]:
-    """Each named thread's current activity, keyed by the name it was asked for."""
-    snapshot = comms.registry.snapshot()
-    names = frozenset(names)
-    captured = comms.agents.all_activity(
-        snapshot.visible_threads(DEFAULT_ROSTER, names=names), snapshot=snapshot)
-    return {name: captured[canonical] for name in names
-            if (canonical := snapshot.canonical_name(name)) in captured}
 
 
 @dataclass(frozen=True)
@@ -769,7 +763,8 @@ class NotificationReading(Observation[ObserveNotifications]):
 
     def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead | None) -> ObservationStep:
-        known = observed_activity(comms, () if previous is None else previous.activity)
+        known = comms.registry.snapshot().observed_activity(
+            comms.agents, () if previous is None else previous.activity)
 
         def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
             request.require_root(comms)
@@ -800,7 +795,7 @@ class ThreadReading(Observation[ObserveThreads]):
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
-        activity: dict[str, ObservedActivity] = {}
+        activity: dict[str, ObservedActivity | DeletedThread] = {}
         names = self.request.names
 
         def located() -> dict[str, Callable[[], ThreadPresentation | None]]:
@@ -808,7 +803,7 @@ class ThreadReading(Observation[ObserveThreads]):
             readable, _ = previous.revision_inputs()
             watched = names | frozenset(actor for view in readable.values()
                                         for actor in view.notification_activity_names())
-            activity = observed_activity(comms, watched)
+            activity = comms.registry.snapshot().observed_activity(comms.agents, watched)
             names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
             if not names:
                 return {}
@@ -1026,7 +1021,7 @@ class ThreadsObserved(Observed):
 
     results: Mapping[str, ThreadReadResult]
     changed: frozenset[str]
-    activity: Mapping[str, ObservedActivity]
+    activity: Mapping[str, ObservedActivity | DeletedThread]
 
     def revision_inputs(self) -> tuple[dict[str, ThreadPresentation], set[str]]:
         readable: dict[str, ThreadPresentation] = {}

@@ -12,9 +12,19 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
+from .agent_backend import (
+    ClearQueue,
+    InputId,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+    UseSettings,
+    WhenBusy,
+)
 from .field_codec import Id128Text
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
-from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -127,7 +137,7 @@ class InputForwarding:
         if not candidates:
             return True
         first = self.pending[candidates[0]]
-        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
@@ -154,7 +164,7 @@ class InputForwarding:
             self.pending[native_id] = command
             self.generation += 1
 
-        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_running(session.send_boundary, public_id, native_id, text) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion

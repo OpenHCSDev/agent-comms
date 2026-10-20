@@ -77,6 +77,28 @@ def test_invalid_leaf_never_mutates_external_target(path, kind):
     assert not path.with_name("missing").exists()
 
 
+@pytest.mark.parametrize("kind", ["file", "dangling", "directory", "fifo"])
+def test_pending_intent_is_present_without_following_or_opening_it(path, kind):
+    _create(path)
+    before = path.read_bytes()
+    intent = sidecar.StoreOwner.snapshot_intent(path)
+    if kind == "file":
+        intent.write_text("unresolved commit")
+    elif kind == "dangling":
+        intent.symlink_to(path.with_name("missing-intent-target"))
+    elif kind == "directory":
+        intent.mkdir()
+    else:
+        os.mkfifo(intent, 0o600)
+    identity = intent.lstat()
+    with pytest.raises(sidecar.SidecarCommitUnknown, match="unresolved commit intent"):
+        with _connection(path):
+            pytest.fail("a pending commit reached the database caller")
+    assert path.read_bytes() == before
+    assert intent.lstat() == identity
+    assert not path.with_name("missing-intent-target").exists()
+
+
 def test_symlink_ancestor_refused(path):
     directory = path.parent / "real"
     directory.mkdir(mode=0o700)

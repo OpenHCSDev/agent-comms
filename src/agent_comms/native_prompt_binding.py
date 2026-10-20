@@ -9,9 +9,9 @@ user-message hash and the required execution evidence has been recorded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,16 +20,16 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .locked_store import RootFile
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .private_send_rules import NativeIdentityCheck
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import DurableFile, SQLiteFile
+from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputExecution, NativeInputRecord
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_pi import read_tracked_input_commitment
-from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
+from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
@@ -44,7 +44,7 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
     @classmethod
     def install(cls, store) -> None:

@@ -5,43 +5,50 @@ from __future__ import annotations
 import logging
 from abc import abstractmethod
 from collections.abc import Awaitable, Sequence
-from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
+from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
 from typing import Callable, ClassVar
 
 from .agent_backend import RuntimeLocation
-from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .bus_publication import CommittedDelivery
+from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_database import CoordinationStore
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
+from .coordination_response import _assert_response_schema
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
+from .external_transcript import ExternalTranscript
+from .field_codec import FieldCodec, projected
 from .historical_views import HistorySource
-from .thread_identity import ThreadProvenance
 from .message_bus import MessageBus
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import Message
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .external_transcript import ExternalTranscript
 from .native_transcript import NativeTranscript, RecordsCut
+from .presentation import MessageNotification
 from .private_path import FileRevision
-from .bus_publication import CommittedDelivery
 from .registration import Registration
 from .routing import TurnRouting
+from .thread_identity import ThreadProvenance
 from .threads import Thread
-from .turn_lease import TurnLeaseFence
-from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
-    AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
-    LaterTranscript, LiveAssignedTranscriptSource, TranscriptDraft, TranscriptSource, WireFrontier,
+    AssignedSourceCursor,
+    AssignedTranscriptSource,
+    EarlierTranscript,
+    LaterTranscript,
+    LiveAssignedTranscriptSource,
+    NoWireFrontier,
+    TranscriptDraft,
+    TranscriptSource,
+    WireFrontier,
 )
-from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .coordination_database import CoordinationStore
-from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_response import _assert_response_schema
-from .presentation import MessageNotification
+from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
+from .turn_lease import TurnLeaseFence
 from .wire_log import WireLog
 
 _LOG = logging.getLogger(__name__)
@@ -347,7 +354,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         if source_runtime is not None and source_runtime != runtime.read_key:
             raise TranscriptChanged()
         root = Path(source.root)
-        log = WireLog(root / "bus.jsonl")
+        log = WireLog(WireLog.path_in(root))
         records = runtime.history_source(root, thread.incarnation)
         return PageSource(thread, runtime, False, root,
                           log, TranscriptRoutes(root), records,
@@ -379,7 +386,7 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        with CoordinationStore.observed(root / "coordination.sqlite3").observing(cls) as db:
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls) as db:
             yield db
 
     @classmethod

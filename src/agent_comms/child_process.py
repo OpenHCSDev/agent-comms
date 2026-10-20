@@ -1155,6 +1155,8 @@ class NoCountYetPrinted(NoIntegerPrinted):
 
 
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
+    interrupted: ClassVar[bool] = False
+
     def printed_count(self, stdout: bytes) -> CheckPrinted:
         return NoCountYetPrinted()
 
@@ -1189,6 +1191,7 @@ class ExitedOutcome(ChildOutcome):
 
 @dataclass(frozen=True)
 class SignaledOutcome(ChildOutcome):
+    interrupted: ClassVar[bool] = True
     signal_number: int
 
     @property

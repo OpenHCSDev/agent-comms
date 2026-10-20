@@ -7,17 +7,22 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import shutil
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_package import (
-    MANIFEST, NativePackageError, VerifiedNativePackage, pinned_native_package,
+    MANIFEST,
+    NativePackageError,
+    VerifiedNativePackage,
+    pinned_native_package,
 )
 from .native_pi import NativePiUnavailable, _private_session_dir
 from .wire_log import WireLog
@@ -45,7 +50,7 @@ class RootLaunch(ABC):
         same launch.
         """
         root = route.root
-        metadata = WireLog(root / "bus.jsonl").read_metadata_unlocked()
+        metadata = WireLog(WireLog.path_in(root)).read_metadata_unlocked()
         if not metadata.private:
             return SharedRootLaunch(root)
         return PrivateNkLaunch.installed(root, metadata.wire_root_id)
@@ -159,7 +164,7 @@ class PrivateNkLaunch(RootLaunch):
             agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
         # Explicit launch installs the current runtime before registering
         # this owner. Readers never create or repair runtime schemas.
-        with Coordination(str(self.validated_root / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(self.validated_root))) as store:
             store.install_private_runtime()
             store.participants.register(
                 thread.incarnation.require_recorded().lookup,
@@ -200,7 +205,7 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         _private_session_dir(self.validated_root)
-        with WireLog(self.validated_root / "bus.jsonl").checked_read() as source:
+        with WireLog(WireLog.path_in(self.validated_root)).checked_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")

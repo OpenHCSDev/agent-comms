@@ -28,9 +28,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import store_files
+from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .locked_store import DurableFile, WireWakeFile
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
@@ -124,14 +126,16 @@ class PublicRegistry(RegistryPrivacy):
         """A public bus has no coordinator identities for restored threads."""
 
 
-class PrivateRegistryGuard(RegistryPrivacy):
+class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+    filename = ".registry-owner-guard"
+
     def __init__(self, registry_path: Path, wire_root_id: str):
         try:
             Id128Text.decode(wire_root_id)
         except MalformedRecord:
             _reject("root ID is invalid")
         self.registry_path = registry_path
-        self.path = registry_path.parent / ".registry-owner-guard"
+        self.path = self.path_in(registry_path.parent)
         self.root_id = bytes.fromhex(wire_root_id)
 
     def _trusted_root(self) -> None:
@@ -262,7 +266,7 @@ class PrivateRegistryGuard(RegistryPrivacy):
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """Stopped subscribers still belong to frozen audiences; their coordinator identities
         must exist before any cohort can be accepted."""
-        with Coordination(str(self.registry_path.parent / "coordination.sqlite3")) as store:
+        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             for thread in threads:
                 store.participants.register(
                     thread.incarnation.require_recorded().lookup, thread.name, thread.name,
@@ -323,13 +327,12 @@ class PrivateRegistryGuard(RegistryPrivacy):
             os.close(fd)
 
 
-PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
-
-
 @dataclass(frozen=True, kw_only=True)
-class PrivateOwnerRenameIntent:
+class PrivateOwnerRenameIntent(DurableFile):
     """Written before a private owner rename changes either store; while it exists, private
     publication and selected execution stay blocked."""
+
+    filename = ".private-owner-rename.pending"
 
     lookup: str
     old: str
@@ -340,13 +343,13 @@ class PrivateOwnerRenameIntent:
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        store_files._atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+        store_files._atomic_write_text(self.path_in(root),
                            json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
 
     @classmethod
     def complete(cls, root: Path) -> None:
         """A completed record proves a finished transition if the unlink is uncertain."""
-        intent = root / PRIVATE_OWNER_RENAME_PENDING
+        intent = cls.path_in(root)
         replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
         intent.unlink()
         fsync_directory(root)
@@ -354,6 +357,6 @@ class PrivateOwnerRenameIntent:
 
 def _require_no_private_owner_rename(root: Path) -> None:
     """A crashed cross-store rename cannot publish or run a selected input."""
-    intent = root / PRIVATE_OWNER_RENAME_PENDING
+    intent = PrivateOwnerRenameIntent.path_in(root)
     if intent.exists() or intent.is_symlink():
         raise RelationViolationError("Private owner rename is pending; inspect both authorities.")

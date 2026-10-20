@@ -344,7 +344,7 @@ def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     from agent_comms.commander.config import CommanderConfig
     CommanderConfig(commander="lead", root=comms.root,
-        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
+        state=tmp_path / "state",
         repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
         disk=tmp_path).write(tmp_path)
     return comms, ThreadCaller("lead")

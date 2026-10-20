@@ -18,7 +18,9 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
-from .registry_provenance import RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient
+from .registry_provenance import (
+    DeletedThread, RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient,
+)
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -37,6 +39,8 @@ from .threads import Thread
 from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
+    from .activity import ObservedActivity
+    from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
     from .bus_publication import CommittedDelivery
 
@@ -82,7 +86,8 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
-                    {thread.name: thread for thread in map(self.require, names)}.values())
+                    (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
+                     if name in self.threads))
         return (executor for thread in selected
                 if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
@@ -695,6 +700,21 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
             claimed_generations=MappingProxyType(dict(document.claims.generations)),
             by_lookup=MappingProxyType(indexed),
         )
+
+    def observed_activity(
+        self, agents: AgentActivity, names: Iterable[str],
+    ) -> dict[str, ObservedActivity | DeletedThread]:
+        """Observe retained view names; absent declarations have no execution authority."""
+        selected = {name: self.canonical_name(name) for name in names}
+        captured = agents.all_activity(
+            self.visible_threads(DEFAULT_ROSTER, names=selected), snapshot=self)
+        observed: dict[str, ObservedActivity | DeletedThread] = {}
+        for name, canonical in selected.items():
+            if canonical in captured:
+                observed[name] = captured[canonical]
+            elif canonical not in self.threads:
+                observed[name] = DeletedThread(canonical)
+        return observed
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)

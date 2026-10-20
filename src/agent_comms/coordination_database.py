@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from .declared_family import DeclaredFamily
-
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
@@ -31,6 +29,8 @@ from agent_comms.typed_table import (
     StoreWriter,
     TypedRow,
 )
+
+from .declared_family import DeclaredFamily
 
 
 @dataclass(frozen=True)
@@ -123,12 +123,6 @@ class CoordinationStore(StoreWriter):
     filename = "coordination.sqlite3"
     writer_timeout = 5.0
     header = b"SQLite format 3\0"
-
-    @staticmethod
-    def files(path: Path) -> tuple[Path, ...]:
-        """The database and the companion files SQLite keeps beside it: together, one store."""
-        companions = ("-wal", "-shm", "-journal")
-        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
 
     @classmethod
     def is_database(cls, path: Path) -> bool:

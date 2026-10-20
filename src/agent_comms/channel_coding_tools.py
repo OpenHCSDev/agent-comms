@@ -15,6 +15,7 @@ from pathlib import Path
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .coordination_database import CoordinationStore
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
@@ -67,7 +68,7 @@ class CodingToolOwner(ABC):
 
         reservation = await self.reserve_room(call)
         async with reservation.checking(), self.check_lock:
-            await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+            await Coordination.run_async(CoordinationStore.path_in(self.comms.root), check)
         return reservation
 
     @abstractmethod

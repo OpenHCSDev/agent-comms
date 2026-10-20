@@ -10,7 +10,7 @@ from bus_history import read_history
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.field_codec import FieldCodec
-from agent_comms.diagnostics import request_observation_path
+from agent_comms.diagnostics import RequestObservations
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import NoticeRole
@@ -1111,7 +1111,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(tmp_path: Pat
     assert len(read_history(comms, "#team")) == 1
     assert not comms.registry.status("alpha").active
     assert not comms.registry.require("alpha").turn_state.active.executing
-    records = [json.loads(line) for line in request_observation_path(root, leases[0].turn_id).read_text().splitlines()]
+    records = [json.loads(line) for line in RequestObservations.path_in(root, turn_id=leases[0].turn_id).read_text().splitlines()]
     assert records[-1]["turn"] == FieldCodec.encode(leases[0])
     assert "acquisition" in records[-1]
 

@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-
 from collections.abc import (
-    AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
 )
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
@@ -16,24 +21,28 @@ from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import CommandTarget
 from .channels import ANY_CHANNEL
-from .errors import UnregisteredThreadError
 from .coordinator import Coordination
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
+from .locked_store import RuntimeFile
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .message_page import (
-    InboxPage, MessagePage, MessagePageRequest, PageBounds,
+    InboxPage,
+    MessagePage,
+    MessagePageRequest,
+    PageBounds,
 )
-from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
 from .messages import Message
+from .page_traversal import NewerTraversal
 from .read_basis import (
     AnonymousViewer,
-    NamedViewer,
+    CapturedSelection,
+    DisplayBasis,
     DisplayViewer,
     ListedDeliveries,
-    DisplayBasis,
+    NamedViewer,
     WatchAcknowledgment,
-    CapturedSelection,
 )
 from .routing import DeliveryScope
 from .store_files import SharedLock, StoreLockOwner
@@ -45,15 +54,16 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 from .publisher import Publisher
-from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
+from .wire_log import CurrentSnapshotOpening, WireLog, WireSnapshot
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher](StoreLockOwner):
+class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
+    filename = "wire"
 
     @property
     def path(self) -> Path:
-        return self.log.path.parent / "wire"
+        return self.path_in(self.log.path.parent)
 
     def __init__(
         self,
@@ -320,10 +330,10 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from .errors import RelationViolationError
-        from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+        from .errors import RelationViolationError
         from .peer_relevance import Prioritized
+        from .private_bus_checkpoint import addressed_source_pointers_unlocked
 
         try:
             with self.log.checked_read(blocking=blocking) as source:

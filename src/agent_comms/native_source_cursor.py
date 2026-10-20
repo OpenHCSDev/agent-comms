@@ -5,16 +5,17 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
+from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import SourceCoverage
-from .threads import Thread
-from .field_codec import FieldCodec
 from .store_files import StoreLockContention
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -27,7 +28,7 @@ class NativeSourceCursor:
     @classmethod
     async def read_async(cls, bus, *, wire_root_id, owner_name, source_reads):
         return await Coordination.run_read_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
         )
 
@@ -39,7 +40,7 @@ class NativeSourceCursor:
     async def advance_async(cls, bus, *, wire_root_id, owner, owner_claimed_generation,
                             owner_generation, committed_input_id, source_reads):
         return await Coordination.run_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._advance_owned, bus, wire_root_id, owner, owner_claimed_generation,
                     owner_generation, committed_input_id, source_reads=source_reads),
         )
@@ -54,7 +55,7 @@ class NativeSourceCursor:
     @classmethod
     async def refresh_async(cls, bus, *, wire_root_id, owner_name, source_reads):
         return await Coordination.run_async(
-            bus.log.path.parent / 'coordination.sqlite3',
+            CoordinationStore.path_in(bus.log.path.parent),
             partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
         )
 

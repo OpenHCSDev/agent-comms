@@ -20,6 +20,8 @@ from agent_comms.coordination_errors import CoordinationError, ParticipantNotReg
 
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
+from .coordination_database import CoordinationStore
+from .native_entries import ImportedSessionWriter
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 from .tool_result import ToolResult
@@ -28,29 +30,33 @@ if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
+from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ThreadImported, ImportSnapshot
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
+from .launch_runtime import LaunchRuntime
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
+from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
-    RegistryPrivacy, _require_no_private_owner_rename,
+    PrivateOwnerRenameIntent,
+    PrivateRegistryGuard,
+    PublicRegistry,
+    RegistryPrivacy,
+    _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
+from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
-from .thread_identity import AgentThreadRole, ThreadRole
-from .agent_backend import RuntimeLocation
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -174,7 +180,7 @@ class ThreadManagement:
         project = Path(directory).expanduser().resolve()
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
-        session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
+        session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
         thread = self.registry.new_thread(
             name,
             tags,
@@ -550,7 +556,7 @@ class PrivateOwnerRename(ThreadRename):
         root, registry = self.threads.root, self.threads.registry
         before, new_name = self.before, self.new_name
         _require_no_private_owner_rename(root)
-        coordinator = root / "coordination.sqlite3"
+        coordinator = CoordinationStore.path_in(root)
         if not coordinator.exists() or before.name == new_name:
             return self.registry_renamed()
         # Validate every deterministic registry/SQL name refusal *before* advancing a committed
@@ -600,6 +606,6 @@ class PrivateOwnerRename(ThreadRename):
         result = ThreadRename.applied(self, title)
         # The wire lock and the check in renamed() make a present intent this rename's own;
         # it completes only after both authorities and the ancillary stores agree.
-        if (self.threads.root / PRIVATE_OWNER_RENAME_PENDING).exists():
+        if PrivateOwnerRenameIntent.path_in(self.threads.root).exists():
             PrivateOwnerRenameIntent.complete(self.threads.root)
         return result

@@ -17,6 +17,8 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
+from ..locked_store import RegistryFile
+
 if TYPE_CHECKING:
     from agent_comms.coordinator import Coordination
 
@@ -61,7 +63,7 @@ class SendRefusal(CoordinatorTable, TypedTable):
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
         with guard_original_root_write(root), _store_lock(root / "wire", mode=SharedLock()):
-            MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
+            MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
             with (
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,

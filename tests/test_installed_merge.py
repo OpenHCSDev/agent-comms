@@ -106,8 +106,7 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
         comms.goals.todos.reconcile_merges(actor, comms.registry.storage_rule)
         assert script.held_orders() == ()
         assert comms.goals.todos.get(todo.id) == closed
-    script.write_board()
-    assert f'| {todo.id}:' not in (tmp_path / 'board.md').read_text()
+    assert f'| {todo.id}:' not in script.board_text()
     assert order_alarms(script) == []
     assert comms.goals.todos.get(todo.id) == closed
 

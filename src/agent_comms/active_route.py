@@ -142,7 +142,7 @@ class ActiveRoute(CommsRoute):
         # The writer atomically replaces this marker. Reuse its owner/mode,
         # ancestry and protocol decoder, without taking the mutation/durability
         # barrier or interpreting registry/history merely to observe identity.
-        marker = WireLog(self.root / "bus.jsonl").private_marker_unlocked()
+        marker = WireLog(WireLog.path_in(self.root)).private_marker_unlocked()
         if marker.root_id != self.wire_root_id:
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()

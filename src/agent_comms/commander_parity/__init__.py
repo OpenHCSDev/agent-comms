@@ -1,4 +1,7 @@
-"""Parity declarations own matrix generation and the cutover decision."""
+"""Parity declarations own matrix generation and the cutover decision.
+
+Delete this transition package when both machines run the native commander.
+"""
 
 from __future__ import annotations
 

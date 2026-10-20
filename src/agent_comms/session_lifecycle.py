@@ -249,7 +249,7 @@ class SessionLifecycle:
     async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
-        await self.transcript.replay(session_id, thread.name)
+        await self.transcript.replay(session_id, self.transcript.runtime)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
@@ -265,7 +265,7 @@ class SessionLifecycle:
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 # History is Core's own store; only owner requests need the owner's Core.
-                await self.transcript.replay(session_id, thread.name)
+                await self.transcript.replay(session_id, self.transcript.runtime)
                 self.proxies[session_id] = error.owner
                 return LoadSessionResponse(field_meta={
                     **await self.metadata(thread.name, session_id=session_id),

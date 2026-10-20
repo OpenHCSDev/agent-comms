@@ -21,18 +21,24 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property
 from importlib.resources import files
+from math import ceil
 from pathlib import Path
+from statistics import median
 from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from . import skills
-from .change_report import FileLine
 from .bus_publication import AgentOrigin
+from .change_report import FileLine
 from .channel_targets import CommandTarget
 from .child_process import (
-    BoundedRun, CheckPrinted, ChildResult, ExitedOutcome, NoIntegerPrinted, OrderCheckFailedError,
+    BoundedRun,
+    CheckPrinted,
+    ChildResult,
+    ExitedOutcome,
+    NoIntegerPrinted,
+    OrderCheckFailedError,
 )
-from .messages import InfoKind, Message
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -47,7 +53,9 @@ from .field_codec import (
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
+from .messages import InfoKind, Message
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -941,17 +949,14 @@ class MergedProgress(FoundProgress):
         return (todo,)
 
 
-class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
+class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
     """The fleet's next install: one time for the bus and the unit that runs it, set by the
     commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
     carries it as its own deadline. Install, maintenance and carry work is the installer's.
     Each live install by ``tools/upgrade_bus.py`` plans the next one a cadence later."""
 
+    filename: ClassVar[str] = "install-deadline.json"
     cadence: ClassVar[int] = 30 * 60
-
-    @staticmethod
-    def path_in(root: Path) -> Path:
-        return root / "install-deadline.json"
 
     @classmethod
     def read(cls, root: Path) -> InstallDeadline:
@@ -1586,6 +1591,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         for check in (self.check, *self.deletes.checks):
             check.require_writable()
 
+    def delivery_rates(self) -> Iterator[tuple[str, float]]:
+        """Undelivered orders provide no observed delivery duration."""
+        return iter(())
+
     def untouched(self, touched: Sequence[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
@@ -1738,6 +1747,11 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     def line(self) -> str:
         return f"Delivered: {self.delivery.line}, waiting on install"
 
+    def delivery_rates(self) -> Iterator[tuple[str, float]]:
+        yield self.id, (
+            self.delivery.at.recorded_at("A delivery") - self.at.recorded_at("An order")
+        ) / len(self.edits)
+
     def story(self) -> tuple[StoryLine, ...]:
         return (*super().story(), *self.delivery.story())
 
@@ -1808,6 +1822,39 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
     """An installed merge retains the application's existing evidence, without a wrapper."""
+
+
+@dataclass(frozen=True)
+class MeasuredDeadline:
+    """A snapshot's distinct delivered-order observations, never another duration store."""
+
+    rates: tuple[float, ...]
+
+    @classmethod
+    def read(cls, store: TodoStore) -> MeasuredDeadline:
+        rates = {
+            identity: rate
+            for todo in store._select("1", ())
+            for order in todo.order_history
+            for identity, rate in order.delivery_rates()
+        }
+        return cls(tuple(rates.values()))
+
+    @cached_property
+    def seconds_per_edit(self) -> float:
+        return median(self.rates)
+
+    @property
+    def summary(self) -> str:
+        if not self.rates:
+            return "Measured median: unavailable (0 delivered orders); minimum 2 minutes"
+        return (f"Measured median: {self.seconds_per_edit:g} seconds per edit "
+                f"from {len(self.rates)} delivered orders")
+
+    def deadline(self, order: CheckedProblemOrder) -> RecordedEventTime:
+        seconds = self.seconds_per_edit * len(order.edits) if self.rates else 0
+        at = order.at.recorded_at("An order")
+        return RecordedEventTime(ceil((at + max(120, seconds)) / 60) * 60)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2918,7 +2965,7 @@ class TodoStore(TypedStore):
         self, *, check_same_thread: bool = True
     ) -> Iterator[sqlite3.Connection]:
         with (
-            MaintenanceBarrier(self.root / "registry.json").allow_input(),
+            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection

@@ -21,21 +21,22 @@ from typing import ClassVar
 
 from .child_process import ParentedProcess, ProcessIdentity
 from .comms import Comms, wire
+from .coordination_database import CoordinationStore
+from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .coordination_errors import CoordinationError
 from .field_codec import FieldCodec
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
-from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
-from .restart_refusals import RestartRefusal
 from .private_path import PrivateDirectoryRole
-from .thread_identity import RecordedThreadIncarnation
+from .restart_refusals import RestartRefusal
 from .store_files import _atomic_write_text, _store_lock
+from .thread_identity import RecordedThreadIncarnation
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
 DIRECTORY = "owner-restart-queue"
@@ -386,7 +387,7 @@ async def run(comms: Comms) -> None:
         async for _ in WireWatch.observations(
             WatchSource.file(comms.registry.store.path),
             WatchSource.file(comms.registry.store.guard_path),
-            WatchSource.file(comms.root / "coordination.sqlite3"),
+            WatchSource.file(CoordinationStore.path_in(comms.root)),
             WatchSource.file(comms.root / "coordination.sqlite3-wal"),
             DirectoryWatchSource(queue.active_directory),
         ):

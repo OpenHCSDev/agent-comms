@@ -23,7 +23,7 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
-from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireSnapshot, WireLog
+from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireLog, WireSnapshot
 from .wire_record import WireRecord
 
 
@@ -274,7 +274,7 @@ class WakeCandidateIndex(TypedStore):
     rows = tuple(TypedTable.members_with(CandidateTable))
 
     def __init__(self, log: WireLog):
-        if log.path.name != "bus.jsonl":
+        if log.path.name != log.filename:
             raise ValueError("candidate index requires the canonical wire log")
         self.log = log
 

@@ -7,14 +7,15 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
+from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
 
 T = TypeVar("T")
 
@@ -131,34 +132,117 @@ class JsonDocument(ABC, Generic[T]):
 
 
 class RootFile:
-    """A declared file location, with construction for file-taking owners."""
+    """A declared bus-file location, independent of its value or I/O constructor."""
 
     __slots__ = ()
     filename: ClassVar[str]
+    root_directory: ClassVar[str] = "."
 
     @classmethod
-    def path_in(cls, root: Path | str) -> Path:
-        return Path(root) / cls.filename
+    def path_in(cls, root: Path | str, **parts: str) -> Path:
+        return Path(root) / cls.filename.format(**parts)
 
     @classmethod
-    def at(cls, root: Path | str, *args, **kwargs):
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        path = cls.path_in(root)
+        return frozenset((path, store_lock_path(path)))
+
+    @classmethod
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
+        """Each declaring owner and its directory, once across composed capabilities."""
+        pending: list[type[RootFile]] = [cls]
+        visited: set[type[RootFile]] = set()
+        while pending:
+            family = pending.pop()
+            if family in visited:
+                continue
+            visited.add(family)
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family):
+                yield family, root / family.root_directory
+
+    @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            path for owner, directory in cls.declarations_in(root)
+            for path in owner.files_in(directory)
+        )
+
+
+class FileStore(RootFile, ABC):
+    """Construction belongs only to owners whose initializer takes a file."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def __init__(self, path: Path, *args, **kwargs) -> None: ...
+
+    @classmethod
+    def at(cls, root: Path | str, *args, **kwargs) -> Self:
         return cls(cls.path_in(root), *args, **kwargs)
+
+
+class PatternFile(RootFile):
+    """Enumerate an owner's declared parameterized names, never the bus directory."""
+
+    __slots__ = ()
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        pattern = Path(cls.filename.format_map(defaultdict(lambda: "*")))
+        return frozenset(
+            path for name in (pattern, store_lock_path(pattern))
+            for path in root.glob(str(name)) if path.is_file()
+        )
+
+
+class DurableFile(RootFile):
+    """Bus state retained across installations, with conversion owned by its store."""
+
+    __slots__ = ()
+
+
+class WireWakeFile(RootFile):
+    """Commits to this primary file wake idle wire readers, unlike lock-file churn."""
+
+    __slots__ = ()
+
+    @classmethod
+    def watched_paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            owner.path_in(directory) for owner, directory in cls.declarations_in(root)
+        )
+
+
+class RegistryFile(DurableFile, WireWakeFile):
+    """Registry location usable by record types without importing their decoder."""
+
+    __slots__ = ()
+    filename = "registry.json"
+
+
+class SQLiteFile(RootFile):
+    """A database and SQLite's companion files share their existing file owner."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        companions = ("-wal", "-shm", "-journal")
+        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        path = cls.path_in(root)
+        return super().files_in(root) | frozenset((
+            *cls.files(path), StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path),
+        ))
 
 
 class RuntimeFile(RootFile):
     """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
-
-    @classmethod
-    def paths_in(cls, root: Path) -> frozenset[Path]:
-        declared, pending = set(), [cls]
-        while pending:
-            family = pending.pop()
-            pending.extend(family.__subclasses__())
-            if "filename" in vars(family):
-                declared.add(family.path_in(root))
-        return frozenset(declared)
 
 
 class DocumentConversion(ABC):
@@ -174,7 +258,7 @@ class DocumentConversion(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(StoreLockOwner, JsonDocument[T]):
+class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path

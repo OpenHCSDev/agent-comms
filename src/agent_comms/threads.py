@@ -7,21 +7,21 @@ import os
 import time
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
+from .cli_result import ThreadToolCatalogResult
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .cli_result import ThreadToolCatalogResult
-from .launch_root import LaunchRoot
-from .native_arguments import NativeArguments
-from .native_tools import NativeRequestTools
-from .store_files import _atomic_write_text
 from .goals import (
     GoalDeclaration,
     NoGoal,
 )
+from .launch_root import LaunchRoot
+from .locked_store import DurableFile, PatternFile
+from .native_arguments import NativeArguments
+from .native_tools import NativeRequestTools
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -35,17 +35,18 @@ from .registration_inheritance import (
     InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .store_files import _atomic_write_text
+from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
     ThreadRole,
+    TurnFence,
     TurnId,
     TurnIdentity,
 )
-from .thread_identity import TurnFence
 from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
-from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -58,7 +59,9 @@ def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
 
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance):
+class Thread(DurableFile, PatternFile, ThreadProvenance):
+    filename: ClassVar[str] = "native-sessions/{lookup}/{name}"
+    catalog_filename: ClassVar[str] = "comms-catalog.json"
     """Declares one agent thread's identity and provenance."""
 
     name: str = field(kw_only=False)
@@ -181,7 +184,8 @@ class Thread(ThreadProvenance):
         launch = LaunchRoot.current()
         directory = self.native_session_directory(launch.path)
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = directory / "comms-catalog.json"
+        path = self.path_in(launch.path, lookup=self.incarnation.require_recorded().lookup,
+                            name=self.catalog_filename)
         catalog = ThreadToolCatalogResult(
             tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
         )
@@ -195,7 +199,7 @@ class Thread(ThreadProvenance):
         return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def native_session_directory(self, root: Path) -> Path:
-        return root / "native-sessions" / self.incarnation.require_recorded().lookup
+        return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -448,6 +452,6 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from . import pi_native_backend, pi_durable_backend  # noqa: E402, F401
+from . import pi_durable_backend, pi_native_backend  # noqa: E402, F401
 
 AgentBackend.seal()

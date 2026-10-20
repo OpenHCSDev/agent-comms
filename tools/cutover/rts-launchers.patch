@@ -1,3 +1,4 @@
+# Delete this transition patch when both machines run the native commander.
 --- a/order.py
 +++ b/order.py
 @@ -1,809 +1,7 @@

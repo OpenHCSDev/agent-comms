@@ -149,7 +149,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
     assert resource["mimeType"] == "text/x-diff"
     assert resource["text"] == patch
     assert resource["uri"].endswith("edit%2F1")
-    await agent.sessions.transcript.replay("worker", "worker", client)
+    await agent.sessions.transcript.replay("worker", client)
     (snapshot,) = decode_updates(client.updates[-1]["_meta"])
     assert isinstance(snapshot, TranscriptSnapshotUpdate)
     assert snapshot.page.events[0].diff == live.diff

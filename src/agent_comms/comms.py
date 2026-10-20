@@ -5,15 +5,16 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from .active_route import CommsRoute, resolve_comms_route
-from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 
+from .active_route import CommsRoute, resolve_comms_route
 from .agent_activity import AgentActivity
-from .channel_management import ChannelManagement
+from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 from .catalog_store import ChannelCatalog
+from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messaging import Messaging
@@ -21,9 +22,10 @@ from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
-from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
+from .thread_management import ThreadManagement
 from .transcripts import Transcripts
+from .wire_log import WireLog
 
 
 class Comms:
@@ -35,9 +37,9 @@ class Comms:
         self.route.observe_root()
         publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"
-        self.registry = Registration(self.root / "registry.json")
+        self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
-            self.root / "bus.jsonl",
+            WireLog.path_in(self.root),
             self.registry,
             publisher,
             projection=projection,
@@ -88,6 +90,6 @@ def client_wire(root: CommsRoute | Path) -> Iterator[Comms]:
     route = resolve_comms_route(root)
     # Refuse before borrowing a route or opening stores held by maintenance.
     # This grants nothing: writes still check under their determining locks.
-    MaintenanceBarrier(route.root / "registry.json").assert_open_unlocked()
+    MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
     with route.hold_client_route():
         yield Comms(route, projection=CompletingRouteCounts)

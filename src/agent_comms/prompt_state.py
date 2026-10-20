@@ -6,9 +6,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
-from .agent_backend import TurnInboxItem
-from .maintenance_barrier import MaintenanceBarrier
 from . import turn_failure as failures
+from .agent_backend import TurnInboxItem
+from .locked_store import RegistryFile
+from .maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -67,7 +68,7 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
         def write():
             session.grant_prompt()
             session.stdin.write(session.native.reader.encode(session.command))
-        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
+        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_new(session.send_boundary, None, session.command.input_id, session.command.message) as outcome:
                 completion = outcome.dispatch(inputs, session, self, write)
         return await completion

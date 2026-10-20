@@ -36,10 +36,11 @@ class ActivityCheckpoint(ActivityClocks, AppendCheckpoint):
 
 class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     record_type = ActivityCheckpoint
+    filename = f"bus_activity_{ActivityCheckpoint.schema}.json"
     fsync_parent = True
 
     def __init__(self, bus_path: Path):
-        super().__init__(bus_path, bus_path.with_name(f"bus_activity_{self.record_type.schema}.json"))
+        super().__init__(bus_path, self.path_in(bus_path.parent))
 
     def snapshot(self, opened: WireSnapshot) -> ActivityClocks:
         boundary = opened.complete_prefix.boundary
