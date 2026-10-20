@@ -671,8 +671,8 @@ def test_upgrade_transcript_hold_covers_the_backup_and_its_restore(comms):
 
     with transcripts_held(comms.root):
         before = bus_files(comms.root)
-        backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
-                             (comms.root,), comms.root.parent / 'backup')
+        backup = Backup(comms.root, comms.root.parent / "no-route.json",
+                        comms.root.parent / 'backup').capture((comms.root,))
         assert bridge_publishes(comms.root).endswith("database is locked")
         assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
         backup.restore()  # the carry aborted

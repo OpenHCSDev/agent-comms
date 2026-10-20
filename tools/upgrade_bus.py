@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import ClassVar
 
 # This file's tree is the target revision: the tool and every step it runs import that
 # tree's src, never the src the checkout being upgraded has installed.
@@ -87,6 +88,7 @@ class Stack:
 
     checkout: Path
     home: Path = Path.home()
+    backup_limit: ClassVar[int] = 5
 
     @property
     def python(self) -> Path:
@@ -100,6 +102,13 @@ class Stack:
     def uv(self) -> Path:
         """The uv the installer runs, kept in the installer's own state."""
         return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+
+    @property
+    def backup_root(self) -> Path:
+        disk = self.home / 'mount/hdd'
+        if not disk.is_mount():
+            raise UpgradeRefused(f'Install backup disk is not mounted: {disk}')
+        return disk / 'agent-comms-upgrade-backups'
 
     def require_uv(self) -> None:
         if not os.access(self.uv, os.X_OK):
@@ -376,8 +385,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     try:
         installed.owners(root, "stop", running)
         with transcripts_held(root):
-            backup = Backup.take(root, ROUTE, (root,),
-                root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+            backup = Backup.take(root, ROUTE, (root,), installed)
     except BaseException as error:
         maintenance.clear(held)
         installed.owners(root, "start", running)

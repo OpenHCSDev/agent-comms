@@ -61,7 +61,7 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
         writer.execute('CREATE TABLE events (body TEXT)')
         writer.execute("INSERT INTO events VALUES ('retained')")
         writer.commit()
-        backup = StoreBackup.take(root, route, (store, ledger), tmp_path / 'backup')
+        backup = StoreBackup(root, route, tmp_path / 'backup').capture((store, ledger))
         assert backup.original()
         writer.execute("UPDATE events SET body='changed'")
         writer.commit()

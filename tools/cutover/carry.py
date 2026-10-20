@@ -615,7 +615,7 @@ class PendingConversion(PreparedCarries):
         root = self.backup.root
         files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
             for step in self.steps for path in step.current(self.checkout).backup_files(root)))))
-        backup = StoreBackup.take(root, self.backup.route, files, self.backup.path)
+        backup = self.backup.capture(files)
         print(f'Backed up selected stores: {backup.path}', flush=True)
         return replace(self, backup=backup)
 

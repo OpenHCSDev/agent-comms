@@ -16,12 +16,16 @@ from collections.abc import Collection
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Iterator, Self
+from typing import TYPE_CHECKING, ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
+
+if TYPE_CHECKING:
+    from upgrade_bus import Stack
+
 
 HOLD_TRANSCRIPTS = """import sys
 from contextlib import closing
@@ -90,23 +94,49 @@ class Backup:
     path: Path
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
-        backup = cls(root, route, path)
-        selected = tuple(str(file.relative_to(root)) for file in files)
-        if path.exists():
-            if tuple(json.loads((path / 'selected.json').read_text())) != selected:
-                raise UpgradeRefused('Existing backup belongs to different resources')
-            backup.files()  # An interrupted snapshot is never treated as complete.
-            return backup
-        path.mkdir(mode=0o700, parents=True)
-        _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
-        contents = backup.capture(files)
-        if route.exists():
-            shutil.copy2(route, path / 'active-route.json')
-        _atomic_write_text(path / 'files.json', json.dumps(contents, indent=1), fsync_parent=True)
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], stack: Stack) -> Self:
+        path = stack.backup_root / f'{root.name}.upgrade-{time.time_ns()}'
+        backup = cls(root, route, path).capture(files)
+        backup.prune(stack.backup_limit)
         return backup
 
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
+    def prune(self, limit: int) -> None:
+        """Keep this rollback archive and the newest other completed archives."""
+        completed = sorted(
+            (path for path in self.path.parent.iterdir()
+             if path.is_dir() and not path.is_symlink() and (path / 'files.json').is_file()),
+            key=lambda path: (path / 'files.json').stat().st_mtime_ns,
+            reverse=True,
+        )
+        others = [path for path in completed if path != self.path]
+        removed = others[limit - 1:]
+        for path in removed:
+            shutil.rmtree(path)
+        if removed:
+            directory = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            print(f'Pruned {len(removed)} completed install backups', flush=True)
+
+    def capture(self, files: tuple[Path, ...]) -> Self:
+        """One shared completion protocol for whole-bus and selected-store snapshots."""
+        selected = tuple(str(file.relative_to(self.root)) for file in files)
+        if self.path.exists():
+            if tuple(json.loads((self.path / 'selected.json').read_text())) != selected:
+                raise UpgradeRefused('Existing backup belongs to different resources')
+            self.files()  # An interrupted snapshot is never treated as complete.
+            return self
+        self.path.mkdir(mode=0o700, parents=True)
+        _atomic_write_text(self.path / 'selected.json', json.dumps(selected), fsync_parent=True)
+        contents = self.capture_files(files)
+        if self.route.exists():
+            shutil.copy2(self.route, self.path / 'active-route.json')
+        _atomic_write_text(self.path / 'files.json', json.dumps(contents, indent=1), fsync_parent=True)
+        return self
+
+    def capture_files(self, files: tuple[Path, ...]) -> dict[str, str]:
         with tarfile.open(self.path / 'bus.tar', 'w') as archive:
             for path in files:
                 archive.add(path, str(Path(self.root.name) / path.relative_to(self.root)))
@@ -205,7 +235,7 @@ class StoreBackup(Backup):
             source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
         )
 
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
+    def capture_files(self, files: tuple[Path, ...]) -> dict[str, str]:
         contents = {}
         for source in files:
             if not source.exists():
