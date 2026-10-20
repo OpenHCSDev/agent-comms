@@ -76,7 +76,7 @@ class LaunchRuntime:
             RestartEnvironment.inherit(source)
             .for_interpreter(self.interpreter)
             .without_pythonpath(),
-            virtual_env=str(self.prefix),
+            virtual_env=SetVariable(str(self.prefix)),
         )
         return configuration.apply_runtime(source)
 
