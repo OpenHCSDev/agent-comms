@@ -126,9 +126,8 @@ class FieldPlan:
         return convert(value)
 
     def editor_default(self, value: object) -> object:
-        convert: Callable[[object], object] = self.setting(
-            "editor_format", self.value.encode_editor)
-        return convert(value)
+        return self.setting(
+            "editor_format", self.value.encode_editor)(value)
 
     @property
     def description(self) -> str:
