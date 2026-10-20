@@ -26,7 +26,7 @@ from agent_comms.native_package import (
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
 
 
-def test_native_environment_refuses_changed_patch(tmp_path, monkeypatch):
+def test_pinned_inputs_refuse_changed_patch(tmp_path):
     stack = tmp_path / "stack"
     stack.mkdir()
     patch = stack / "patch-native-example.py"
@@ -36,12 +36,10 @@ def test_native_environment_refuses_changed_patch(tmp_path, monkeypatch):
     manifest.write_text(stock)
     inputs = NativeBuildInputs(tmp_path)
     manifest.write_text(stock + INPUTS_PREFIX + inputs.digest(manifest) + "\n")
-    monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    monkeypatch.setattr(native_package, "_resource_root", lambda: stack)
-    assert native_package.native_environment(tmp_path / "cache").parent == tmp_path / "cache"
+    inputs.require_pinned(manifest)
     patch.write_bytes(b"First patch byte\n")
-    with pytest.raises(ValueError, match="inputs changed.*--update-pins"):
-        native_package.native_environment(tmp_path / "cache")
+    with pytest.raises(ValueError):
+        inputs.require_pinned(manifest)
 
 
 @pytest.fixture

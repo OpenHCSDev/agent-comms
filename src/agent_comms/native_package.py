@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
-from .field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text
-from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text
+from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -64,15 +64,6 @@ def pinned_package_in(root: Path) -> Path:
 
 def pinned_location() -> Path:
     return pinned_package_in(MANIFEST.parent)
-
-
-def native_environment(cache: Path) -> Path:
-    """Require the pinned inputs, then key the environment by sources and manifest.
-
-    stack/bin/pi-native-test-env builds this stack-shaped directory; an installed
-    artifact is never evidence that the checkout's current sources were built.
-    """
-    return cache / NativeBuildInputs(_resource_root().parent).require_pinned(MANIFEST)
 
 
 def pinned_native_package() -> Path:
@@ -418,15 +409,6 @@ class VerifiedNativePackage:
         """Node reads no ambient options, module paths or compile cache."""
         return {**{name: value for name, value in environment.items() if name not in AMBIENT_NODE},
                 "NODE_DISABLE_COMPILE_CACHE": "1"}
-
-    @classmethod
-    def from_environment(cls, cache: Path) -> VerifiedNativePackage:
-        """Acquire this checkout's declared test environment once, not the live install."""
-        environment = native_environment(cache)
-        manifest = environment / MANIFEST.name
-        if manifest.read_bytes() != MANIFEST.read_bytes():
-            raise NativePackageError("Native environment and source pins disagree")
-        return cls.acquire(pinned_package_in(environment))
 
     @classmethod
     def acquire(cls, root: Path) -> VerifiedNativePackage:

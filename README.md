@@ -84,8 +84,7 @@ stamp. Rebuild after changing the checked-out commit to refresh the build identi
 git clone --recurse-submodules https://github.com/OpenHCSDev/agent-comms.git
 cd agent-comms
 pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
-stack/bin/pi-native-test-env --python "$(command -v python)"   # prints the gate line
-PYTHONPATH=src python -m pytest --native-cache ~/.cache/agent-comms/native
+python -m pytest
 black src tests
 ruff check src tests
 mypy src
@@ -100,10 +99,10 @@ Skill edits belong in [OpenHCSDev/refactor-audit](https://github.com/OpenHCSDev/
 then the submodule pin is advanced here. The development install above also
 uses that same checkout for the shared audit measures.
 
-Tests take the native artifact of the checkout's own pin from the environment
-`stack/bin/pi-native-test-env` builds or reuses under `--cache DIR` (default
-`~/.cache/agent-comms/native`, `StorageRule.native_cache`), one per pin digest, and
-never from the installed package; without it, pytest stops naming that command.
+Tests use the native package of the checkout's own pin, `stack/.pi-native-<pin>/`,
+never the installed one. When it is missing, the pytest session runs
+`stack/bin/prepare-pi-native` before any worker starts, so a changed pin rebuilds
+on the next run.
 
 Pytest uses separate `pytest-xdist` worker processes (automatic CPU detection,
 capped at eight) with work stealing and combined coverage. Use `pytest -n 0`
