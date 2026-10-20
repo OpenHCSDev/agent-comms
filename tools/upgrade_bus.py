@@ -542,6 +542,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
             staged.owners(root, "stop", running)
             raise
     except BaseException as error:
+        print(f"upgrade-bus: install failed ({type(error).__name__}: {error}); "
+              "restoring original installation", file=sys.stderr)
         state = maintenance.read()
         recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = recovery.nonce
@@ -550,6 +552,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         restored = maintenance.read()
         restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = restored_hold.nonce
+        if run("git", "-C", checkout, "rev-parse", "HEAD").strip() != current:
+            run("git", "-C", checkout, "reset", "-q", "--keep", current)
+            Revisions.prepare(checkout)
         installed.publish()
         maintenance.clear(restored_hold)
         installed.owners(root, "start", running)
