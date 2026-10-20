@@ -19,7 +19,13 @@ if TYPE_CHECKING:
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .native_entries import NativeEntry, RecordedEntry, RootEntry, SessionEntry, TranscriptProjection
+from .native_entries import (
+    NativeEntry,
+    RecordedEntry,
+    RootEntry,
+    SessionEntry,
+    TranscriptProjection,
+)
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
