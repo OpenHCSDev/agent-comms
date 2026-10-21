@@ -31,7 +31,7 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import _require_no_private_owner_rename
+from .private_registry_guard import RegistryPrivacy, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import SharedLock
 from .threads import Thread
@@ -55,6 +55,7 @@ def _verify_selected_wake_state(
     generation: int,
     store: Coordination,
     claim_scope: WakeClaim,
+    privacy: RegistryPrivacy,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
     registry_owner = RegistryOwner(thread=owner, claimed_generation=generation)
@@ -68,7 +69,7 @@ def _verify_selected_wake_state(
         raise IdentityConflict("Wake source or owner turn does not match")
     with store.session.read():
         assert_cohort_schema(store.session._connection)
-        acknowledgement = _claim_record(store.session._connection, initial)
+        acknowledgement = _claim_record(store.session._connection, initial, privacy)
         if not any(
             assignment.assignment_id == claim_scope.wake_assignment_id
             for assignment in acknowledgement.assignments
@@ -139,12 +140,13 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        comms.registry.store.private_guard_unlocked().require_root(
+        privacy = comms.registry.store.private_guard_unlocked()
+        privacy.require_root(
             claim_scope.wire_root_id, IdentityConflict("Selected wake belongs to another namespace"))
         with checking(), comms.bus.bus.reading() as source:
             initial = _committed_source(
                 source, claim_scope, "Selected wake has no committed initial row")
-            _verify_selected_wake_state(initial, owner, generation, store, claim_scope)
+            _verify_selected_wake_state(initial, owner, generation, store, claim_scope, privacy)
             yield registry, owner
 
 

@@ -59,7 +59,7 @@ def _accepted(
     comms: Comms, store: Coordination, root_id: str, target: str, body: str
 ) -> tuple[CommittedDelivery, WakeAssignment]:
     message = publish_initial(comms, "sender", target, body)
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     for recipient in initial.audience.recipients:
         store.participants.register(
             recipient.recipient_lookup,
@@ -308,7 +308,7 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
         current_message = publish_initial(comms, "sender", "gamma", "new selected")
-        current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
+        current = comms.bus.bus.delivery(current_message.seq)
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(acknowledgement.assignments) == 1
         current_claim = acknowledgement.assignments[0]
@@ -417,7 +417,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         assignment = store.assignments.get(assignment.assignment_id)
         builder = _projection(index, store, owner, 0, notice.seq)
-        wire_before = comms.bus.log.path.read_bytes()
+        sequence_before = comms.bus.bus.revision()
         assignments_before = WakeAssignment.select(store.session._connection)
         obligations_before = ResponseObligation.select(store.session._connection)
         started = time.monotonic()
@@ -437,7 +437,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         assert context["open_obligations"][0]["execution_id"] == "wire-awareness-reply"
         assert WakeAssignment.select(store.session._connection) == assignments_before
         assert ResponseObligation.select(store.session._connection) == obligations_before
-        assert comms.bus.log.path.read_bytes() == wire_before
+        assert comms.bus.bus.revision() == sequence_before
         print(f"actual complete wire projection: {elapsed:.6f}s", flush=True)
 
         # A reused numeric PID with a different recorded process birth is not
@@ -467,7 +467,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         assert not missing.complete and "Optional awareness omitted" in missing.render(32768)
         assert WakeAssignment.select(db) == assignments_before
         assert ResponseObligation.select(db) == obligations_before
-        assert comms.bus.log.path.read_bytes() == wire_before
+        assert comms.bus.bus.revision() == sequence_before
     finally:
         store.close()
 

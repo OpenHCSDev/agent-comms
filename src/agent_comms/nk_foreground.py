@@ -99,16 +99,15 @@ def reserve_foreground_owner(
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)
     comms = Comms(root)
-    with comms.bus.log.checked_read() as source:
-        marker = source.marker
-    if marker.root_id != wire_root_id:
-        raise RelationViolationError("Private wire root changed before owner reservation")
     owner = comms.registry.new_thread(
         name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
     # Foreground attempts must reserve a fresh name, never replace an owner
     # that may retain uncertain input. The registry owns that namespace check.
     with comms.registry.store.locked():
+        comms.registry.store.private_guard_unlocked().require_root(
+            wire_root_id, RelationViolationError("Native namespace changed before owner reservation"),
+        )
         canonical = comms.registry.canonical_name(owner.name)
         if canonical != owner.name or canonical in comms.registry.all_threads():
             raise RelationViolationError("Foreground recipient already exists")
