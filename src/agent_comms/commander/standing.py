@@ -159,8 +159,9 @@ class UnitAskUnanswered(UndatedStandingRule):
     sent_at: float
     seconds: ClassVar[int] = 15 * 60
 
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    @staticmethod
+    def asks(comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
+        """Holders' messages to the commander, sent by ``before``, that no commander reply answers."""
         held = HolderCannotRun.holders(comms, commander)
         if not held:
             return ()
@@ -168,11 +169,15 @@ class UnitAskUnanswered(UndatedStandingRule):
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
         since = min(todo.order.checked().at.recorded_at("A held order")
                     for todos in held.values() for todo in todos)
-        request = UnansweredUnitAsks(
-            RepliesDisplayScope(snapshot.names_for(commander), peers), since, time.time() - cls.seconds,
-        )
+        return comms.bus.log.read_page(UnansweredUnitAsks(
+            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
+        ))
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
         return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
-                     for message in comms.bus.log.read_page(request))
+                     for message in cls.asks(comms, commander, time.time() - cls.seconds))
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.sent_at) // 60))
