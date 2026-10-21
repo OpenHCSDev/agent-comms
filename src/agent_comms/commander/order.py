@@ -274,6 +274,9 @@ class CommanderContext(CommanderConfig):
         bound._caller = caller
         return bound
 
+    def retire(self) -> None:
+        self._caller.retire(self.comms)
+
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
 
@@ -569,8 +572,6 @@ class Commander(CommanderContext):
     def problem(self, order_file, unit, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
-        self.comms.goals.todos.require_unit(
-            self.comms.registry.require(unit).incarnation, self.incarnation)
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
@@ -1121,7 +1122,7 @@ class RetireVerb(OrderVerb):
     help = "stop a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
-        ctx._caller.retire(ctx.comms)
+        ctx.retire()
         print(f'{ctx.commander} retired')
 
 

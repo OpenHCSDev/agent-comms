@@ -121,12 +121,9 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     assert [todo.id for todo in held] == ['P41']
     original = held[0]
     second = document(tmp_path / 'second.json', replace(order, id='second-order'))
-    collision = tmp_path / 'collision.json'
-    collision.write_text(json.dumps(FieldCodec.encode(replace(
-        OrderFile.read(Path(second).read_text()), slop=()))))
     refusal = 'worker is assigned by fork-one on open order first-order (P41)'
     for prefix in (('--fork', 'fork-two'), ()):
-        result = command(comms, 'order', 'problem', str(collision), '--to', 'worker',
+        result = command(comms, 'order', 'problem', second, '--to', 'worker',
                          '--where', 'owner.py:2', *prefix)
         assert result.returncode != 0 and refusal in result.stderr
         print(result.stderr.strip())
@@ -136,7 +133,7 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     result = command(comms, 'capacity')
     assert result.returncode == 0 and "2 live forks ['fork-one', 'fork-two']" in result.stdout
     print(result.stdout.strip())
-    resend = replace(OrderFile.read(Path(first).read_text()), problems=('P41',))
+    resend = replace(OrderFile.read(Path(first).read_text()), problems=('P41',), slop=())
     Path(first).write_text(json.dumps(FieldCodec.encode(resend)))
     result = command(comms, 'order', 'send', 'worker', first, '--fork', 'fork-two')
     assert result.returncode != 0 and refusal in result.stderr
