@@ -42,7 +42,7 @@ jobs:
   native-scripts:
     name: native-scripts
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
