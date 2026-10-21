@@ -2,8 +2,6 @@
 import asyncio
 import json
 
-from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message
 from agent_comms.native_arguments import NativeInputProofArgument
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof
 from agent_comms.native_transcript import NativeTranscript
@@ -18,9 +16,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
         async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
             comms = agent._comms
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=str(native.project))
-            native.provider.text = json.dumps(FieldCodec.encode((
-                Message(session, 'sender', 'The bus-owned native proof answered.', InfoKind, timestamp=0),
-            )))
+            native.provider.text = 'The bus-owned native proof answered.'
             sent = comms.messaging.send('sender', session, 'Qualify this fresh bus-owned proof turn.').message
             async with asyncio.timeout(60):
                 await agent.inputs.drain_inbox(session)
@@ -43,6 +39,6 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
             proof = NativeContextProof.read_evidence(files, rows[0].input_id,
                                                      session_entry_start=record.start)
             assert proof.session_id == files.session_id
-            assert not comms.registry.require(session).active_turn.executing
+            assert not agent.turns.turn_state(session).active.phase.busy
             print('SAVED_OWNER_DM_REPLY_SCOPED_PROOF_AND_NATIVE_HANDOFF=PASS', sent.seq, files.input_proof)
     assert all(child.retired for child in native.children)

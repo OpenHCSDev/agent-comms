@@ -176,11 +176,13 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
     from agent_comms.native_session_reopen import NativeSessionIdentity
 
     # Schema conversion owns the durable proof even without a surviving transcript.
-    proof = NativeSessionFiles.for_identity(
+    files = NativeSessionFiles.for_identity(
         NativeSessionIdentity('s', str(PrivateSession.path_in(tmp_path, session_id='s'))),
         root=tmp_path, owner=lead.incarnation.require_recorded(),
-    ).input_proof
-    proof.parent.mkdir(parents=True, mode=0o700)
+    )
+    proof = files.input_proof
+    files.prepare_private_directory(proof.parent)
+    proof.touch(mode=0o600)
     with closing(sqlite3.connect(proof)) as db:
         NativeContextJournal.create(db)
         _positional_indexes(db, NativeContextJournal)

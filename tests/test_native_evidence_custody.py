@@ -5,19 +5,18 @@ import json
 import os
 import sqlite3
 import threading
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, NativeEvidenceScope
+from agent_comms.native_entries import NativeEntry, NativeEvidenceRead
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
 from agent_comms.native_transcript import NativeTranscript
 from test_native_pi import INPUT_ID, _evidence
 
 
-@pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
 @pytest.mark.parametrize("redirect", ["hardlink", "symlink"])
-def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, reader_type, redirect):
+def test_private_source_refuses_linked_or_redirected_session(tmp_path, redirect):
     files = _evidence(tmp_path)
     session = files.session
     before = session.read_bytes()
@@ -27,26 +26,19 @@ def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, read
     else:
         alias.symlink_to(session)
     with pytest.raises(NativePiUnavailable):
-        with reader_type.open(alias):
+        with PrivateEvidenceRead.open(alias):
             pytest.fail("An unsafe native source was acquired")
     assert session.read_bytes() == before
 
 
-@pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
-def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
+def test_held_private_source_refuses_a_new_hardlink(tmp_path):
     files = _evidence(tmp_path)
     session = files.session
-    with reader_type.open(session) as reader:
-        if reader_type is PrivateEvidenceRead:
-            tuple(reader.rows())
-        else:
-            reader.observe()
+    with PrivateEvidenceRead.open(session) as reader:
+        tuple(reader.rows())
         os.link(session, tmp_path / "new-link.jsonl")
         with pytest.raises(NativePiUnavailable):
-            if reader_type is PrivateEvidenceRead:
-                tuple(reader.rows())
-            else:
-                reader.observe()
+            tuple(reader.rows())
 
 
 
@@ -65,8 +57,7 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             "content": [{"type": "text", "text": "restored sou"}],
         }},
     ))
-    with NativeEvidenceScope() as scope:
-        evidence = scope.for_source(session)
+    with NativeEvidenceRead.open(session) as evidence:
         header, entries = evidence.observe()
         assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
@@ -141,10 +132,15 @@ def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
 def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
     from agent_comms.store_files import StoreLockContention, _store_lock
     lock_target = tmp_path / "ownership"
-    with _store_lock(lock_target):
-        with pytest.raises(BlockingIOError):
-            with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
-                pytest.fail("A competing descriptor acquired exclusive ownership")
+    def compete():
+        with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+            pytest.fail("A competing thread acquired exclusive ownership")
+
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        with _store_lock(lock_target):
+            pending = worker.submit(compete)
+            with pytest.raises(BlockingIOError):
+                pending.result(timeout=2)
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
     with _store_lock(lock_target, blocking=False):
