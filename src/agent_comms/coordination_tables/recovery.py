@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
+from typing import Annotated
 
 from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
@@ -14,8 +14,8 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionReference
-from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
+from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
@@ -45,7 +45,16 @@ class ACPClientConnectivity(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectivityFacet(IncrementingColumn, MonotoneColumns, ExecutionReference, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="connectivity"):
+class ConnectivityFacet(
+    IncrementingColumn,
+    MonotoneColumns,
+    ExecutionReference,
+    FrozenColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="connectivity",
+):
 
     column_orders = (NonDecreasing(('observed_at_ms',)),)
 

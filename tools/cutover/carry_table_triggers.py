@@ -4,6 +4,7 @@ SnapshotMeta is the sole exception: its existing schema digest changes in the sa
 transaction as its guards, after the old digest has been checked against the stored
 schema. No runtime reader accepts both schemas. Retire after installation.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -27,8 +28,10 @@ class TableTriggers(Carry):
         # Explicit offline discovery; ordinary TypedTable reads only imported members.
         tuple(TypedTable.__registry__.values())
         paths = {
-            path for owner, directory in SQLiteFile.declarations_in(root)
-            if issubclass(owner, DurableFile) for path in owner.matching_in(directory)
+            path
+            for owner, directory in SQLiteFile.declarations_in(root)
+            if issubclass(owner, DurableFile)
+            for path in owner.matching_in(directory)
         }
         for path in paths:
             cls.require_confined(root, path)
@@ -40,15 +43,24 @@ class TableTriggers(Carry):
         with closing(opener(path)) as db:
             transaction = SQLiteFile.write_transaction(db) if apply else nullcontext(db)
             with transaction:
-                rows = tuple(TypedTable.member_named(table.name)
-                             for table in SQLiteTableName.stored(db))
+                rows = tuple(
+                    TypedTable.member_named(table.name) for table in SQLiteTableName.stored(db)
+                )
                 declared = {name: sql for row in rows for name, sql in row.schema_objects().items()}
-                structure = {name: sql for row in rows for name, sql in row.structure_objects().items()}
-                stored = SQLiteSchemaObject.read(db.execute(
-                    "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                    "AND name NOT LIKE 'sqlite_%' ORDER BY rowid"))
-                actual_guards = SQLiteSchemaObject.read(db.execute(
-                    "SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY rowid"))
+                structure = {
+                    name: sql for row in rows for name, sql in row.structure_objects().items()
+                }
+                stored = SQLiteSchemaObject.read(
+                    db.execute(
+                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+                        "AND name NOT LIKE 'sqlite_%' ORDER BY rowid"
+                    )
+                )
+                actual_guards = SQLiteSchemaObject.read(
+                    db.execute(
+                        "SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY rowid"
+                    )
+                )
                 guard_names = {guard.name for guard in actual_guards}
                 actual_structure = [item for item in stored if item.name not in guard_names]
                 if differences := SQLiteSchemaObject.differences(actual_structure, structure):
@@ -62,11 +74,14 @@ class TableTriggers(Carry):
                     # Sidecar digests use declaration insertion order, which is also
                     # the catalog's creation order before this first trigger carry.
                     old_schema = {item.name: item.sql for item in stored}
-                    old_digest = hashlib.sha256(json.dumps(
-                        old_schema, separators=(",", ":")).encode()).hexdigest()
+                    old_digest = hashlib.sha256(
+                        json.dumps(old_schema, separators=(",", ":")).encode()
+                    ).hexdigest()
                     digest = _digest(row)
                     complete = not SQLiteSchemaObject.differences(stored, declared)
-                    if meta.ddl_digest != old_digest and not (meta.ddl_digest == digest and complete):
+                    if meta.ddl_digest != old_digest and not (
+                        meta.ddl_digest == digest and complete
+                    ):
                         raise RelationViolationError(f"{path}: sidecar schema digest is unknown")
                     digest_changed = meta.ddl_digest != digest
                 differences = SQLiteSchemaObject.differences(actual_guards, expected)
@@ -93,11 +108,19 @@ class TableTriggers(Carry):
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return tuple(member for path in cls.paths(root) if cls.rewrite(path, apply=False)
-                     for member in SQLiteFile.files(path) if member.exists())
+        return tuple(
+            member
+            for path in cls.paths(root)
+            if cls.rewrite(path, apply=False)
+            for member in SQLiteFile.files(path)
+            if member.exists()
+        )
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         changed = tuple(path for path in cls.paths(root) if cls.rewrite(path, apply=apply))
-        return Carried(len(changed), {"files": len(changed)},
-                       tuple(str(path.relative_to(root)) for path in changed) if apply else ())
+        return Carried(
+            len(changed),
+            {"files": len(changed)},
+            tuple(str(path.relative_to(root)) for path in changed) if apply else (),
+        )

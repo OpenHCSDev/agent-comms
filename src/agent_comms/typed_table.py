@@ -48,8 +48,8 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
 from .lifecycle import LifecycleState
+from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -896,7 +896,8 @@ class StableReferenceColumns(MutationCapability):
             f"{field.reference('NEW')} IS NOT {field.reference('OLD')}"
             for field in row._fields_named(row.stable_reference_columns))
         return (RowMutation.UPDATE.abort_trigger(
-            row, when=f"{reference.reference('NEW')} IS {reference.reference('OLD')} AND ({changes})",
+            row, when=(f"{reference.reference('NEW')} IS {reference.reference('OLD')} "
+                       f"AND ({changes})"),
             suffix="_reference", message="Values require a new reference"),)
 
 
@@ -937,7 +938,9 @@ class LifecycleTransitions(MutationCapability):
         edges = " OR ".join(
             f"({previous} = {sql_literal(name)} AND {following} IN "
             f"({','.join(sql_literal(target) for target in sorted(targets))}))"
-            for name, targets in field.lifecycle_family.transition_table().items() if targets) or "0"
+            for name, targets in field.lifecycle_family.transition_table().items()
+            if targets
+        ) or "0"
         return (RowMutation.UPDATE.abort_trigger(
             row, columns=("lifecycle",), when=f"{previous} != {following} AND NOT ({edges})",
             suffix="_edges", message="Lifecycle transition is not declared"),)
@@ -1013,10 +1016,17 @@ class CounterAdvance(MutationCapability):
             (state,) = dependent._fields_named(("lifecycle",))
             closed = ",".join(sql_literal(name) for name, targets in
                               state.lifecycle_family.transition_table().items() if not targets)
-            blocked.append(f"EXISTS (SELECT 1 FROM {_identifier(dependent.declared_name)} dependent "
-                           f"WHERE {keys} AND {state.discriminator('dependent')} NOT IN ({closed}))")
-        condition = f"{counter.reference('NEW')} != {counter.reference('OLD')} AND (" + " OR ".join(
-            [f"{counter.reference('NEW')} != {counter.reference('OLD')} + 1", *blocked]) + ")"
+            blocked.append(
+                f"EXISTS (SELECT 1 FROM {_identifier(dependent.declared_name)} dependent "
+                f"WHERE {keys} AND {state.discriminator('dependent')} NOT IN ({closed}))"
+            )
+        condition = (
+            f"{counter.reference('NEW')} != {counter.reference('OLD')} AND ("
+            + " OR ".join(
+                [f"{counter.reference('NEW')} != {counter.reference('OLD')} + 1", *blocked]
+            )
+            + ")"
+        )
         return (RowMutation.UPDATE.abort_trigger(
             row, when=condition, suffix="_counter", message="Counter advance has live dependents"),)
 
@@ -1195,7 +1205,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         names = {item.name for item in fields}
         following: dict[str, list[_Field]] = {}
         for owner in cls.__mro__:
-            declared = tuple(annotationlib.get_annotations(owner, format=annotationlib.Format.STRING))
+            declared = tuple(
+                annotationlib.get_annotations(owner, format=annotationlib.Format.STRING)
+            )
             for position, name in enumerate(declared):
                 match vars(owner).get(name):
                     case Generated() as declaration:

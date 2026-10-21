@@ -19,13 +19,13 @@ from .coordination_errors import IdentityConflict, PublicationActivationBlocked,
 from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
+    NativeColumn,
     NativeInputContext,
     NativeInputExecution,
     NativeInputLocation,
     NativeInputPosition,
-    NativeStageStorage,
     NativeInputRecord,
-    NativeColumn,
+    NativeStageStorage,
     NumberNativeColumn,
     RecordedNativePosition,
     TextNativeColumn,
@@ -40,19 +40,19 @@ from .selected_triage import (
 from .typed_table import (
     Column,
     DurableTables,
-    FrozenColumns,
     FinalizedColumn,
-    RequiredUpdateColumns,
-    StableReferenceColumns,
-    WriteOnceColumns,
+    FrozenColumns,
     IntegerStorage,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
+    RequiredUpdateColumns,
     SharedFileTables,
+    StableReferenceColumns,
     TextStorage,
     TypedRow,
     TypedTable,
+    WriteOnceColumns,
 )
 
 if TYPE_CHECKING:
@@ -89,8 +89,21 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(WriteOnceColumns, FinalizedColumn, RequiredUpdateColumns, FrozenColumns, NoDelete, NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
-    immutable_columns = ('input_id', 'stage', 'execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest')
+class NativeRuntimeInput(
+    WriteOnceColumns,
+    FinalizedColumn,
+    RequiredUpdateColumns,
+    FrozenColumns,
+    NoDelete,
+    NativeInputRecord,
+    NativeInputContext,
+    NativeRuntimeTable,
+    TypedTable,
+):
+    immutable_columns = (
+        "input_id", "stage", "execution_id", "attempt_ordinal", "owner_lookup", "owner_thread",
+        "owner_generation", "owner_token_digest",
+    )
     write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
     finalized_column = 'session_entry_id'
     required_update_columns = ('sent_owner_claimed_generation',)
@@ -315,10 +328,20 @@ class NativeRuntimeInput(WriteOnceColumns, FinalizedColumn, RequiredUpdateColumn
             raise StaleFence("native proof was previously committed")
 
 @dataclass(frozen=True)
-class CurrentNativeCursor(MonotoneColumns, StableReferenceColumns, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
-    column_orders = (NonDecreasing(('covered_seq', 'injected_seq')),)
-
-    immutable_columns = ('wire_root_id', 'recipient_lookup', 'owner_thread', 'owner_generation', 'owner_claimed_generation')
+class CurrentNativeCursor(
+    MonotoneColumns,
+    StableReferenceColumns,
+    FrozenColumns,
+    NoDelete,
+    NativeInputContext,
+    NativeRuntimeTable,
+    TypedTable,
+):
+    column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
+    immutable_columns = (
+        "wire_root_id", "recipient_lookup", "owner_thread", "owner_generation",
+        "owner_claimed_generation",
+    )
     reference_column = 'injected_seq'
     stable_reference_columns = ('input_id',)
 

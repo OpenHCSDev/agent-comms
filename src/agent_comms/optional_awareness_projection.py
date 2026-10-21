@@ -31,7 +31,14 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
 from .child_process import ProcessIdentity
-from .cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements, ClaimBatchMembers, CohortDeliveryReceipts, CohortTable, assert_optional_awareness_schema
+from .cohort_schema import (
+    AwarenessClaimGenerations,
+    ClaimBatchAcknowledgements,
+    ClaimBatchMembers,
+    CohortDeliveries,
+    CohortTable,
+    assert_optional_awareness_schema,
+)
 from .context_segments.optional_awareness import (
     CompleteAwareness,
     OmittedAwareness,
@@ -346,7 +353,7 @@ class OptionalAwarenessProjection:
         }
         deliveries = {
             row.wire_seq: row
-            for row in CohortDeliveryReceipts.select(
+            for row in CohortDeliveries.select(
                 db,
                 where=f"wire_root_id=? AND recipient_lookup=? AND wire_seq IN ({marks})",
                 parameters=(root_id, lookup, *sequences),

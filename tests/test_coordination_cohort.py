@@ -21,7 +21,7 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
-from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
+from agent_comms.cohort_schema import CohortDeliveries, install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
     accept_delivery_cohort,
@@ -179,13 +179,13 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
     for message in (alice_first, bob, alice_second):
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
 
-    assert CohortDeliveryReceipts.sealed_sequences_after(
+    assert CohortDeliveries.sealed_sequences_after(
         store.session._connection,
         wire_root_id=root_id,
         recipient_lookup=lookups["Alice"],
         after_seq=alice_first.seq,
     ) == frozenset({alice_second.seq})
-    assert CohortDeliveryReceipts.sealed_sequences_after(
+    assert CohortDeliveries.sealed_sequences_after(
         store.session._connection,
         wire_root_id=root_id,
         recipient_lookup=lookups["Bob"],

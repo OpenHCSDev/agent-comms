@@ -26,10 +26,10 @@ from .typed_table import (
     GuardedRelatedInserts,
     ImmutableRows,
     Index,
-    NoDelete,
     InitialOneWayColumn,
-    SQLiteJournalMode,
+    NoDelete,
     SharedFileTables,
+    SQLiteJournalMode,
     TypedTable,
 )
 
@@ -55,30 +55,47 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchAcknowledgements(InitialOneWayColumn, FrozenColumns, GuardedColumns, NoDelete, CohortTable, TypedTable, declared_name="claim_batch_receipts"):
-
-    transition_column = 'sealed'
+class ClaimBatchAcknowledgements(
+    InitialOneWayColumn,
+    FrozenColumns,
+    GuardedColumns,
+    NoDelete,
+    CohortTable,
+    TypedTable,
+    declared_name="claim_batch_receipts",
+):
+    transition_column = "sealed"
     transition_from = 0
     transition_to = 1
-
-    immutable_columns = ('wire_root_id', 'wire_seq', 'message_id', 'exact_target', 'envelope_digest', 'audience_digest', 'decisions_digest', 'member_count', 'claim_count', 'manifest_codec', 'resolver_version', 'policy_version', 'accepted_at_ms')
+    immutable_columns = (
+        "wire_root_id", "wire_seq", "message_id", "exact_target", "envelope_digest",
+        "audience_digest", "decisions_digest", "member_count", "claim_count", "manifest_codec",
+        "resolver_version", "policy_version", "accepted_at_ms",
+    )
     column_guards = (
-        ColumnGuard(('sealed',), """(((SELECT COUNT(*) FROM cohort_delivery_receipts d WHERE
-        d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq) != OLD.member_count OR (SELECT COUNT(*)
-        FROM cohort_delivery_receipts d WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq AND
-        d.kind = 'selected') != OLD.claim_count) OR ((SELECT COUNT(*) FROM claim_batch_members m WHERE
-        m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq) != OLD.claim_count) OR (EXISTS ( SELECT 1
-        FROM cohort_delivery_receipts d WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq AND
-        d.ordinal >= OLD.member_count) OR EXISTS ( SELECT 1 FROM claim_batch_members m WHERE m.wire_root_id =
-        OLD.wire_root_id AND m.wire_seq = OLD.wire_seq AND m.ordinal >= OLD.claim_count)) OR (EXISTS ( SELECT 1 FROM
-        claim_batch_members m LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id = m.wire_root_id AND d.wire_seq
-        = m.wire_seq AND d.claim_id = m.claim_id WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq =
-        OLD.wire_seq AND (d.claim_id IS NULL OR m.ordinal != ( SELECT COUNT(*) FROM cohort_delivery_receipts
-        preceding WHERE preceding.wire_root_id = OLD.wire_root_id AND preceding.wire_seq = OLD.wire_seq AND
-        preceding.kind = 'selected' AND preceding.ordinal < d.ordinal )) )) OR (EXISTS ( SELECT 1 FROM
-        cohort_delivery_receipts d JOIN wake_claims c ON c.recipient_lookup = d.recipient_lookup AND c.wire_seq =
-        d.wire_seq WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq AND d.kind =
-        'unmentioned_observer' )))"""),
+        ColumnGuard(('sealed',), """(((SELECT COUNT(*) FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq)
+        != OLD.member_count OR (SELECT COUNT(*) FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.kind = 'selected') != OLD.claim_count)
+        OR ((SELECT COUNT(*) FROM claim_batch_members m
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq)
+        != OLD.claim_count) OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.ordinal >= OLD.member_count) OR EXISTS (SELECT 1 FROM claim_batch_members m
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq
+        AND m.ordinal >= OLD.claim_count)) OR (EXISTS (SELECT 1 FROM claim_batch_members m
+        LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id = m.wire_root_id
+        AND d.wire_seq = m.wire_seq AND d.claim_id = m.claim_id
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq
+        AND (d.claim_id IS NULL OR m.ordinal != (
+        SELECT COUNT(*) FROM cohort_delivery_receipts preceding
+        WHERE preceding.wire_root_id = OLD.wire_root_id AND preceding.wire_seq = OLD.wire_seq
+        AND preceding.kind = 'selected' AND preceding.ordinal < d.ordinal))))
+        OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        JOIN wake_claims c ON c.recipient_lookup = d.recipient_lookup AND c.wire_seq = d.wire_seq
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.kind = 'unmentioned_observer')))"""),
     )
 
     wire_root_id: Annotated[
@@ -119,12 +136,14 @@ class ClaimBatchAcknowledgements(InitialOneWayColumn, FrozenColumns, GuardedColu
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
 
-    insert_condition = """((SELECT sealed FROM claim_batch_receipts r WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq =
-        NEW.wire_seq) != 0) OR (NOT EXISTS ( SELECT 1 FROM wake_claims c JOIN claim_batch_receipts r ON
-        r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq WHERE c.assignment_id = NEW.claim_id AND
-        c.recipient_lookup = NEW.recipient_lookup AND c.wire_seq = NEW.wire_seq AND c.message_id = r.message_id AND
-        c.resolver_version = r.resolver_version AND c.policy_version = r.policy_version AND c.accepted_at_ms =
-        r.accepted_at_ms))"""
+    insert_condition = """((SELECT sealed FROM claim_batch_receipts r
+        WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
+        OR (NOT EXISTS (SELECT 1 FROM wake_claims c JOIN claim_batch_receipts r
+        ON r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq
+        WHERE c.assignment_id = NEW.claim_id AND c.recipient_lookup = NEW.recipient_lookup
+        AND c.wire_seq = NEW.wire_seq AND c.message_id = r.message_id
+        AND c.resolver_version = r.resolver_version AND c.policy_version = r.policy_version
+        AND c.accepted_at_ms = r.accepted_at_ms))"""
 
     wire_root_id: Annotated[str, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
@@ -149,19 +168,27 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
         )
 
 @dataclass(frozen=True, kw_only=True)
-class CohortDeliveryReceipts(GuardedRelatedInserts, GuardedInserts, ImmutableRows, CohortTable, TypedTable):
-    # Delivery selection kind is distinct from this table's nominal identity.
-
+class CohortDeliveries(
+    GuardedRelatedInserts,
+    GuardedInserts,
+    ImmutableRows,
+    CohortTable,
+    TypedTable,
+    declared_name="cohort_delivery_receipts",
+):
+    """Sealed deliveries, including observers that receive no execution claim."""
 
     related_insert_target = WakeAssignment
-    related_insert_condition = """EXISTS ( SELECT 1 FROM cohort_delivery_receipts d JOIN claim_batch_receipts r ON
-        r.wire_root_id=d.wire_root_id AND r.wire_seq=d.wire_seq AND r.sealed=1 WHERE
-        d.recipient_lookup=NEW.recipient_lookup AND d.wire_seq=NEW.wire_seq AND d.kind='unmentioned_observer')"""
-    insert_condition = """((SELECT sealed FROM claim_batch_receipts r WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq =
-        NEW.wire_seq) != 0) OR (NEW.kind = 'selected' AND NOT EXISTS ( SELECT 1 FROM claim_batch_members m JOIN
-        wake_claims c ON c.assignment_id = m.claim_id WHERE m.wire_root_id = NEW.wire_root_id AND m.wire_seq =
-        NEW.wire_seq AND m.claim_id = NEW.claim_id AND m.recipient_lookup = NEW.recipient_lookup AND c.recipient =
-        NEW.canonical_thread))"""
+    related_insert_condition = """EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id AND r.wire_seq=d.wire_seq
+        AND r.sealed=1 WHERE d.recipient_lookup=NEW.recipient_lookup AND d.wire_seq=NEW.wire_seq
+        AND d.kind='unmentioned_observer')"""
+    insert_condition = """((SELECT sealed FROM claim_batch_receipts r
+        WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
+        OR (NEW.kind = 'selected' AND NOT EXISTS (SELECT 1 FROM claim_batch_members m
+        JOIN wake_claims c ON c.assignment_id = m.claim_id WHERE m.wire_root_id = NEW.wire_root_id
+        AND m.wire_seq = NEW.wire_seq AND m.claim_id = NEW.claim_id
+        AND m.recipient_lookup = NEW.recipient_lookup AND c.recipient = NEW.canonical_thread))"""
 
     wire_root_id: Annotated[str, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
@@ -222,19 +249,23 @@ class CohortDeliveryReceipts(GuardedRelatedInserts, GuardedInserts, ImmutableRow
 @dataclass(frozen=True, kw_only=True)
 class AwarenessClaimGenerations(OwnerRecord, GuardedInserts, ImmutableRows, AwarenessTable, TypedTable):
 
-    insert_condition = """(NOT EXISTS ( SELECT 1 FROM claim_batch_members m JOIN wake_claims c ON c.assignment_id=m.claim_id JOIN
-        claim_batch_receipts r ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq JOIN owner_generations g
-        ON g.owner_lookup=m.recipient_lookup WHERE m.claim_id=NEW.claim_id AND m.wire_root_id=NEW.wire_root_id AND
-        m.wire_seq=NEW.wire_seq AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient=NEW.canonical_thread AND
-        c.message_id=r.message_id AND r.sealed=0 AND g.owner_thread=NEW.canonical_thread AND
-        g.generation=NEW.owner_generation))"""
+    insert_condition = """(NOT EXISTS (SELECT 1 FROM claim_batch_members m
+        JOIN wake_claims c ON c.assignment_id=m.claim_id JOIN claim_batch_receipts r
+        ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq JOIN owner_generations g
+        ON g.owner_lookup=m.recipient_lookup WHERE m.claim_id=NEW.claim_id
+        AND m.wire_root_id=NEW.wire_root_id AND m.wire_seq=NEW.wire_seq
+        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient=NEW.canonical_thread
+        AND c.message_id=r.message_id AND r.sealed=0 AND g.owner_thread=NEW.canonical_thread
+        AND g.generation=NEW.owner_generation))"""
 
     claim_id: Annotated[str, Column(primary_key=True)]
     wire_root_id: str
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
     owner_lookup: Annotated[str, WireName("recipient_lookup"), Column(record_key=True)]
     owner_thread: Annotated[
-        str, WireName("canonical_thread"), Column(record_key=True, check="length(canonical_thread) BETWEEN 1 AND 256")
+        str,
+        WireName("canonical_thread"),
+        Column(record_key=True, check="length(canonical_thread) BETWEEN 1 AND 256"),
     ]
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 

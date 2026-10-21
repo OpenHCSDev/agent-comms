@@ -6,8 +6,6 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
-from agent_comms.participant_identity import ParticipantIdentity
-
 import os
 import re
 import shutil
@@ -17,16 +15,24 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from agent_comms.participant_identity import ParticipantIdentity
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName, boundary_decoder
-from .native_failures import NativeRequestFailure, NativePiUnavailable
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    MalformedRecord,
+    Sha256Text,
+    WireName,
+    boundary_decoder,
+)
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
+from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
 from .native_session_files import NativeSessionFiles
@@ -208,12 +214,16 @@ class NativeContextRecord(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextJournal(GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables):
+class NativeContextJournal(
+    GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables
+):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
-    insert_condition = """NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM native_context_journal), 0) OR
-        EXISTS(SELECT 1 FROM native_context_journal WHERE request_generation=NEW.request_generation AND
-        (llm_context_digest != NEW.llm_context_digest OR committed_at_ms != NEW.committed_at_ms)) OR NEW.session_id
+    insert_condition = """NEW.request_generation < COALESCE((SELECT MAX(request_generation)
+        FROM native_context_journal), 0) OR EXISTS(SELECT 1 FROM native_context_journal
+        WHERE request_generation=NEW.request_generation
+        AND (llm_context_digest != NEW.llm_context_digest
+        OR committed_at_ms != NEW.committed_at_ms)) OR NEW.session_id
         != (SELECT session_id FROM native_context_journal ORDER BY session_id LIMIT 1)"""
 
 

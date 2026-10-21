@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import IntFlag
-from typing import TYPE_CHECKING, Final, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Final
 
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
@@ -17,7 +17,7 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
-from agent_comms.field_codec import projected, SnapshotExclude
+from agent_comms.field_codec import SnapshotExclude, projected
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
@@ -84,30 +84,55 @@ class NoPreviousAttempt(PreviousAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(LifecycleTransitions, FinalizedLifecycle, CounterDependent, IncrementingColumn, MonotoneColumns, OwnerRecord, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
-
-    counter_reference = ForeignKey(('owner_lookup','owner_generation'), OwnerGenerations, ('owner_lookup','generation'))
-
-    column_orders = (NonDecreasing(('updated_at_ms', 'last_progress_at_ms', 'backend_done', 'process_dead')), NonDecreasingWhenPresent(('lease_expires_at_ms',)))
-
-    insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id AND e.owner_lookup =
-        NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts AND ((NEW.attempt_ordinal = 1 AND (e.status =
-        'pending' OR (e.status = 'active' AND e.current_attempt_ordinal = 1))) OR (NEW.attempt_ordinal > 1 AND
-        (e.status = 'deferred' OR (e.status = 'active' AND e.current_attempt_ordinal = NEW.attempt_ordinal)))) AND
-        NEW.attempt_ordinal = 1 + coalesce( (SELECT max(a.attempt_ordinal) FROM attempts a WHERE a.execution_id =
-        e.execution_id), 0))) OR (NOT EXISTS (SELECT 1 FROM owner_generations g WHERE g.owner_lookup =
-        NEW.owner_lookup AND g.owner_thread = NEW.owner_thread AND g.generation = NEW.owner_generation)) OR
-        ((json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1 OR (CASE WHEN
-        json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle,
-        '$.backend_done') END) != 0 OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN
-        ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) != 0) OR
-        (NEW.attempt_ordinal > 1 AND ( NOT EXISTS (SELECT 1 FROM retry_disposition_basis b WHERE b.execution_id =
-        NEW.execution_id AND b.authorized = 1) OR EXISTS (SELECT 1 FROM current_executions p WHERE p.owner_lookup =
-        NEW.owner_lookup AND p.execution_id IS NOT NULL))) OR (NEW.attempt_ordinal > 1 AND NOT EXISTS ( SELECT 1
-        FROM attempts a WHERE a.execution_id = NEW.execution_id AND a.attempt_ordinal = NEW.attempt_ordinal - 1 AND
-        a.phase IN ({retry_attempt_phases}) AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation >
-        a.owner_generation AND NEW.owner_token_digest != a.owner_token_digest))"""
-    immutable_columns = ('execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest', 'created_at_ms')
+class AttemptRecord(
+    LifecycleTransitions,
+    FinalizedLifecycle,
+    CounterDependent,
+    IncrementingColumn,
+    MonotoneColumns,
+    OwnerRecord,
+    GuardedInserts,
+    FrozenColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    PreviousAttempt,
+    declared_name="attempts",
+):
+    counter_reference = ForeignKey(
+        ("owner_lookup", "owner_generation"), OwnerGenerations, ("owner_lookup", "generation")
+    )
+    column_orders = (
+        NonDecreasing(("updated_at_ms", "last_progress_at_ms", "backend_done", "process_dead")),
+        NonDecreasingWhenPresent(("lease_expires_at_ms",)),
+    )
+    insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e
+        WHERE e.execution_id = NEW.execution_id AND e.owner_lookup = NEW.owner_lookup
+        AND NEW.attempt_ordinal <= e.max_attempts AND ((NEW.attempt_ordinal = 1
+        AND (e.status = 'pending' OR (e.status = 'active' AND e.current_attempt_ordinal = 1)))
+        OR (NEW.attempt_ordinal > 1 AND (e.status = 'deferred' OR (e.status = 'active'
+        AND e.current_attempt_ordinal = NEW.attempt_ordinal))))
+        AND NEW.attempt_ordinal = 1 + coalesce((SELECT max(a.attempt_ordinal) FROM attempts a
+        WHERE a.execution_id = e.execution_id), 0)))
+        OR (NOT EXISTS (SELECT 1 FROM owner_generations g WHERE g.owner_lookup = NEW.owner_lookup
+        AND g.owner_thread = NEW.owner_thread AND g.generation = NEW.owner_generation))
+        OR ((json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1
+        OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names})
+        THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) != 0
+        OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names})
+        THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) != 0)
+        OR (NEW.attempt_ordinal > 1 AND (NOT EXISTS (SELECT 1 FROM retry_disposition_basis b
+        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1)
+        OR EXISTS (SELECT 1 FROM current_executions p WHERE p.owner_lookup = NEW.owner_lookup
+        AND p.execution_id IS NOT NULL))) OR (NEW.attempt_ordinal > 1 AND NOT EXISTS (
+        SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
+        AND a.attempt_ordinal = NEW.attempt_ordinal - 1 AND a.phase IN ({retry_attempt_phases})
+        AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation > a.owner_generation
+        AND NEW.owner_token_digest != a.owner_token_digest))"""
+    immutable_columns = (
+        "execution_id", "attempt_ordinal", "owner_lookup", "owner_thread", "owner_generation",
+        "owner_token_digest", "created_at_ms",
+    )
 
     def require_attempt(self) -> AttemptRecord:
         return self

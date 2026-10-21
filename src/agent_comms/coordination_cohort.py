@@ -10,12 +10,19 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
-from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements, ClaimBatchMembers, CohortDeliveryReceipts, CohortTable, assert_optional_awareness_schema
+from agent_comms.cohort_schema import (
+    AwarenessClaimGenerations,
+    ClaimBatchAcknowledgements,
+    ClaimBatchMembers,
+    CohortDeliveries,
+    CohortTable,
+    assert_optional_awareness_schema,
+)
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -136,7 +143,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         for ordinal, assignment in enumerate(expected)
     ]:
         raise IdentityConflict("sealed K claim members conflict with committed bus")
-    deliveries = CohortDeliveryReceipts.select(
+    deliveries = CohortDeliveries.select(
         db,
         where="wire_root_id=? AND wire_seq=?",
         parameters=(initial.wire_root_id, message.seq),
@@ -144,7 +151,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
     )
     selected = {assignment.recipient_lookup: assignment.assignment_id for assignment in expected}
     if deliveries != [
-        CohortDeliveryReceipts(
+        CohortDeliveries(
             wire_root_id=initial.wire_root_id,
             wire_seq=message.seq,
             ordinal=ordinal,
@@ -280,7 +287,7 @@ def accept_delivery_cohort(
         }
         for ordinal, recipient in enumerate(initial.audience.recipients):
             assignment_id = selected.get(recipient.recipient_lookup)
-            CohortDeliveryReceipts(
+            CohortDeliveries(
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
                 ordinal=ordinal,

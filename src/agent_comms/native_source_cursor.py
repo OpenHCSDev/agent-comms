@@ -4,7 +4,6 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
@@ -12,7 +11,7 @@ from .cursor_owner import CursorOwner
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
-from .native_runtime_input import CurrentNativeCursor
+from .native_runtime_input import CurrentNativeCursor, NativeRuntimeTable
 from .proven_source_coverage import SourceCoverage
 from .store_files import StoreLockContention
 from .threads import Thread

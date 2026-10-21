@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -21,7 +21,13 @@ from agent_comms.coordination_tables.attempts import (
     ReplayFact,
 )
 from agent_comms.execution_states import ExecutionState
-from agent_comms.field_codec import NullMember, SingleFieldValue, SnapshotExclude, SubclassUnion, projected
+from agent_comms.field_codec import (
+    NullMember,
+    SingleFieldValue,
+    SnapshotExclude,
+    SubclassUnion,
+    projected,
+)
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.typed_table import (
@@ -106,10 +112,12 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class CurrentExecutions(IncrementingColumn, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
-    revision_column = 'pointer_revision'
-
-    insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations WHERE owner_lookup = NEW.owner_lookup)"""
+class CurrentExecutions(
+    IncrementingColumn, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable
+):
+    revision_column = "pointer_revision"
+    insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations
+        WHERE owner_lookup = NEW.owner_lookup)"""
     immutable_columns = ('owner_lookup',)
 
     @property
@@ -179,24 +187,42 @@ FROM executions e"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord(LifecycleTransitions, OrdinalTransitions, IncrementingColumn, MonotoneColumns, GuardedColumns, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
-
-    column_orders = (NonDecreasing(('updated_at_ms',)),)
-
-    immutable_columns = ('execution_id', 'origin', 'owner_lookup', 'owner_thread', 'max_attempts', 'created_at_ms')
-    column_guards = (ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names}) AND
-        json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND NOT EXISTS ( SELECT 1 FROM attempts a WHERE
-        a.execution_id = NEW.execution_id AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal') AND
-        a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases}) )) OR ((NEW.origin = 'wire') AND
-        ((NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id)) OR
-        (json_extract(NEW.lifecycle, '$.kind') = 'completed' AND EXISTS ( SELECT 1 FROM obligations WHERE
-        execution_id = NEW.execution_id AND success_terminal != 1)) OR (json_extract(NEW.lifecycle, '$.kind') =
-        'deferred' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS ( SELECT 1 FROM obligations
-        WHERE execution_id = NEW.execution_id AND retryable != 1)))) OR (json_extract(NEW.lifecycle, '$.kind') =
-        'failed' AND EXISTS ( SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id)) OR
-        (json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
-        AND EXISTS (SELECT 1 FROM retry_disposition_basis b WHERE b.execution_id = NEW.execution_id AND b.authorized
-        = 1))"""),)
+class ExecutionRecord(
+    LifecycleTransitions,
+    OrdinalTransitions,
+    IncrementingColumn,
+    MonotoneColumns,
+    GuardedColumns,
+    FrozenColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="executions",
+):
+    column_orders = (NonDecreasing(("updated_at_ms",)),)
+    immutable_columns = (
+        "execution_id", "origin", "owner_lookup", "owner_thread", "max_attempts", "created_at_ms",
+    )
+    column_guards = (
+        ColumnGuard(("lifecycle",), """(json_extract(NEW.lifecycle, '$.kind')
+        IN ({optional_attempt_execution_names}) AND json_extract(NEW.lifecycle, '$.ordinal')
+        IS NOT NULL AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
+        AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
+        AND a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases})))
+        OR ((NEW.origin = 'wire') AND ((NOT EXISTS (SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'completed'
+        AND EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
+        AND success_terminal != 1)) OR (json_extract(NEW.lifecycle, '$.kind') = 'deferred'
+        AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1))))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
+        SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'failed'
+        AND json_extract(NEW.lifecycle, '$.ordinal')
+        IS NOT NULL AND EXISTS (SELECT 1 FROM retry_disposition_basis b
+        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1))"""),
+    )
 
     retry_view = "retry_disposition_basis"
 
@@ -425,9 +451,9 @@ class ExecutionReference:
 class RetryPartition(GuardedAfterWrites):
     """A failed execution cannot retain authorization to retry."""
 
-    after_write_condition = """EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e ON e.execution_id = b.execution_id WHERE
-        b.execution_id = NEW.execution_id AND b.authorized = 1 AND e.status = 'failed' AND e.current_attempt_ordinal
-        IS NOT NULL)"""
+    after_write_condition = """EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
+        ON e.execution_id = b.execution_id WHERE b.execution_id = NEW.execution_id
+        AND b.authorized = 1 AND e.status = 'failed' AND e.current_attempt_ordinal IS NOT NULL)"""
 
 
 @dataclass(frozen=True, slots=True)

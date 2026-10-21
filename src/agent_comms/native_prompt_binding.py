@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -21,14 +21,13 @@ from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import CohortTable
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
 from .native_pi import read_tracked_input_commitment
-from .native_runtime_input import NativeRuntimeInput
+from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
@@ -52,7 +51,9 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+class PromptBinding(
+    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema
+):
     filename = "native_prompt_bindings.sqlite3"
 
     @classmethod

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
-from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
     Column,
     ColumnGuard,
@@ -68,7 +68,9 @@ class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
         return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerGenerations(CounterAdvance, NoDelete, FrozenColumns, ParticipantIdentity, CoordinatorTable, TypedTable):
+class OwnerGenerations(
+    CounterAdvance, NoDelete, FrozenColumns, ParticipantIdentity, CoordinatorTable, TypedTable
+):
 
     counter_column = 'generation'
 

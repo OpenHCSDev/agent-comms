@@ -31,11 +31,14 @@ from agent_comms.typed_table import (
 
 
 @dataclass(frozen=True, slots=True)
-class PublicationIntents(ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable):
+class PublicationIntents(
+    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable
+):
     """One obligation route's frozen response: the exact Message it publishes."""
 
-    insert_condition = """NOT EXISTS ( SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND exact_target =
-        NEW.exact_target AND state = 'pending' )"""
+    insert_condition = """NOT EXISTS (SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
+        AND state = 'pending')"""
 
 
     validator_function: ClassVar[str] = "coordination_validate_publication_intent"
@@ -148,11 +151,19 @@ class PublicationIntents(ValidatedInserts, GuardedInserts, ImmutableRows, Coordi
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublicationEvidence(GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="publication_receipts"):
-    insert_condition = """(EXISTS (SELECT 1 FROM executions WHERE execution_id = NEW.execution_id AND status = 'failed')) OR
-        (NEW.message_id != ( SELECT expected_message_id FROM publication_intents WHERE execution_id =
-        NEW.execution_id AND exact_target = NEW.exact_target )) OR (NOT EXISTS ( SELECT 1 FROM obligations WHERE
-        execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND state = 'publishing' ))"""
+class PublicationEvidence(
+    GuardedInserts,
+    ImmutableRows,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="publication_receipts",
+):
+    insert_condition = """(EXISTS (SELECT 1 FROM executions
+        WHERE execution_id = NEW.execution_id AND status = 'failed'))
+        OR (NEW.message_id != (SELECT expected_message_id FROM publication_intents
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target))
+        OR (NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
+        AND exact_target = NEW.exact_target AND state = 'publishing'))"""
 
     @property
     def reference(self) -> MessageReference:

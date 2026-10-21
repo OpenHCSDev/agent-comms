@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from agent_comms.coordinator import Coordination
 
 from .native_runtime_input import NativeRuntimeTable
