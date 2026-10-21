@@ -98,8 +98,8 @@ class ChannelRowModel:
 
 
 class SidebarObservation(ABC):
-    def status_text(self) -> str:
-        return "Reading comms"
+    @abstractmethod
+    def status_text(self) -> str: ...
 
     def shows_status(self) -> bool:
         return True
@@ -128,6 +128,9 @@ class SidebarObservation(ABC):
 
 @dataclass(frozen=True)
 class WaitingSidebar(SidebarObservation):
+    def status_text(self) -> str:
+        return "Reading comms"
+
     def references_for(self, root):
         from ..display_references import PendingReferences
         return PendingReferences(root)

@@ -51,7 +51,10 @@ from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import (
-    ChannelRowModel, SidebarModel, ThreadRowModel, WaitingSidebar,
+    ChannelRowModel,
+    SidebarModel,
+    ThreadRowModel,
+    WaitingSidebar,
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
@@ -179,7 +182,7 @@ class Observation[InterestT: InterestRequest](ObservationLifetime):
 
     def __init__(self, request: InterestT):
         self.request = request
-        self.steps: Generator[ObservationStep, None, None] = (_ for _ in ())
+        self.steps: Generator[ObservationStep] = (_ for _ in ())
 
     def for_interest(self, requested: Observation) -> Observation:
         if self.request == requested.request:
@@ -211,7 +214,7 @@ class Observation[InterestT: InterestRequest](ObservationLifetime):
     @abstractmethod
     def read(
         self, comms: Comms, revision: WireRevision,
-    ) -> Generator[ObservationStep, None, None]: ...
+    ) -> Generator[ObservationStep]: ...
 
     def after_read(self, service: ObservationService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
@@ -690,7 +693,7 @@ class SidebarReading(Observation[ObserveSidebar]):
     def prepared(self, service: ObservationService) -> None:
         service.interest.prepared(self, service)
 
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep, None, None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         key = SidebarSent(revision.expiry_period, type(self.stage), revision)
         if not self.sent.changed_since(key):
             return
@@ -777,7 +780,7 @@ class NotificationReading(Observation[ObserveNotifications]):
         super().__init__(request)
         self.read_states: dict[ReadNotifications, NotificationsRead] = {}
 
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep, None, None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         for request in self.request.reads:
             previous = self.read_states.get(request)
             if previous is not None and not request.changed_since(comms, revision, previous):
@@ -815,7 +818,7 @@ class ThreadReading(Observation[ObserveThreads]):
         self.initial = self.request.names - previous.request.names
         return self
 
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep, None, None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
         activity: dict[str, ObservedActivity | DeletedThread] = {}
@@ -865,7 +868,7 @@ class ViewReading(Observation[ObserveViews]):
         super().__init__(request)
         self.revision: ReadState = NoRevision()
 
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep, None, None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
         if not self.revision.changed_since(RegistrationsView(), revision):
             return
         retired = comms.views.retired_views(self.request.threads, self.request.channels)
@@ -983,7 +986,7 @@ class SidebarPreparing(SidebarResult, WaitingSidebar):
         return previous.accepts_preparing()
 
     def status_text(self) -> str:
-        return f"Reading comms\n{self.cause}"
+        return f"{super().status_text()}\n{self.cause}"
 
 
 @dataclass(frozen=True)
