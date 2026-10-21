@@ -11,7 +11,7 @@ from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification, ThreadRecord
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_identity import CommanderForkIdentity, ThreadIncarnation
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
@@ -159,20 +159,6 @@ class ThreadCaller(ToolCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         """An agent's message is only the bus record."""
-
-
-@dataclass(frozen=True, eq=False)
-class CommanderForkIdentity(RecordedThreadIncarnation):
-    """A registered actor's parent authority, resolved before any Todo transaction.
-
-    The ordinary incarnation wire form records the actor, not a reusable authority.
-    """
-
-    authority: ThreadIncarnation
-
-    @property
-    def commanding_identity(self) -> ThreadIncarnation:
-        return self.authority
 
 
 @dataclass(frozen=True)

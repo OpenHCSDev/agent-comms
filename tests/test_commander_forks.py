@@ -36,7 +36,7 @@ from agent_comms.tools import CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import (
     DeclarationDerivation, GoalRef, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
-    Slop, StrikeReason, Todo, TodoError,
+    Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
 )
 
 
@@ -299,3 +299,24 @@ def test_malformed_problem_ids_are_refused_without_writes(fork_bus):
     with store.snapshot() as db:
         assert ProblemAllocation.select(db) == []
     assert store.list(source.github) == (retained,)
+
+
+def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    lead = comms.registry.require('lead')
+    store.create('P41', source.github, 'Replacing parent problem', creator=lead,
+        owner=comms.registry.require('worker'), assigner=lead.incarnation, generation='worker',
+        review_at=RecordedEventTime(time.time() + 600), order=replace(order, id='replacing-order'),
+        goal=GoalRef('lead', lead.created_at, 'request'))
+    comms.registry.register_commander_child('fork-one', 'lead', comms.goals)
+    actor = CommanderForkCaller('fork-one').identity(comms)
+    current = store.get('P40')
+    verdict = SupersededVerdict(
+        expected_revision=current.revision, actor=actor, previous=current.held(),
+        tool_call_id='retained-edit', replacement='P41',
+        reason='The replacing order moved this edit to another unit.')
+    assert verdict.prepare(comms.goals, current) == verdict
+    unknown = replace(verdict, replacement='P99')
+    with pytest.raises(ValueError, match='not held for this commander'):
+        unknown.prepare(comms.goals, current)

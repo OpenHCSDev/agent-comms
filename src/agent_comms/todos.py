@@ -2175,9 +2175,6 @@ class GoalReference(SubclassUnion):
     def threads(self) -> tuple[str, ...]:
         return ()
 
-    def authorize_order(self, current: Todo, actor: ThreadIncarnation) -> None:
-        actor.require_may_change(current)
-
 
 @dataclass(frozen=True)
 class NoGoalReference(NullMember, GoalReference):
@@ -2212,9 +2209,6 @@ class GoalRef(RecordMember, GoalReference):
 
     def request(self) -> str:
         return self.goal_id
-
-    def authorize_order(self, current: Todo, actor: ThreadIncarnation) -> None:
-        current.require_commander(self.incarnation)
 
 
 class TodoHolder(ABC):
@@ -2430,14 +2424,23 @@ class TodoOperation(TodoCommand, declared_name=None):
 class AssignTodo(TodoOperation):
     """The order's commander gives the problem to a unit."""
 
+    actor: ThreadIncarnation
     proposed: Assignment
     review_at: EventTime
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
+    @classmethod
+    def by(cls, actor: ThreadIncarnation, expected_revision: int, owner: ThreadIncarnation,
+           generation: str, review_at: EventTime, order: PendingProblemOrder | MergedProblemOrder,
+           goal: GoalReference, traced: FileLine | NoSourceReference) -> AssignTodo:
+        """The one place the typed actor and the assignment's recorded assigner are made."""
+        return cls(expected_revision, actor, Assignment.of(owner, actor, generation),
+                   review_at, order, goal, traced)
+
     def authored_by(self, actor: ThreadIncarnation) -> Self:
-        return replace(self, proposed=replace(self.proposed,
+        return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
     def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
@@ -2450,7 +2453,7 @@ class AssignTodo(TodoOperation):
                 proposed, self.review_at, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
-        self.goal.authorize_order(current, self.actor)
+        self.actor.require_may_change(current)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
@@ -2460,10 +2463,6 @@ class AssignTodo(TodoOperation):
                        order=self.order, prior_orders=current.orders_before(self.order),
                        goal=self.goal,
                        revision=current.revision + 1)
-
-    @property
-    def actor(self) -> ThreadIncarnation:
-        return self.proposed.parent_identity
 
 
 @dataclass(frozen=True)
@@ -2718,8 +2717,8 @@ class SupersededVerdict(ToolCallVerdict):
         return f"{super().story_text()} by {self.replacement}: {self.reason}"
 
     def prepare(self, goals, current):
-        replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
-                     if todo.id == self.replacement]
+        replacing = [todo for todo in goals.todos.held_for_commander(
+                         self.actor.commanding_identity) if todo.id == self.replacement]
         if not replacing:
             raise ValueError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
@@ -3273,6 +3272,13 @@ class Todo(TypedTable):
             raise ValueError("Say why they are the same problem in 8+ words.")
         self.order.folded(target.id, why)
 
+    @property
+    def acting_assigner(self) -> ThreadIncarnation:
+        """Who assigned this order last, acting under its commander: a reissue acts as them,
+        so a sibling fork's competing order on the unit is still refused."""
+        return self.holder_state.previous_assignment().parent_identity.acting_for(
+            self.creator_identity)
+
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor.commanding_identity:
             raise TodoConflict(self)
@@ -3413,11 +3419,12 @@ class TodoStore(DurableStore):
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
-        found = self.get(problem)
-        found.require_commander(commander)
-        if not found.state.open or found.holder != unit:
+        authority = commander.commanding_identity
+        found = self._select('id=? AND creator=? AND creator_created=?',
+                             (problem, authority.name, authority.wire_birth), reader=self._open)
+        if len(found) != 1 or found[0].holder != unit:
             raise ValueError(f'{unit} holds no order on {problem}')
-        return found
+        return found[0]
 
     def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
         old = self.resolve_order(commander, unit, problem)
@@ -3719,6 +3726,5 @@ class TodoStore(DurableStore):
         order: PendingProblemOrder,
         traced: FileLine | NoSourceReference = NoSourceReference(),
     ) -> Todo:
-        proposed = Assignment.of(_thread(owner), assigner, generation)
-        return self.apply(
-            todo_id, AssignTodo(expected_revision, proposed, review_at, order, goal, traced))
+        return self.apply(todo_id, AssignTodo.by(assigner, expected_revision, _thread(owner),
+                                                 generation, review_at, order, goal, traced))

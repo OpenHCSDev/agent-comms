@@ -237,9 +237,7 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", UnownedWheelSpin.order_for(
-        todo, "lead", held_bus.registry.require("lead").incarnation,
-    ))
+    held_bus.goals.update_goal("worker", UnownedWheelSpin.order_for(todo, "lead"))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(

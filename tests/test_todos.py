@@ -466,8 +466,7 @@ def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
         blocked_holder(held_bus)
         observed, = Blocked.violations(held_bus, "lead")
         row = held_bus.goals.todos.get(observed.orders[0])
-        reassigned = held_bus.goals.update_goal("outsider", UnownedWheelSpin.order_for(
-            row, "lead", held_bus.registry.require("lead").incarnation))
+        reassigned = held_bus.goals.update_goal("outsider", UnownedWheelSpin.order_for(row, "lead"))
         assigned = held_bus.goals.todos.get(row.id)
         generation = held_bus.goals.open_goal_store().require_generation(observed.goal.id)
         with held_bus.bus.locked(), pytest.raises(TodoError):
