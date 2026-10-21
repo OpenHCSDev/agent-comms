@@ -1110,6 +1110,14 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
+class AbsolutePathText(PathText):
+    """An install path bound to the caller's directory before its child changes cwd."""
+
+    @classmethod
+    def from_text(cls, value: str) -> Path:
+        return Path(value).expanduser().resolve()
+
+
 class BoundedText(TextRepresentation[str], ValidatedScalar):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
