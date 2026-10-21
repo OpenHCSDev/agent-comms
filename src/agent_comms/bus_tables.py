@@ -66,6 +66,14 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
         Index(("sender", "message_id")),
     )
 
+    @classmethod
+    def reference_sql(cls, alias: str) -> str:
+        fields = ",".join(
+            value for item, key in FieldCodec.record_fields(MessageReference)
+            for value in (sql_literal(key), cls._sql(alias + ".{" + item.name + "}"))
+        )
+        return f"json_object({fields})"
+
 
 @dataclass(frozen=True)
 class AnsweredSource(TypedTable, BusProjectionTables):
@@ -78,10 +86,7 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         since: float, before: float, upper: int, limit: int,
     ) -> tuple[messages.BusRecord, ...]:
         """Read unanswered originals through the existing reference and sender indexes."""
-        reference = ",".join(
-            value for item, key in FieldCodec.record_fields(MessageReference)
-            for value in (sql_literal(key), MessageIdentitySource._sql("asked.{" + item.name + "}"))
-        )
+        reference = MessageIdentitySource.reference_sql("asked")
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         query = (
@@ -92,10 +97,36 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             + f'AND asked.seq < ? AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
-            + cls._sql(f'WHERE answered.{{original}}=json_object({reference}) ')
+            + cls._sql(f'WHERE answered.{{original}}={reference} ')
             + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
         )
         sequences = db.execute(query, (*requesters, since, before, upper, *responders, limit))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+    @classmethod
+    def latest_answer(
+        cls, db: sqlite3.Connection, requesters: frozenset[str], responders: frozenset[str],
+        since: float,
+    ) -> tuple[messages.BusRecord, ...]:
+        asking = ",".join("?" for _ in requesters)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        content = messages.Message.table
+        query = (
+            f'SELECT reply.seq FROM "{identity}" AS reply '
+            f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
+            f'WHERE reply.sender IN ({replying}) AND '
+            + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
+            + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS asked ON '
+            + cls._sql(f'answered.{{original}}={MessageIdentitySource.reference_sql("asked")} ')
+            + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
+            f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
+            f'AND asked.sender IN ({asking}) AND '
+            + content._sql('question.{timestamp} >= ?) ORDER BY reply.seq DESC LIMIT 1')
+        )
+        sequences = db.execute(query, (*responders, since, *requesters, since))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 

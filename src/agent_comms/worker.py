@@ -33,12 +33,13 @@ async def run_owner(comms: Comms) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         name = ThreadLaunch.current().name
         thread = await Coordination.run_worker(partial(comms.registry.require, name))
+        stopped = OwnerStop()
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
             agent_bin=GivenBinary(NativeArguments.owner_launcher(LaunchRuntime.running())),
+            owner_stop=stopped,
         )
-        stopped = OwnerStop()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stopped.request)

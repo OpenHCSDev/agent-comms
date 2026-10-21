@@ -14,7 +14,6 @@ from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .cli_result import CliResult
 from .field_codec import FieldCodec, WireForm
-from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
@@ -189,7 +188,7 @@ class HistoryViews:
         self.messaging = messaging
         self.goals = goals
         self.ledger = ledger
-        self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
+        self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
@@ -314,7 +313,7 @@ class HistoryViews:
         self, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
-        return ThreadView.roster(snapshot, self.agents, GoalWaits.at(self.root), visibility)
+        return ThreadView.roster(snapshot, self.agents, self.goals, visibility)
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -345,7 +344,7 @@ class HistoryViews:
         """Read the requested threads' status once, before loading their messages."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
-            snapshot, self.agents, GoalWaits.at(self.root),
+            snapshot, self.agents, self.goals,
             RosterVisibility(archived=True), names=names,
         )
         return ThreadPresentations(
@@ -364,7 +363,7 @@ class HistoryViews:
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
                 display_activity,
-                unread=self.bus.pending_counts_opened(
+                goals=self.goals, unread=self.bus.pending_counts_opened(
                     source, basis, conversations=basis.registry.threads,
                 ), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
@@ -430,13 +429,13 @@ class HistoryViews:
                         if not active_only or snapshot.status(name).active)
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
         return ThreadRecord.read(
-            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)
+            snapshot, self.agents, self.goals, threads, pending)
 
     def thread_detail(self, name: str, read: InboxRead) -> ThreadRecord:
         thread = self.registry.require(name)
         pending = read.counts(self.bus, (thread.name,))
         record, = ThreadRecord.read(self.registry.snapshot(), self.agents,
-                                    GoalWaits.at(self.root).read(), (thread,), pending)
+                                    self.goals, (thread,), pending)
         return record
 
     def poll(self, target: PollTarget) -> ThreadPoll:
