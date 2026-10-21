@@ -33,7 +33,7 @@ from typing import (
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
+from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, WireValue, compile_decoder
 from .locked_store import DurableFile, FileStore, SQLiteFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
@@ -225,7 +225,7 @@ class JsonStorage(SqlStorage):
             is_dataclass(annotation)
             or get_origin(annotation) in (list, tuple, dict, frozenset, Union, types.UnionType)
             or isinstance(annotation, type)
-            and issubclass(annotation, DeclaredFamily)
+            and issubclass(annotation, (DeclaredFamily, WireValue))
         )
 
     @classmethod

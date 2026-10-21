@@ -12,6 +12,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type, cast
 
+from agent_comms.bus_tables import Addressed, BusCapability
+
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
@@ -327,16 +329,14 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
     pass
 
 
-@dataclass(frozen=True, slots=True)
-class Message:
+@dataclass(frozen=True)
+class Message(Addressed, BusCapability):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
-    target: str = field(metadata={"wire_name": "to", "wire_order": 3})
     body: str = field(metadata={"wire_name": "text", "wire_order": 6})
     type: builtins.type[MessageKind] = field(metadata={"wire_order": 5})
     timestamp: float = field(

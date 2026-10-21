@@ -5,86 +5,40 @@ from __future__ import annotations
 import sqlite3
 import time
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields, make_dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import ClassVar, get_type_hints
 
-from .coordination_database import CoordinationStore
-from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .field_codec import FieldCodec
-from .typed_table import (
-    AppendOnlyTables, Column, DurableTables, SQLiteTableName, StoreWriter, TypedTable,
-)
-
-
-class BusTables(DurableTables, AppendOnlyTables):
-    """Bus history cannot be rebuilt from another source."""
-
-
-@dataclass(frozen=True)
-class BusRow(TypedTable, BusTables):
-    seq: int = field(metadata={"sql": Column(primary_key=True, auto_increment=True)})
-    kind: str
-    at: float
-
-
-class BusCapability(BusTables):
-    """A field declaration derives its frozen value and its one SQLite table."""
-
-    table: ClassVar[type[TypedTable]]
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        own = vars(cls).get("__annotations__", {})
-        if not own:
-            return  # Record members compose capabilities; they declare no new fields.
-        dataclass(cls, frozen=True)
-        hints = get_type_hints(cls, include_extras=True)
-        cls.table = make_dataclass(
-            BusTables.__name__.removesuffix("Tables") + cls.__name__ + "Row",
-            [("seq", int, field(metadata={"sql": Column(
-                primary_key=True, references=(BusRow, "seq"))})),
-             *((item.name, hints[item.name], item) for item in fields(cls) if item.name in own)],
-            bases=(TypedTable, BusTables),
-            namespace={"__module__": cls.__module__},
-            frozen=True,
-        )
-
-
-class Addressed(BusCapability):
-    sender: str
-    target: str = field(metadata={"sql": Column(index=True)})
-
-
-class KeyedPublication(BusCapability):
-    publication_key: str = field(metadata={"sql": Column(unique=True)})
-
-
-class Claimed(BusCapability):
-    claim_owner: str
-
-
-class MessageText(BusCapability):
-    body: str
+from agent_comms.bus_publication import Delivered
+from agent_comms.bus_tables import Addressed, BusRow, BusTables, KeyedPublication
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message
+from agent_comms.typed_table import SQLiteTableName, StoreWriter
 
 
 class BusRecord(DeclaredFamily, affix="Record"):
-    """Kinds select their fields and tables by composing capabilities."""
-
-    @classmethod
-    def capabilities(cls) -> tuple[type[BusCapability], ...]:
-        return tuple(base for base in cls.__mro__
-                     if issubclass(base, BusCapability) and "table" in vars(base))
+    """Kinds compose the same field declarations as the real Message."""
 
 
 @dataclass(frozen=True)
-class PublicMessage(BusRecord, Addressed, KeyedPublication, MessageText):
+class PublicRecord(BusRecord, Message):
     pass
 
 
 @dataclass(frozen=True)
-class PrivateDelivery(BusRecord, Addressed, KeyedPublication, MessageText, Claimed):
+class KeyedPublicRecord(PublicRecord, KeyedPublication):
+    pass
+
+
+@dataclass(frozen=True)
+class PrivateRecord(BusRecord, Message, Delivered):
+    pass
+
+
+@dataclass(frozen=True)
+class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
 
 
@@ -93,6 +47,8 @@ class Bus(StoreWriter):
 
     def __init__(self, path: Path):
         super().__init__(path)
+        for member in BusRecord.members_with(BusRecord):
+            member.tables()
         with self.writing() as db:
             if not SQLiteTableName.stored(db):
                 BusTables.create_schema(db)
@@ -107,14 +63,17 @@ class Bus(StoreWriter):
 
     def append(self, record: BusRecord) -> int:
         with self.writing() as db:
-            prior = KeyedPublication.table.select(db, publication_key=record.publication_key)
-            if prior:
-                return prior[0].seq
+            if issubclass(type(record), KeyedPublication):
+                prior = KeyedPublication.table.select(db, acknowledgement=record.acknowledgement)
+                if prior:
+                    return prior[0].seq
             cursor = BusRow.insert_values(db, kind=type(record).declared_name, at=time.time())
             seq = FieldCodec.decode(int, cursor.lastrowid)
-            for capability in type(record).capabilities():
-                capability.table(seq=seq, **{
-                    item.name: getattr(record, item.name) for item in fields(capability)
+            header_fields = {item.name for item in fields(BusRow)}
+            for table in type(record).tables():
+                table(seq=seq, **{
+                    item.name: getattr(record, item.name) for item in fields(table)
+                    if item.name not in header_fields
                 }).insert(db)
             return seq
 
@@ -122,12 +81,13 @@ class Bus(StoreWriter):
     def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
         member = FieldCodec.decode(type[BusRecord], header.kind)
         values = {BusRecord.family_discriminator: header.kind}
-        for capability in member.capabilities():
-            rows = capability.table.select(db, seq=header.seq)
+        for table in member.tables():
+            rows = table.select(db, seq=header.seq)
             if not rows:
                 raise RelationViolationError(
-                    f"Bus row {header.seq} lacks {capability.__name__}")
-            values.update((item.name, getattr(rows[0], item.name)) for item in fields(capability))
+                    f"Bus row {header.seq} lacks {table.declared_name}")
+            values.update(FieldCodec.encode_fields(rows[0]))
+        values[FieldCodec.record_key(Message, "seq")] = header.seq
         return FieldCodec.decode(BusRecord, values)
 
     def lookup(self, seq: int) -> BusRecord:
