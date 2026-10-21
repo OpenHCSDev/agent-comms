@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .message_bus import WatchPass
 from .registration import Registration
+from .service_sender import ServiceSender
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_management import Goals
 from .standing_rules import StandingRule
-from .thread_execution import ExternalThreadExecution
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
@@ -49,22 +49,9 @@ class CommanderReview:
 
 
 @dataclass
-class CommanderHeartbeat(WatchPass):
-    sender: ClassVar[str] = "commander-heartbeat"
+class CommanderHeartbeat(ServiceSender, WatchPass):
+    sender = "commander-heartbeat"
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
-
-    @classmethod
-    def register(cls, registry: Registration) -> None:
-        """Declare the shared service sender before any worker or restart publication."""
-        if cls.sender not in registry:
-            registry.declare(
-                registry.new_thread(
-                    cls.sender,
-                    frozenset(),
-                    str(registry.store.path.parent),
-                    execution=ExternalThreadExecution,
-                )
-            )
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:

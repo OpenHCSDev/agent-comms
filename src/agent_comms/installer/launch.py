@@ -8,19 +8,54 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, TextIO
+from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
-from agent_comms.field_codec import FieldCodec, Id128Text, PathText
+from agent_comms.coordination_errors import CoordinationError
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError, ToolRefusedError
+from agent_comms.field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
+from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
+from agent_comms.messages import InfoKind, Message
+from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
+
+
+@dataclass(frozen=True)
+class InstallReport(ServiceSender):
+    """Publish the install's own typed result, never an interpretation of its logs."""
+
+    sender: ClassVar[str] = "installer"
+    root: Path
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        try:
+            with client_wire(self.root) as comms:
+                self.register(comms.registry)
+                comms.bus.publisher.publish_ordinary(
+                    Message(sender=self.sender, target="#comms", body="\n".join(lines),
+                            type=InfoKind), origin=AgentOrigin())
+        except (OSError, sqlite3.Error, CoordinationError, RelationViolationError,
+                ToolRefusedError, MalformedRecord, CheckpointNeedsRepairError) as error:
+            print(f"install announcement failed: {error}", file=sys.stderr)
+
+    def starting(self, upgrade: Upgrade) -> None:
+        self.post(("Install starting", *upgrade.lines()))
+
+    def finished(self, upgrade: Upgrade) -> None:
+        self.post(("Install finished", *upgrade.lines()))
+
+    def failed(self, error: UpgradeRefused) -> None:
+        self.post(error.lines())
 
 
 @dataclass(frozen=True)
@@ -71,7 +106,7 @@ class InstallRun:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.rehearse, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses)
+                       self.harnesses, InstallReport(self.root))
 
     def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:

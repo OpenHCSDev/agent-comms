@@ -14,8 +14,9 @@ run asks before its stop. ``--rehearse`` stops there.
 A live run then stops the running agent owners with the installed CLI, backs up only
 files the rehearsal changed, moves the checkout, prepares native Pi, carries the bus,
 reads it back, publishes the built runtime and starts only the owners it stopped. A
-failure after the backup restores the original runtime and data. Nothing is sent and
-no input is replayed: owners start by the normal start path.
+failure after the backup restores the original runtime and data. No saved input is
+replayed: owners start by the normal start path. The installer reports its
+start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
@@ -65,6 +66,9 @@ from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, Carry
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
+
+if TYPE_CHECKING:
+    from agent_comms.installer.launch import InstallReport
 
 HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -135,6 +139,9 @@ class OwnerStart(DeclaredFamily, affix="Owner"):
 
     name: str
 
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
     @staticmethod
     def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
         try:
@@ -146,12 +153,34 @@ class OwnerStart(DeclaredFamily, affix="Owner"):
 
 @dataclass(frozen=True)
 class StartedOwner(OwnerStart):
-    pass
+    def lines(self) -> tuple[str, ...]:
+        return (f"Started owner: {self.name}",)
 
 
 @dataclass(frozen=True)
 class RefusedOwner(OwnerStart):
     error: str
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Owner not started: {self.name}: {self.error}",)
+
+
+class InstallRolledBack(UpgradeRefused):
+    """The original installation was restored after a failed live pass."""
+
+    def __init__(self, error: BaseException, started: tuple[OwnerStart, ...], backup: str):
+        self.error = error
+        self.started = started
+        self.backup = backup
+        super().__init__("; ".join(self.lines()))
+
+    def lines(self) -> tuple[str, ...]:
+        return (
+            f"Install rolled back: {type(self.error).__name__}: {self.error}",
+            "Original runtime selected again",
+            *(line for owner in self.started for line in owner.lines()),
+            f"Backup: {self.backup}",
+        )
 
 
 @dataclass(frozen=True)
@@ -217,6 +246,9 @@ class RetiringRehearsal(FreshRehearsal):
 class LiveRun(DeclaredFamily, affix="Run"):
     """What a live install changed."""
 
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
 
 @dataclass(frozen=True)
 class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
@@ -225,43 +257,69 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     backup: BackupReport
     retired_backups: tuple[Annotated[Path, PathText], ...]
 
+    def lines(self) -> tuple[str, ...]:
+        return (
+            *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
+            f"Stopped owners: {', '.join(self.stopped) or 'none'}",
+            *(line for owner in self.started for line in owner.lines()),
+            f"Restarted services: {', '.join(self.services) or 'none'}",
+            f"Backup: {self.backup.backup} ({self.backup.bytes} bytes)",
+        )
+
 
 @dataclass(frozen=True)
 class UnchangedRun(LiveRun):
     """Published the installed runtime again and planned the next install."""
+
+    def lines(self) -> tuple[str, ...]:
+        return ("Runtime republished; nothing carried",)
 
 
 @dataclass(frozen=True)
 class CreatedRun(RestartedServices, LiveRun, Extendable):
     route: str
 
+    def lines(self) -> tuple[str, ...]:
+        return (f"Created bus; route: {self.route}",
+                f"Restarted services: {', '.join(self.services) or 'none'}")
+
 
 @dataclass(frozen=True)
 class RetiredRun(CreatedRun, StoppedOwners):
     retired: Annotated[Path, PathText]
 
+    def lines(self) -> tuple[str, ...]:
+        return (*super().lines(), f"Stopped owners: {', '.join(self.stopped) or 'none'}",
+                f"Retired bus: {self.retired}")
+
 
 @dataclass(frozen=True)
 class Upgrade(DeclaredFamily, affix="Upgrade"):
-    """One install run on one bus: what it found pending, and its rehearsal."""
+    """The source, target and pending carries found by one install."""
 
     source: str
     target: str
     root: Annotated[Path, PathText]
     pending: tuple[str, ...]
-    rehearsal: Rehearsal
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"{self.source[:12]} -> {self.target[:12]}",
+                f"Pending carries: {', '.join(self.pending) or 'none'}")
 
 
 @dataclass(frozen=True)
 class RehearsedUpgrade(Upgrade):
-    pass
+    rehearsal: Rehearsal
 
 
 @dataclass(frozen=True)
-class InstalledUpgrade(Upgrade):
+class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+
+    def lines(self) -> tuple[str, ...]:
+        return (*super().lines(), *self.live.lines())
 
 
 @dataclass(frozen=True)
@@ -523,7 +581,7 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult]) -> Upgrade:
+            harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
@@ -551,8 +609,14 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         names = tuple(step.name() for step in pending)
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
-        return InstalledUpgrade(current, target, root, names, rehearsal, install.install(rehearsal),
-                                harnesses())
+        install.announce(report)
+        result = InstalledUpgrade(current, target, root, names, rehearsal,
+                                  install.install(rehearsal), harnesses())
+        report.finished(result)
+        return result
+    except UpgradeRefused as error:
+        report.failed(error)
+        raise
     finally:
         tree.close()
         shutil.rmtree(scratch, ignore_errors=True)
@@ -574,6 +638,10 @@ class Install[Rehearsed: Rehearsal](ABC):
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
+
+    def announce(self, report: InstallReport) -> None:
+        report.starting(Upgrade(self.current, self.target, self.root,
+                                tuple(step.name() for step in self.pending)))
 
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
@@ -657,6 +725,9 @@ class FreshInstall(Install[FreshRehearsal]):
            installer: InstallerChoice, spill_dir: Path) -> Install:
         return cls(checkout, root, current, target, chain, pending, installed, staged,
                    tree, installer, spill_dir)
+
+    def announce(self, report: InstallReport) -> None:
+        """A fresh bus has nowhere to publish a start message yet."""
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()
@@ -752,7 +823,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
               f"original runtime selected; owners: {started}; "
               f"backup: {backup.description}",
               file=sys.stderr)
-        raise
+        raise InstallRolledBack(error, started, backup.description) from error
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
     started = staged.start(root, running)
