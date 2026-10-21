@@ -6,6 +6,7 @@ claim_scope, native process, source proof and response publication remain real.
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
@@ -84,11 +85,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
     service = prepare_native_comms(Comms(stage/'wire'))
-    if continue_existing:
-        with service.bus.log.locked():
-            root_id = service.bus.log.private_marker_unlocked().root_id
-    else:
-        root_id = service.registry.prepare_native_root().namespace
+    root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
@@ -268,16 +265,16 @@ async def configured_pure_channel(arguments):
                         assert all(row.lifecycle.mode.triage for row in claims)
                         receipts = []
                         for original in originals:
-                            initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
-                            with store.session.read():
-                                sealed = _claim_record(db,initial)
+                            with NativeBoundary(service.bus) as boundary, store.session.read():
+                                initial = service.bus.bus.delivery(original.seq)
+                                sealed = _claim_record(db, initial, boundary.privacy)
                             assert {row.assignment_id for row in sealed.assignments} == {
                                 row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
                             rows = PublicationEvidence.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
-                            reply, = service.bus.log.messages_for_references((rows[0].reference,))
+                            reply, = service.bus.bus.messages_for_references((rows[0].reference,))
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
                             history = read_historical_native_inputs(
@@ -376,7 +373,7 @@ async def configured_pure_channel(arguments):
                 'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
-                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.bus.path.stat().st_size}
             acknowledgement['compaction_events'] = compaction_events
             (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
             print(json.dumps(acknowledgement,indent=2),flush=True)
@@ -440,7 +437,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
-                reply, = service.bus.log.messages_for_references((receipts[0].reference,))
+                reply, = service.bus.bus.messages_for_references((receipts[0].reference,))
                 assert reply.sender == name and '12' in reply.body
                 break
             await asyncio.sleep(.1)
@@ -538,7 +535,7 @@ async def configured_mixed_routes(arguments):
                         first_execution = execution_ids.pop()
                         receipts = PublicationEvidence.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
-                        replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
+                        replies = service.bus.bus.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
                         direct = next(row for row in replies if row.target == 'human')
                         assert '17' in channel.body and '12' in channel.body
@@ -548,7 +545,7 @@ async def configured_mixed_routes(arguments):
                         late_receipts = PublicationEvidence.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
-                        assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
+                        assert '23' in service.bus.bus.messages_for_references((late_receipts[0].reference,))[0].body
                         lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(
@@ -667,7 +664,7 @@ class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def ownership(cls, service, owners):
-        with service.bus.log.checked_read():
+        with service.bus.bus.reading():
             yield True
 
 
@@ -982,7 +979,7 @@ async def run(arguments):
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
                     origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
             from agent_comms.coordination_cohort import accept_delivery_cohort
-            initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
+            initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.audience.recipients:
                     store.participants.register(audience.recipient_lookup,

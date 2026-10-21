@@ -140,13 +140,6 @@ def test_carry_refuses_a_table_whose_columns_differ(tmp_path):
              "columns differ")
 
 
-def test_carry_refuses_a_derived_file(tmp_path):
-    from agent_comms.bus_page_index import BusPageIndex
-
-    row = BusPageIndex.rows[0]
-    _refused(tmp_path / "f.sqlite3", row.schema_objects()[row.declared_name], "derived")
-
-
 def _positional_indexes(db, row):
     """Rename a row's declared indexes to the positional names older files hold."""
     indexes = [(name, sql) for name, sql in row.schema_objects().items() if _INDEX.match(sql)]

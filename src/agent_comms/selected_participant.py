@@ -307,10 +307,13 @@ class SelectedParticipant(MroDispatch):
         originals = await Coordination.run_worker(capture)
 
         def verify(resource: Coordination):
-            with resource.session.read():
+            from .coordination_session import NativeBoundary
+
+            with NativeBoundary(bus) as boundary, resource.session.read():
+                boundary.privacy.require_root(root_id, IdentityConflict("Selected source namespace changed"))
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
-                    acknowledgement = _claim_record(resource.session._connection, initial)
+                    acknowledgement = _claim_record(resource.session._connection, initial, boundary.privacy)
                     if not any(row.assignment_id == assignment.assignment_id
                                for row in acknowledgement.assignments):
                         raise IdentityConflict("selected assignment is absent from its sealed acknowledgement")

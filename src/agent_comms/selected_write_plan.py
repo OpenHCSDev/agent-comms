@@ -186,14 +186,13 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
         with self.comms.registry.store.locked():
-            with self.comms.bus.log.locked():
-                marker = self.comms.bus.log.private_marker_unlocked()
-            if marker.root_id != self.root_id or not marker.claims:
-                raise IdentityConflict("Selected write requires matching private claim root")
+            self.comms.registry.store.private_guard_unlocked().require_root(
+                self.root_id, IdentityConflict("Selected write requires its original native namespace"),
+            )
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
             if not owner.process_identity.runs_here() or owner.executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
-            initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
+            initial = self.comms.bus.bus.delivery(source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = owner.incarnation.lookup

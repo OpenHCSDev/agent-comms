@@ -51,7 +51,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import _require_no_private_owner_rename
+from .private_registry_guard import RegistryPrivacy, _require_no_private_owner_rename
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
@@ -195,7 +195,8 @@ class OptionalAwarenessProjection:
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
         with _store_lock(self.registry.store.path, blocking=False):
-            root_id = self.registry.store.private_guard_unlocked().namespace
+            privacy = self.registry.store.private_guard_unlocked()
+            root_id = privacy.namespace
         lookup = assignment.recipient_lookup
         page = self.index.page(
             recipient_lookup=lookup,
@@ -208,7 +209,7 @@ class OptionalAwarenessProjection:
 
         path = CoordinationStore.path_in(self.index.root)
         with CoordinationStore.observing(path) as db:
-            self._verify_schema_and_owner(db, initial, assignment, owner)
+            self._verify_schema_and_owner(db, initial, assignment, owner, privacy)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
                 (row.source_seq, row.message_id, row.wake_mode, row.target) for row in page.entries
@@ -299,6 +300,7 @@ class OptionalAwarenessProjection:
         initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
+        privacy: RegistryPrivacy,
     ) -> None:
         CoordinatorTable.require_schema(db)
         assert_cohort_schema(db)
@@ -313,7 +315,7 @@ class OptionalAwarenessProjection:
         )
         if people != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
             raise ProjectionUnavailableError("selected participant owner changed")
-        acknowledgement = _claim_record(db, initial)
+        acknowledgement = _claim_record(db, initial, privacy)
         if not any(current == assignment for current in acknowledgement.assignments):
             raise ProjectionUnavailableError("current selected claim lost its sealed acknowledgement")
 

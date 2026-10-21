@@ -1,8 +1,7 @@
 """Owner-fenced response publication across the coordinator and bus.
 
 Tx1 freezes an intent without a bus append. For the bounded append/Tx2, acquire
-the shared wire lock, bus lock, registry lock, then the coordinator's exclusive
-write lock. The registry lock is retained through the fsynced append and SQL terminal
+the registry read lock, then the coordinator's exclusive write lock. The registry lock is retained through the fsynced append and SQL terminal
 commit; an explicitly witnessed live owner can be checked on that revision.
 A stop before the boundary refuses publication, whereas a concurrent stop
 linearizes after commit. The
@@ -22,7 +21,7 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated, Type
 
-from agent_comms.cohort_schema import assert_cohort_schema
+from agent_comms.cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
@@ -45,6 +44,7 @@ from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
@@ -223,7 +223,7 @@ class SelectedResponseRoute(TypedRow):
             initial.message.target,
             initial.audience.wire_envelope_digest,
             initial.audience.digest,
-            initial.decisions_digest,
+            ClaimBatchAcknowledgements.decision_hash(initial),
             assignment.resolver_version,
             assignment.policy_version,
             assignment.recipient_lookup,
@@ -339,7 +339,7 @@ def _require_cohort_assignments(
     store: Coordination,
     bus: MessageBus,
     snapshot: RecoverySnapshot,
-    privacy,
+    privacy: RegistryPrivacy,
     *,
     terminal: bool = False,
 ) -> None:
@@ -398,7 +398,7 @@ def _require_final_owner(
     store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
-    privacy,
+    privacy: RegistryPrivacy,
     owner_witness: LiveResponseOwner,
     exact_target: str,
 ) -> RecoverySnapshot:
@@ -505,7 +505,7 @@ def _terminal_replay(
     store: Coordination,
     fence: OwnerFence,
     bus: MessageBus,
-    privacy,
+    privacy: RegistryPrivacy,
     owner_witness: LiveResponseOwner,
     exact_target: str,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
@@ -585,7 +585,7 @@ def _settle_fenced_response(
                 # only authorized first append while its final fence is locked.
                 from .response_conversation import ResponseConversation
 
-                conversation = ResponseConversation.capture(bus, snapshot, obligation)
+                conversation = ResponseConversation.capture(bus, snapshot, obligation, boundary.privacy)
                 matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot, activity=boundary.activity
                 )

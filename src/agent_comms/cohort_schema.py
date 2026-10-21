@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
@@ -25,6 +25,10 @@ from .typed_table import (
     SQLiteJournalMode,
     TypedTable,
 )
+
+if TYPE_CHECKING:
+    from .bus_publication import Delivered
+    from .private_registry_guard import RegistryPrivacy
 
 _LOG = logging.getLogger(__name__)
 
@@ -76,6 +80,43 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
     accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
     sealed: bool = False
     without_rowid = True
+
+    @staticmethod
+    def decision_hash(delivery: Delivered) -> str:
+        from .bus_publication import decisions_digest, decisions_wire
+
+        return decisions_digest(decisions_wire(delivery.decisions))
+
+    @classmethod
+    def for_delivery(
+        cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
+    ) -> ClaimBatchAcknowledgements:
+        """Native acknowledgement facts derive from the actual delivered value."""
+        from .bus_publication import INITIAL_CODEC
+        from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+
+        return cls(
+            wire_root_id=privacy.namespace,
+            wire_seq=delivery.seq,
+            message_id=delivery.message_id,
+            exact_target=delivery.target,
+            envelope_digest=delivery.audience.wire_envelope_digest,
+            audience_digest=delivery.audience.digest,
+            decisions_digest=cls.decision_hash(delivery),
+            member_count=len(delivery.audience.recipients),
+            claim_count=sum(len(decision.claim_decisions()) for decision in delivery.decisions),
+            manifest_codec=INITIAL_CODEC,
+            resolver_version=RESOLVER_VERSION,
+            policy_version=POLICY_VERSION,
+            accepted_at_ms=accepted_at_ms,
+        )
+
+    def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
+        from dataclasses import replace
+        from .coordination_errors import IdentityConflict
+
+        if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
+            raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
         """An awareness contribution borrows this original sealed acknowledgement."""
