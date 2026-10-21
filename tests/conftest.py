@@ -186,7 +186,7 @@ def cursor_delivery(source_reads):
 
 @pytest.fixture(scope="session")
 def native_runtime_package():
-    """The artifact of this checkout's own pin, prepared as installation prepares it."""
+    """The running interpreter's artifact, qualified by the real installer before tests."""
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
@@ -256,7 +256,7 @@ def private_directory():
 
 
 @pytest.fixture
-def private_comms(private_directory):
+def private_comms(private_directory, native_runtime_package):
     """One throwaway private bus, built as production builds one.
 
     Its launch derives like any private root's: the marker installed here
