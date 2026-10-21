@@ -1,0 +1,1 @@
+Your commander ignored the heartbeat's vibe check, so the heartbeat has paused every unit under it until it complies. Do not resume or continue this goal; Core resumes it when the commander answers.

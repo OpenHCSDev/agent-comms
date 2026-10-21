@@ -199,6 +199,30 @@ class RequestStalled(UndatedStandingRule):
                 " -> order its next step or mark it done")
 
 
+@dataclass(frozen=True)
+class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
+    """The first participant's replies that answer a second participant's message, newest
+    first; the page is read newest first, so an answer is seen before what it answers."""
+
+    scope: RepliesDisplayScope
+    since: float
+    empty: ClassVar[tuple[Message, ...]] = ()
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        replies: list[Message] = []
+        asked: set[MessageReference] = set()
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    replies.append(message)
+                else:
+                    asked.add(message.reference)
+        return tuple(reply for reply in replies if asked.intersection(reply.answers))
+
+
 @dataclass(frozen=True, slots=True)
 class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
     scope: RepliesDisplayScope
