@@ -1311,7 +1311,12 @@ class ObservationProcess(AbstractContextManager):
         try:
             self.connection.send(request)
         except BrokenPipeError as error:
-            raise self.ended(str(error)) from error
+            died = self.ended(str(error))
+        else:
+            return
+        # The pickler's failed-send traceback retains an exported BytesIO
+        # view. ObserverDied carries the cause text, not that pipe buffer.
+        raise died
 
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""

@@ -3,26 +3,35 @@
 import asyncio
 import multiprocessing
 import os
+from functools import partial
 
 import pytest
 
+from agent_comms.coordinator import Coordination
+from agent_comms.native_arguments import GivenBinary
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.ui_model.observation import (
-    ObservationProcess, ObserverDied, ReadNotifications, StopObserving,
+    ObservationProcess,
+    ObserverDied,
+    ReadNotifications,
+    StopObserving,
 )
 from delivery_owner_fixture import canonical_agent
 from test_runtime import until
 
 
 @pytest.fixture
-async def headless_owner(comms, tmp_path):
-    owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
+async def headless_owner(comms, tmp_path, caplog):
+    owner = canonical_agent(comms, agent_bin=GivenBinary('pi'),
+                            runtime_enabled=True, auto_wake=False)
     owner.on_connect(None)
     try:
-        await owner.new_session(str(tmp_path))
+        thread = await Coordination.run_worker(partial(owner.sessions.declare_thread, str(tmp_path)))
+        await owner.sessions.start_owner(str(tmp_path), thread.name)
         yield owner
     finally:
         await owner.shutdown()
+    assert not [record for record in caplog.records if record.levelno >= 40]
 
 
 def observation_children():
@@ -65,7 +74,8 @@ async def test_subscriptions_share_process_and_last_close_joins_it(headless_owne
 
 async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
     process = ObservationProcess(headless_owner._comms.route)
-    pending = asyncio.create_task(process.read(ReadNotifications(str(headless_owner._comms.root), ())))
+    pending = asyncio.create_task(process.read(
+        ReadNotifications(str(headless_owner._comms.root), ())))
     try:
         await asyncio.sleep(0)
         process.process.terminate()
