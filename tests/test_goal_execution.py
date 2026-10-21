@@ -1,7 +1,8 @@
-"""Real turn acquisition, terminal handling and cutover share the execution owner."""
+"""Real turn acquisition and terminal handling share the execution owner."""
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
+from dataclasses import fields
 
 import pytest
 
@@ -9,6 +10,7 @@ from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,
@@ -17,6 +19,8 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_presentation import (
     AttemptFailedExecution,
+    GoalExecution,
+    GoalSnapshot,
     RunnableExecution,
     RunningExecution,
 )
@@ -34,6 +38,18 @@ def execution_bus(copied_goal_bus):
     ))
     comms.goals.update_goal("worker", SetGoalAction(text="Repair original work"))
     return comms
+
+
+@pytest.mark.parametrize("execution_type", tuple(
+    member for member in GoalExecution.members_with(GoalExecution)
+    if fields(member) == fields(RunnableExecution)
+))
+def test_execution_identity_survives_wire_and_change_detection(execution_bus, execution_type):
+    goal = execution_bus.registry.require("worker").goal
+    execution = execution_type(goal.id)
+    assert FieldCodec.decode(GoalExecution, FieldCodec.encode(execution)) == execution
+    current = GoalSnapshot(goal, RunnableExecution(goal.id))
+    assert current.changed_by(GoalSnapshot(goal, execution)) == (current.execution != execution)
 
 
 @asynccontextmanager
@@ -123,4 +139,3 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert comms.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(comms) == 1  # The old failure remains evidence, never replayed.
-

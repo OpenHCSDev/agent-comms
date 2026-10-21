@@ -444,6 +444,9 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
+            thread.role.require_executable(
+                RelationViolationError("Only agent threads can be stopped.")
+            )
             if not snapshot.status(thread.name).active and (
                 thread.process_identity.allows_inactive_stop()
             ):

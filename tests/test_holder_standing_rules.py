@@ -26,6 +26,7 @@ from agent_comms.commander.standing import (
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
@@ -61,6 +62,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
+    comms.messaging.initialize_private_initial_protocol()
     declare_test_bus(comms, channels=('comms',), threads=tuple(
         comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
         for name in ('lead', 'worker', 'outsider')
@@ -94,6 +96,14 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     copied_bus = Comms(copied)
     configured_repository(copied_bus)
     return copied_bus
+
+
+def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
+    reader = comms.messaging.user_identity(str(tmp_path))
+    before = comms.registry.store.path.read_bytes()
+    with pytest.raises(RelationViolationError, match="Only agent threads can be stopped"):
+        comms.owners.stop(reader.name)
+    assert comms.registry.store.path.read_bytes() == before
 
 
 def blocked_holder(comms):
@@ -163,9 +173,8 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
 
 
 async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
-    held_bus, native_runtime_package, source_programs, tmp_path,
+    held_bus, native_runtime_package, tmp_path,
 ):
-    source_programs.bind(held_bus.root.parent)
     provider_root = tmp_path / "stopping-provider"
     provider_root.mkdir(mode=0o700)
     async with native_backend_fixture(provider_root, package=native_runtime_package) as fixture:
