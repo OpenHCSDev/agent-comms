@@ -1415,6 +1415,10 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def line(self) -> str:
         return "No order"
 
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        """Only pending and claimed orders take a check correction (DeliverableProblemOrder)."""
+        raise ValueError("Only a pending or claimed order takes a check correction.")
+
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
     )
@@ -1798,12 +1802,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
-
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -1861,6 +1859,12 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
+
+    def corrected(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
 
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
@@ -1982,9 +1986,6 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def closing_artifact(self) -> str:
         return self.delivery.closing_artifact()
-
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
@@ -2849,6 +2850,7 @@ class CorrectCheckTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
         _text(self.reason, "Check correction reason", 2000)
         self.check.require_writable()
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
