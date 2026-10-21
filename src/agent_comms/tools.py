@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
 import threading
@@ -51,6 +50,7 @@ from .goal_waits import StandbyReview
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration, OrderCheck
+from .message_bus import HeldBusWrite
 from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
@@ -85,7 +85,7 @@ from .task_sources import (
 )
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
-from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnBound, TurnsSince, TurnDigestRead, UnjudgedEdits
+from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnBound, TurnsSince, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
@@ -374,12 +374,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
 
 class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    ToolRequest[Caller], declared_name=None
+    HeldBusWrite, ToolRequest[Caller], declared_name=None
 ):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
-        return asyncio.run(comms.bus.when_open(partial(self.publish, comms, caller)))
+        return self.write_when_open(comms, partial(self.publish, comms, caller))
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
