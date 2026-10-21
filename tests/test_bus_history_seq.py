@@ -2,16 +2,24 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
+
+import pytest
 
 from agent_comms.bus import Bus, PublicRecord
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.locked_store import RegistryFile
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.publisher import Publisher
+from agent_comms.presentation import WireRevision
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.registration import Registration
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
+from agent_comms.typed_table import RowNotFoundError
 
 
 def channel_bus(root):
@@ -25,7 +33,7 @@ def channel_bus(root):
 def pages(messages):
     before = messages.bus.revision() + 1
     result = []
-    while page := messages.page(before_seq=before, limit=2):
+    while page := messages.bus.page(before, 2):
         result.append(tuple(row.seq for row in page))
         before = page[-1].seq
     return result
@@ -37,14 +45,46 @@ def test_message_bus_pages_five_channel_messages_two_at_a_time(tmp_path):
 
 def test_archived_database_pages_read_only(tmp_path):
     live = channel_bus(tmp_path / "live")
-    archive = tmp_path / "archive"
-    archive.mkdir()
-    live.bus.backup(Bus.path_in(archive))
+    registry = Registration(RegistryFile.path_in(live.bus.path.parent))
+    registry.declare(registry.new_thread("author", frozenset({"history"}), str(tmp_path)))
+    source = HistoryArchive(Bus.path_in(tmp_path / "reader")).attach(live.bus.path.parent)
+    archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)
     archived.bus.path.chmod(0o400)
+    source.validate()
+    assert source.snapshot_bus_revision == 5
     assert pages(archived) == [(5, 4), (3, 2), (1,)]
     with archived.bus.observing() as db:
         assert db.execute("PRAGMA query_only").fetchone()[0] == 1
+    replacement = tmp_path / "replacement.sqlite3"
+    live.bus.backup(replacement)
+    replacement.replace(archived.bus.path)
+    with pytest.raises(ValueError, match="Historical snapshot changed"):
+        source.validate()
+
+
+def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    original = messages.bus.lookup(1)
+    assert messages.bus.lookup_message(original.message_id).reference == original.reference
+    with pytest.raises(RowNotFoundError):
+        messages.bus.lookup_message("missing")
+    messages.bus.append(lambda seq, db: replace(original, seq=seq))
+    with pytest.raises(MalformedRecord, match="Expected one"):
+        messages.bus.lookup_message(original.message_id)
+
+
+def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    before = replace(WireRevision.empty(), bus_seq=messages.bus.revision(),
+                     bus_identity=RecordedBusIdentity.capture(messages.bus.path))
+    grown = replace(before, bus_seq=before.bus_seq + 1)
+    assert grown.changed_since(StoresView(), before)
+    assert not grown.changed_since(BusSourceView(), before)
+    replacement = Bus.path_in(tmp_path / "replacement")
+    messages.bus.backup(replacement)
+    replaced = replace(before, bus_identity=RecordedBusIdentity.capture(replacement))
+    assert replaced.changed_since(BusSourceView(), before)
 
 
 def test_native_cursor_resumes_by_file_byte_offset(tmp_path):

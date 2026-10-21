@@ -1,4 +1,4 @@
-"""An append-only, capability-declared SQLite bus; no existing readers are wired here."""
+"""Append-only database history and capability-declared record queries."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from agent_comms.bus_tables import (
     BusTables,
     BusProjectionTables,
     KeyedPublication,
+    MessageIdentitySource,
     SentSource,
     ReceivedSource,
     AnsweredSource,
@@ -27,6 +28,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
+from agent_comms.watched import Watched
 
 
 class PublicRecord(BusRecord):
@@ -48,7 +50,7 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
-class Bus(StoreWriter, DurableFile):
+class Bus(StoreWriter, DurableFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
@@ -125,6 +127,12 @@ class Bus(StoreWriter, DurableFile):
             if not headers:
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
             return self._record(db, headers[0])
+
+    def lookup_message(self, message_id: str) -> BusRecord:
+        """Resolve one content identity; absent or ambiguous identities are refused."""
+        with self.observing() as db:
+            identity = MessageIdentitySource.require(db, message_id=message_id)
+            return self._record(db, BusRow.require(db, seq=identity.seq))
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:

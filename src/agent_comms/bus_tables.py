@@ -12,7 +12,7 @@ from typing import Annotated, get_type_hints
 from agent_comms import messages
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, SharedFileTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, Index, SharedFileTables, TypedTable
 from agent_comms.message_reference import MessageReference
 
 
@@ -40,6 +40,18 @@ class ReceivedSource(ParticipantSource):
 
 class DirectReplySource(ReceivedSource):
     """The record's declared reply policy starts a separate direct turn."""
+
+
+@dataclass(frozen=True)
+class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
+    """A record's existing reference, searchable without recomputing its content hash."""
+
+    sender: str
+    indexes = (
+        Index(("seq",), unique=True),
+        Index(("message_id",)),
+        Index(("sender", "message_id")),
+    )
 
 
 @dataclass(frozen=True)

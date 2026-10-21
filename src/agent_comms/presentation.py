@@ -61,7 +61,7 @@ from .read_basis import (
     NamedViewer,
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
-from .recorded_bus import RecordedBusIdentity
+from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     STATUS_SOURCE,
@@ -842,11 +842,15 @@ class WireRevision(ReadState):
             lambda views: (views.channels.catalog.path,), *STATUS_SOURCE, RegistrationsView
         ),
     ]
-    bus_log: Annotated[
+    bus_changes: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: Bus.source_paths(views.root), *STATUS_SOURCE, BusSourceView),
+        *revision_source(lambda views: Bus.source_paths(views.root), *STATUS_SOURCE),
     ]
-    bus_seq: Annotated[int, WatchViews((*STATUS_SOURCE, BusSourceView))]
+    bus_identity: Annotated[
+        RecordedBusIdentity, WatchViews((*STATUS_SOURCE, BusSourceView)),
+        Differs(lambda before, current: not before.matches(current)),
+    ]
+    bus_seq: Annotated[int, WatchViews(STATUS_SOURCE)]
     bus_routes: Annotated[
         tuple[FileRevision, ...],
         *revision_source(bus_route_paths, StoresView, SidebarView),
@@ -912,7 +916,7 @@ class WireRevision(ReadState):
                 for plan in FieldCodec.field_plans(cls)
                 if WatchPaths.single(plan.annotation)
             },
-            bus_seq=0, expiry_tick=0,
+            bus_identity=NoRecordedBus(), bus_seq=0, expiry_tick=0,
         )
 
     @classmethod
@@ -932,7 +936,8 @@ class WireRevision(ReadState):
                         for revision in FileRevision.capture(path).revisions())
             for name, group in cls.source_paths(views).items()
         }
-        return cls(**captured, bus_seq=views.bus.bus.revision(), expiry_tick=expiry_tick)
+        return cls(**captured, bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
+                   bus_seq=views.bus.bus.revision(), expiry_tick=expiry_tick)
 
     def selection_reusable_from(self, earlier: WireRevision) -> bool:
         return ((self.registry, self.catalog, self.history) ==
@@ -948,7 +953,7 @@ class WireRevision(ReadState):
         if (self.registry != earlier.registry or self.changed_since(BusSourceView(), earlier)
                 or not readable):
             return frozenset(names)
-        if self.bus_log != earlier.bus_log:
+        if self.bus_seq != earlier.bus_seq:
             snapshot = comms.registry.snapshot()
             source = comms.bus.bus
             if source.revision() != self.bus_seq:
