@@ -1913,7 +1913,7 @@ class Comparison:
                 or any(self.introduced.values()))
 
 
-def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
+def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Comparison:
     source_root = Path(root)
     if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
         raise ValueError("--root must be a repository-relative source directory")
@@ -1932,7 +1932,7 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
 
     measures = Measure.members_with(Measure)
     # Forked workers start from this already-imported module instead of importing it again.
-    with ForkedProcessPool() as pool:
+    with ForkedProcessPool(workers) as pool:
         parts = {measure: [pool.submit(part)
                            for part in measure.parts(repo, base, head, paths, root)]
                  for measure in measures}
@@ -1967,8 +1967,10 @@ def main() -> int:
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
+    parser.add_argument("--workers", type=int, default=os.process_cpu_count() or 1,
+                        help="Pool width; a caller running ratchets in parallel narrows it")
     args = parser.parse_args()
-    result = compare(Path.cwd(), args.base, args.head, args.root)
+    result = compare(Path.cwd(), args.base, args.head, args.root, args.workers)
     # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
     print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges
