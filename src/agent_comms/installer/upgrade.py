@@ -20,7 +20,6 @@ start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -65,7 +64,7 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, Ma
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses, RuntimeRetirement
+from agent_comms.runtime_processes import RuntimeProcesses, RuntimeProcessOutcome
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
@@ -258,12 +257,8 @@ class RetiringRehearsal(FreshRehearsal):
 class LiveRun(DeclaredFamily, affix="Run"):
     """What a live install changed, including every bridge and old-runtime process."""
 
-    processes: tuple[RuntimeRetirement, ...] = ()
+    processes: tuple[RuntimeProcessOutcome, ...] = ()
     bridges: tuple[BridgeResume, ...] = ()
-
-    @property
-    def successful(self) -> bool:
-        return all(process.successful for process in self.processes)
 
     def lines(self) -> tuple[str, ...]:
         return (
@@ -706,9 +701,9 @@ class Install[Rehearsed: Rehearsal](ABC):
             finally:
                 # A failed live pass has restored the outgoing runtime; resume onto it too.
                 resumed = tuple(bridge.resume() for bridge in paused)
-        # Bridges have exec'd before discovery. The installer must also have
-        # transferred to the target runtime; it is not exempted from the sweep.
-        processes = asyncio.run(RuntimeProcesses.observe(self.staged.runtime).retire(10))
+        # Observe after bridge transfer. Discovery never grants stop authority
+        # over another app; installer-started children keep their launch handles.
+        processes = RuntimeProcesses.observe(self.staged.runtime).outcomes
         return replace(result, bridges=resumed, processes=processes)
 
     @abstractmethod
