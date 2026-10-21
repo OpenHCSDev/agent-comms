@@ -67,15 +67,14 @@ class Pgrep:
     """`pgrep -f`: matching the pattern against whole command lines, the waiter's own included."""
 
     program: ClassVar[str] = "pgrep"
-    full: ClassVar[str] = "--full"
+    full: ClassVar[re.Pattern[str]] = re.compile(r"--full|-\w*f\w*")
+    """`--full`, or a cluster of short options holding `f`."""
 
     @classmethod
     def full_match(cls, segment: Words) -> bool:
         return any(
-            run.program == cls.program and any(
-                arg == cls.full or (arg[:1] == "-" and arg[1:2] != "-" and "f" in arg[1:])
-                for arg in takewhile(lambda arg: arg.startswith("-"), run.args)
-            )
+            run.program == cls.program
+            and any(map(cls.full.fullmatch, takewhile(lambda arg: arg.startswith("-"), run.args)))
             for run in Bash.commands(segment)
         )
 
@@ -110,12 +109,18 @@ class Bash(ToolInput):
                 for run in timeout.commands():
                     match (run.program, *run.args):
                         case (keyword, *condition) if keyword in self.loops:
-                            yield Wait(False, (tuple(condition), *takewhile(
-                                lambda later: later[:1] != self.body, segments[index + 1:]
-                            )))
-                        case (program, flag, script, *_) if (
-                            self.shell.fullmatch(program) and self.script_flag.fullmatch(flag)
-                        ):
+                            yield Wait(
+                                False,
+                                (
+                                    tuple(condition),
+                                    *takewhile(
+                                        lambda later: later[:1] != self.body, segments[index + 1 :]
+                                    ),
+                                ),
+                            )
+                        case (program, flag, script, *_) if self.shell.fullmatch(
+                            program
+                        ) and self.script_flag.fullmatch(flag):
                             for wait in Bash(script).waits():
                                 yield replace(wait, bounded=wait.bounded or timeout.bounded)
 
