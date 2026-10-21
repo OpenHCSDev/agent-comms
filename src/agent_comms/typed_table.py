@@ -954,9 +954,7 @@ class OrdinalTransitions(MutationCapability):
         violations = []
         for member in family.members_with(family):
             rule = member.ordinal_rule
-            first = "NULL" if rule.first is None else str(rule.first)
-            expected = (f"CASE WHEN {ordinal.reference('OLD')} IS NULL THEN {first} "
-                        f"ELSE {ordinal.reference('OLD')} + {rule.increment} END")
+            expected = f"NULLIF(COALESCE({ordinal.reference('OLD')}, 0) + {rule.increment}, 0)"
             allowed = ",".join(sql_literal(previous.declared_name)
                                for previous in family.members_with(rule.predecessors))
             violations.append(

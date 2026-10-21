@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -23,32 +23,26 @@ if TYPE_CHECKING:
     from .coordination_snapshot import RecoverySnapshot
 
 
-class OrdinalRule(ABC):
+class OrdinalRule:
     increment: int = 0
     predecessors: type = LifecycleState
 
-    @property
-    @abstractmethod
-    def first(self) -> int | None: ...
+    def next_ordinal(self, previous: ExecutionState) -> int:
+        return (previous.current_attempt_ordinal or 0) + self.increment
 
-    def accepts(self, following: int | None, previous: ExecutionState) -> bool:
-        ordinal = previous.current_attempt_ordinal
-        expected = self.first if ordinal is None else ordinal + self.increment
-        return isinstance(previous, self.predecessors) and following == expected
+    def accepts(self, following: ExecutionState, previous: ExecutionState) -> bool:
+        return (isinstance(previous, self.predecessors)
+                and following.current_attempt_ordinal == (self.next_ordinal(previous) or None))
 
 
 class PreservedOrdinal(OrdinalRule):
-    first = None
+    """Keep the previous attempt, including its absence before the first start."""
 
 
 @dataclass(frozen=True)
 class AdvancedOrdinal(OrdinalRule):
     predecessors: type
     increment: int = 1
-
-    @property
-    def first(self) -> int:
-        return self.increment
 
 
 @dataclass(frozen=True)
@@ -68,7 +62,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
 
     @property
     def next_attempt_ordinal(self) -> int:
-        return 1
+        return ActiveExecution.ordinal_rule.next_ordinal(self)
 
     def require_attempt_start(self) -> None:
         raise IdentityConflict("execution cannot start an attempt")
@@ -109,7 +103,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     ordinal_rule: ClassVar[OrdinalRule] = PreservedOrdinal()
 
     def accepts_previous(self, previous: ExecutionState) -> bool:
-        return self.ordinal_rule.accepts(self.current_attempt_ordinal, previous)
+        return self.ordinal_rule.accepts(self, previous)
 
     def validate_snapshot(self, snapshot, authorized: bool) -> None:
         """State-specific cross-lifecycle rules, after common identities agree."""
@@ -159,10 +153,6 @@ class AttemptReference:
     @property
     def current_attempt_ordinal(self) -> int | None:
         return self.ordinal
-
-    @property
-    def next_attempt_ordinal(self) -> int:
-        return (self.ordinal or 0) + 1
 
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
