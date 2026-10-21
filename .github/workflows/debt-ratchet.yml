@@ -38,6 +38,8 @@ jobs:
           PY
       - name: Collect the test suite
         run: pytest --collect-only -q -p no:cacheprovider
+      - name: Stack clients import only modules Core has
+        run: python tools/module_layers.py --check
 
   native-scripts:
     name: native-scripts

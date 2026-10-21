@@ -8,7 +8,7 @@ from typing import ClassVar, Literal
 from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
@@ -146,8 +146,7 @@ class TextualPart(Part, ABC):
         return (StartedItem(message.id, self.id, self.phase, accumulator),)
 
 
-class TextPart(TextualPart):
-    wire_tag = 'text'
+class TextPart(TextWire, TextualPart):
     event_type = AssistantTranscript
     phase = ModelWaitPhase('Replying')
 
