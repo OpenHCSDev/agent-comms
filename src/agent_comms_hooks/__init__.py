@@ -131,3 +131,13 @@ class ClaudeHookProgram(ABC):
     def entry(cls) -> dict[str, object]:
         """This program's entry, marked so install can replace what it wrote."""
         return {"writer": cls.writer, "hooks": [{"type": "command", "command": cls.command()}]}
+
+
+class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
+    """A program Claude Code runs only on calls of the one tool it names."""
+
+    tool: ClassVar[str]
+
+    @classmethod
+    def entry(cls) -> dict[str, object]:
+        return {**super().entry(), "matcher": cls.tool}
