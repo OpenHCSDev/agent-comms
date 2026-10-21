@@ -24,15 +24,15 @@ from .acp_extension import (
     UnavailableCursorObservation,
     encode_updates,
 )
+from .agent_backend import InputId
 from .comms import Comms
 from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
+from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .diagnostics import PublicationMeasurements
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
-from .cursor_owner import CursorState
-from .cursor_owner import CursorOwner
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
 from .thread_identity import ClaimedIdentity
@@ -71,14 +71,14 @@ class CursorDelivery:
     ) -> CursorState:
         """Selected settlement borrows this recipient's serialized reader lifetime."""
         async with self.reading() as source_reads:
-            return await CursorOwner.advance_async(
-                participant.bus, source_reads=source_reads,
+            owner = CommittedCursorOwner(
+                thread=participant.owner.thread,
+                claimed_generation=participant.owner.claimed_generation,
                 wire_root_id=participant.root_id,
-                owner=participant.owner.thread,
-                owner_claimed_generation=participant.owner.claimed_generation,
-                owner_generation=participant.identity.generation,
-                committed_input_id=input_id,
+                generation=participant.identity.generation,
+                input_id=InputId(input_id),
             )
+            return await owner.advance_async(participant.bus, source_reads=source_reads)
 
     def close(self) -> None:
         self.source_reads.close()

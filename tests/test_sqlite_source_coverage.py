@@ -2,26 +2,28 @@
 
 import pytest
 
-from agent_comms.bus import Bus, BusRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
 from agent_comms.bus_source_page import CoveragePage
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_owner import UnstartedCursor
 from agent_comms.messages import InfoKind, Message
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from agent_comms.publisher import ResponseWrites
-from test_bus import record_from
+from bus_record_fixture import prepare_native_comms, record_from
 
 
 @pytest.fixture
 def coverage(tmp_path):
-    Bus.install(Bus.path_in(tmp_path))
-    comms = Comms(tmp_path, ResponseWrites)
+    comms = prepare_native_comms(Comms(tmp_path, ResponseWrites))
+    with NativeBoundary(comms.bus) as boundary:
+        root_id = boundary.privacy.namespace
     with Coordination(str(CoordinationStore.path_in(tmp_path))) as store:
         store.install_private_runtime()
-        yield SourceCoverage(comms.bus, store, wire_root_id="a" * 32,
+        yield SourceCoverage(comms.bus, store, wire_root_id=root_id,
                              recipient_lookup="b" * 32)
 
 

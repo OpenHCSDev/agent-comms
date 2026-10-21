@@ -8,36 +8,36 @@ historical watermark grants no current-owner, provider, write or reply permit.
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
+import sqlite3
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, TYPE_CHECKING
-
-from .bus_source_page import CoveragePage
-from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from .field_codec import FieldCodec, Id128Text
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
+from agent_comms.lifecycle_capability import Active
 
+from .agent_backend import InputId
 from .audience_manifest import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
+from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import AcceptedCohort, _claim_record
+from .field_codec import FieldCodec, Id128Text
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
+from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
+from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_path import FileIdentity, ObservedPath, PresentPath
 from .wake_policy import RecipientDecision
-from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 
 if TYPE_CHECKING:
-    from .private_registry_guard import RegistryPrivacy
+    from .cursor_owner import CursorOwner, CursorState
     from .native_entries import NativeEvidenceScope
-    from .cursor_owner import CursorState
+    from .private_registry_guard import RegistryPrivacy
 
 _MAX_SCAN_SECONDS = 0.25
 
@@ -77,10 +77,10 @@ class CoverageInput(ABC):
     def candidate(self, state, owner, coverage): ...
 
     @abstractmethod
-    def allows(self, owner, db, state, committed_input_id) -> bool: ...
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool: ...
 
-    def require_reference(self, owner, cursor) -> None:
-        pass
+    @abstractmethod
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None: ...
 
     def build(self, owner, covered_seq):
         return CurrentNativeCursor(
@@ -106,8 +106,11 @@ class NoInjectedInput(CoverageInput):
     def candidate(self, state, owner, coverage):
         return state.without_input(self, owner, coverage)
 
-    def allows(self, owner, db, state, committed_input_id):
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
         return True
+
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
+        """A suffix without an injected input has no new reference to compare."""
 
 
 @dataclass(frozen=True)
@@ -128,11 +131,11 @@ class InjectedInput(CoverageInput):
     def candidate(self, state, owner, coverage):
         return self.build(owner, coverage.covered_seq)
 
-    def allows(self, owner, db, state, committed_input_id):
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
         if self.original.owner_identity != owner.participant_identity:
             raise IdentityConflict('current cursor native proof belongs to another owner')
         state.require_input_progress(self.original)
-        if committed_input_id is not None and self.original.input_id != committed_input_id:
+        if not owner.permits_input(InputId(self.original.input_id)):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
         if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):
@@ -140,7 +143,7 @@ class InjectedInput(CoverageInput):
         owner.require_recorded_reference(db, self.original.reference)
         return True
 
-    def require_reference(self, owner, cursor):
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
         if cursor.injected_seq == self.original.source_seq and (
             cursor.reference != self.original.reference or self.original.owner_identity != owner.participant_identity
         ):
@@ -174,22 +177,18 @@ class ProvenSourceCoverage:
         sequences = self.injected_source_seqs
         if not sequences:
             return NoInjectedInput()
-        return InjectedInput(self.last_proof(sequences[-1]))
+        source_seq = sequences[-1]
+        matching = [item for item in self.inputs
+                    if item.source_seq == source_seq and item.expected_prompt_equality_established]
+        if not matching:
+            raise IdentityConflict("current cursor source lacks live-bound native proof")
+        return InjectedInput(matching[-1])
 
     def evidence(self, *, through_seq: int | None = None) -> tuple[HistoricalNativeInput, ...]:
         """Consume the native inputs already corroborated in this source read."""
         if through_seq is None:
             return self.inputs
         return tuple(item for item in self.inputs if item.source_seq <= through_seq)
-
-    def last_proof(self, source_seq: int) -> HistoricalNativeInput | None:
-        if source_seq == 0:
-            return None
-        matching = [item for item in self.inputs
-                    if item.source_seq == source_seq and item.expected_prompt_equality_established]
-        if not matching:
-            raise IdentityConflict("current cursor source lacks live-bound native proof")
-        return matching[-1]
 
 
 class SourceCoverage:
