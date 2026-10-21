@@ -641,7 +641,7 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
                 *excluded: str) -> Iterator[ProgressPoint]: ...
 
     @abstractmethod
-    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]: ...
+    def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]: ...
 
     @abstractmethod
     def readings(self, source: ProgressSource) -> DistanceReadings: ...
@@ -664,7 +664,7 @@ class MissingCheckout(ProgressCheckout):
                 *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
 
-    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         return ()
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
@@ -693,7 +693,7 @@ class PresentCheckout(ProgressCheckout):
     def origin_refs(self) -> tuple[str, ...]:
         return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
 
-    def references(self, storage: StorageRule, owner: ThreadIncarnation) -> tuple[str, ...]:
+    def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = {f"refs/heads/{branch}"
                  for branch, paths in WorkBranches(self.path).worktrees().items()
                  if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
@@ -768,8 +768,9 @@ class ProgressSource:
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
-    def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
-        owner = todo.held().owner_identity
+    def of(cls, todo: Todo, registry: Registration, pulls: PullRequests) -> Self:
+        owner = registry.require(todo.held().owner)
+        storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
         candidates = (Path(todo.order.checked().check.directory), *owned)
         path = next((path for path in candidates if (path / ".git").exists()),
@@ -832,9 +833,9 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     Never stored: the checkout and GitHub are its owners."""
 
     @classmethod
-    def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+    def read(cls, todo: Todo, registry: Registration, pulls: PullRequests) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
-        return cls.from_source(MeasuredProgressSource.of(todo, storage, pulls))
+        return cls.from_source(MeasuredProgressSource.of(todo, registry, pulls))
 
     @classmethod
     def from_source(cls, source: ProgressSource) -> OrderProgress:
@@ -1380,7 +1381,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
 
-    def closed_by_merge(self, todo: Todo, storage: StorageRule,
+    def closed_by_merge(self, todo: Todo, registry: Registration,
                         pulls: PullRequests) -> tuple[Todo, ...]:
         return ()
 
@@ -1577,10 +1578,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def merged(self, sha: str) -> MergedProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
-    def closed_by_merge(self, todo: Todo, storage: StorageRule,
+    def closed_by_merge(self, todo: Todo, registry: Registration,
                         pulls: PullRequests) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
-        source = ProgressSource.of(todo, storage, pulls)
+        source = ProgressSource.of(todo, registry, pulls)
         return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
 
@@ -3082,12 +3083,12 @@ class TodoStore(TypedStore, DurableTables):
         return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
                      if todo.pending and todo.handed_out_on_release)
 
-    def reconcile_merges(self, commander: ThreadIncarnation, storage: StorageRule) -> None:
-        """Read before locking; close only orders whose observed revision still holds."""
+    def reconcile_merges(self, commander: ThreadIncarnation, registry: Registration) -> None:
+        """Read before locking; record merge changes whose observed revision still holds."""
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
         completed = tuple(closed for todo in held
-                          for closed in todo.order.closed_by_merge(todo, storage, pulls))
+                          for closed in todo.order.closed_by_merge(todo, registry, pulls))
         if not completed:
             return
         with self.writing() as db:
@@ -3097,14 +3098,14 @@ class TodoStore(TypedStore, DurableTables):
                     result.upsert(db)
 
     def board_disagreements(
-        self, commander: ThreadIncarnation, storage: StorageRule,
+        self, commander: ThreadIncarnation, registry: Registration,
     ) -> Iterator[tuple[Todo, MergedProgress]]:
         """Open orders whose progress misses a linked merge, sharing one PR read cache."""
         todos = self.held_for_commander(commander)
         pulls = PullRequests(todos)
         for todo in todos:
-            progress = OrderProgress.read(todo, storage, pulls)
-            source = ProgressSource.of(todo, storage, pulls)
+            progress = OrderProgress.read(todo, registry, pulls)
+            source = ProgressSource.of(todo, registry, pulls)
             for merged in progress.missing_merges(source):
                 yield todo, merged
 
@@ -3123,14 +3124,14 @@ class TodoStore(TypedStore, DurableTables):
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
-    def timers_up_for_commander(self, commander: ThreadIncarnation, storage: StorageRule,
+    def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
         """Held work whose review timer is up, with its round; merged work waits on install."""
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(
-                         todo, {todo.id: OrderProgress.read(todo, storage, pulls)}))
+                         todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))
 
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",

@@ -246,7 +246,8 @@ def pr_commander(tmp_path, monkeypatch):
                      for row, body in requests},
     }))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
-    lead = thread(source.checkout.name, tmp_path, 1.0)
+    lead = Registration(tmp_path / "registry.json").new_thread(
+        source.checkout.name, frozenset(), str(source.checkout), created_at=1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
@@ -302,7 +303,7 @@ def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, 
     assert requests[0].orders == tuple(todo.order.id for todo in linked)
     store = TodoStore(ctx.root)
     assert tuple(store.get(todo.id) for todo in originals) == linked
-    store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
+    store.reconcile_merges(ctx.incarnation, ctx.comms.registry)
     done = tuple(store.get(todo.id) for todo in originals)
     assert all(todo.state is DoneTodoState for todo in done)
     assert len({todo.order.sha for todo in done}) == 1
@@ -317,7 +318,7 @@ def test_unlinked_pr_with_matching_problem_heading_closes_nothing(pr_commander):
     original = pr_order(ctx, "P343")
     assert PullRequests((original,)).listed(original.repo, MergedListedPullRequest, original) == ()
     store = TodoStore(ctx.root)
-    store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
+    store.reconcile_merges(ctx.incarnation, ctx.comms.registry)
     assert store.get(original.id) == original
     assert original.order.checked().pull_requests == ()
 
@@ -331,7 +332,7 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     assert pulls.listed(linked.repo, MergedListedPullRequest, linked) == ()
     assert len(pulls.listed(linked.repo, ClosedListedPullRequest, linked)) == 1
     store = TodoStore(ctx.root)
-    store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
+    store.reconcile_merges(ctx.incarnation, ctx.comms.registry)
     assert store.get(original.id) == linked
 
 
@@ -357,7 +358,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
     with practice_copy(ctx.root, copied_path) as (copied, measurement):
         checked = ctx.model_copy(update={"root": copied, "state": copied / "state"})
         store = checked.comms.goals.todos
-        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        store.reconcile_merges(checked.incarnation, checked.comms.registry)
         mechanical, application = tuple(store.get(todo.id) for todo in originals)
         assert mechanical.state is DoneTodoState
         assert mechanical.assignment is None
@@ -373,7 +374,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
         assert worker.name in board
         print("APPLICATION BOARD:", next(line for line in board.splitlines()
                                           if line.startswith(f"| {application.id}:")))
-        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        store.reconcile_merges(checked.incarnation, checked.comms.registry)
         assert store.get(application.id) == application  # no heartbeat revision churn
         assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
         with pytest.raises(ToolRefusedError) as refused:

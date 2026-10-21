@@ -162,7 +162,7 @@ class ReviewTimerUp(HeldOrderDue):
     def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
         actor = comms.registry.require(commander).incarnation
         return comms.goals.todos.timers_up_for_commander(
-            actor, comms.registry.storage_rule, time.time())
+            actor, comms.registry, time.time())
 
     def line(self) -> str:
         return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
@@ -343,7 +343,7 @@ class BoardDisagrees(UndatedStandingRule):
         return tuple(
             cls(todo.id, todo.order.id, merged.sha)
             for todo, merged in comms.goals.todos.board_disagreements(
-                comms.registry.require(commander).incarnation, comms.registry.storage_rule
+                comms.registry.require(commander).incarnation, comms.registry
             )
         )
 
