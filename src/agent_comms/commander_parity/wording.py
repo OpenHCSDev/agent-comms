@@ -143,7 +143,7 @@ class OrderWordingComparison(WordingComparison):
             expected_revision=todo.revision,
             order=order,
             request=context.comms.registry.require(context.commander).goal.require().id,
-            deadline=todo.deadline,
+            review_at=todo.review_at,
             commander=context.commander,
             assigner=context.incarnation,
         )
