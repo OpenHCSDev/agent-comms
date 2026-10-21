@@ -540,6 +540,23 @@ def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
     assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))
 
 
+def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(held_bus):
+    """A held unit whose last attempt failed refuses a status-only resume; the chokehold's
+    release continues its generation the way a fresh order does, so one such unit neither stays
+    paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
+    from agent_comms.goal_actions import (
+        ActiveGoalAction, ChokeholdPausedGoalAction, CompliedGoalAction, OwnerInvocable,
+    )
+
+    blocked_holder(held_bus)
+    held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
+    with pytest.raises(ValueError, match="unresolved"):
+        held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
+    held_bus.goals.update_goal(
+        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+    assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+
+
 def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus, monkeypatch):
     """The heartbeat's memory of what it enforced dies with its process; the bus says which
     bursts already went out, so a rule that reads as new again after a restart is not resent."""
