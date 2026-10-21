@@ -69,7 +69,7 @@ class VerdictCase(ABC):
     def native(run: LifecycleRun, command: VerdictVerb, todo: Todo, edit: Edit) -> object:
         return run.commander.call(
             CommsVerdictTool(
-                problem=todo.id, operation=command.operation(run.commander, todo, edit.id)
+                problem=todo.id, operation=command.operation(run.commander, todo, edit)
             )
         )
 
