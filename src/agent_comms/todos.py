@@ -36,6 +36,7 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.change_report import (
     FileLine,
     MainRevision,
@@ -767,7 +768,8 @@ class PresentCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = {f"refs/heads/{branch}"
                  for branch, paths in WorkBranches(self.path).worktrees().items()
-                 if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
+                 if any(storage.owns_checkout(owner, checkout, checkout)
+                        for checkout in (Path(path).resolve() for path in paths))}
         return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
@@ -2637,7 +2639,6 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 @dataclass(frozen=True)
 class ReviewedHeadVerdict(QuotedVerdict):
     """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
-    context: ClassVar[str] = "agent-comms/review"
     head: str
 
     def __post_init__(self) -> None:
@@ -2657,14 +2658,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
             raise TodoError("The verdict actor must be the connector reviewer recording it.")
         current = goals.todos.get(problem)
         recorded = self.prepare(goals, current).record(goals, problem)
-        posted = subprocess.run(
-            ("gh", "api", "--method", "POST", f"repos/{recorded.repo.to_wire()}/statuses/{self.head}",
-             "-f", "state=success", "-f", f"context={self.context}",
-             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
-            capture_output=True, text=True, timeout=60,
-        )
-        if posted.returncode:
-            raise TodoError(posted.stderr.strip() or f"Review status on {self.head} failed.")
+        AcceptedHeadReview().post(recorded.repo, self.head, reviewer.name, problem)
         return recorded
 
 

@@ -92,6 +92,8 @@ class Repository:
         command = (
             sys.executable, str(source / "tools/debt_ratchet.py"),
             "--root", self.root, "--base", base, "--head", head,
+            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+            "--workers", "2",
         )
         environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
             (str(source / "src"), os.environ["PYTHONPATH"]))}
@@ -905,6 +907,20 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     )
 
 
+def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
+    base = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.done\n"})
+    kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})
+    status, report = repo.compare(base, kept)
+    identity = f"{NoneAbsence.__name__}:{repo.root}/owner.py"
+    assert report["introduced"][identity] == 0
+    added = repo.commit(
+        {"owner.py": "def ready(stored):\n    return stored is not None and stored.owner is not None\n"}
+    )
+    status, report = repo.compare(kept, added)
+    assert status == 1
+    assert report["introduced_lines"][identity] == [2]
+
+
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
@@ -978,7 +994,7 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
 
 
 def string_identity_readings(source: bytes) -> list[tuple[str, type]]:
-    declared = b"class CarryStep: pass\ndef carry_hunts(): pass\n"
+    declared = b"class CarryStep: pass\nclass Claimed: pass\ndef carry_hunts(): pass\n"
     spellings = DeclaredSpellings.read(
         {
             path: DeclaredSpellings.declarations(path, module)
@@ -1019,6 +1035,25 @@ word = "plain words here"
         ("model", NamedAccess),
         ("pkg.plugin", NamedAccess),
         ("text", NamedAccess),
+    ]
+
+
+def test_a_one_word_class_name_counts_only_where_a_type_is_expected():
+    source = b"""notice = Message(owner, owner, "Claimed", kind)
+label = "Claimed"
+field: Annotated[int, tool_field("Claimed")] = 0
+step = "CarryStep"
+def read() -> "Claimed": pass
+held: "Claimed"
+class Index(list["Claimed"]): pass
+Bound = TypeVar("Bound", bound="Claimed")
+"""
+    assert string_identity_readings(source) == [
+        ("CarryStep", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
     ]
 
 
@@ -1126,3 +1161,21 @@ except FileNotFoundError: absent()
 def test_broad_handlers_only_count_defaults_returned_by_the_handler():
     source = b"""def read():\n    try: work()\n    except Exception:\n        return None\n    try: work()\n    except:\n        if condition: return {}\n    try: work()\n    except OSError:\n        return None\n    try: work()\n    except BaseException:\n        raise\n    try: work()\n    except Exception:\n        def helper(): return None\n        raise\n"""
     assert BroadExceptDefault.count(source, "read.py") == 2
+
+
+def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
+    """run-step.sh annotates the last lines of stdout and stderr merged into one pipe; the
+    report is flushed first, so what grew is what a reader without the job log sees."""
+    base = repo.commit({"check.py": 'value = row["a"]\n'})
+    head = repo.commit({"check.py": "value = type(x) is int\n"})
+    source = Path(__file__).resolve().parents[2]
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        (str(source / "src"), os.environ["PYTHONPATH"]))}
+    merged = subprocess.run(
+        (sys.executable, str(source / "tools/debt_ratchet.py"),
+         "--root", repo.root, "--base", base, "--head", head),
+        cwd=repo.path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, timeout=120,
+    )
+    assert merged.returncode == 1
+    assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))

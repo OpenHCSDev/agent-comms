@@ -508,7 +508,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         pass
 
     def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """Only a thread holding owner requests records a claude-ai directive."""
+        """Only a thread holding owner requests records an owner directive."""
         return goal
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
@@ -568,7 +568,7 @@ class RequestDirective:
 @dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each claude-ai directive the commander
+    request stays open until no order serving it is open. Each owner directive the commander
     receives is recorded on it when it arrives."""
 
     directives: tuple[RequestDirective, ...] = ()
@@ -659,12 +659,20 @@ class ProblemGoalOrder(GoalOrder):
 class GoalAuthority:
     """What an owner input was granted: this goal in this state.
 
-    Assigning or replacing a problem order revises the goal but keeps its authority;
-    pausing, completing, blocking, clearing or replacing the goal changes it.
+    Assigning or replacing a problem order revises the goal but keeps its authority, and an
+    order or retry that makes the same goal active keeps a running turn; pausing, completing,
+    blocking, clearing or replacing the goal ends it.
     """
 
     goal_id: str
     state: GoalState
+
+    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
+        """Whether a turn granted this authority may keep working under the current goal."""
+        return current.continues(self)
+
+    def continues(self, captured: GoalAuthority) -> bool:
+        return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
 
 
 @dataclass(frozen=True)
@@ -844,6 +852,12 @@ class NoGoal(NullMember, GoalDeclaration):
     @property
     def authority(self) -> NoGoal:
         return self
+
+    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
+        return current == self
+
+    def continues(self, captured: GoalAuthority) -> bool:
+        return False
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
         return scope
