@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from agent_comms.channel_targets import CommandTarget
 import os
 import subprocess
@@ -18,6 +20,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
@@ -34,22 +38,20 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
-    store = Coordination(str(root / "coordination.sqlite"), clock_ms=lambda: 9999)
+    store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     install_private_cohort_schema(store)
     for name in lookups:
         store.participants.register(lookups[name], name, name, committed=True)
-    return comms, store, comms.messaging.initialize_private_initial_protocol(), lookups
+    return comms, store, comms.registry.prepare_native_root().namespace, lookups
 
 
 def _public_messages(comms: Comms) -> tuple[Message, ...]:
-    # Consume this small fixture under the wire owner's fixed append boundary.
-    with comms.bus.log.full_history_snapshot() as (_, messages):
-        return tuple(messages)
+    return tuple(comms.bus.bus.message_history())
 
 
 def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path) -> None:
@@ -57,7 +59,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
     assert channel.sender_role == UserThreadRole
     assert [row.body for row in comms.views.history_page(CommandTarget.named("#team")).messages] == ["hello @alice"]
-    initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
+    initial = comms.bus.bus.delivery(channel.seq)
     assert initial.message == channel
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
         lookups.values()
@@ -69,7 +71,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=NamedViewer(channel.sender)).messages)[-1] == dm
-    dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
+    dm_initial = comms.bus.bus.delivery(dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
         for member in dm_initial.audience.recipients
@@ -79,16 +81,13 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert accepted.value.member_count == accepted.value.assignment_count == 1
 
 
-def test_explicit_root_override_preserves_private_user_receipt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    comms, _, root_id, _ = _root(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path / "other-home"))
-    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    selected = wire()
-    assert selected.root == comms.root
-    sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
-    assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
+def test_selected_root_preserves_private_user_receipt(tmp_path: Path) -> None:
+    comms, _, _, _ = _root(tmp_path)
+    with LaunchRoot(comms.root).selected():
+        selected = wire()
+        assert selected.root == comms.root
+        sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
+        assert selected.bus.bus.delivery(sent.seq).message == sent
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
@@ -111,7 +110,7 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
     user = comms.messaging.user_identity(str(tmp_path))
     with pytest.raises(RelationViolationError):
         comms.messaging.send(user.name, "alice", "agent impersonation").message
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
 
 
 def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Path) -> None:
@@ -125,7 +124,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
         messages = [future.result(timeout=5) for future in futures]
     assert sorted(message.seq for message in messages) == [1, 2]
     assert {
-        comms.bus.log.read_delivery_cohort(root_id, message.seq).message.message_id
+        comms.bus.bus.delivery(message.seq).message.message_id
         for message in messages
     } == {message.message_id for message in messages}
 
@@ -153,6 +152,6 @@ def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) 
     members = comms.registry.all_threads().values()
     humans = [human for thread in members for human in thread.role.human(thread)]
     assert len(humans) == 1
-    assert [comms.bus.log.read_delivery_cohort(root_id, seq).message.seq for seq in seqs] == seqs
+    assert [comms.bus.bus.delivery(seq).message.seq for seq in seqs] == seqs
 
 

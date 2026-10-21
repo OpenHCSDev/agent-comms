@@ -14,8 +14,9 @@ from agent_comms.todos import ProblemNumber, Todo, TodoStore
 
 class ProblemNumbers(Carry):
     def backup_files(self) -> tuple[Path, ...]:
-        paths = tuple(path for path in SQLiteFile.files(TodoStore.path_in(self.root))
-                      if path.exists())
+        paths = tuple(
+            path for path in SQLiteFile.files(TodoStore.path_in(self.root)) if path.exists()
+        )
         for path in paths:
             self.require_confined(self.root, path)
         return paths

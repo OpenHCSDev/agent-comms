@@ -14,6 +14,7 @@ from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
 )
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.display_order import (
@@ -34,7 +35,10 @@ def test_builtin_channel_target_decodes_to_declaring_member(channel):
 
 
 def setup_wire(path):
+    Bus.install(Bus.path_in(path))
     comms = wire(path)
+    for tag in ("api", "ui"):
+        comms.channels.create_tag(tag)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(tags), worktree=str(path)))
     return comms

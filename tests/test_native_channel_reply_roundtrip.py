@@ -1,4 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
+
+from bus_record_fixture import prepare_native_comms
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_arguments import NativeArguments
@@ -20,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from agent_comms.lifecycle_capability import Executing
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution
@@ -236,7 +239,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = Comms(tmp_path / "wire")
+    comms = prepare_native_comms(Comms(tmp_path / "wire"))
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name
@@ -245,7 +248,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset({'team'}), str(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
@@ -315,7 +318,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                     with store.session.read():
                         rows = WakeAssignment.select(store.session._connection)
-                        return len(rows) == 6 and all(row.lifecycle.terminal for row in rows)
+                        return len(rows) == 6 and all(not row.lifecycle.successors() for row in rows)
 
             await until(settled, "Original and every peer-reply claim settled")
             with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
@@ -398,7 +401,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            return any(not state.active.executing and state.finished_turn_id for state in states)
+            return any(not bool(state.active.items_with(Executing, state.active)) and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(

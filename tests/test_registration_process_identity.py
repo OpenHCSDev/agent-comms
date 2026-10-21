@@ -108,7 +108,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
     saved = restored.threads[owner.name]
-    assert saved.process_identity == NoProcess() and not saved.turn_record.read().executing
+    assert saved.process_identity == NoProcess() and not saved.executing
     assert saved.incarnation == owner.incarnation
     assert saved.session_file == SavedSessionFile(str(session))
 

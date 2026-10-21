@@ -35,7 +35,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
@@ -69,11 +69,40 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
 
     assert checkout.name == 'worker--P1'
     assert lockstep.name == 'worker--P1--toad'
-    assert rule.owns_checkout(worker, checkout) and rule.owns_checkout(worker, lockstep)
-    assert not rule.owns_checkout(worker, misnamed)
+    assert rule.owns_checkout(worker, checkout, checkout)
+    assert rule.owns_checkout(worker, lockstep, lockstep)
+    assert not rule.owns_checkout(worker, misnamed, misnamed)
     assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)
     assert lockstep in rule.checkouts_of(worker)
     assert misnamed not in rule.checkouts_of(worker)
+
+
+def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
+    checkout_bus, tmp_path,
+):
+    rule = checkout_bus.registry.storage_rule
+    other = tmp_path / 'toad'
+    other.mkdir()
+    git(other, 'init', '-q', '--initial-branch=main')
+    git(other, 'commit', '-q', '--allow-empty', '-m', 'Second repository')
+    git(other, 'remote', 'add', 'origin', 'https://github.com/OpenHCSDev/toad.git')
+    lockstep = rule.repository_checkout('worker', 'P1', RepositoryName('OpenHCSDev', 'toad'))
+    adding = f'git -C {other} worktree add -q -b worker-toad {lockstep}'
+
+    def decide(command: str, cwd: Path) -> None:
+        checkout_bus.registry.decide_storage('worker', shell_storage_effects(command, cwd))
+
+    with pytest.raises(StorageDenied, match='is not a checkout of worker'):
+        decide(f'git worktree add -q -b worker-wrong {lockstep}', tmp_path / 'declared-project')
+    with pytest.raises(StorageDenied, match='is not a checkout of worker'):
+        decide(f'git -C {other} worktree add -q {lockstep.with_name("worker--P1--textual")}',
+               tmp_path)
+    with pytest.raises(StorageDenied, match='is not a checkout of idle'):
+        checkout_bus.registry.decide_storage('idle', shell_storage_effects(adding, tmp_path))
+    assert not lockstep.exists()
+    decide(adding, tmp_path)
+    subprocess.run(adding.split(), check=True, capture_output=True, timeout=15)
+    assert lockstep in rule.checkouts_of(checkout_bus.registry.require('worker'))
 
 
 @pytest.fixture

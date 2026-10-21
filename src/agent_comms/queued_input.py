@@ -38,7 +38,7 @@ from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .agent_backend import InputContent, TurnInbox
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
     from .input_drain import InputDrain
@@ -326,7 +326,7 @@ class DeliveredInput(QueuedInput):
     @classmethod
     def reserve_pending(
         cls, inputs: InputDrain, name: str, root_id: str,
-        pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
+        pending: tuple[tuple[Delivered, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
     ) -> None:
@@ -478,18 +478,19 @@ class DeliveredInput(QueuedInput):
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
+            from .coordination_session import NativeBoundary
+
             with store.session.read():
                 assignments = tuple(
                     assignment for assignment in pending_sealed_assignments(
                         store, lookup, owner.name, after_seq=after_seq
                     ) if assignment.audience.joins_active_turn()
                 )
-            with bus.log.checked_read() as source:
-                if source.marker.root_id != root_id:
-                    raise IdentityConflict("delivered source wire root changed")
-                originals = tuple(source.references(tuple(
+            with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
+                boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
+                originals = source.deliveries_for_references(tuple(
                     assignment.source for assignment in assignments
-                )))
+                ))
             return tuple(zip(originals, assignments, strict=True))
 
         pending = await Coordination.run_read_async(store_path, read)

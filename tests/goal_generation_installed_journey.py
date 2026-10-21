@@ -82,7 +82,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 await pilot.press('enter')
                 await until(lambda: comms.registry.require(session).goal is not None
                             and comms.registry.require(session).goal.state.declared_name == 'blocked'
-                            and not comms.registry.require(session).active_turn.executing)
+                            and not comms.registry.require(session).executing)
                 blocked = comms.registry.require(session).goal
                 store = comms.goals.open_goal_store()
                 before = store.require_generation(blocked.id)
@@ -93,7 +93,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 app.save_screenshot(str(stage / 'blocked-before-retry.svg'))
                 assert await pilot.click('#goal-toggle'), 'Click the actual visible Retry control'
                 await until(lambda: comms.registry.require(session).goal.state.declared_name == 'completed'
-                            and not comms.registry.require(session).active_turn.executing)
+                            and not comms.registry.require(session).executing)
                 completed = comms.registry.require(session).goal
                 generation = store.require_generation(completed.id)
                 assert completed.id == blocked.id

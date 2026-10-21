@@ -455,7 +455,7 @@ class HistoryArchive(DurableFile):
                 for path in paths:
                     if path.exists():
                         shutil.copy2(path, stage / path.name)
-                TranscriptRoutes(source_root).snapshot(stage)
+                TranscriptRoutes(source_root).retain(stage)
                 if (revisions != tuple(FileRevision.capture(path) for path in paths)
                         or not original_identity.matches(ObservedPath.at(original_bus.path))
                         or original_bus.revision() != bus_revision

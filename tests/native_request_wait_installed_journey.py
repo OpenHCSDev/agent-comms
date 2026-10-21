@@ -1,6 +1,7 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
 
 from agent_comms.bus import Bus
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio
@@ -16,14 +17,11 @@ import time
 from agent_comms.comms import Comms
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
-from agent_comms.threads import Thread
 from toad.agent_schema import AgentDefinition
 from toad.app import ToadApp
-from toad.widgets.transcript_history import TranscriptHistory
 
 from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
@@ -178,13 +176,13 @@ async def run(arguments):
                     # Keep the observer genuinely non-reading throughout the
                     # original native completion, rather than resuming it at an
                     # arbitrary provider-write time while publication continues.
-                    await until(pilot, lambda: not service.registry.require("wait-native").active_turn.executing, 90)
+                    await until(pilot, lambda: not service.registry.require('wait-native').executing, 90)
                     report["completed_with_nonreading_observer"] = True
                     reader._transport.resume_reading()
                     await asyncio.wait_for(consume(reader, slow_packets), 30)
                     report["nonreading_observer_retired"] = True
                     slow_writer.close(); await slow_writer.wait_closed(); slow_writer = None
-                await until(pilot, lambda: not service.registry.require("wait-native").active_turn.executing, 90)
+                await until(pilot, lambda: not service.registry.require('wait-native').executing, 90)
                 assert app._exception is None, app._exception
                 await until(pilot, lambda: response_painted(app, view, f"WAIT_NATIVE_OK_{index}"), 30)
                 assert view.agent.session.connected, "Fast controller lost its original attachment"
@@ -194,7 +192,7 @@ async def run(arguments):
             originals = [row for row in rows if row.get("message", {}).get("role") == "user"]
             assert len(originals) == 2 and len(posts) == 2, "Original input or provider call replayed"
             attempts = stored_inputs(service.root).rows
-            assert len(attempts) == 2 and all(row.has_started and not row.unresolved for row in attempts.values()), "Subscriber loss changed an accepted input's disposition"
+            assert len(attempts) == 2 and all(row.has_started and not bool(row.items_with(Unresolved, True)) for row in attempts.values()), "Subscriber loss changed an accepted input's disposition"
             report["original_dispositions"] = [row.public_status for row in attempts.values()]
             observations = [json.loads(line) for path in (service.root / "diagnostics").glob("*.requests.jsonl")
                             for line in path.read_text().splitlines()]

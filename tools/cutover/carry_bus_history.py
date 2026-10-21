@@ -39,7 +39,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import BusFile, RegistryFile
 from agent_comms.messages import BusRecord, Message
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
@@ -59,7 +59,7 @@ from agent_comms.wake_policy import (
 
 
 @dataclass(frozen=True)
-class HistoryMetadata:
+class HistoryMetadata(BusFile):
     """Only the retired stream boundary is needed, never its root ID or activation."""
 
     last_seq: int
@@ -71,7 +71,7 @@ class HistoryMetadata:
             raise RelationViolationError("Retired claim boundary is outside its stream")
 
     @classmethod
-    def read(cls, root: Path) -> HistoryMetadata:
+    def read(cls, root: Path) -> Self:
         data = FieldCodec.parse((root / cls.filename).read_bytes())
         return FieldCodec.construct(
             cls,
@@ -668,7 +668,7 @@ class HistoryInput:
         return tuple(rewritten)
 
 
-class BusHistory(Carry):
+class BusHistory(Carry, BusFile):
     """Validate and stream the retired history through the bus's one insert path."""
 
     filename = "bus.jsonl"
@@ -760,8 +760,7 @@ class BusHistory(Carry):
                 bindings[source.original_identity] = RecordedBusIdentity.capture(source.bus.path)
                 directory = source.bus.path.parent.relative_to(self.root)
                 rewritten.update(
-                    str(directory / name)
-                    for name in (*result.rewritten, *read.rewritten)
+                    str(directory / name) for name in (*result.rewritten, *read.rewritten)
                 )
             catalog_result = HistoryCatalogSource.publish(
                 self.root, self.original_root, catalog, bindings
@@ -782,11 +781,16 @@ class BusHistory(Carry):
         if spill.is_relative_to(self.root):
             raise RelationViolationError("History spill must be outside the bus")
         with _store_lock(HistoryArchive.path_in(self.root)):
-            roots = (self.root, *(Path(source.root) for source in
-                                  HistoryArchive(Bus.path_in(self.root)).sources()))
+            roots = (
+                self.root,
+                *(Path(source.root) for source in HistoryArchive(Bus.path_in(self.root)).sources()),
+            )
             stage = Path(tempfile.mkdtemp(prefix=f"{self.name()}-", dir=spill))
-            rewritten = tuple(name for directory in roots
-                              for name in HistoryInput.moved(self.root, directory, stage))
+            rewritten = tuple(
+                name
+                for directory in roots
+                for name in HistoryInput.moved(self.root, directory, stage)
+            )
             if not rewritten:
                 stage.rmdir()
         return Carried(len(rewritten), rewritten=rewritten)
@@ -846,3 +850,9 @@ class BusHistory(Carry):
             detail=dict(rows=count, continuous=count, round_tripped=count),
             rewritten=(bus.path.name,),
         )
+
+
+class CorruptHistory(BusFile):
+    """A retained repair input is never permission to create an empty bus."""
+
+    filename = BusHistory.filename + ".corrupt"

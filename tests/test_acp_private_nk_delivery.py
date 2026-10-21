@@ -6,6 +6,8 @@ activate private processing for existing public sessions.
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 
 import os
 
@@ -31,13 +33,13 @@ tmp_path = private_root_fixture
 
 def _private_comms(tmp_path):
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     owner = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model'))
     comms.registry.declare(owner)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True

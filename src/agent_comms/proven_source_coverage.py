@@ -8,6 +8,8 @@ historical watermark grants no current-owner, provider, write or reply permit.
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -33,6 +35,7 @@ from .wake_policy import RecipientDecision
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 
 if TYPE_CHECKING:
+    from .private_registry_guard import RegistryPrivacy
     from .native_entries import NativeEvidenceScope
     from .cursor_owner import CursorState
 
@@ -224,7 +227,10 @@ class SourceCoverage:
     def _read(
         self, request: CoveragePage, prefix: SourcePrefix, source_reads: NativeEvidenceScope,
     ) -> ProvenSourceCoverage:
-        with source_reads.borrow():
+        from .coordination_session import NativeBoundary
+
+        with source_reads.borrow(), NativeBoundary(self.bus) as boundary:
+            boundary.privacy.require_root(self.wire_root_id, IdentityConflict("Coverage native namespace changed"))
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
             prefix.require_start(request.after_seq)
@@ -256,7 +262,7 @@ class SourceCoverage:
                 if not matches:
                     raise IdentityConflict("recipient source differs from its frozen audience")
                 recipient, decision = matches[0]
-                acknowledgement = self._accepted_cohort(initial)
+                acknowledgement = self._accepted_cohort(initial, boundary.privacy)
                 if acknowledgement is None:
                     blocked = seq
                     break
@@ -286,7 +292,7 @@ class SourceCoverage:
                 source_prefix=prefix,
             )
 
-    def _accepted_cohort(self, initial: Delivered) -> AcceptedCohort | None:
+    def _accepted_cohort(self, initial: Delivered, privacy: RegistryPrivacy) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
@@ -294,7 +300,7 @@ class SourceCoverage:
             sealed = ClaimBatchAcknowledgements.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
-            return _claim_record(db, initial) if sealed and sealed.sealed else None
+            return _claim_record(db, initial, privacy) if sealed and sealed.sealed else None
 
     def _selected_inputs(
         self, seq: int, recipient: FrozenRecipient, decision: RecipientDecision, acknowledgement: AcceptedCohort,
@@ -309,7 +315,7 @@ class SourceCoverage:
         policy = decision.wake_policy()
         if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not policy.active:
+        if not policy.items_with(Active, policy):
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
         if policy.proves_source(evidence) and all(

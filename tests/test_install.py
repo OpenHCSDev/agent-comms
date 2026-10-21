@@ -1,8 +1,6 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
 
-from agent_comms.bus import Bus
-
 import json
 import os
 import sqlite3
@@ -14,6 +12,8 @@ import pytest
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.bus import Bus
+from agent_comms.recorded_bus import RecordedBusIdentity
+from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
@@ -21,33 +21,37 @@ from agent_comms.commander.config import (
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.practice import declared_files, practice_copy
-from agent_comms.locked_store import SQLiteFile
+from agent_comms.locked_store import BusFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-from agent_comms.wire_log import WireLog
 
 REPO = Path(__file__).resolve().parents[1]
 
 
-def bus(directory: Path) -> tuple[Path, str]:
-    """A private bus holding one thread and one message, as production writes one."""
+def bus(directory: Path) -> tuple[Path, RecordedBusIdentity]:
+    """An installed native root holding a real published message."""
     root = directory / "wire"
-    root.mkdir(mode=0o700)
-    Bus.install(Bus.path_in(root))
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
+    comms.channels.create_tag("team")
     comms.registry.declare(comms.registry.new_thread("worker", frozenset({"team"}), str(directory)))
-    root_id = comms.messaging.initialize_private_initial_protocol()
     comms.messaging.send("worker", "#team", "hello")
-    return root, root_id
+    return root, RecordedBusIdentity.capture(comms.bus.bus.path)
 
 
-def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(private_directory):
+def test_fresh_install_is_excluded_by_every_declared_bus_input(private_directory):
     root = private_directory / "bus"
     root.mkdir(mode=0o700)
-    log = WireLog(WireLog.path_in(root))
-    assert log.fresh()
-    Bus.install(Bus.path_in(root))
-    assert not log.fresh()
     chain = CarryChain.at(REPO)
+    assert BusFile.fresh(root)
+    for owner, directory in BusFile.declarations_in(root):
+        path = owner.path_in(directory)
+        path.touch()
+        assert not BusFile.fresh(root), owner
+        path.unlink()
+        path.symlink_to(root / "absent-input")
+        assert not BusFile.fresh(root), owner
+        path.unlink()
+    Bus.install(Bus.path_in(root))
+    assert not BusFile.fresh(root)
     CarryLedger(root).start(chain)
     assert chain.pending(CarryLedger(root).applied()) == ()
 
@@ -104,45 +108,6 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
         for name in copied - databases:
             assert (copy / name).read_bytes() == (root / name).read_bytes()
     assert bus_files(root) == saved
-
-
-def test_a_message_sent_while_the_bus_is_copied_never_splits_the_log_from_its_checkpoint(
-        private_directory, monkeypatch, capsys):
-    # The live install of 0d81f55e2 refused its practice copy ("Private bus checkpoint
-    # root/size changed."): the commander heartbeat appended between the log's copy and
-    # its checkpoint's, so the copied checkpoint pointed past the end of the copied log.
-    import shutil
-    import threading
-
-    from agent_comms.cli import main
-    from agent_comms.installer import practice
-    from agent_comms.private_bus_checkpoint import WritableCheckpoint
-
-    root, _ = bus(private_directory)
-    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    log = WireLog(WireLog.path_in(root))
-    writer = threading.Thread(target=lambda: Comms(root).messaging.send("worker", "#team", "late"))
-    copy2, connect = shutil.copy2, sqlite3.connect
-
-    def copy_then_write(source, target, *args, **kwargs):
-        result = copy2(source, target, *args, **kwargs)
-        if Path(source) == log.path:
-            writer.start()
-        return result
-
-    def connect_after_writer(database, *args, **kwargs):
-        if (str(WritableCheckpoint.path_in(root)) in str(database)
-                and threading.current_thread() is not writer):
-            writer.join(timeout=2)  # a writer held off by the bus lock stays out of the cut
-        return connect(database, *args, **kwargs)
-
-    monkeypatch.setattr(practice.shutil, "copy2", copy_then_write)
-    monkeypatch.setattr(practice.sqlite3, "connect", connect_after_writer)
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
-        monkeypatch.undo()
-        writer.join(timeout=30)
-        assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
-        assert '"failed"' not in capsys.readouterr().out
 
 
 def test_install_report_encodes_its_registered_harnesses() -> None:
@@ -243,4 +208,4 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
         copied = Comms(copy).registry.require("owner")
         assert copied.turn_lease.identity == lease.identity
-        assert copied.turn_record.read().executing
+        assert copied.executing

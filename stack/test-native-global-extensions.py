@@ -18,7 +18,6 @@ import sys
 import time
 import tempfile
 
-from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.field_codec import FieldCodec
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
@@ -164,7 +163,4 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-globals-") as directory:
-        try:
-            main(Path(directory) / "fixture")
-        finally:
-            drain_candidate_catchup(Path(directory))
+        main(Path(directory) / "fixture")

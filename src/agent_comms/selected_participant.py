@@ -10,7 +10,7 @@ from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
@@ -35,12 +35,12 @@ from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
+from .store_files import SharedLock
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
 from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
-from .wire_log import WireLog
 
 
 @dataclass
@@ -152,7 +152,7 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(WireLog.path_in(comms.root), comms.registry, ParticipantPublisher)
+        bus = MessageBus(comms.root, comms.registry, ParticipantPublisher)
         with cursor_delivery.measurements.operation("claim_prepare"):
             owner, participant, pending, sent_outcomes = await Coordination.run_async(
                 store.session.path,
@@ -197,7 +197,7 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
+        comms: Comms, owner: Thread, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
@@ -220,12 +220,10 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with bus.log.checked_read() as source:
+        with comms.registry.store.locked(mode=SharedLock()):
             _require_no_private_owner_rename(comms.root)
-            marker = source.marker
-            if marker.root_id != root_id:
-                raise IdentityConflict("selected claim_scope wire root changed")
-            after_seq = max(after_seq, marker.claimed_after_seq)
+            comms.registry.store.private_guard_unlocked().require_root(
+                root_id, IdentityConflict("Selected claim namespace changed"))
         try:
             thread, generation = comms.registry.live_owner_with_claim(name)
         except (RelationViolationError, ValueError) as error:
@@ -234,7 +232,7 @@ class SelectedParticipant(MroDispatch):
         owner.require_registry(comms.registry)
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
-            comms.root, comms.registry, comms.bus.log, name,
+            comms.root, comms.registry, comms.bus.bus, name,
             limit=MessageNotification.window_limit,
         )
         LiveResponseOwner(
@@ -295,27 +293,27 @@ class SelectedParticipant(MroDispatch):
         preparing the native session or making a provider request.
         """
         def capture():
-            # Capture source pointers and bytes before opening the SQL snapshot,
-            # so file decoding cannot keep a database reader open.
-            with bus.log.checked_read() as source:
-                marker = source.marker
-                if marker.root_id != root_id:
-                    raise IdentityConflict("selected source wire root changed")
-                for assignment in assignments:
-                    if assignment.wire_seq <= marker.claimed_after_seq:
-                        raise IdentityConflict("historical source precedes the current claim_scope floor")
-                return tuple(source.references(tuple(
+            # Historical public records have no delivery capability. Native identity
+            # belongs to the original registry guard, not a second bus metadata file.
+            with bus._registry.store.locked(mode=SharedLock()):
+                bus._registry.store.private_guard_unlocked().require_root(
+                    root_id, IdentityConflict("Selected source namespace changed"))
+            with bus.bus.reading() as source:
+                return source.deliveries_for_references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
                     for assignment in assignments
-                )))
+                ))
 
         originals = await Coordination.run_worker(capture)
 
         def verify(resource: Coordination):
-            with resource.session.read():
+            from .coordination_session import NativeBoundary
+
+            with NativeBoundary(bus) as boundary, resource.session.read():
+                boundary.privacy.require_root(root_id, IdentityConflict("Selected source namespace changed"))
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
-                    acknowledgement = _claim_record(resource.session._connection, initial)
+                    acknowledgement = _claim_record(resource.session._connection, initial, boundary.privacy)
                     if not any(row.assignment_id == assignment.assignment_id
                                for row in acknowledgement.assignments):
                         raise IdentityConflict("selected assignment is absent from its sealed acknowledgement")

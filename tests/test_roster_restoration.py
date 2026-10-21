@@ -1,6 +1,7 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
 from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 import os
 from dataclasses import replace
@@ -127,12 +128,12 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
-    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old, current = Comms(tmp_path / "old"), prepare_native_comms(Comms(tmp_path / "current"))
     live = current.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = old.registry.new_thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
     current.registry.declare(live)
-    root_id = current.messaging.initialize_private_initial_protocol()
+    root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)

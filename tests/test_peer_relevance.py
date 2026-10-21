@@ -155,9 +155,9 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
 
 
 def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     earlier = publish_initial(comms, "outsider", "Alice", "From a stranger")
     later = publish_initial(comms, "Bob", "Alice", "From a partner")
     owner = comms.registry.require("Alice")
@@ -207,9 +207,9 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
 
 
 def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     original = publish_initial(comms, "Bob", "Alice", "Current work")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     assert _peers(comms, "Alice") == ()

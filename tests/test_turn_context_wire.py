@@ -5,15 +5,13 @@ import json
 
 import pytest
 
-from agent_comms.context_store import AbsentContext
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.image_inputs import ImageInput
-from agent_comms.wire_record import WireRecord
 from agent_comms.field_codec import FieldCodec
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 def manifest(owner, generation=1):
@@ -43,7 +41,7 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     from threading import Event
     from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     publish_initial(comms, 'sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
     original = comms.bus.awareness_segments(owner, ())
@@ -83,21 +81,8 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     assert comms.bus.log.path.read_bytes() == before
 
 
-def test_observation_family_rejects_message_fields_and_preview(tmp_path):
-    comms,root_id=_root(tmp_path)
-    recorded, _entries = AbsentContext().capture(manifest(comms.registry.require('Alice')))
-    row = {'observation': {'kind': 'recorded_context_manifest',
-                           'manifest': FieldCodec.encode(recorded)}}
-    # Only the one-time conversion accepts the old context envelope. Runtime
-    # message readers never silently accept a second storage location.
-    with pytest.raises(ValueError):
-        WireRecord.from_wire(row, root_id)
-    with pytest.raises(ValueError):
-        WireRecord.from_wire({**row, 'seq': 40}, root_id)
-
-
 def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     images = (ImageInput('YQ==', 'image/png'),)
     context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), (), comms.goals)

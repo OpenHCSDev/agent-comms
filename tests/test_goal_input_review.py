@@ -1,9 +1,11 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
 
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
 import os
 
 import pytest
+from conftest import publish_initial
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -30,10 +32,11 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
+    comms.messaging.initialize_private_initial_protocol()
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
-        comms.messaging.send("parent", "worker", text).message
+        publish_initial(comms, "parent", "worker", text)
         for text in ("Set standby", "Yes wait")
     ]
     ledger = InputDispositions(comms.root)
@@ -98,7 +101,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert [row.input_id for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[key]
-        assert row.unresolved and row.accepts_reservation
+        row.require(Unresolved, ValueError("review required"))
+        assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.claim_scope == claim_scope and row.reviewed_for_goal(goal.id)

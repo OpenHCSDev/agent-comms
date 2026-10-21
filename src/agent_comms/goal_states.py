@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from .declared_family import DeclaredFamily
 from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext, ProblemOrderGoalAction
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PauseSource(DeclaredFamily, affix="Pause"):
+    lifts_on_compliance: ClassVar[bool] = False
+
     def instruction(self) -> str | None:
         return None
 
@@ -47,11 +50,22 @@ class RuntimePause(PauseSource):
     pass
 
 
+class ChokeholdPause(PauseSource):
+    """The heartbeat held this unit because its commander ignored a vibe check; Core resumes
+    it when the commander complies, and nothing else may."""
+
+    lifts_on_compliance = True
+
+    def instruction(self) -> str:
+        return (
+            "Your commander ignored the heartbeat's vibe check, so the heartbeat paused every"
+            " unit under it until it complies. Do not resume or continue this goal; Core resumes"
+            " it when the commander answers."
+        )
+
+
 @dataclass(frozen=True)
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
-    active: ClassVar[bool] = False
-    terminal: ClassVar[bool] = False
-
     def after_failed_turn(self, diagnostic: str) -> GoalState:
         return self
 
@@ -60,11 +74,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
 
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
-
-    def require_active(self) -> None:
-        from .errors import RelationViolationError
-
-        raise RelationViolationError(self.activity_refusal())
 
     def activity_refusal(self) -> str:
         pause = self.pause_source
@@ -89,13 +98,13 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return {"kind": cls.declared_name}
 
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GoalState], ...]: ...
-
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
+
+    def continues_turn_from(self, captured: GoalState) -> bool:
+        """A running turn keeps its authority only while the state it was granted stands."""
+        return self == captured
 
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
@@ -107,6 +116,11 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     @property
     def pause_source(self) -> PauseSource | None:
         return None
+
+    @property
+    def lifts_on_compliance(self) -> bool:
+        """Held by the heartbeat until the commander complies."""
+        return False
 
     @property
     def protected(self) -> bool:
@@ -138,11 +152,11 @@ class OpenGoal(BlockingOnFailure, GoalState):
 
 
 @dataclass(frozen=True)
-class ActiveGoal(OpenGoal, FromOpenGoal):
-    active = True
+class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
-    def require_active(self) -> None:
-        pass
+    def continues_turn_from(self, captured: GoalState) -> bool:
+        """An order or retry that makes the goal active never ends a running turn."""
+        return True
 
     @property
     def toggle(self) -> type[GoalAction]:
@@ -184,6 +198,10 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     @property
     def pause_source(self) -> PauseSource:
         return self.source
+
+    @property
+    def lifts_on_compliance(self) -> bool:
+        return self.source.lifts_on_compliance
 
     @property
     def protected(self) -> bool:
@@ -273,8 +291,7 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
-    terminal = True
+class CompletedGoal(Complete, Terminal, BlockingOnFailure, GoalState, FromOpenGoal):
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)

@@ -28,6 +28,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 from acp.exceptions import RequestError
 from agent_comms.errors import ToolRefusedError
 from agent_comms.message_bus import HeldBusWrite
+from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 
 from .active_route import (
     ActiveRoute,
@@ -148,7 +149,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .wire_log import WireLog
+from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
@@ -239,9 +240,8 @@ class TargetAction:
                 'bound_count': len(self.bound)}
 
 
-class TargetOutcome:
+class TargetOutcome(LifecycleCapability):
     """One attempted selection member; failure never claims absence of effects."""
-    successful: ClassVar[bool] = False
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
@@ -251,11 +251,10 @@ class TargetOutcome:
 
 
 @dataclass(frozen=True)
-class TargetCompleted(TargetOutcome):
+class TargetCompleted(Successful, TargetOutcome):
     target: str
     command: CliCommand
     result: Annotated[CliResult, WireForm]
-    successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
@@ -276,8 +275,12 @@ class TargetBatchResult(CliResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     @property
+    def completed_count(self) -> int:
+        return sum(len(outcome.items_with(Successful, outcome)) for outcome in self.outcomes)
+
+    @property
     def successful(self) -> bool:
-        return all(outcome.successful for outcome in self.outcomes)
+        return self.completed_count == len(self.outcomes)
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(name for outcome in self.outcomes
@@ -2404,6 +2407,5 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
-        route = ActiveRoute(ctx.root, marker.root_id)
+        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

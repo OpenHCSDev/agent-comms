@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from contextlib import aclosing
 from dataclasses import dataclass, field, replace
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from acp.schema import PromptResponse
@@ -18,7 +17,6 @@ from .acp_extension import (
     NoQueueScope,
     PromptRequest,
     QueueChangedUpdate,
-    QueueProjection,
     QueueScope,
     encode_updates,
 )

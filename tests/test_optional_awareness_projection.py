@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+from agent_comms.lifecycle_capability import Executing
+
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import os
@@ -11,12 +14,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.bus import Bus
-from agent_comms.bus_publication import CommittedDelivery
+from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.wake_policy import FullWake
@@ -39,8 +42,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    Bus.install(Bus.path_in(root))
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
@@ -48,7 +50,7 @@ def _root(
         comms.registry.declare(
             comms.registry.new_thread(f'member{number:03}', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
     return comms, store, WakeCandidateIndex(comms.bus.bus), root_id
@@ -56,9 +58,9 @@ def _root(
 
 def _accepted(
     comms: Comms, store: Coordination, root_id: str, target: str, body: str
-) -> tuple[CommittedDelivery, WakeAssignment]:
+) -> tuple[Delivered, WakeAssignment]:
     message = publish_initial(comms, "sender", target, body)
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     for recipient in initial.audience.recipients:
         store.participants.register(
             recipient.recipient_lookup,
@@ -89,7 +91,7 @@ def _projection(
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
     active = owner.turn_record.read().require_active()
-    assert active.executing
+    active.require(Executing, ValueError("turn must execute"))
     claimed_generation = active.claimed_generation.value
     return OptionalAwarenessProjection(
         index,
@@ -119,7 +121,6 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         )
         current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
-        assert result.complete
         context = result.context()
         assert context["selected"] == [
             {
@@ -138,23 +139,21 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         store.close()
 
 
-def test_committed_index_unsealed_candidate_and_replaced_owner(tmp_path: Path) -> None:
+def test_committed_candidates_and_replaced_owner(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
+        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).context()["selected"]
 
         second = publish_initial(comms, "sender", "member000", "not yet sealed")
         # The committed prefix can outrun the caller's minimum source watermark.
         # It must include the later candidate or omit the whole supplement.
-        assert not _projection(index, store, owner, 0, initial.message.seq)(
-            initial, assignment, owner
-        ).complete
+        assert 'Optional awareness omitted' in _projection(index, store, owner, 0, initial.message.seq)(initial, assignment, owner).render(32768)
         unavailable = _projection(index, store, owner, 0, second.seq)(initial, assignment, owner)
-        assert not unavailable.complete and "Optional awareness omitted" in unavailable.render(32768)
+        assert 'Optional awareness omitted' in unavailable.render(32768)
         replaced = replace(owner, created_at=owner.created_at + 10)
-        assert not _projection(index, store, owner, 0, 1)(initial, assignment, replaced).complete
+        assert 'Optional awareness omitted' in _projection(index, store, owner, 0, 1)(initial, assignment, replaced).render(32768)
     finally:
         store.close()
 
@@ -181,7 +180,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         result = _projection(index, store, owner, older.message.seq, newer.message.seq, max_rows=1)(
             newer, current, owner
         )
-        assert not result.complete and "Optional awareness omitted" in result.render(32768)
+        assert 'Optional awareness omitted' in result.render(32768)
     finally:
         store.close()
 
@@ -192,12 +191,12 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
         initial, assignment = _accepted(comms, store, root_id, "member000", "original")
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, assignment, owner).complete
+        assert builder(initial, assignment, owner).context()["selected"]
         store.participants.advance_generation(
             assignment.recipient_lookup, owner.name, expected_generation=1
         )
         stale = builder(initial, assignment, owner)
-        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
+        assert 'Optional awareness omitted' in stale.render(32768)
     finally:
         store.close()
 
@@ -217,7 +216,7 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert not result.complete and "Optional awareness omitted" in result.render(32768)
+        assert 'Optional awareness omitted' in result.render(32768)
     finally:
         store.close()
 
@@ -242,7 +241,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, assignment, owner
         )
-        assert result.complete and result.omitted_count == 2
+        assert result.omitted_count == 2
         context = result.context()
         assert [row["claim_id"] for row in context["selected"]] == [assignment.assignment_id]
         assert context["open_obligations"] == []
@@ -265,7 +264,7 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.complete and result.omitted_count == 0
+        assert result.omitted_count == 0
         assert [row["claim_id"] for row in result.context()["selected"]] == [
             assignment.assignment_id
         ]
@@ -280,7 +279,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         initial, assignment = _accepted(comms, store, root_id, "member000", "current")
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, assignment, owner).complete
+        assert builder(initial, assignment, owner).context()["selected"]
         # Disposable legacy/disk inconsistency only: supported writes freeze
         # acknowledgement facts. Restore the original trigger before checking schema.
         db = store.session._connection
@@ -294,7 +293,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         )
         db.execute(trigger)
         stale = builder(initial, assignment, owner)
-        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
+        assert 'Optional awareness omitted' in stale.render(32768)
     finally:
         store.close()
 
@@ -307,7 +306,7 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
         current_message = publish_initial(comms, "sender", "gamma", "new selected")
-        current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
+        current = comms.bus.bus.delivery(current_message.seq)
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(acknowledgement.assignments) == 1
         current_claim = acknowledgement.assignments[0]
@@ -317,7 +316,7 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         )
         assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
         assert old.message.seq < current.message.seq
-        assert result.complete and result.omitted_count == 1
+        assert result.omitted_count == 1
         selected = result.context()["selected"]
         assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
         assert old_claim.assignment_id not in result.render(32768)
@@ -334,7 +333,6 @@ def test_other_owner_decision_never_enters_selected_context(tmp_path: Path) -> N
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.complete
         context = result.context()
         assert [row["source_seq"] for row in context["selected"]] == [initial.message.seq]
         assert "foreign-owner-message" not in result.render(32768)
@@ -355,7 +353,6 @@ def test_many_frozen_members_do_not_become_selected_authority(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.complete
         assert len(result.context()["selected"]) == 1
     finally:
         store.close()
@@ -374,7 +371,6 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.complete
         context = result.context()
         assert [row["source_seq"] for row in context["selected"]] == [101]
     finally:
@@ -398,7 +394,8 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
         assert isinstance(passive.lifecycle, PassiveAssignment)
-        assert not passive.lifecycle.engageable and not passive.lifecycle.mode.active
+        with pytest.raises(IdentityConflict):
+            passive.lifecycle.require_engageable()
         observer = RecordedThreadIncarnation("fixture", comms.registry.require("member001").created_at).lookup
         assert not WakeAssignment.select(
             store.session._connection,
@@ -416,13 +413,12 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         assignment = store.assignments.get(assignment.assignment_id)
         builder = _projection(index, store, owner, 0, notice.seq)
-        wire_before = comms.bus.log.path.read_bytes()
+        sequence_before = comms.bus.bus.revision()
         assignments_before = WakeAssignment.select(store.session._connection)
         obligations_before = ResponseObligation.select(store.session._connection)
         started = time.monotonic()
         result = builder(initial, assignment, owner)
         elapsed = time.monotonic() - started
-        assert result.complete, result
         context = result.context()
         assert {row["claim_id"] for row in context["selected"]} == {
             assignment.assignment_id,
@@ -436,7 +432,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         assert context["open_obligations"][0]["execution_id"] == "wire-awareness-reply"
         assert WakeAssignment.select(store.session._connection) == assignments_before
         assert ResponseObligation.select(store.session._connection) == obligations_before
-        assert comms.bus.log.path.read_bytes() == wire_before
+        assert comms.bus.bus.revision() == sequence_before
         print(f"actual complete wire projection: {elapsed:.6f}s", flush=True)
 
         # A reused numeric PID with a different recorded process birth is not
@@ -447,8 +443,8 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             owner, process_identity=replace(identity, start_time=identity.start_time + 1)
         )
         changed = builder(initial, assignment, replaced_process)
-        assert not changed.complete and "Optional awareness omitted" in changed.render(32768)
-        assert builder(initial, assignment, owner).complete
+        assert 'Optional awareness omitted' in changed.render(32768)
+        assert builder(initial, assignment, owner).context()["selected"]
 
         # Simulate damaged derived proof, restoring the real schema before read.
         # The passive row remains a completeness requirement, not an inner-join
@@ -463,10 +459,10 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         db.execute(trigger)
         missing = builder(initial, assignment, owner)
-        assert not missing.complete and "Optional awareness omitted" in missing.render(32768)
+        assert 'Optional awareness omitted' in missing.render(32768)
         assert WakeAssignment.select(db) == assignments_before
         assert ResponseObligation.select(db) == obligations_before
-        assert comms.bus.log.path.read_bytes() == wire_before
+        assert comms.bus.bus.revision() == sequence_before
     finally:
         store.close()
 
@@ -480,14 +476,14 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
             initial, assignment = _accepted(comms, store, root_id, "member000", f"work {number}")
         owner = _owner(comms, "member000")
         newest = _projection(index, store, owner, initial.message.seq - 1, initial.message.seq)
-        assert newest(initial, assignment, owner).complete
+        assert newest(initial, assignment, owner).context()["selected"]
         all_rows = _projection(index, store, owner, 0, initial.message.seq)
         started = time.monotonic()
         bounded = all_rows(initial, assignment, owner)
         elapsed = time.monotonic() - started
         # One hundred complete claim descriptions exceed the existing 16KiB
         # optional text budget; omission must still fit the actual 250ms gate.
-        assert not bounded.complete and "Optional awareness omitted" in bounded.render(32768)
+        assert 'Optional awareness omitted' in bounded.render(32768)
         assert bounded.reason == "ProjectionUnavailableError"
         assert elapsed < 0.250
         print(f"actual 100-row optional projection: {elapsed:.6f}s", flush=True)

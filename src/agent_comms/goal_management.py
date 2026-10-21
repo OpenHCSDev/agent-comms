@@ -10,6 +10,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.lifecycle_capability import Unresolved
+
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -224,9 +226,10 @@ class Goals:
                     message.target,
                     message.body,
                 )
-            if row.owner in owners and row.unresolved:
-                unknown[key] = row
-                eligible.add(key)
+            for pending in row.items_with(Unresolved, row):
+                if pending.owner in owners:
+                    unknown[key] = pending
+                    eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,
@@ -393,12 +396,9 @@ class Goals:
         wait = self.waits.for_goal(goal, self.waits.read())
         if not wait.owner_matches(current.incarnation.require_recorded()):
             return False
-        with self.bus.log.checked_read() as source:
-            original = source.delivery(reference.seq)
-            if original.message.reference != reference:
-                raise ValueError("Dependency reply source reference changed.")
-            if not wait.matches(original, current.incarnation.require_recorded()):
-                return False
+        original, = self.bus.bus.deliveries_for_references((reference,))
+        if not wait.matches(original, current.incarnation.require_recorded()):
+            return False
         return wait.consume_reply(self.waits, goal.id)
 
     def update_goal[Result: GoalDeclaration](

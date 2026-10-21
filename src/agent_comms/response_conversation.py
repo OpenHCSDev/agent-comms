@@ -12,7 +12,8 @@ from agent_comms.response_acknowledgement import (
 )
 
 from .audience_manifest import FrozenRecipient, freeze_audience
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
+from .private_registry_guard import RegistryPrivacy
 from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .coordination_tables.responses import ResponseObligation
@@ -27,7 +28,8 @@ if TYPE_CHECKING:
 class ResponseConversation:
     responder: FrozenRecipient
     obligation: ResponseObligation
-    sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    privacy: RegistryPrivacy
 
     @classmethod
     def source_references(cls, snapshot, obligation: ResponseObligation) -> tuple[MessageReference, ...]:
@@ -49,12 +51,9 @@ class ResponseConversation:
         return tuple(dict.fromkeys((*cls.source_references(snapshot, obligation), *following)))
 
     @classmethod
-    def capture(cls, bus, snapshot, obligation: ResponseObligation):
+    def capture(cls, bus, snapshot, obligation: ResponseObligation, privacy: RegistryPrivacy):
         originals = cls.source_references(snapshot, obligation)
-        marker = bus.log.private_marker_unlocked()
-        sources = bus.log.delivery_cohorts_unlocked(
-            marker.root_id, tuple(reference.seq for reference in originals)
-        )
+        sources = bus.bus.deliveries_for_references(originals)
         if len(sources) != len(originals):
             raise IdentityConflict("Response obligation has no complete original conversation")
         if {source.message.reference for source in sources} != set(originals):
@@ -65,6 +64,7 @@ class ResponseConversation:
             FrozenRecipient(snapshot.execution.owner_lookup, snapshot.execution.owner_thread),
             obligation,
             sources,
+            privacy,
         )
 
     def audience(self, message: Message):
@@ -114,7 +114,7 @@ class ResponseConversation:
             stored, audience=audience, decisions=decisions,
             control=ControlClassification.ORDINARY.value,
             acknowledgement=KeyedResponseAcknowledgement(
-                self.sources[0].wire_root_id, intent.execution_id, intent.publication_key,
+                self.privacy.namespace, intent.execution_id, intent.publication_key,
                 public_envelope_digest(stored.to_wire()),
             ),
         )

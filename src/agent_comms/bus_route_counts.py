@@ -66,13 +66,13 @@ class RouteCounts:
         SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
     ), candidates AS MATERIALIZED (
         SELECT owner.key AS actor,row.*,
-            delivery_since(owner.key,row.sender,row.target,row.sender_lookup) AS since
+            delivery_since(owner.key,row.sender,row.target,row.sender_lookup,addressed.seq) AS since
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
         JOIN json_each(arguments.recipients) AS recipient ON recipient.key=owner.key
         JOIN route_keys AS route ON route.target=target.value
         JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup=route.sender_lookup
-        JOIN "{ReceivedSource.declared_name}" AS addressed
+        LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=recipient.value AND addressed.seq=row.seq
         WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
     ), requests AS MATERIALIZED (
@@ -82,9 +82,10 @@ class RouteCounts:
     def _route_rows(self, row_type, registry, deliveries, seen, after: int, query: str, parameters=()):
         with self.observing() as db:
             db.create_function(
-                "delivery_since", 4,
-                lambda actor, sender, target, lookup: deliveries[actor].minimum_timestamp(
-                    sender, target, lookup, registry), deterministic=True,
+                "delivery_since", 5,
+                lambda actor, sender, target, lookup, received: registry.unread_since(
+                    actor, deliveries[actor].minimum_timestamp(sender, target, lookup, registry),
+                    bool(received)), deterministic=True,
             )
             senders = registry.sender_bindings
             bindings = (

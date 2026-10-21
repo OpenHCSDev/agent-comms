@@ -127,16 +127,14 @@ class HumanInputOrigin(InputOrigin):
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
         from .active_route import guard_original_root_write
-        from .store_files import _store_lock
 
-        with guard_original_root_write(comms.root), _store_lock(comms._wire_lock_path):
-            snapshot = comms.registry.snapshot()
+        with guard_original_root_write(comms.root), comms.registry.store.locked():
+            snapshot = comms.registry.store.read_snapshot_unlocked()
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
-            root_id = comms.bus.log.read_metadata_unlocked().root_id
-            root_id = Id128Text.decode(root_id)
-            user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
+            root_id = comms.registry.store.private_guard_unlocked().namespace
+            user = comms.messaging.user_identity(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
                        claim_scope, owner.worktree, owner.goal.captured)
 
@@ -149,8 +147,12 @@ class HumanInputOrigin(InputOrigin):
 
         if controller is None or controller is UNBOUND_CONTROLLER:
             raise RelationViolationError("User input origin requires its attached ACP controller")
-        if self.root_id != comms.bus.log.read_metadata_unlocked().root_id:
-            raise RelationViolationError("User input origin belongs to another wire root")
+        from .store_files import SharedLock
+
+        with comms.registry.store.locked(mode=SharedLock()):
+            comms.registry.store.private_guard_unlocked().require_root(
+                self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
+            )
         if self.claim_scope != claim_scope:
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)

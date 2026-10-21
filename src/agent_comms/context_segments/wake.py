@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import SentMessageOutcome
 
-from ..bus_publication import CommittedDelivery
+from ..bus_publication import Delivered
 from ..threads import Thread
 from ..turn_context import (
     InstructionFile,
@@ -33,7 +33,7 @@ from .wake_values import WakeWorkContext
 class SelectedWakeSegment(InstructionSegment):
     """Original sealed sources and their captured owner, never wake authority."""
 
-    sources: tuple[tuple[CommittedDelivery, WakeAssignment], ...]
+    sources: tuple[tuple[Delivered, WakeAssignment], ...]
     owner: Thread
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
@@ -135,7 +135,7 @@ class SelectedWakeSegment(InstructionSegment):
 class DeliveredMessageSegment(InstructionSegment):
     """One committed message handed to its recipient's already running turn."""
 
-    source: CommittedDelivery
+    source: Delivered
     assignment: WakeAssignment
     owner: Thread
 

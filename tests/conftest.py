@@ -24,7 +24,6 @@ from agent_comms.native_tool_transport import ToolListener
 from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
-from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 
 
@@ -121,13 +120,12 @@ def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPubli
 
 
 def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
-    """Stage an agent's initial message on the bus; no SQL acceptance or live wake."""
+    """Publish through the ordinary owner without submitting to a native agent."""
     type.require_sendable()
-    with _store_lock(comms.root / "wire"):
-        return comms.bus.publisher.publish_initial_cohort(
-            Message(sender=sender, target=target, body=body, type=type, role=role),
-            origin=AgentOrigin(),
-        )
+    return comms.bus.publisher.publish_ordinary(
+        Message(sender=sender, target=target, body=body, type=type, role=role),
+        origin=AgentOrigin(),
+    )
 
 def pytest_sessionstart(session):
     """The controller prepares this checkout's pinned inputs before any worker runs.
@@ -236,9 +234,10 @@ def private_directory():
 @pytest.fixture
 def private_comms(private_directory):
     """Install one isolated SQLite bus and select it for this check's lifetime."""
+    from bus_record_fixture import prepare_native_comms
+
     root = private_directory / "wire"
-    Bus.install(Bus.path_in(root))
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     from agent_comms.launch_root import LaunchRoot
 
     with LaunchRoot.from_path(root).selected():

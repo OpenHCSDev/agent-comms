@@ -83,12 +83,15 @@ class Messaging:
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""
+        from .coordination_session import NativeBoundary
         from .input_disposition import InputDispositions
 
         for lease in owner.turn_lease.held():
             inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-            with self.bus.bus.reading() as source:
-                return inputs.answered_by(lease, source, self.registry.snapshot(), target)
+            with NativeBoundary(self.bus) as boundary, self.bus.bus.reading() as source:
+                return inputs.answered_by(
+                    lease, source, boundary.registry, target, privacy=boundary.privacy,
+                )
         return ()
 
     def _register_user(self, worktree: str) -> Thread:

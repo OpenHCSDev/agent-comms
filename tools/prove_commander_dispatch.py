@@ -5,8 +5,6 @@ No fake transport, provider or history is used. Failed attempts remain retained.
 
 from __future__ import annotations
 
-from agent_comms.bus import Bus
-
 import argparse
 import asyncio
 import json
@@ -22,24 +20,25 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 from uuid import uuid4
 
+from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
 from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, Argument
+from agent_comms.field_codec import Argument, FieldCodec, PathText
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.messages import Message
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import ReportDelivery, PendingProblemOrder, TriageScope
-from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.todos import PendingProblemOrder, ReportDelivery, TriageScope
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
 from agent_comms.watched import FileSource
@@ -134,6 +133,7 @@ class RunProofCommand(ProofCommand):
         home = root.parent / "home"
         home.mkdir(parents=True)
         comms = Comms(root)
+        comms.registry.prepare_native_root()
         Bus.install(Bus.path_in(comms.root))
         # A fresh interpreter acquires the scratch commander configuration.
         # Keep the actual storage declaration across its isolated HOME.
@@ -161,7 +161,6 @@ class RunProofCommand(ProofCommand):
         CommanderConfig(
             commander=commander.name,
             root=root,
-            cli=Path(sys.executable).with_name("agent-comms"),
             state=root.parent / "state",
             repos=(),
             worktrees=comms.registry.storage_rule.checkout_base,

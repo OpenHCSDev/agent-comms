@@ -40,6 +40,7 @@ from agent_comms.thread_text import ForkedParent, NoParent
 def prepare_physical_fixture():
     """Prepare the same original immutable archive for the existing native recorder."""
     from retained_history_cutover_pilot import reference_actual_history
+    from bus_record_fixture import prepare_native_comms
     destination=Path(os.environ['PHYSICAL_FIXTURE_ROOT'])
     destination.mkdir(mode=0o700,parents=True,exist_ok=False)
     project=destination/'project';project.mkdir(mode=0o700)
@@ -49,7 +50,8 @@ def prepare_physical_fixture():
         'api':'openai-completions','models':[{'id':'fixture','contextWindow':32768,'maxTokens':2048}]}}}))
     (profile/'auth.json').write_text('{}')
     (profile/'settings.json').write_text(json.dumps({'retry':{'enabled':False,'maxRetries':0}}))
-    comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
+    comms=prepare_native_comms(wire(destination/'wire'))
+    root_id=comms.registry.prepare_native_root().namespace
     comms.registry.declare(comms.registry.new_thread('archive-review', frozenset({'comms'}), str(project), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')

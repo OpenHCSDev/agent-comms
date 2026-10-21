@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
@@ -26,10 +27,14 @@ from .typed_table import (
     TypedTable,
 )
 
+if TYPE_CHECKING:
+    from .bus_publication import Delivered
+    from .private_registry_guard import RegistryPrivacy
+
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class CohortTable(PrivateRuntimeSchema):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
@@ -49,6 +54,9 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
+    manifest_format: ClassVar[str] = "audience-v1"
+    decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
+
     wire_root_id: Annotated[
         str,
         Column(
@@ -76,6 +84,46 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
     accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
     sealed: bool = False
     without_rowid = True
+
+    @classmethod
+    def decision_hash(cls, delivery: Delivered) -> str:
+        from .audience_manifest import MAX_AUDIENCE_BYTES
+        from .response_acknowledgement import _canonical
+
+        encoded = _canonical([decision.to_wire() for decision in delivery.decisions])
+        if len(encoded) > MAX_AUDIENCE_BYTES:
+            raise ValueError("Private decision set exceeds its byte bound.")
+        return hashlib.sha256(cls.decision_domain + encoded).hexdigest()
+
+    @classmethod
+    def for_delivery(
+        cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
+    ) -> ClaimBatchAcknowledgements:
+        """Native acknowledgement facts derive from the actual delivered value."""
+        from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+
+        return cls(
+            wire_root_id=privacy.namespace,
+            wire_seq=delivery.seq,
+            message_id=delivery.message_id,
+            exact_target=delivery.target,
+            envelope_digest=delivery.audience.wire_envelope_digest,
+            audience_digest=delivery.audience.digest,
+            decisions_digest=cls.decision_hash(delivery),
+            member_count=len(delivery.audience.recipients),
+            claim_count=sum(len(decision.claim_decisions()) for decision in delivery.decisions),
+            manifest_codec=cls.manifest_format,
+            resolver_version=RESOLVER_VERSION,
+            policy_version=POLICY_VERSION,
+            accepted_at_ms=accepted_at_ms,
+        )
+
+    def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
+        from dataclasses import replace
+        from .coordination_errors import IdentityConflict
+
+        if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
+            raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
         """An awareness contribution borrows this original sealed acknowledgement."""
@@ -384,14 +432,12 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """A historical capture is omitted; a changed current owner refuses."""
+        """Prior generations/names are historical; wrong or future identities refuse."""
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if self.owner_generation < expected.generation:
-            return False
-        if self.captured_owner != expected:
+        if self.recipient_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
-        return True
+        return self.captured_owner == expected
 
     @property
     def captured_owner(self) -> OwnerGenerations:

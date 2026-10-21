@@ -11,6 +11,8 @@ response and registry outcomes before recording success.
 
 from __future__ import annotations
 
+from .lifecycle_capability import Failed
+
 import hashlib
 import hmac
 import json
@@ -31,7 +33,7 @@ from uuid import uuid4
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .goal_attempt_identity import GoalAttemptIdentity
+from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
@@ -127,7 +129,7 @@ class Generation(GoalLedgerTable, TypedTable):
         return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
 
     def failure_identity(self) -> GoalAttemptIdentity:
-        self.lifecycle.require_failure()
+        self.lifecycle.require(Failed, FailureNotObserved())
         return self.attempt_identity
 
     def has_ready_grant(self, number: int, digest: str) -> bool:

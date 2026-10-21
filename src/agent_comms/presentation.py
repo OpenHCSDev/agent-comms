@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -73,7 +73,6 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import (
     ThreadOwnerBinding,
@@ -88,7 +87,7 @@ from .bus import Bus
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms
@@ -112,7 +111,7 @@ class OutcomeViewer(ABC):
         pass
 
     @abstractmethod
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         pass
 
 
@@ -122,7 +121,7 @@ class AllOutcomes(OutcomeViewer):
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return True
 
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         return True
 
 
@@ -139,7 +138,7 @@ class OwnerOutcomes(OutcomeViewer):
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return self.lookup in (sender_lookup, recipient.recipient_lookup)
 
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         return source.audience.sender_lookup == self.lookup
 
 
@@ -223,7 +222,7 @@ class MessageNotification:
     @classmethod
     def read_references(
         cls, log: Bus, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        project: Callable[[Sequence[Delivered]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
@@ -236,7 +235,7 @@ class MessageNotification:
 
     @classmethod
     def delivery_window(
-        cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
+        cls, root: Path, registry: Registration, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
     ):
         """Project the original frozen audience even before handling is recorded."""
@@ -257,7 +256,7 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[CommittedDelivery]):
+                                 sources: Sequence[Delivered]):
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
@@ -273,7 +272,7 @@ class MessageNotification:
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
-        sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
+        sources: Sequence[Delivered], observations: Mapping[str, RecipientActivity],
         *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
@@ -357,7 +356,7 @@ class MessageNotification:
     @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, viewer: OutcomeViewer,
-        sources: Sequence[CommittedDelivery], *,
+        sources: Sequence[Delivered], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes to the messages the caller already checked."""
@@ -669,7 +668,7 @@ class ThreadView(ThreadRecord):
         return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if self.thread.turn_record.executing:
+        if self.thread.executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 

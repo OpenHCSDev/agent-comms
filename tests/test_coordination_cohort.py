@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from agent_comms.bus import Bus
 
 from bus_history import read_history
@@ -53,7 +55,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "comms"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     people = {
         "sender": (17001.0, {"team"}),
         "Alice": (17002.0, {"team"}),
@@ -72,7 +74,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     install_private_cohort_schema(coordinator)
     for name in ("Alice", "Bob", "Charlie"):
         coordinator.participants.register(lookups[name], name, name, committed=True)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     return comms, coordinator, root_id, lookups
 
 

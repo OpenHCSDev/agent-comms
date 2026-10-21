@@ -186,25 +186,24 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
         with self.comms.registry.store.locked():
-            with self.comms.bus.log.locked():
-                marker = self.comms.bus.log.private_marker_unlocked()
-            if marker.root_id != self.root_id or not marker.claims:
-                raise IdentityConflict("Selected write requires matching private claim root")
+            self.comms.registry.store.private_guard_unlocked().require_root(
+                self.root_id, IdentityConflict("Selected write requires its original native namespace"),
+            )
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if not owner.process_identity.runs_here() or owner.turn_record.executing:
+            if not owner.process_identity.runs_here() or owner.executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
-            initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
+            initial = self.comms.bus.bus.delivery(source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = owner.incarnation.lookup
             with Coordination(str(CoordinationStore.path_in(self.comms.root))) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
-                    assignment
+                    pending
                     for assignment in assignments
-                    if assignment.source == MessageReference(source_seq, source_message_id)
-                    and assignment.recipient == owner.name
-                    and assignment.lifecycle.full_pending
+                    for pending in assignment.lifecycle.writable_pending_assignments(assignment)
+                    if pending.source == MessageReference(source_seq, source_message_id)
+                    and pending.recipient == owner.name
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")

@@ -3,7 +3,7 @@ from agent_comms.messages import NoticeRole
 from dataclasses import replace
 
 from agent_comms.comms import Comms
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 def facts_for(comms, owner):
@@ -12,7 +12,7 @@ def facts_for(comms, owner):
 
 
 def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_them(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
     original = comms.messaging.send_user_message("#team", "Preserve this original constraint", worktree=str(tmp_path))
     before = facts_for(comms, owner)
@@ -26,7 +26,7 @@ def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_th
 
 
 def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     original = comms.registry.require("Alice")
     first = comms.messaging.send_user_message("#team", "Original exact user constraint", worktree=str(tmp_path))
     assert [fact.source.reference for fact in facts_for(comms, original)] == [first.reference]

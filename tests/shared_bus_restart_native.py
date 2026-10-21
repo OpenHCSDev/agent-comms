@@ -3,6 +3,10 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+
+from bus_record_fixture import prepare_native_comms
+from agent_comms.lifecycle_capability import Complete
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
@@ -29,7 +33,6 @@ from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -81,12 +84,8 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire')
-    if continue_existing:
-        with service.bus.log.locked():
-            root_id = service.bus.log.private_marker_unlocked().root_id
-    else:
-        root_id = service.messaging.initialize_private_initial_protocol()
+    service = prepare_native_comms(Comms(stage/'wire'))
+    root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
@@ -235,7 +234,7 @@ async def configured_pure_channel(arguments):
                     # otherwise an observer can block publisher COMMIT while
                     # awaiting a registry lock held by that publisher.
                     active = tuple(name for name in names
-                        if service.registry.require(name).active_turn.executing)
+                        if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
                             'dispatched_unproven_inputs':[{'owner':row.owner_thread,
@@ -248,7 +247,7 @@ async def configured_pure_channel(arguments):
                     overlap |= len({row.owner_thread for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
-                    if len(claims) == len(names)*len(originals) and all(row.lifecycle.completed for row in claims) and not active:
+                    if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
                         assert len(triage) == len(full) == len(names)
                         assert all(row.verdict is FullSelectedTriage for row in triage)
                         assert all(row.session_id and row.session_entry_id for row in inputs)
@@ -266,16 +265,16 @@ async def configured_pure_channel(arguments):
                         assert all(row.lifecycle.mode.triage for row in claims)
                         receipts = []
                         for original in originals:
-                            initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
-                            with store.session.read():
-                                sealed = _claim_record(db,initial)
+                            with NativeBoundary(service.bus) as boundary, store.session.read():
+                                initial = service.bus.bus.delivery(original.seq)
+                                sealed = _claim_record(db, initial, boundary.privacy)
                             assert {row.assignment_id for row in sealed.assignments} == {
                                 row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
                             rows = PublicationEvidence.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
-                            reply, = service.bus.log.messages_for_references((rows[0].reference,))
+                            reply, = service.bus.bus.messages_for_references((rows[0].reference,))
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
                             history = read_historical_native_inputs(
@@ -374,7 +373,7 @@ async def configured_pure_channel(arguments):
                 'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
-                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.bus.path.stat().st_size}
             acknowledgement['compaction_events'] = compaction_events
             (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
             print(json.dumps(acknowledgement,indent=2),flush=True)
@@ -421,11 +420,11 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 and not row.reference.recorded)
             if authorized:
                 break
-            assert not (claims and all(claim.lifecycle.completed for claim in claims)), \
+            assert not (claims and all(bool(claim.lifecycle.items_with(Complete, True)) for claim in claims)), \
                 'Original completed before cancellation; cancellation was not exercised'
             await asyncio.sleep(.03)
         await attachment.cancel(name)
-        while service.registry.require(name).active_turn.executing:
+        while service.registry.require(name).executing:
             await asyncio.sleep(.03)
         cancelled_claims, cancelled_inputs, cancelled_receipts = observe(cancelled)
         assert {row.input_id for row in authorized}.issubset({row.input_id for row in cancelled_inputs})
@@ -433,12 +432,12 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         continuation = publish('NEW_CONTINUATION_ORIGINAL')
         while True:
             claims, inputs, receipts = observe(continuation)
-            if claims and all(claim.lifecycle.completed for claim in claims) and \
-                    not service.registry.require(name).active_turn.executing:
+            if claims and all(bool(claim.lifecycle.items_with(Complete, True)) for claim in claims) and \
+                    not service.registry.require(name).executing:
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
-                reply, = service.bus.log.messages_for_references((receipts[0].reference,))
+                reply, = service.bus.bus.messages_for_references((receipts[0].reference,))
                 assert reply.sender == name and '12' in reply.body
                 break
             await asyncio.sleep(.1)
@@ -467,7 +466,6 @@ async def configured_mixed_routes(arguments):
     """
     from agent_comms.comms import wire
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
@@ -527,8 +525,8 @@ async def configured_mixed_routes(arguments):
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
                     if late is not None and len(assignments) == len(originals)+1 and all(
-                            row.lifecycle.completed for row in assignments) and len(cursors) == 1 and (
-                            cursors[0].covered_seq >= late.seq) and not service.registry.require(name).active_turn.executing:
+                            bool(row.lifecycle.items_with(Complete, True)) for row in assignments) and len(cursors) == 1 and (
+                            cursors[0].covered_seq >= late.seq) and not service.registry.require(name).executing:
                         assert len(inputs) == 2 and all(row.reference_stage is FullNativeExecution for row in inputs)
                         links = ExecutionAssignmentLink.select(db,order_by=('execution_id','ordinal'))
                         original_claims = {row.assignment_id for row in assignments if row.wire_seq != late.seq}
@@ -537,7 +535,7 @@ async def configured_mixed_routes(arguments):
                         first_execution = execution_ids.pop()
                         receipts = PublicationEvidence.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
-                        replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
+                        replies = service.bus.bus.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
                         direct = next(row for row in replies if row.target == 'human')
                         assert '17' in channel.body and '12' in channel.body
@@ -547,7 +545,7 @@ async def configured_mixed_routes(arguments):
                         late_receipts = PublicationEvidence.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
-                        assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
+                        assert '23' in service.bus.bus.messages_for_references((late_receipts[0].reference,))[0].body
                         lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(
@@ -666,7 +664,7 @@ class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def ownership(cls, service, owners):
-        with service.bus.log.checked_read():
+        with service.bus.bus.reading():
             yield True
 
 
@@ -725,7 +723,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
                 origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for index in range(self.wave_size)]
             return
-        self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
+        self.originals = [self.service.bus.publisher.publish_ordinary(Message(
             'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', InfoKind), origin=AgentOrigin())
             for name in self.names]
 
@@ -816,8 +814,8 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire')
-    root_id = service.messaging.initialize_private_initial_protocol()
+    service = prepare_native_comms(Comms(stage/'wire'))
+    root_id = service.registry.prepare_native_root().namespace
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS='restart-local/fixture')
@@ -981,7 +979,7 @@ async def run(arguments):
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
                     origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
             from agent_comms.coordination_cohort import accept_delivery_cohort
-            initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
+            initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.audience.recipients:
                     store.participants.register(audience.recipient_lookup,
@@ -1038,7 +1036,7 @@ async def run(arguments):
                 expected_posts = (4 if arguments.wave_size > 1 else
                                   2 if arguments.cancel_before_grant else len(names))
                 if arguments.wave_size > 1 and provider.posts == 1 and late_original is None:
-                    assert service.registry.require(names[0]).active_turn.executing
+                    assert service.registry.require(names[0]).executing
                     # All original batch members were reserved before this late
                     # arrival, while the real provider's first response is held.
                     with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
@@ -1055,7 +1053,7 @@ async def run(arguments):
                     provider.response_gate.set()
                 if provider.posts == expected_posts:
                     if not provider.response_gate.is_set():
-                        assert all(service.registry.require(name).active_turn.executing
+                        assert all(service.registry.require(name).executing
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
@@ -1075,11 +1073,11 @@ async def run(arguments):
                                     ','.join('?' for _ in (*cutover.originals, late_original))+')',
                                     parameters=tuple(message.seq for message in (*cutover.originals, late_original)))
                                 completed = len(rows) == arguments.wave_size+1 and all(
-                                    row.lifecycle.completed for row in rows)
+                                    bool(row.lifecycle.items_with(Complete, True)) for row in rows)
                             else:
                                 completed = len(rows)==len(names) and all(
                                     row.lifecycle.declared_name=='ignored' for row in rows)
-                    if completed and all(not service.registry.require(name).active_turn.executing
+                    if completed and all(not service.registry.require(name).executing
                                          for name in names):
                         break
                 if not diagnosed and time.perf_counter()-started > 25:

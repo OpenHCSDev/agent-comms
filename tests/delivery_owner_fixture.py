@@ -1,6 +1,6 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 
-from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 from contextlib import asynccontextmanager
 
@@ -35,16 +35,9 @@ async def canonical_delivery_owner(root, *, direct=False):
 
 
 def canonical_agent(comms, **options):
-    """Configure the existing owner against its real canonical root marker.
-
-    ACP startup selects this process root before constructing the agent. Tests
-    construct it here instead; conftest restores the prior selection at teardown.
-    """
+    """Prepare the actual bus and native authority, then select this owner's root."""
+    prepare_native_comms(comms)
     LaunchRoot.from_path(comms.root).install()
-    with comms.bus.log.locked():
-        metadata = comms.bus.log.read_metadata_unlocked()
-    if not metadata.private:
-        Bus.install(Bus.path_in(comms.root))
     agent = CommsAgent(
         comms,
         **options,

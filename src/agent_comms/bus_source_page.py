@@ -47,7 +47,6 @@ class CoveragePage(AddressedPage):
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateQuery(SourcePage):
-    root_id: Annotated[str, Id128Text]
     recipient_lookup: Annotated[str, Id128Text]
     required_through_seq: int
 

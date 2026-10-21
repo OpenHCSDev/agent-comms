@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.bus import Bus
+from agent_comms.locked_store import BusFile
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
@@ -54,7 +55,6 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
 from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
@@ -75,7 +75,6 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -695,7 +694,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         """What exists at ``root`` decides how much of an install it needs."""
         if retire:
             return RetiringInstall
-        if WireLog(WireLog.path_in(root)).fresh():
+        if BusFile.fresh(root):
             return FreshInstall
         return Install
 
@@ -783,6 +782,7 @@ class FreshInstall(Install[FreshRehearsal]):
         Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        Comms(self.root).registry.prepare_native_root()
         bus = Bus.install(Bus.path_in(self.root))
         CarryLedger(self.root).start(self.chain)
         self.staged.publish()
