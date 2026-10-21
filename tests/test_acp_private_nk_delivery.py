@@ -95,7 +95,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participants.get(lookup)
         assert after.owner_thread == "gamma"
-        assert after.participant_generation == before.participant_generation
+        assert after.owner_identity.generation == before.owner_identity.generation
         assert after.pointer == active.pointer
         with pytest.raises(StaleRevision):
             store.participants.rename_owner(lookup, "wrong", expected_generation=2)

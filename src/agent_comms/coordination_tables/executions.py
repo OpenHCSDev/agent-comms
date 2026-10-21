@@ -21,12 +21,18 @@ from agent_comms.field_codec import NullMember, SingleFieldValue, SnapshotExclud
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.typed_table import (
-    IntegerStorage,
-    TextStorage,
     Column,
+    ColumnGuard,
     ForeignKey,
+    FrozenColumns,
     Generated,
+    GuardedColumns,
+    GuardedInserts,
+    GuardedUpdates,
     Index,
+    IntegerStorage,
+    NoDelete,
+    TextStorage,
     TypedTable,
 )
 
@@ -89,7 +95,11 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class CurrentExecutions(CoordinatorTable, TypedTable):
+class CurrentExecutions(GuardedInserts, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+    insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations WHERE owner_lookup = NEW.owner_lookup)"""
+    immutable_columns = ('owner_lookup',)
+    update_condition = """NEW.pointer_revision != OLD.pointer_revision + 1"""
+
     @property
     def unresolved(self) -> bool:
         return self.execution_id.pointed
@@ -144,30 +154,6 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "current_pointer_insert_owner": (
-                """ BEFORE INSERT ON current_executions
-WHEN NOT EXISTS (SELECT 1 FROM owner_generations
- WHERE owner_lookup = NEW.owner_lookup)
-BEGIN SELECT RAISE(ABORT, 'current pointer owner is not registered'); END"""
-            ),
-            "current_pointer_update_owner": (
-                """ BEFORE UPDATE ON current_executions
-WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.pointer_revision != OLD.pointer_revision + 1
-BEGIN SELECT RAISE(ABORT, 'current pointer owner/revision mismatch'); END"""
-            ),
-            "current_pointer_delete_frozen": (
-                """ BEFORE DELETE ON
-current_executions BEGIN
-    SELECT RAISE(ABORT, 'current pointer cannot be deleted' );
-END"""
-            ),
-        }
-
-
 _RETRY_BASIS = """SELECT e.execution_id,
   CASE WHEN e.current_attempt_ordinal IS NOT NULL
      AND e.current_attempt_ordinal < e.max_attempts
@@ -181,7 +167,31 @@ FROM executions e"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
+class ExecutionRecord(GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
+
+    immutable_columns = ('execution_id', 'origin', 'owner_lookup', 'owner_thread', 'max_attempts', 'created_at_ms')
+    update_condition = """NEW.revision != OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms OR (json_extract(NEW.lifecycle,
+        '$.kind') = 'active' AND (json_extract(OLD.lifecycle, '$.kind') NOT IN ({startable_execution_names}) OR
+        json_extract(NEW.lifecycle, '$.ordinal') != coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR
+        (json_extract(NEW.lifecycle, '$.kind') != 'active' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT
+        json_extract(OLD.lifecycle, '$.ordinal'))"""
+    column_guards = (
+        ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges}))
+        OR (json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names}) AND
+        json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND NOT EXISTS ( SELECT 1 FROM attempts a WHERE
+        a.execution_id = NEW.execution_id AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal') AND
+        a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases}) )) OR ((NEW.origin = 'wire') AND
+        ((NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id)) OR
+        (json_extract(NEW.lifecycle, '$.kind') = 'completed' AND EXISTS ( SELECT 1 FROM obligations WHERE
+        execution_id = NEW.execution_id AND success_terminal != 1)) OR (json_extract(NEW.lifecycle, '$.kind') =
+        'deferred' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS ( SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id AND retryable != 1)))) OR (json_extract(NEW.lifecycle, '$.kind') =
+        'failed' AND EXISTS ( SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id)) OR
+        (json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
+        AND EXISTS (SELECT 1 FROM retry_disposition_basis b WHERE b.execution_id = NEW.execution_id AND b.authorized
+        = 1))"""),
+    )
+
     retry_view = "retry_disposition_basis"
 
     @classmethod
@@ -396,77 +406,3 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "execution_status_edge": (
-                """ BEFORE UPDATE OF lifecycle ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges})
-BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
-            ),
-            "execution_failed_attempt": (
-                """ BEFORE UPDATE OF lifecycle ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names})
- AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
- AND NOT EXISTS (
-   SELECT 1 FROM attempts a
-   WHERE a.execution_id = NEW.execution_id
-     AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
-     AND a.owner_lookup = NEW.owner_lookup
-     AND a.phase IN ({failed_attempt_phases})
- )
-BEGIN SELECT RAISE(ABORT, 'failed execution requires a failed attempt'); END"""
-            ),
-            "execution_frozen_facts": (
-                """ BEFORE UPDATE ON executions
-WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
- OR NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
- OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms OR
- (json_extract(NEW.lifecycle, '$.kind') = 'active' AND
-  (json_extract(OLD.lifecycle, '$.kind') NOT IN ({startable_execution_names}) OR
-   json_extract(NEW.lifecycle, '$.ordinal') != coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR
- (json_extract(NEW.lifecycle, '$.kind') != 'active' AND
-  json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))
-BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
-            ),
-            "execution_response_finality": """
-BEFORE UPDATE OF lifecycle ON executions
-WHEN NEW.origin = 'wire'
-BEGIN
-    SELECT RAISE(ABORT, 'wire execution requires original response obligations')
-    WHERE NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id);
-    SELECT RAISE(ABORT, 'completed execution requires all original responses')
-    WHERE json_extract(NEW.lifecycle, '$.kind') = 'completed' AND EXISTS (
-      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND success_terminal != 1);
-    SELECT RAISE(ABORT, 'deferred execution requires all original responses retryable')
-    WHERE json_extract(NEW.lifecycle, '$.kind') = 'deferred'
-      AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS (
-      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1);
-END""",
-            "execution_failure_receipt_guard": (
-                """ BEFORE UPDATE OF lifecycle
-ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
-  SELECT 1 FROM publication_receipts WHERE execution_id =
-  NEW.execution_id)
-BEGIN SELECT RAISE(ABORT,
-'failed execution cannot erase publication receipt' ); END"""
-            ),
-            "execution_delete_frozen": (
-                """ BEFORE DELETE ON executions BEGIN
-    SELECT RAISE(ABORT, 'execution cannot be deleted');
-END"""
-            ),
-            "failed_retry_partition_update": (
-                """ BEFORE UPDATE OF lifecycle
-ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
- AND EXISTS (SELECT 1 FROM retry_disposition_basis b
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END"""
-            ),
-        }

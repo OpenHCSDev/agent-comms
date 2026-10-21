@@ -80,14 +80,14 @@ class VerifiedOwnerLoss(ABC):
         is insufficient.
         """
         from agent_comms.comms import Comms
-        from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
+        from agent_comms.native_runtime_input import NativeRuntimeTable
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
-            assert_native_runtime_schema(store.session._connection)
+            NativeRuntimeTable.require_installed(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:

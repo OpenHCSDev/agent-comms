@@ -642,6 +642,13 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
+    def require_installed(cls, db: sqlite3.Connection) -> None:
+        """Installed durable families require their declaration and enforced relations."""
+        cls.require_schema(db)
+        if SQLiteForeignKeys.read(db.execute("PRAGMA foreign_keys")) != [SQLiteForeignKeys(True)]:
+            raise cls.schema_error(f"{cls.__name__} foreign-key enforcement is disabled")
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         for row in cls.schema_rows():
             row.create(db)
@@ -655,36 +662,135 @@ class TableSchema(ABC):
 class RowMutation(Enum):
     """SQLite's destructive row events own their immutable-history guards."""
 
+    INSERT = "INSERT"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
 
-    def abort_trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
-        name = f"{row.declared_name}_{self.value.lower()}_abort"
+    def abort_trigger(
+        self, row: type[TypedTable], *, columns: tuple[str, ...] = (), when: str = "",
+        message: str = "Rows are immutable", after: bool = False, suffix: str = "",
+    ) -> SQLiteSchemaObject:
+        suffix = "_" + "_".join(columns) if columns else suffix
+        timing = "AFTER" if after else "BEFORE"
+        name = f"{row.declared_name}_{self.value.lower()}{suffix}_{timing.lower()}_abort"
+        selected = " OF " + row._column_list(columns) if columns else ""
+        condition = " WHEN " + row._sql(when) if when else ""
         return SQLiteSchemaObject(
             name,
-            f'CREATE TRIGGER "{name}" BEFORE {self.value} ON "{row.declared_name}" '
-            "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END",
+            f'CREATE TRIGGER "{name}" {timing} {self.value}{selected} ON "{row.declared_name}"'
+            f"{condition} BEGIN SELECT RAISE(ABORT, '{message}'); END",
         )
 
 
-class AppendOnlyTables(TableSchema):
+class MutationCapability(ABC):
+    """Each MRO declaration contributes guards; siblings never override one another."""
+
+    @classmethod
+    @abstractmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]: ...
+
+
+class NoUpdate(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.UPDATE.abort_trigger(row, message="Rows cannot be updated"),)
+
+
+class NoDelete(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.DELETE.abort_trigger(row, message="Rows cannot be deleted"),)
+
+
+@dataclass(frozen=True)
+class ColumnGuard:
+    """A predicate on an UPDATE's selected columns, not another SQL trigger template."""
+
+    columns: tuple[str, ...]
+    condition: str = "1"
+
+    def trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        return RowMutation.UPDATE.abort_trigger(
+            row, columns=self.columns, when=self.condition, message="Column change is refused")
+
+
+class GuardedColumns(MutationCapability):
+    column_guards: ClassVar[tuple[ColumnGuard, ...]] = ()
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(guard.trigger(row) for guard in row.column_guards)
+
+
+class FrozenColumns(MutationCapability):
+    immutable_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        columns = row._fields_named(row.immutable_columns)
+        condition = " OR ".join(
+            f'NEW."{column.wire_name}" IS NOT OLD."{column.wire_name}"' for column in columns)
+        return (RowMutation.UPDATE.abort_trigger(
+            row, columns=row.immutable_columns, when=condition, message="Column values are immutable"),)
+
+
+class GuardedUpdates(MutationCapability):
+    update_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=row.update_condition, message="Update violates row invariants"),)
+
+
+class GuardedInserts(MutationCapability):
+    insert_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=row.insert_condition, message="Insert violates row membership"),)
+
+
+class GuardedRelatedInserts(MutationCapability):
+    related_insert_target: ClassVar[type[TypedTable]]
+    related_insert_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return (RowMutation.INSERT.abort_trigger(
+            row.related_insert_target, when=row.related_insert_condition,
+            message="Insert violates related row membership"),)
+
+
+class ValidatedInserts(MutationCapability):
+    validator_function: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        arguments = ", ".join(f'NEW."{field.wire_name}"' for field in row._fields() if field.init)
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=f"{row.validator_function}({arguments}) != 1", suffix="_validation",
+            message="Insert fails declared validation"),)
+
+
+class GuardedAfterWrites(MutationCapability):
+    after_write_condition: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(mutation.abort_trigger(
+            row, when=row.after_write_condition, after=True,
+            message="Write violates related row invariants")
+            for mutation in (RowMutation.INSERT, RowMutation.UPDATE))
+
+
+class ImmutableRows(NoUpdate, NoDelete):
+    """A row family refuses both destructive mutations."""
+
+
+class AppendOnlyTables(ImmutableRows, TableSchema):
     """Declared history tables reject UPDATE and DELETE, even from raw SQL."""
-
-    @classmethod
-    def _append_only_triggers(cls) -> dict[str, str]:
-        triggers = (mutation.abort_trigger(row)
-                    for row in cls.schema_rows() for mutation in RowMutation)
-        return {trigger.name: trigger.sql for trigger in triggers}
-
-    @classmethod
-    def declared_schema(cls) -> dict[str, str]:
-        return super().declared_schema() | cls._append_only_triggers()
-
-    @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        super().create_schema(db)
-        for statement in cls._append_only_triggers().values():
-            db.execute(statement)
 
 
 class SharedFileTables(TableSchema):
@@ -889,15 +995,28 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return statements
 
     @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        """Named trigger suffixes, including their leading SQL whitespace."""
-        return {}
+    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        guards = (
+            trigger for capability in cls.__mro__
+            if issubclass(capability, MutationCapability)
+            and "mutation_guards" in vars(capability) and capability is not MutationCapability
+            for trigger in capability.mutation_guards(cls)
+        )
+        statements: dict[str, str] = {}
+        for trigger in guards:
+            if trigger.name in statements:
+                raise TypeError(f"{cls.__name__} declares two guards named {trigger.name}")
+            statements[trigger.name] = trigger.sql.replace(
+                "CREATE TRIGGER ", "CREATE TRIGGER IF NOT EXISTS ", 1
+            ) if if_not_exists else trigger.sql
+        return statements
 
     @classmethod
-    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
-        existence = "IF NOT EXISTS " if if_not_exists else ""
-        return {name: f"CREATE TRIGGER {existence}{name}{cls._sql(body)}"
-                for name, body in cls.trigger_bodies().items()}
+    def structure_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        """Tables, indexes and views, with mutation guards excluded by their declarations."""
+        guards = cls.triggers()
+        return {name: sql for name, sql in cls.schema_objects(if_not_exists=if_not_exists).items()
+                if name not in guards}
 
     @classmethod
     def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:

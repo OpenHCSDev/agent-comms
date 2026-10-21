@@ -20,8 +20,8 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .cohort_schema import assert_cohort_schema
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from .cohort_schema import CohortTable
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
@@ -33,7 +33,14 @@ from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
-from .typed_table import Column, IntegerStorage, TextStorage, TypedRow, TypedTable
+from .typed_table import (
+    Column,
+    ImmutableRows,
+    IntegerStorage,
+    TextStorage,
+    TypedRow,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
@@ -45,7 +52,7 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+class PromptBinding(ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
 
     @classmethod
@@ -85,16 +92,6 @@ class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, Priv
         "AND wire_root_id NOT GLOB '*[^0-9a-f]*' "
         "AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'",
     )
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        return {
-            f"{cls.declared_name}_{operation.lower()}_guard": " "
-            f"BEFORE {operation} ON {cls.declared_name} "
-            "BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END"
-            for operation in ("UPDATE", "DELETE")
-        }
-
 
 @dataclass(frozen=True)
 class _BindingRoot(TypedRow):
@@ -145,8 +142,8 @@ def bind_expected_prompt(
     path = binding_store_path(store)
     with sidecar_connection(path, PromptBinding) as sidecar:
         with store.session.writing() as db:
-            assert_native_runtime_schema(db)
-            assert_cohort_schema(db)
+            NativeRuntimeTable.require_installed(db)
+            CohortTable.require_installed(db)
             ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
             reserved = NativeRuntimeInput.one(db, input_id=input_id)
             if reserved is None:

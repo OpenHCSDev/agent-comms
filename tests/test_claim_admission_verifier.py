@@ -97,7 +97,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 execution_id,
                 1,
                 owner.name,
-                person.participant_generation,
+                person.owner_identity.generation,
                 prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
@@ -114,7 +114,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 operation_id="f" * 32,
                 owner_claimed_generation=claimed_generation,
                 turn_id=owner.require_turn_lease().turn_id,
-                participant_generation=person.participant_generation,
+                participant_generation=person.owner_identity.generation,
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, claim_scope, owner.name)

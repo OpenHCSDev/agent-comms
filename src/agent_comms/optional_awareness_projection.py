@@ -31,14 +31,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
 from .child_process import ProcessIdentity
-from .cohort_schema import (
-    AwarenessClaimGenerations,
-    ClaimBatchAcknowledgements,
-    ClaimBatchMembers,
-    CohortDeliveryReceipts,
-    assert_cohort_schema,
-    assert_optional_awareness_schema,
-)
+from .cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements, ClaimBatchMembers, CohortDeliveryReceipts, CohortTable, assert_optional_awareness_schema
 from .context_segments.optional_awareness import (
     CompleteAwareness,
     OmittedAwareness,
@@ -301,7 +294,7 @@ class OptionalAwarenessProjection:
         owner: Thread,
     ) -> None:
         CoordinatorTable.require_schema(db)
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(

@@ -217,12 +217,12 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         participant = store.participants.register("lookup", "Owner", "owner", committed=True).value
         advanced = store.participants.advance_generation(
-            "lookup", "owner", expected_generation=participant.participant_generation
+            "lookup", "owner", expected_generation=participant.owner_identity.generation
         ).value
-        assert advanced.participant_generation == participant.participant_generation + 1
+        assert advanced.owner_identity.generation == participant.owner_identity.generation + 1
         assert registry.snapshot().owner_identity("owner") == initial
         registry.register(registry.require("owner"), new_owner=True)
-        assert store.participants.get("lookup").participant_generation == advanced.participant_generation
+        assert store.participants.get("lookup").owner_identity.generation == advanced.owner_identity.generation
 
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):

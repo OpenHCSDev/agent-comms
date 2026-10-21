@@ -115,7 +115,7 @@ class ExecutionStore:
                 raise IdentityConflict("execution identity conflicts")
             return AlreadyApplied(snapshot)
         participant = self.participants.get(owner_lookup)
-        if not participant.committed or participant.owner_thread != owner_thread:
+        if not participant.committed or participant.owner_identity.owner_thread != owner_thread:
             raise IdentityConflict("execution requires committed current owner")
         if not isinstance(max_attempts, int) or max_attempts <= 0:
             raise ValueError("max_attempts must be positive")

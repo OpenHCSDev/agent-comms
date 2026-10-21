@@ -40,7 +40,10 @@ from .selected_triage import (
 from .typed_table import (
     Column,
     DurableTables,
+    FrozenColumns,
+    GuardedUpdates,
     IntegerStorage,
+    NoDelete,
     SharedFileTables,
     TextStorage,
     TypedRow,
@@ -81,7 +84,14 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(GuardedUpdates, FrozenColumns, NoDelete, NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+    immutable_columns = ('input_id', 'stage', 'execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest')
+    update_condition = """(OLD.{sent_owner_claimed_generation} IS NOT NULL AND NEW.{sent_owner_claimed_generation} IS NOT
+        OLD.{sent_owner_claimed_generation}) OR (NEW.{sent_owner_claimed_generation} IS NULL AND NEW.session_id IS
+        NOT NULL) OR (OLD.session_id IS NOT NULL AND (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS
+        NOT OLD.session_file)) OR OLD.session_entry_id IS NOT NULL OR (NEW.session_id IS NULL AND
+        NEW.{sent_owner_claimed_generation} IS NULL)"""
+
     @classmethod
     def source_membership_sql(cls) -> str:
         return " UNION ALL ".join(
@@ -301,36 +311,12 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
 
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        name = cls.declared_name
-        return {
-            f"{name}_identity_guard": f"""
-            BEFORE UPDATE ON {name}
-            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
-                OR NEW.execution_id IS NOT OLD.execution_id
-                OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
-                OR NEW.owner_lookup IS NOT OLD.owner_lookup
-                OR NEW.owner_thread IS NOT OLD.owner_thread
-                OR NEW.owner_generation IS NOT OLD.owner_generation
-                OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
-                OR (OLD.{{sent_owner_claimed_generation}}
-                    IS NOT NULL
-                    AND NEW.{{sent_owner_claimed_generation}}
-                        IS NOT OLD.{{sent_owner_claimed_generation}})
-                OR (NEW.{{sent_owner_claimed_generation}} IS NULL AND NEW.session_id IS NOT NULL)
-                OR (OLD.session_id IS NOT NULL AND
-                    (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS NOT OLD.session_file))
-                OR OLD.session_entry_id IS NOT NULL
-                OR (NEW.session_id IS NULL AND NEW.{{sent_owner_claimed_generation}} IS NULL)
-            BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
-            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
-            "BEGIN SELECT RAISE(ABORT,'native runtime input cannot be deleted'); END",
-        }
-
-
 @dataclass(frozen=True)
-class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(GuardedUpdates, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
+    immutable_columns = ('wire_root_id', 'recipient_lookup', 'owner_thread', 'owner_generation', 'owner_claimed_generation')
+    update_condition = """NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq OR (NEW.injected_seq =
+        OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)"""
+
     @property
     def context_anchor(self) -> NativeColumn:
         return self.session_id
@@ -387,19 +373,3 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         "AND session_id IS NOT NULL AND request_generation>0)",
     )
 
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        name = cls.declared_name
-        return {
-            f"{name}_update_guard": f""" BEFORE UPDATE ON {name}
-            WHEN NEW.wire_root_id IS NOT OLD.wire_root_id
-                OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
-                OR NEW.owner_thread IS NOT OLD.owner_thread
-                OR NEW.owner_generation IS NOT OLD.owner_generation
-                OR NEW.{{owner_claimed_generation}} IS NOT OLD.{{owner_claimed_generation}}
-                OR NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq
-                OR (NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)
-            BEGIN SELECT RAISE(ABORT,'native source cursor cannot regress'); END""",
-            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
-            "BEGIN SELECT RAISE(ABORT,'native source cursor cannot be deleted'); END",
-        }

@@ -15,14 +15,7 @@ from dataclasses import dataclass
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
-from agent_comms.cohort_schema import (
-    AwarenessClaimGenerations,
-    ClaimBatchAcknowledgements,
-    ClaimBatchMembers,
-    CohortDeliveryReceipts,
-    assert_cohort_schema,
-    assert_optional_awareness_schema,
-)
+from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements, ClaimBatchMembers, CohortDeliveryReceipts, CohortTable, assert_optional_awareness_schema
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -214,8 +207,8 @@ def _record_optional_owner_generations(
                 claim_id=assignment.assignment_id,
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
-                recipient_lookup=assignment.recipient_lookup,
-                canonical_thread=assignment.recipient,
+                owner_lookup=assignment.recipient_lookup,
+                owner_thread=assignment.recipient,
                 owner_generation=current.generation,
             ).insert(db)
     except (sqlite3.Error, SchemaVersionError, IdentityConflict, MalformedRecord) as error:
@@ -245,7 +238,7 @@ def accept_delivery_cohort(
         if wire_seq <= marker.claimed_after_seq:
             raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if acknowledgement is not None:
             return AlreadyApplied(_claim_record(db, initial))
@@ -360,7 +353,7 @@ def sealed_cohort_assignments(
         raise ValueError("acknowledgement-backed page bounds are invalid")
     with store.session.read():
         db = store.session._connection
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         selected_states = AssignmentState.selection_predicate(state_capability, "c")
         return tuple(
             WakeAssignment.read(

@@ -637,10 +637,10 @@ class PrivateOwnerRename(ThreadRename):
                 person = store.participants.get(before.incarnation.require_recorded().lookup)
             except ParticipantNotRegistered:
                 return self.registry_renamed()
-            if not person.committed or person.owner_thread != before.name:
+            if not person.committed or person.owner_identity.owner_thread != before.name:
                 raise RelationViolationError(
                     "Private coordinator owner differs from the registered owner.")
-            generation = person.participant_generation
+            generation = person.owner_identity.generation
             PrivateOwnerRenameIntent(lookup=person.lookup, old=before.name, new=new_name,
                                      generation=generation,
                                      wire_root_id=self.registry_privacy.root_id.hex(),

@@ -219,12 +219,12 @@ def test_registration_complete_atomic_reopen_and_rename(db_path: Path) -> None:
         db.participants.advance_generation("owner", "thread", expected_generation=1)
     db.close()
     with store(db_path) as reopened:
-        assert reopened.participants.get("owner").participant_generation == 2
+        assert reopened.participants.get("owner").owner_identity.generation == 2
         assert reopened.participants.get("owner").committed
         assert reopened.participants.get("owner").aliases == ("owner", "Owner New")
         replay = reopened.participants.register("owner", "Owner", "thread", committed=False)
         assert isinstance(replay, AlreadyApplied)
-        assert replay.value.participant_generation == 2
+        assert replay.value.owner_identity.generation == 2
         assert replay.value.display_name == "Owner New"
 
 
@@ -1296,7 +1296,7 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         assert process.exitcode == 0
     assert sorted(results) == ["AlreadyApplied", "Applied"]
     with store(db_path) as db:
-        assert db.participants.get("owner").participant_generation == 1
+        assert db.participants.get("owner").owner_identity.generation == 1
         assert (
             db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
         )

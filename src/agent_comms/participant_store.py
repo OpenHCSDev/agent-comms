@@ -41,16 +41,8 @@ class ParticipantSnapshot:
     display_name: str
     committed: bool
     aliases: tuple[str, ...]
-    owner_thread: str
-    participant_generation: Annotated[int, WireName("generation")]
+    owner_identity: OwnerGenerations
     pointer: CurrentExecutions
-
-    @property
-    def owner_identity(self) -> OwnerGenerations:
-        return OwnerGenerations(
-            owner_lookup=self.lookup, owner_thread=self.owner_thread,
-            generation=self.participant_generation,
-        )
 
 
 class ParticipantStore:
@@ -80,8 +72,7 @@ class ParticipantStore:
                 person.display_name,
                 person.committed,
                 aliases,
-                generation.owner_thread,
-                generation.generation,
+                generation,
                 pointer,
             )
 
@@ -155,7 +146,7 @@ class ParticipantStore:
                 raise ValueError("alias and display name must be bounded")
         with self.session.writing() as db:
             person = self.get(lookup)
-            if person.participant_generation != expected_generation:
+            if person.owner_identity.generation != expected_generation:
                 raise StaleRevision("owner generation changed")
             existing = ParticipantAliases.one(self.session._connection, alias=alias)
             if existing is not None:
@@ -216,7 +207,7 @@ class ParticipantStore:
             person = self.get(lookup)
             if not person.committed:
                 raise IdentityConflict("uncommitted participant cannot own a generation")
-            if person.participant_generation != expected_generation:
+            if person.owner_identity.generation != expected_generation:
                 raise StaleRevision("owner generation changed")
             OwnerGenerations.update(
                 db,

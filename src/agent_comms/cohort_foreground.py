@@ -8,7 +8,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .cohort_schema import CohortDeliveryReceipts, assert_cohort_schema
+from .cohort_schema import CohortDeliveryReceipts, CohortTable
 from .coordination_cohort import accept_delivery_cohort
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -39,7 +39,7 @@ async def _accept_visible_deliveries(
                 raise IdentityConflict("private initial wire root changed")
             authorized_after = max(after_seq, marker.claimed_after_seq)
             with resource.session.read():
-                assert_cohort_schema(resource.session._connection)
+                CohortTable.require_installed(resource.session._connection)
                 sealed = CohortDeliveryReceipts.sealed_sequences_after(
                     resource.session._connection,
                     wire_root_id=root_id,

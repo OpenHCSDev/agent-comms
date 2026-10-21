@@ -96,7 +96,7 @@ def _projection(
         registry=Registration(index.log.path.with_name("registry.json")),
         expected_participant_generation=store.participants.get(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup
-        ).participant_generation,
+        ).owner_identity.generation,
         expected_claimed_generation=claimed_generation,
         max_rows=max_rows,
     )

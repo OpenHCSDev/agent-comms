@@ -21,17 +21,24 @@ from agent_comms.coordination_errors import (
     StaleFence,
 )
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_tables.participants import OwnerGenerations
+from agent_comms.coordination_tables.participants import OwnerRecord
 from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
-    TextStorage,
     Column,
+    ColumnGuard,
     ForeignKey,
+    FrozenColumns,
     Generated,
+    GuardedColumns,
+    GuardedInserts,
+    GuardedUpdates,
+    NoDelete,
+    TextStorage,
     TypedTable,
 )
+from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 if TYPE_CHECKING:
     from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -79,7 +86,43 @@ class NoPreviousAttempt(PreviousAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+class AttemptRecord(OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+
+    insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id AND e.owner_lookup =
+        NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts AND ((NEW.attempt_ordinal = 1 AND (e.status =
+        'pending' OR (e.status = 'active' AND e.current_attempt_ordinal = 1))) OR (NEW.attempt_ordinal > 1 AND
+        (e.status = 'deferred' OR (e.status = 'active' AND e.current_attempt_ordinal = NEW.attempt_ordinal)))) AND
+        NEW.attempt_ordinal = 1 + coalesce( (SELECT max(a.attempt_ordinal) FROM attempts a WHERE a.execution_id =
+        e.execution_id), 0))) OR (NOT EXISTS (SELECT 1 FROM owner_generations g WHERE g.owner_lookup =
+        NEW.owner_lookup AND g.owner_thread = NEW.owner_thread AND g.generation = NEW.owner_generation)) OR
+        ((json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1 OR (CASE WHEN
+        json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle,
+        '$.backend_done') END) != 0 OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN
+        ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) != 0) OR
+        (NEW.attempt_ordinal > 1 AND ( NOT EXISTS (SELECT 1 FROM retry_disposition_basis b WHERE b.execution_id =
+        NEW.execution_id AND b.authorized = 1) OR EXISTS (SELECT 1 FROM current_executions p WHERE p.owner_lookup =
+        NEW.owner_lookup AND p.execution_id IS NOT NULL))) OR (NEW.attempt_ordinal > 1 AND NOT EXISTS ( SELECT 1
+        FROM attempts a WHERE a.execution_id = NEW.execution_id AND a.attempt_ordinal = NEW.attempt_ordinal - 1 AND
+        a.phase IN ({retry_attempt_phases}) AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation >
+        a.owner_generation AND NEW.owner_token_digest != a.owner_token_digest))"""
+    immutable_columns = ('execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest', 'created_at_ms')
+    update_condition = """NEW.revision != OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms OR ((CASE WHEN
+        json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle,
+        '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN
+        ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0) OR ((CASE
+        WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE
+        json_extract(OLD.lifecycle, '$.process_dead') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind')
+        IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) = 0) OR
+        (OLD.last_progress_at_ms IS NOT NULL AND (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms <
+        OLD.last_progress_at_ms)) OR ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND
+        (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle,
+        '$.lease_expires_at_ms')) < (json_extract(OLD.lifecycle, '$.lease_expires_at_ms'))) OR
+        ((json_extract(OLD.lifecycle, '$.kind')) IN ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle,
+        '$.kind')) = (json_extract(OLD.lifecycle, '$.kind')))"""
+    column_guards = (
+        ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind')) != (json_extract(OLD.lifecycle, '$.kind')) AND NOT ({attempt_edges})"""),
+    )
+
     def require_attempt(self) -> AttemptRecord:
         return self
 
@@ -125,14 +168,6 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
             self.owner_thread,
             self.owner_generation,
             self.owner_token_digest,
-        )
-
-    @property
-    def owner_identity(self) -> OwnerGenerations:
-        return OwnerGenerations(
-            owner_lookup=self.owner_lookup,
-            owner_thread=self.owner_thread,
-            generation=self.owner_generation,
         )
 
     execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
@@ -260,81 +295,12 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "attempt_insert_authorized": (
-                """ BEFORE INSERT ON attempts BEGIN
-    SELECT RAISE(ABORT, 'attempt must be contiguous and within execution budget')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id
-        AND e.owner_lookup = NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts
-        AND ((NEW.attempt_ordinal = 1 AND
-              (e.status = 'pending' OR
-               (e.status = 'active' AND e.current_attempt_ordinal = 1)))
-          OR (NEW.attempt_ordinal > 1 AND
-              (e.status = 'deferred' OR
-               (e.status = 'active' AND e.current_attempt_ordinal = NEW.attempt_ordinal))))
-        AND NEW.attempt_ordinal = 1 + coalesce(
-            (SELECT max(a.attempt_ordinal) FROM attempts a
-              WHERE a.execution_id = e.execution_id), 0));
-    SELECT RAISE(ABORT, 'attempt generation must match owner counter')
-    WHERE NOT EXISTS (SELECT 1 FROM owner_generations g
-      WHERE g.owner_lookup = NEW.owner_lookup AND g.owner_thread = NEW.owner_thread
-        AND g.generation = NEW.owner_generation);
-    SELECT RAISE(ABORT, 'new attempt requires a fresh active fence')
-    WHERE (json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1
-       OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) != 0 OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) != 0;
-    SELECT RAISE(ABORT, 'retry requires derived authorization and no current owner')
-    WHERE NEW.attempt_ordinal > 1 AND (
-      NOT EXISTS (SELECT 1 FROM retry_disposition_basis b
-        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1)
-      OR EXISTS (SELECT 1 FROM current_executions p
-        WHERE p.owner_lookup = NEW.owner_lookup AND p.execution_id IS NOT NULL));
-    SELECT RAISE(ABORT, 'previous attempt must be dead with an older distinct fence')
-    WHERE NEW.attempt_ordinal > 1 AND NOT EXISTS (
-      SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
-      AND a.attempt_ordinal = NEW.attempt_ordinal - 1
-      AND a.phase IN ({retry_attempt_phases})
-      AND a.backend_done = 1 AND a.process_dead = 1
-      AND NEW.owner_generation > a.owner_generation
-      AND NEW.owner_token_digest != a.owner_token_digest);
-END"""
-            ),
-            "attempt_phase_edge": (
-                """ BEFORE UPDATE OF lifecycle ON attempts
-WHEN (json_extract(NEW.lifecycle, '$.kind')) != (json_extract(OLD.lifecycle, '$.kind')) AND NOT ({attempt_edges})
-BEGIN SELECT RAISE(ABORT, 'attempt phase transition is not declared'); END"""
-            ),
-            "attempt_frozen_facts": (
-                """ BEFORE UPDATE ON attempts
-WHEN NEW.execution_id IS NOT OLD.execution_id
- OR NEW.attempt_ordinal != OLD.attempt_ordinal
- OR NEW.owner_lookup IS NOT OLD.owner_lookup OR NEW.owner_thread IS NOT OLD.owner_thread
- OR NEW.owner_generation != OLD.owner_generation
- OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
- OR NEW.created_at_ms != OLD.created_at_ms
- OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms
- OR ((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle, '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0)
- OR ((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle, '$.process_dead') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) = 0)
- OR (OLD.last_progress_at_ms IS NOT NULL AND
-      (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms < OLD.last_progress_at_ms))
- OR ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL
-      AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) < (json_extract(OLD.lifecycle, '$.lease_expires_at_ms')))
- OR ((json_extract(OLD.lifecycle, '$.kind')) IN ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind')))
-BEGIN SELECT RAISE(ABORT, 'attempt transition rewrites frozen facts'); END"""
-            ),
-            "attempt_delete_frozen": (
-                """ BEFORE DELETE ON attempts BEGIN
-    SELECT RAISE(ABORT, 'attempt cannot be deleted');
-END"""
-            ),
-        }
-
-
 @dataclass(frozen=True, slots=True)
-class ReplayAssessments(CoordinatorTable, TypedTable):
+class ReplayAssessments(ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+    immutable_columns = ('execution_id',)
+    update_condition = """NEW.revision != OLD.revision + 1 OR (NEW.facts | OLD.facts) != NEW.facts OR (OLD.replay_safe = 0 AND
+        NEW.replay_safe = 1) OR (OLD.side_effects_possible = 1 AND NEW.side_effects_possible = 0)"""
+
     @property
     def allows_retry(self) -> bool:
         return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
@@ -449,57 +415,3 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
 
     unique = (("execution_id", "retry_authorized"),)
 
-    @classmethod
-    def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-
-        return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
-        )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "replay_assessment_monotonic": (
-                """
-BEFORE UPDATE ON replay_assessments
-WHEN NEW.execution_id IS NOT OLD.execution_id
- OR NEW.revision != OLD.revision + 1
- OR (NEW.facts | OLD.facts) != NEW.facts
- OR (OLD.replay_safe = 0 AND NEW.replay_safe = 1)
- OR (OLD.side_effects_possible = 1 AND NEW.side_effects_possible = 0)
-BEGIN
-    SELECT RAISE(ABORT, 'replay assessment cannot erase ambiguity');
-END"""
-            ),
-            "replay_assessment_delete_frozen": (
-                """ BEFORE DELETE ON
-replay_assessments BEGIN
-    SELECT RAISE(ABORT, 'replay assessment cannot be deleted' );
-END"""
-            ),
-            "failed_retry_partition_replay_insert": (
-                """ AFTER INSERT ON
-replay_assessments
-WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
-             ON e.execution_id = b.execution_id
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1
-               AND e.status = 'failed' AND e.current_attempt_ordinal
-               IS NOT NULL)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END"""
-            ),
-            "failed_retry_partition_replay_update": (
-                """ AFTER UPDATE ON
-replay_assessments
-WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
-             ON e.execution_id = b.execution_id
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1
-               AND e.status = 'failed' AND e.current_attempt_ordinal
-               IS NOT NULL)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END"""
-            ),
-        }

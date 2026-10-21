@@ -16,17 +16,50 @@ from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.obligation_states import ResponseState
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
-    TextStorage,
     Column,
+    ColumnGuard,
     ForeignKey,
+    FrozenColumns,
     Generated,
+    GuardedColumns,
+    GuardedInserts,
+    GuardedUpdates,
+    NoDelete,
+    TextStorage,
     TypedTable,
 )
+from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligations"):
+class ResponseObligation(ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
     """One original reply-route obligation within an execution."""
+
+    immutable_columns = ('execution_id', 'exact_target', 'created_at_ms')
+    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')) OR (NEW.revision !=
+        OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms) OR ((json_extract(NEW.lifecycle, '$.kind') IN
+        ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1 FROM publication_intents WHERE execution_id
+        = NEW.execution_id AND exact_target = NEW.exact_target )) OR (json_extract(NEW.lifecycle, '$.kind') =
+        'published' AND NOT EXISTS ( SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id AND
+        exact_target = NEW.exact_target AND message_id = json_extract(NEW.lifecycle, '$.message_id') AND seq =
+        json_extract(NEW.lifecycle, '$.seq') ))))"""
+    insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
+        e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target )) OR
+        (json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names}))"""
+    column_guards = (
+        ColumnGuard(('lifecycle',), """(json_extract(OLD.lifecycle, '$.kind') != json_extract(NEW.lifecycle, '$.kind') AND NOT ({obligation_edges}
+        )) OR (json_extract(OLD.lifecycle, '$.kind') = 'published' AND ( json_extract(NEW.lifecycle, '$.message_id')
+        IS NOT json_extract(OLD.lifecycle, '$.message_id') OR json_extract(NEW.lifecycle, '$.seq') IS NOT
+        json_extract(OLD.lifecycle, '$.seq') )) OR (EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id =
+        OLD.execution_id AND exact_target = OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind') !=
+        'published') OR (EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND
+        exact_target = OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names}))"""),
+        ColumnGuard(('exact_target',), """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
+        e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target )) OR (EXISTS
+        (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target =
+        OLD.exact_target))"""),
+    )
+
 
     @staticmethod
     def response_record(records, exact_target):
@@ -141,141 +174,3 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         ("execution_id", "exact_target", "publication_settled"),
     )
 
-    @classmethod
-    def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-
-        return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
-        )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {**cls._retry_trigger_bodies(), **cls._lifecycle_trigger_bodies(), **cls._publication_trigger_bodies()}
-
-    @classmethod
-    def _retry_trigger_bodies(cls):
-        return {
-            "failed_retry_partition_obligation_insert": """ AFTER INSERT
-ON obligations
-WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
-             ON e.execution_id = b.execution_id
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1
-               AND e.status = 'failed' AND e.current_attempt_ordinal
-               IS NOT NULL)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END""",
-            "failed_retry_partition_obligation_update": """ AFTER UPDATE
-ON obligations
-WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
-             ON e.execution_id = b.execution_id
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1
-               AND e.status = 'failed' AND e.current_attempt_ordinal
-               IS NOT NULL)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END""",
-        }
-
-    @classmethod
-    def _lifecycle_trigger_bodies(cls):
-        return {
-            "obligation_same_state_frozen": """ BEFORE UPDATE ON obligations
-WHEN json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')
-BEGIN SELECT RAISE(ABORT, 'obligation disposition must change'); END""",
-            "obligation_declared_edge": """
-BEFORE UPDATE OF lifecycle ON obligations
-WHEN json_extract(OLD.lifecycle, '$.kind') != json_extract(NEW.lifecycle, '$.kind') AND NOT ({obligation_edges}
-)
-BEGIN
-    SELECT RAISE(ABORT, 'obligation state transition is not declared');
-END""",
-            "obligation_frozen_facts": """
-BEFORE UPDATE ON obligations
-WHEN NEW.execution_id IS NOT OLD.execution_id
- OR NEW.exact_target IS NOT OLD.exact_target
- OR NEW.created_at_ms != OLD.created_at_ms
- OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms
-BEGIN
-    SELECT RAISE(ABORT, 'obligation transition rewrites frozen facts');
-END""",
-            "obligation_target_matches_execution_insert": """
-BEFORE INSERT ON obligations
-WHEN NOT EXISTS (
-    SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
-    WHERE e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target
-)
-BEGIN
-    SELECT RAISE(ABORT, 'obligation target does not match wire execution');
-END""",
-            "obligation_target_matches_execution_update": """
-BEFORE UPDATE OF exact_target ON obligations
-WHEN NOT EXISTS (
-    SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
-    WHERE e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target
-)
-BEGIN
-    SELECT RAISE(ABORT, 'obligation target does not match wire execution');
-END""",
-            "obligation_delete_frozen": """ BEFORE DELETE ON obligations BEGIN
-    SELECT RAISE(ABORT, 'obligation cannot be deleted');
-END""",
-        }
-
-    @classmethod
-    def _publication_trigger_bodies(cls):
-        return {
-            "published_obligation_receipt_is_frozen": """
-BEFORE UPDATE OF lifecycle ON obligations
-WHEN json_extract(OLD.lifecycle, '$.kind') = 'published' AND (
-    json_extract(NEW.lifecycle, '$.message_id') IS NOT json_extract(OLD.lifecycle, '$.message_id')
-    OR json_extract(NEW.lifecycle, '$.seq') IS NOT json_extract(OLD.lifecycle, '$.seq')
-)
-BEGIN
-    SELECT RAISE(ABORT, 'published obligation receipt is frozen');
-END""",
-            "obligation_publication_transition": """
-BEFORE UPDATE ON obligations
-WHEN json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})
-BEGIN
-    SELECT RAISE(ABORT, 'publishing obligation requires intent')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM publication_intents
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
-    );
-    SELECT RAISE(ABORT, 'published obligation requires matching receipt')
-    WHERE json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS (
-        SELECT 1 FROM publication_receipts
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
-          AND message_id = json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq')
-    );
-END""",
-            "obligation_publication_insert": """
-BEFORE INSERT ON obligations
-WHEN json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})
-BEGIN
-    SELECT RAISE(ABORT, 'publication obligation starts pending');
-END""",
-            "obligation_receipt_requires_published": """
-BEFORE UPDATE OF lifecycle ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
- AND json_extract(NEW.lifecycle, '$.kind') != 'published'
-BEGIN
-    SELECT RAISE(ABORT, 'frozen receipt requires published obligation');
-END""",
-            "obligation_state_with_intent": """
-BEFORE UPDATE OF lifecycle ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
-  AND json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names})
-BEGIN
-    SELECT RAISE(ABORT, 'frozen intent cannot return to pending obligation');
-END""",
-            "obligation_target_frozen": """
-BEFORE UPDATE OF exact_target ON obligations
-WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
-BEGIN
-    SELECT RAISE(ABORT, 'publication target is frozen');
-END""",
-        }

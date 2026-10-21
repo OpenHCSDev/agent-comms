@@ -38,7 +38,14 @@ from .private_path import (
     NativeSessionFileRole,
     TrustedAncestorRole,
 )
-from .typed_table import Column, DurableTables, Index, TypedTable
+from .typed_table import (
+    Column,
+    DurableTables,
+    GuardedInserts,
+    ImmutableRows,
+    Index,
+    TypedTable,
+)
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -201,32 +208,20 @@ class NativeContextRecord(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
+class NativeContextJournal(GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables):
     """One proof declaration owns wire facts and the indexed durable journal."""
+
+    insert_condition = """NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM native_context_journal), 0) OR
+        EXISTS(SELECT 1 FROM native_context_journal WHERE request_generation=NEW.request_generation AND
+        (llm_context_digest != NEW.llm_context_digest OR committed_at_ms != NEW.committed_at_ms)) OR NEW.session_id
+        != (SELECT session_id FROM native_context_journal ORDER BY session_id LIMIT 1)"""
+
 
     schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
     indexes = (Index(("request_generation",)), Index(("session_id",)))
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        table = cls.declared_name
-        return {
-            f"{table}_append": f""" BEFORE INSERT ON {table}
-            WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
-              OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
-                        AND (llm_context_digest != NEW.llm_context_digest
-                             OR committed_at_ms != NEW.committed_at_ms))
-              OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
-            BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
-            **{
-                f"{table}_{action.lower()}": " "
-                f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
-                for action in ("UPDATE", "DELETE")
-            },
-        }
 
     @classmethod
     def native_contract(cls) -> dict[str, Any]:

@@ -3,9 +3,9 @@
 Files written before index names were derived from what each index covers hold
 positional names (delivery_0_idx), and files written before every file kind was
 compared with its declaration hold a sealed copy of it: a meta table with a
-digest or version, triggers freezing it, and PRAGMA user_version. Each file is
-converted in place inside one write transaction: indexes, triggers and views
-come from the declarations of the tables it holds, the sealed copies go, and
+digest or version and PRAGMA user_version. Each file is converted in place inside
+one write transaction: indexes and views come from the declarations of the tables
+it holds, the sealed copies go, and
 every table keeps its rows.
 
 The files are every durable SQLite file the bus declares and every saved session's
@@ -77,10 +77,6 @@ class IndexKind(CatalogKind):
     named_by_coverage = True
 
 
-class TriggerKind(CatalogKind):
-    pass
-
-
 class ViewKind(CatalogKind):
     pass
 
@@ -112,7 +108,7 @@ class StoredObject(TypedRow):
         row = self.declaration(path)
         if derived(row):
             raise RelationViolationError(f"{path}: {self.name} is derived; it rebuilds, never carried")
-        if self.sql != row.schema_objects()[row.declared_name]:
+        if self.sql != row.structure_objects()[row.declared_name]:
             raise RelationViolationError(f"{path}: table {self.name} columns differ")
         return row
 
@@ -123,7 +119,7 @@ class StoredObject(TypedRow):
     def stored(cls, db) -> tuple[StoredObject, ...]:
         return tuple(cls.read(db.execute(
             "SELECT type,name,tbl_name,sql FROM sqlite_master "
-            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
+            "WHERE sql IS NOT NULL AND type != 'trigger' AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
 
 
 def derived(row: type[TypedTable]) -> bool:
@@ -183,7 +179,7 @@ class StoredFile:
         """Whether its catalog differs from what its tables' declarations derive."""
         rows = [item.row(self.path) for item in self.objects
                 if item.type.holds_rows and not item.retired]
-        declared = {name: sql for row in rows for name, sql in row.schema_objects().items()}
+        declared = {name: sql for row in rows for name, sql in row.structure_objects().items()}
         return (self.user_version != 0
                 or {item.name: item.sql for item in self.objects} != declared)
 
@@ -210,7 +206,7 @@ def carry(path: Path) -> FileCarried:
             tables = [item for item in before if item.type.holds_rows]
             kept = [item for item in tables if not item.retired]
             rows = tuple(item.row(path) for item in kept)
-            declared = {name: sql for row in rows for name, sql in row.schema_objects().items()}
+            declared = {name: sql for row in rows for name, sql in row.structure_objects().items()}
             counts = RowCount.of(db, kept)
             retired = RowCount.of(db, [item for item in tables if item.retired])
             for item in before:
@@ -220,8 +216,10 @@ def carry(path: Path) -> FileCarried:
                 if item.retired:
                     item.drop(db)
             for row in rows:
-                row.create(db, if_not_exists=True)
-            if differences := SQLiteSchemaObject.differences(TypedTable.objects_of(db, rows), declared):
+                for statement in row.structure_objects(if_not_exists=True).values():
+                    db.execute(statement)
+            stored = [SQLiteSchemaObject(item.name, item.sql) for item in StoredObject.stored(db)]
+            if differences := SQLiteSchemaObject.differences(stored, declared):
                 raise RelationViolationError(f"{path}: still differs: {differences}")
             if RowCount.of(db, kept) != counts:
                 raise RelationViolationError(f"{path}: row counts changed")

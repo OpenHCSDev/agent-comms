@@ -114,7 +114,7 @@ def selected_turn():
                 "execution", expected_revision=snapshot.execution.revision
             ).value
             store.attempts.start(AttemptStart(
-                "execution", 1, owner.name, person.participant_generation, prepare_fence_token(),
+                "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))
@@ -129,7 +129,7 @@ def selected_turn():
                 operation_id="f" * 32,
                 owner_claimed_generation=generation,
                 turn_id=owner.require_turn_lease().turn_id,
-                participant_generation=person.participant_generation,
+                participant_generation=person.owner_identity.generation,
                 attempt_ordinal=1,
             )
             yield comms, store, claim_scope, resource
