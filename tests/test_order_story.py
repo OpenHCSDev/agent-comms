@@ -12,11 +12,11 @@ from agent_comms.goals import RequestGoalOrder
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    AcceptedVerdict, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
+    AcceptedVerdict, OrderMessage, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
-    CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
+    CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
 )
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
@@ -53,6 +53,14 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
         request="request", review_at=RecordedEventTime(2000),
         order=replace(order(source), id="resent-order"))), comms)
+    current = comms.goals.todos.get("P1")
+    with pytest.raises(ValueError):
+        current.latest_message
+    for message_id in ("initial-order-message", "current-order-message"):
+        caller.invoke(CommsChangeProblemTool(problem=current.id, operation=OrderMessage(
+            current.revision, actor, message_id)), comms)
+        current = comms.goals.todos.get(current.id)
+        assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = Comms(copied_root)
