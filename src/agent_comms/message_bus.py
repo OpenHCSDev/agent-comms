@@ -19,25 +19,30 @@ from contextlib import AbstractContextManager, ExitStack, aclosing, contextmanag
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_activity_index import ActivityClocks, BusActivityIndex
-from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import CommandTarget
-from .channels import AnyChannel
-from .coordinator import Coordination
-from .errors import UnregisteredThreadError
-from .historical_views import HistoryArchive
-from .locked_store import RuntimeFile
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from .message_page import (
+from agent_comms.bus_activity_index import ActivityClocks, BusActivityIndex
+from agent_comms.bus_route_counts import OpenedRouteCounts
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import AnyChannel
+from agent_comms.coordinator import Coordination
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.historical_views import HistoryArchive
+from agent_comms.locked_store import RuntimeFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+from agent_comms.message_page import (
     InboxPage,
     MessagePage,
     MessagePageRequest,
     PageBounds,
 )
-from .message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
-from .messages import Message
-from .page_traversal import NewerTraversal
-from .read_basis import (
+from agent_comms.message_reference import (
+    AfterMessageStart,
+    FirstUnreadStart,
+    InboxStart,
+    MessageReference,
+)
+from agent_comms.messages import Message
+from agent_comms.page_traversal import NewerTraversal
+from agent_comms.read_basis import (
     AnonymousViewer,
     CapturedSelection,
     DisplayBasis,
@@ -46,25 +51,24 @@ from .read_basis import (
     NamedViewer,
     WatchAcknowledgment,
 )
-from .routing import DeliveryScope
-from .store_files import SharedLock, StoreLockOwner
+from agent_comms.routing import DeliveryScope
+from agent_comms.store_files import SharedLock, StoreLockOwner
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
-    from .relationships import PeerRelation
-    from .threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.registration import Registration
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.relationships import PeerRelation
+    from agent_comms.threads import Thread
 
+from agent_comms.publisher import Publisher
 from agent_comms.wire_log import (
     FRESH_SNAPSHOT_OPENING,
     CurrentSnapshotOpening,
     WireLog,
     WireSnapshot,
 )
-
-from .publisher import Publisher
-from .wire_watch import WatchSource, WireWatch
+from agent_comms.wire_watch import WatchSource, WireWatch
 
 
 class HeldBusWrite:
@@ -74,15 +78,19 @@ class HeldBusWrite:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass(HeldBusWrite, ABC):
-    """A scheduled pass borrows its wire and enters maintenance before any mutation."""
+class WatchPass[Observed](HeldBusWrite, ABC):
+    """Observe without the wire lock; enter maintenance only to apply the result."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            self.write_when_open(comms, partial(self.pass_body, comms))
+            observed = self.observe(comms)
+            self.write_when_open(comms, partial(self.pass_body, comms, observed))
 
     @abstractmethod
-    def pass_body(self, comms: Comms) -> None: ...
+    def observe(self, comms: Comms) -> Observed: ...
+
+    @abstractmethod
+    def pass_body(self, comms: Comms, observed: Observed) -> None: ...
 
 
 class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
@@ -100,8 +108,8 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         *,
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
-        from .catalog_store import ChannelCatalog
-        from .read_ledger import ReadLedger
+        from agent_comms.catalog_store import ChannelCatalog
+        from agent_comms.read_ledger import ReadLedger
 
         self.reads = ReadLedger.at(bus_path.parent)
         self.projection = projection
@@ -363,10 +371,13 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
-        from .errors import RelationViolationError
-        from .peer_relevance import Prioritized
-        from .private_bus_checkpoint import addressed_source_pointers_unlocked
+        from agent_comms.context_segments.awareness import (
+            AwarenessSegment,
+            UnavailableAwarenessSegment,
+        )
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.peer_relevance import Prioritized
+        from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 
         try:
             with self.log.checked_read(blocking=blocking) as source:

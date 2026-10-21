@@ -17,7 +17,7 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, TextWire, WireModel
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
@@ -29,6 +29,7 @@ from agent_comms.runtime_updates import (
     HiddenItem,
     PageItem,
     ParagraphDraft,
+    PresentableDraft,
     PublishedPage,
     RuntimeUpdate,
     StartedItem,
@@ -61,13 +62,16 @@ class UserInput(TaggedWire, ABC):
     def display(self) -> str: ...
 
 
-class TextInput(UserInput):
-    wire_tag = 'text'
+class TextDisplay(WireModel):
     text: str
 
     @property
     def display(self) -> str:
         return self.text
+
+
+class TextInput(TextWire, TextDisplay, UserInput):
+    pass
 
 
 class ImageInput(UserInput):
@@ -306,36 +310,43 @@ class Item(TaggedWire, ABC):
     def phase(self) -> TurnPhase:
         return ModelWaitPhase(self.doing)
 
+class AccumulatedItem(Item, ABC):
+    @abstractmethod
+    def accumulator(self, started_at: EventTime) -> PresentableDraft: ...
+
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return self.accumulator(EventTime.capture(timestamp)).events
+
+
+class NoTranscript:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return ()
+
+
 class TextBody(WireModel):
     text: str
 
     def accumulator(self, started_at: EventTime) -> TextDraft:
         return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at, self.id)
 
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(EventTime.capture(timestamp)).events
 
-
-class AssistantItem(TextBody, Item):
+class AssistantItem(TextBody, AccumulatedItem):
     wire_tag = 'agentMessage'
     doing = 'Replying'
 
 
-class PlanItem(TextBody, Item):
+class PlanItem(TextBody, AccumulatedItem):
     wire_tag = 'plan'
     doing = 'Planning'
 
 
-class ReasoningItem(Item):
+class ReasoningItem(AccumulatedItem):
     wire_tag = 'reasoning'
     summary: list[str] = Field(default_factory=list)
 
     def accumulator(self, started_at: EventTime) -> ParagraphDraft:
         # Only public summaries; private/raw reasoning is never projected.
         return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at, self.id)
-
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(EventTime.capture(timestamp)).events
 
 
 class UserItem(Item):
@@ -420,13 +431,8 @@ class ToolContentPart(TaggedWire, ABC):
     def display(self) -> str: ...
 
 
-class ToolText(ToolContentPart):
+class ToolText(TextDisplay, ToolContentPart):
     wire_tag = 'inputText'
-    text: str
-
-    @property
-    def display(self) -> str:
-        return self.text
 
 
 class ToolImage(ToolContentPart):
@@ -450,20 +456,23 @@ class ToolAudio(ToolContentPart):
 ToolContent = ToolContentPart.declared_union()
 
 
-class DynamicToolItem(ToolItem):
+class ToolInput(WireModel):
+    input_value: dict[str, JsonValue] = Field(alias='arguments')
+
+    @property
+    def arguments(self) -> dict[str, JsonValue]:
+        return self.input_value
+
+
+class DynamicToolItem(ToolInput, ToolItem):
     wire_tag = 'dynamicToolCall'
     tool: str
-    input_value: dict[str, JsonValue] = Field(alias='arguments')
     contentItems: list[ToolContent] | None = None
     success: bool | None = None
 
     @property
     def tool_name(self) -> str:
         return self.tool
-
-    @property
-    def arguments(self) -> dict[str, JsonValue]:
-        return self.input_value
 
     @property
     def output(self) -> str:
@@ -492,11 +501,10 @@ class McpError(WireModel):
     message: str
 
 
-class McpToolItem(ToolItem):
+class McpToolItem(ToolInput, ToolItem):
     wire_tag = 'mcpToolCall'
     server: str
     tool: str
-    input_value: dict[str, JsonValue] = Field(alias='arguments')
     status: str
     result: McpResult | None = None
     error: McpError | None = None
@@ -504,10 +512,6 @@ class McpToolItem(ToolItem):
     @property
     def tool_name(self) -> str:
         return f'{self.server}/{self.tool}'
-
-    @property
-    def arguments(self) -> dict[str, JsonValue]:
-        return self.input_value
 
     @property
     def output(self) -> str:
@@ -534,12 +538,9 @@ class FunctionOutputItem(Item):
         return (ToolEndTranscript(position=self.id, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=self.output),)
 
 
-class SendOutputItem(FunctionOutputItem):
+class SendOutputItem(NoTranscript, FunctionOutputItem):
+    # The bridge's send result is already rendered from the bus in Toad.
     name: Literal[SEND_TOOL]
-
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        # The bridge's send result is already rendered from the bus in Toad.
-        return ()
 
 
 class CompactionItem(Item):
@@ -553,12 +554,9 @@ class CompactionItem(Item):
         return (NoticeTranscript('Context compacted.', position=self.id, timestamp=timestamp),)
 
 
-class HookPromptItem(Item):
+class HookPromptItem(NoTranscript, Item):
+    # Harness instructions are not assistant output.
     wire_tag = 'hookPrompt'
-
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        # Harness instructions are not assistant output.
-        return ()
 
 
 class ReviewBody(WireModel):

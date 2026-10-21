@@ -32,7 +32,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
-from agent_comms.change_report import FileLine, NoSourceReference
+from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.child_process import BoundedRun
 from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.comms import Comms
@@ -397,9 +397,9 @@ class Commander(CommanderContext):
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
-        order = replace(document.order, finding=finding)
-        check = replace(order.check, directory=str(self.repo_directory(order.check.directory)))
-        order = replace(order, check=check)
+        check = replace(document.order.check,
+                        directory=str(self.repo_directory(document.order.check.directory)))
+        order = replace(document.order, finding=finding, check=check)
         edits = order.edits
         body = '\n'.join((document.prose, *edits, order.report))
         # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
@@ -429,8 +429,10 @@ class Commander(CommanderContext):
             problems.append('problems: fix: omit IDs when creating a new problem')
         if not new and (missing := [pid for pid in group if pid not in listed]):
             problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
-        for label, validate in (('order.owner', lambda: order.owner.require_exists(Path(check.directory))),
-                               ('order.check.directory', check.require_directory)):
+        for label, validate in (
+            ('order.source', order.require_references),
+            ('order.check.directory', check.require_directory),
+        ):
             try:
                 with MalformedRecord.refusing(label):
                     validate()
@@ -463,7 +465,7 @@ class Commander(CommanderContext):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(Path(check.directory))
+                    reference.require_exists(Path(check.directory), order.cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         if any((Path(check.directory) / reference.file).resolve().is_relative_to(
@@ -564,7 +566,6 @@ class Commander(CommanderContext):
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
-        location.require_exists(checkout)
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
@@ -647,16 +648,14 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def done(self, pid, sha, screenshot='', seen='', repo=''):
+    def done(self, pid, sha, screenshot='', seen=''):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
         in the same revision; this posts the strikes Core recorded."""
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         unit = todo.held().owner
-        if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
-            sys.exit('Refused: --repo must name the recorded order check directory.')
-        repo = todo.order.check.directory
+        repo = str(self.repo_directory(todo.order.check.directory))
         operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
         if not operation:
             diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent',
@@ -668,10 +667,10 @@ class Commander(CommanderContext):
                 sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
         thread = self.comms.registry.require(unit)
         storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
-        checkout = storage.rule.order_checkout(unit, pid)
-        if checkout in storage.extra_checkouts:
-            sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; '
-                     'storage rule: it removes it before the order counts as done.')
+        for checkout in storage.rule.problem_checkouts(unit, pid):
+            if checkout in storage.extra_checkouts:
+                sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; '
+                         'storage rule: it removes it before the order counts as done.')
         try:
             storage.require_quota()
         except SelectedToolDenied as quota:
@@ -694,7 +693,7 @@ class Commander(CommanderContext):
         """Record the commander's source read, whether or not it became an order."""
         ref = FileLine.from_wire(where)
         directory = Path.cwd()
-        ref.require_exists(directory)
+        ref.require_exists(directory, MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
         ref = FileLine(str((directory / ref.file).resolve()), ref.line)
@@ -981,7 +980,7 @@ class DoneVerb(OrderVerb):
     sha: Annotated[
         str,
         Argument(
-            flags=("--sha",), options={"help": "the delivered commit in --repo HEAD, or op"}
+            flags=("--sha",), options={"help": "commit in the recorded checkout, or op"}
         ),
     ]
     screenshot: Annotated[
@@ -996,16 +995,10 @@ class DoneVerb(OrderVerb):
     ] = ""
 
     seen: Annotated[str, Argument(flags=("--seen",))] = ""
-    repo: Annotated[
-        str,
-        Argument(
-            flags=("--repo",), options={"help": "the recorded order check directory"}
-        ),
-    ] = ""
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
-        ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
+        ctx.done(todo.id, self.sha, self.screenshot, self.seen)
 
 
 @dataclass(frozen=True)

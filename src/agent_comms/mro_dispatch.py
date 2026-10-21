@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, ClassVar, TypeVar
 
 Handler = TypeVar("Handler", bound=Callable[..., Any])
@@ -45,11 +45,17 @@ class MroDispatch:
             if (classes := getattr(method, "__handled_classes__", ()))
         )
 
-    def handlers_for(self, value: Any):
-        for capability in type(value).__mro__:
-            for name, classes in type(self)._handler_declarations:
+    @classmethod
+    def handler_names_for(cls, value_type: type) -> Iterator[str]:
+        """Resolve a declaration directly; instance dispatch uses the same lookup."""
+        for capability in value_type.__mro__:
+            for name, classes in cls._handler_declarations:
                 if capability in classes:
-                    yield getattr(self, name)
+                    yield name
+
+    def handlers_for(self, value: Any):
+        for name in self.handler_names_for(type(value)):
+            yield getattr(self, name)
 
     async def dispatch(self, value: Any, *args, **kwargs) -> Any:
         handlers = tuple(self.handlers_for(value))

@@ -32,7 +32,10 @@ from agent_comms.order_runs import OrderRun
 
 from agent_comms import skills
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import FileLine, NoSourceReference, SourceReference
+from agent_comms.change_report import (
+    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
+    SourceReference, SourceRevision,
+)
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import (
     BoundedRun,
@@ -94,9 +97,9 @@ from agent_comms.typed_table import (
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .goal_management import Goals
-    from .registration import Registration
+    from agent_comms.comms import Comms
+    from agent_comms.goal_management import Goals
+    from agent_comms.registration import Registration
 
 
 @dataclass(frozen=True)
@@ -776,8 +779,11 @@ class PresentCheckout(ProgressCheckout):
         return self.commits(pattern, self.origin_refs, *self.default_refs)
 
     def edits(self) -> Iterator[float]:
-        """When each uncommitted change in this checkout was last written; a deletion has none."""
-        changed = (*self.git("diff", "--name-only", "-z", "HEAD").split("\0"),
+        """When each uncommitted change in this checkout was last written; a deletion has none.
+
+        A submodule is pinned package data, never a unit's edit, so its git state is not read."""
+        changed = (*self.git("diff", "--name-only", "-z", "--ignore-submodules=all",
+                             "HEAD").split("\0"),
                    *self.git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
         return (path.stat().st_mtime for path in (self.path / name for name in changed if name)
                 if path.exists())
@@ -1395,6 +1401,9 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
+        """An unlocated finding has no source reference to validate."""
+
     def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
         return False
 
@@ -1413,6 +1422,9 @@ class UnlocatedProblemFinding(ProblemFinding):
 @dataclass(frozen=True)
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
+
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
+        self.where.require_exists(root, revision)
 
     def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
         return any(self.where.same_file(location, root) for location in locations)
@@ -1574,9 +1586,9 @@ class FixShape:
         if not self.parents:
             raise ValueError("scope.shape.parents must name at least one parent class declaration")
 
-    def require_references(self, root: Path) -> None:
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
         for location in (*self.parents, *self.members):
-            location.require_class(root)
+            location.require_class(root, revision)
 
 
 @dataclass(frozen=True)
@@ -1594,7 +1606,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
             if get_origin(base) is OrderScope
         )
 
-    def require_references(self, root: Path) -> None:
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
         """Triage has no implementation declarations to validate."""
 
     @abstractmethod
@@ -1632,8 +1644,8 @@ class TriageScope(OrderScope[ReportDelivery]):
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
 
-    def require_references(self, root: Path) -> None:
-        self.shape.require_references(root)
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
+        self.shape.require_references(root, revision)
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
@@ -1662,6 +1674,16 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def checked(self) -> CheckedProblemOrder:
         return self
+
+    @cached_property
+    def cited_revision(self) -> SourceRevision:
+        return (*map(PullRequestHeadRevision, self.pull_requests), MainRevision())[0]
+
+    def require_references(self) -> None:
+        root, revision = Path(self.check.directory), self.cited_revision
+        self.owner.require_exists(root, revision)
+        self.finding.require_references(root, revision)
+        self.scope.require_references(root, revision)
 
     def require_wording(self) -> None:
         """Check fresh order prose, never reinterpret stored history or shell commands."""
@@ -2390,9 +2412,10 @@ class CitedStrike(TodoOperation, declared_name=None):
     def prepare(self, goals: Goals, current: Todo) -> Self:
         if not self.evidence:
             raise ValueError("A strike needs a checkable file:line, not a board row or goal text.")
-        root = Path(current.order.checked().check.directory)
+        order = current.order.checked()
+        root, revision = Path(order.check.directory), order.cited_revision
         for cited in self.evidence:
-            cited.require_exists(root)
+            cited.require_exists(root, revision)
         return self
 
 
@@ -3284,12 +3307,16 @@ class TodoStore(DurableStore):
         return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
                      if todo.pending and todo.handed_out_on_release)
 
-    def reconcile_merges(self, commander: ThreadIncarnation, registry: Registration) -> None:
-        """Read before locking; record merge changes whose observed revision still holds."""
+    def merged_orders(self, commander: ThreadIncarnation,
+                      registry: Registration) -> tuple[Todo, ...]:
+        """Observe linked merges without holding a write lock."""
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
-        completed = tuple(closed for todo in held
-                          for closed in todo.order.closed_by_merge(todo, registry, pulls))
+        return tuple(closed for todo in held
+                     for closed in todo.order.closed_by_merge(todo, registry, pulls))
+
+    def record_merges(self, completed: tuple[Todo, ...]) -> None:
+        """Record only merge changes whose observed revision still holds."""
         if not completed:
             return
         with self.writing() as db:

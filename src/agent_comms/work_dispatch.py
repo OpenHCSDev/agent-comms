@@ -12,16 +12,19 @@ import subprocess
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
-from .goal_actions import (
+from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
+    OrderGoalAction,
     ProblemOrderGoalAction,
 )
+
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
+from .repo import Checkout
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
@@ -73,22 +76,8 @@ class WorkDispatch:
             text=True,
             timeout=60,
         )
-        subprocess.run(
-            (
-                "git",
-                "-C",
-                self.action.order.check.directory,
-                "worktree",
-                "add",
-                "-b",
-                f"auto/{name}",
-                str(checkout),
-                "origin/main",
-            ),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
+        Checkout.add(
+            self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
@@ -107,6 +96,14 @@ class ReusedWorkDispatch(WorkDispatch):
     """Publish to an existing unit without allocating or starting another process."""
 
     unit: Thread
+
+    @classmethod
+    def for_unit(cls, action: OrderGoalAction, unit: Thread) -> Self:
+        bound = replace(
+            action,
+            expect=replace(action.expect, expected_checkpoint=unit.goal.captured),
+        )
+        return cls(bound, action.expected_revision, unit)
 
     @property
     def name(self) -> str:

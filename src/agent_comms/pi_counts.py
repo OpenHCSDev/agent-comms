@@ -7,7 +7,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
-from .field_codec import FieldCodec, FieldRepresentation, NullMember, WireValue, boundary_decoder
+from .field_codec import (
+    AcceptsNull,
+    ExternalJsonShape,
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    WireValue,
+    boundary_decoder,
+)
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -15,10 +23,9 @@ if TYPE_CHECKING:
     from .turn_usage import UsageAccount
 
 
-class PiCountWire(FieldRepresentation):
+class PiCountWire(AcceptsNull, FieldRepresentation):
     """Positive native counts: zero and omission mean not reported."""
 
-    accepts_null = True
     minimum: ClassVar[int] = 1
 
     @classmethod
@@ -44,11 +51,8 @@ class NonnegativeCountWire(PiCountWire):
     minimum = 0
 
 
-class PiCount(WireValue):
+class PiCount(AcceptsNull, ExternalJsonShape, WireValue):
     """Whether Pi reported a count; wire omission is decided once at the field boundary."""
-
-    accepts_null = True
-    external_json_shape = True
 
     @classmethod
     def from_wire(cls, value: object) -> PiCount:
