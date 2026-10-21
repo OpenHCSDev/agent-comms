@@ -28,13 +28,14 @@ from agent_comms.typed_table import (
     Generated,
     GuardedColumns,
     GuardedInserts,
-    GuardedUpdates,
     IncrementingColumn,
     Index,
     IntegerStorage,
+    LifecycleTransitions,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
+    OrdinalTransitions,
     TextStorage,
     TypedTable,
 )
@@ -171,18 +172,12 @@ FROM executions e"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord(IncrementingColumn, MonotoneColumns, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
+class ExecutionRecord(LifecycleTransitions, OrdinalTransitions, IncrementingColumn, MonotoneColumns, GuardedColumns, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
 
     column_orders = (NonDecreasing(('updated_at_ms',)),)
 
     immutable_columns = ('execution_id', 'origin', 'owner_lookup', 'owner_thread', 'max_attempts', 'created_at_ms')
-    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = 'active' AND (json_extract(OLD.lifecycle, '$.kind') NOT IN
-        ({startable_execution_names}) OR json_extract(NEW.lifecycle, '$.ordinal') !=
-        coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR (json_extract(NEW.lifecycle, '$.kind') !=
-        'active' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))"""
-    column_guards = (
-        ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges}))
-        OR (json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names}) AND
+    column_guards = (ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names}) AND
         json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND NOT EXISTS ( SELECT 1 FROM attempts a WHERE
         a.execution_id = NEW.execution_id AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal') AND
         a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases}) )) OR ((NEW.origin = 'wire') AND
@@ -194,8 +189,7 @@ class ExecutionRecord(IncrementingColumn, MonotoneColumns, GuardedColumns, Guard
         'failed' AND EXISTS ( SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id)) OR
         (json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
         AND EXISTS (SELECT 1 FROM retry_disposition_basis b WHERE b.execution_id = NEW.execution_id AND b.authorized
-        = 1))"""),
-    )
+        = 1))"""),)
 
     retry_view = "retry_disposition_basis"
 

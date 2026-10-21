@@ -29,6 +29,7 @@ from typing import (
     Self,
     TypeVar,
     Union,
+    cast,
     get_args,
     get_origin,
 )
@@ -47,6 +48,7 @@ from .field_codec import (
     compile_decoder,
 )
 from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
+from .lifecycle import LifecycleState
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -429,6 +431,17 @@ class _Field(SqlValue):
     nullable: bool
     column: Column
 
+    def reference(self, alias: str) -> str:
+        return f"{alias}.{_identifier(self.wire_name)}"
+
+    @property
+    def lifecycle_family(self) -> type[LifecycleState]:
+        return cast(type[LifecycleState], _base_type(self.annotation)[0])
+
+    def discriminator(self, alias: str) -> str:
+        family = cast(type[DeclaredFamily], _base_type(self.annotation)[0])
+        return f"json_extract({self.reference(alias)}, '$.{family.family_discriminator}')"
+
     @classmethod
     def for_field(cls, plan: FieldPlan) -> _Field:
         column = Column.declared(plan.annotation)
@@ -670,7 +683,7 @@ class RowMutation(Enum):
         self, row: type[TypedTable], *, columns: tuple[str, ...] = (), when: str = "",
         message: str = "Rows are immutable", after: bool = False, suffix: str = "",
     ) -> SQLiteSchemaObject:
-        suffix = "_" + "_".join(columns) if columns else suffix
+        suffix = ("_" + "_".join(columns) if columns else "") + suffix
         timing = "AFTER" if after else "BEFORE"
         name = f"{row.declared_name}_{self.value.lower()}{suffix}_{timing.lower()}_abort"
         selected = " OF " + row._column_list(columns) if columns else ""
@@ -731,7 +744,7 @@ class FrozenColumns(MutationCapability):
         condition = " OR ".join(
             f'NEW."{column.wire_name}" IS NOT OLD."{column.wire_name}"' for column in columns)
         return (RowMutation.UPDATE.abort_trigger(
-            row, columns=row.immutable_columns, when=condition, message="Column values are immutable"),)
+            row, when=condition, suffix="_frozen", message="Column values are immutable"),)
 
 
 class OneWayColumn(MutationCapability):
@@ -773,10 +786,13 @@ class ColumnOrder(ABC):
     @abstractmethod
     def suffix(self) -> str: ...
 
+    def violation(self, previous: str, following: str) -> str:
+        return f"{following} IS NULL OR {following} {self.comparison} {previous}"
+
     def trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
         conditions = (
-            f'(OLD."{field.wire_name}" IS NOT NULL AND (NEW."{field.wire_name}" IS NULL '
-            f'OR NEW."{field.wire_name}" {self.comparison} OLD."{field.wire_name}"))'
+            f"({field.reference('OLD')} IS NOT NULL AND "
+            f"({self.violation(field.reference('OLD'), field.reference('NEW'))}))"
             for field in row._fields_named(self.columns))
         return RowMutation.UPDATE.abort_trigger(
             row, when=" OR ".join(conditions), suffix=self.suffix,
@@ -791,6 +807,13 @@ class NonDecreasing(ColumnOrder):
 class NonIncreasing(ColumnOrder):
     comparison = ">"
     suffix = "_decreasing"
+
+
+class NonDecreasingWhenPresent(NonDecreasing):
+    suffix = "_present_increasing"
+
+    def violation(self, previous: str, following: str) -> str:
+        return f"{following} IS NOT NULL AND {following} {self.comparison} {previous}"
 
 
 class MonotoneColumns(MutationCapability):
@@ -812,6 +835,144 @@ class AccumulatingBits(MutationCapability):
         return (RowMutation.UPDATE.abort_trigger(
             row, when=" OR ".join(conditions), suffix="_accumulating",
             message="Observed bits cannot be erased"),)
+
+
+class WriteOnceColumns(MutationCapability):
+    write_once_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        condition = " OR ".join(
+            f"({field.reference('OLD')} IS NOT NULL AND "
+            f"{field.reference('NEW')} IS NOT {field.reference('OLD')})"
+            for field in row._fields_named(row.write_once_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_write_once", message="Recorded values are immutable"),)
+
+
+class RequiredColumn(MutationCapability):
+    dependent_column: ClassVar[str]
+    required_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        dependent, required = row._fields_named((row.dependent_column, row.required_column))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{dependent.reference('NEW')} IS NOT NULL AND "
+            f"{required.reference('NEW')} IS NULL", suffix="_required",
+            message="Dependent value requires its original reference"),)
+
+
+class FirstValueState(MutationCapability):
+    initial_value_column: ClassVar[str]
+    initial_value_state: ClassVar[type[LifecycleState]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (value,) = row._fields_named((row.initial_value_column,))
+        (lifecycle,) = row._fields_named(("lifecycle",))
+        names = ",".join(sql_literal(state.declared_name) for state in
+                         lifecycle.lifecycle_family.members_with(row.initial_value_state))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{value.reference('OLD')} IS NULL AND {value.reference('NEW')} IS NOT NULL "
+            f"AND {lifecycle.discriminator('NEW')} NOT IN ({names})", suffix="_first_value",
+            message="Initial value requires its declared lifecycle"),)
+
+
+class LifecycleTransitions(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        previous, following = field.discriminator("OLD"), field.discriminator("NEW")
+        edges = " OR ".join(
+            f"({previous} = {sql_literal(name)} AND {following} IN "
+            f"({','.join(sql_literal(target) for target in sorted(targets))}))"
+            for name, targets in field.lifecycle_family.transition_table().items() if targets) or "0"
+        return (RowMutation.UPDATE.abort_trigger(
+            row, columns=("lifecycle",), when=f"{previous} != {following} AND NOT ({edges})",
+            suffix="_edges", message="Lifecycle transition is not declared"),)
+
+
+class OrdinalTransitions(MutationCapability):
+    """Python and SQLite consume each state's same ordinal-rule declaration."""
+
+    ordinal_column: ClassVar[str] = "current_attempt_ordinal"
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        from .execution_states import ExecutionState
+
+        (state,) = row._fields_named(("lifecycle",))
+        (ordinal,) = row._fields_named((row.ordinal_column,))
+        family = cast(type[ExecutionState], state.lifecycle_family)
+        violations = []
+        for member in family.members_with(family):
+            rule = member.ordinal_rule
+            first = "NULL" if rule.first is None else str(rule.first)
+            expected = (f"CASE WHEN {ordinal.reference('OLD')} IS NULL THEN {first} "
+                        f"ELSE {ordinal.reference('OLD')} + {rule.increment} END")
+            allowed = ",".join(sql_literal(previous.declared_name)
+                               for previous in family.members_with(rule.predecessors))
+            violations.append(
+                f"({state.discriminator('NEW')} = {sql_literal(member.declared_name)} AND "
+                f"({state.discriminator('OLD')} NOT IN ({allowed}) OR "
+                f"{ordinal.reference('NEW')} IS NOT ({expected})))")
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(violations), suffix="_ordinal",
+            message="Attempt ordinal violates lifecycle rule"),)
+
+
+class LifecycleChanges(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.discriminator('OLD')} = {field.discriminator('NEW')}",
+            suffix="_changed", message="Lifecycle disposition must change"),)
+
+
+class FinalizedLifecycle(MutationCapability):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named(("lifecycle",))
+        closed = ",".join(sql_literal(name) for name, targets in
+                          field.lifecycle_family.transition_table().items() if not targets)
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.discriminator('OLD')} = {field.discriminator('NEW')} AND "
+            f"{field.discriminator('OLD')} IN ({closed})", suffix="_final",
+            message="Final lifecycle cannot be rewritten"),)
+
+
+class CounterDependent:
+    """A historical counter reference blocks its owner's advance while still live."""
+
+    counter_reference: ClassVar[ForeignKey]
+
+
+class CounterAdvance(MutationCapability):
+    counter_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (counter,) = row._fields_named((row.counter_column,))
+        blocked = []
+        for dependent in TypedTable.members_with(CounterDependent):
+            reference = dependent.counter_reference
+            if reference.target is not row:
+                continue
+            keys = " AND ".join(
+                f"{source.reference('dependent')} = {target.reference('OLD')}"
+                for source, target in zip(dependent._fields_named(reference.columns),
+                                          row._fields_named(reference.target_columns), strict=True))
+            (state,) = dependent._fields_named(("lifecycle",))
+            closed = ",".join(sql_literal(name) for name, targets in
+                              state.lifecycle_family.transition_table().items() if not targets)
+            blocked.append(f"EXISTS (SELECT 1 FROM {_identifier(dependent.declared_name)} dependent "
+                           f"WHERE {keys} AND {state.discriminator('dependent')} NOT IN ({closed}))")
+        condition = f"{counter.reference('NEW')} != {counter.reference('OLD')} AND (" + " OR ".join(
+            [f"{counter.reference('NEW')} != {counter.reference('OLD')} + 1", *blocked]) + ")"
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_counter", message="Counter advance has live dependents"),)
 
 
 class GuardedUpdates(MutationCapability):

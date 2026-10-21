@@ -24,6 +24,8 @@ from agent_comms.typed_table import (
     GuardedInserts,
     GuardedUpdates,
     IncrementingColumn,
+    LifecycleChanges,
+    LifecycleTransitions,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
@@ -34,34 +36,27 @@ from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseObligation(IncrementingColumn, MonotoneColumns, ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
+class ResponseObligation(LifecycleTransitions, LifecycleChanges, IncrementingColumn, MonotoneColumns, ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
     column_orders = (NonDecreasing(('updated_at_ms',)),)
 
     """One original reply-route obligation within an execution."""
 
     immutable_columns = ('execution_id', 'exact_target', 'created_at_ms')
-    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')) OR (FALSE) OR
-        ((json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1
+    update_condition = """(json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1
         FROM publication_intents WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target )) OR
         (json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS ( SELECT 1 FROM publication_receipts
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND message_id =
-        json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq') ))))"""
+        json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq') )))"""
     insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
         e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target )) OR
         (json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names}))"""
-    column_guards = (
-        ColumnGuard(('lifecycle',), """(json_extract(OLD.lifecycle, '$.kind') != json_extract(NEW.lifecycle, '$.kind') AND NOT ({obligation_edges}
-        )) OR (json_extract(OLD.lifecycle, '$.kind') = 'published' AND ( json_extract(NEW.lifecycle, '$.message_id')
-        IS NOT json_extract(OLD.lifecycle, '$.message_id') OR json_extract(NEW.lifecycle, '$.seq') IS NOT
-        json_extract(OLD.lifecycle, '$.seq') )) OR (EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id =
-        OLD.execution_id AND exact_target = OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind') !=
-        'published') OR (EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND
-        exact_target = OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names}))"""),
-        ColumnGuard(('exact_target',), """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
+    column_guards = (ColumnGuard(('lifecycle',), """(EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id AND exact_target =
+        OLD.exact_target) AND json_extract(NEW.lifecycle, '$.kind') != 'published') OR (EXISTS (SELECT 1 FROM
+        publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target) AND
+        json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names}))"""), ColumnGuard(('exact_target',), """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
         e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target )) OR (EXISTS
         (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target =
-        OLD.exact_target))"""),
-    )
+        OLD.exact_target))"""),)
 
 
     @staticmethod

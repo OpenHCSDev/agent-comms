@@ -21,24 +21,25 @@ from agent_comms.coordination_errors import (
     StaleFence,
 )
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_tables.participants import OwnerRecord
+from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
     AccumulatingBits,
     Column,
-    ColumnGuard,
+    CounterDependent,
+    FinalizedLifecycle,
     ForeignKey,
     FrozenColumns,
     Generated,
-    GuardedColumns,
     GuardedInserts,
-    GuardedUpdates,
     IncrementingColumn,
+    LifecycleTransitions,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
+    NonDecreasingWhenPresent,
     NonIncreasing,
     TextStorage,
     TypedTable,
@@ -91,9 +92,11 @@ class NoPreviousAttempt(PreviousAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(IncrementingColumn, MonotoneColumns, OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+class AttemptRecord(LifecycleTransitions, FinalizedLifecycle, CounterDependent, IncrementingColumn, MonotoneColumns, OwnerRecord, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
 
-    column_orders = (NonDecreasing(('updated_at_ms', 'last_progress_at_ms')),)
+    counter_reference = ForeignKey(('owner_lookup','owner_generation'), OwnerGenerations, ('owner_lookup','generation'))
+
+    column_orders = (NonDecreasing(('updated_at_ms', 'last_progress_at_ms', 'backend_done', 'process_dead')), NonDecreasingWhenPresent(('lease_expires_at_ms',)))
 
     insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id AND e.owner_lookup =
         NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts AND ((NEW.attempt_ordinal = 1 AND (e.status =
@@ -113,20 +116,6 @@ class AttemptRecord(IncrementingColumn, MonotoneColumns, OwnerRecord, GuardedIns
         a.phase IN ({retry_attempt_phases}) AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation >
         a.owner_generation AND NEW.owner_token_digest != a.owner_token_digest))"""
     immutable_columns = ('execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest', 'created_at_ms')
-    update_condition = """((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE
-        json_extract(OLD.lifecycle, '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind')
-        IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0) OR ((CASE
-        WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE
-        json_extract(OLD.lifecycle, '$.process_dead') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind')
-        IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) = 0) OR
-        ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle,
-        '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) <
-        (json_extract(OLD.lifecycle, '$.lease_expires_at_ms'))) OR ((json_extract(OLD.lifecycle, '$.kind')) IN
-        ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle,
-        '$.kind')))"""
-    column_guards = (
-        ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind')) != (json_extract(OLD.lifecycle, '$.kind')) AND NOT ({attempt_edges})"""),
-    )
 
     def require_attempt(self) -> AttemptRecord:
         return self

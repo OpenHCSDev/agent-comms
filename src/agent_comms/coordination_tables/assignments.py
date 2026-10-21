@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
 
-from agent_comms.assignment_states import AssignmentState
+from agent_comms.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -21,43 +21,37 @@ from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
+    FirstValueState,
     ForeignKey,
     FrozenColumns,
     Generated,
     GuardedInserts,
-    GuardedUpdates,
     ImmutableRows,
     IncrementingColumn,
     Index,
+    LifecycleChanges,
+    LifecycleTransitions,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
+    RequiredColumn,
     TypedTable,
+    WriteOnceColumns,
 )
 from agent_comms.wake_policy import MessageAudience
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAssignment(IncrementingColumn, MonotoneColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="wake_claims"):
+class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, LifecycleTransitions, LifecycleChanges, IncrementingColumn, MonotoneColumns, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="wake_claims"):
+    write_once_columns = ('triage_verdict', 'execution_id', 'exact_target')
+    initial_value_column = 'execution_id'
+    initial_value_state = EngagedAssignment
+    dependent_column = 'exact_target'
+    required_column = 'execution_id'
+
     column_orders = (NonDecreasing(('updated_at_ms',)),)
 
-    immutable_columns = ('assignment_id', 'recipient_lookup', 'wire_seq', 'message_id', 'recipient', 'audience', 'resolver_version', 'policy_version', 'accepted_at_ms')
-    update_condition = """((json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind'))) OR
-        ((({assignment_mode_new})) IS NOT (({assignment_mode_old}))) OR (((({assignment_verdict_old})) IS NOT NULL
-        AND (({assignment_verdict_new})) IS NOT (({assignment_verdict_old}))) OR ((json_extract(OLD.lifecycle,
-        '$.decision.execution_id')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT
-        (json_extract(OLD.lifecycle, '$.decision.execution_id'))) OR ((json_extract(OLD.lifecycle,
-        '$.decision.exact_target')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT
-        (json_extract(OLD.lifecycle, '$.decision.exact_target'))) OR ((json_extract(OLD.lifecycle,
-        '$.decision.exact_target')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT NULL
-        AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NULL) OR ((json_extract(OLD.lifecycle,
-        '$.decision.execution_id')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL
-        AND (json_extract(NEW.lifecycle, '$.kind')) != 'engaged')) OR ((json_extract(OLD.lifecycle, '$.kind')) !=
-        (json_extract(NEW.lifecycle, '$.kind')) AND NOT ({assignment_edges} )) OR ((json_extract(NEW.lifecycle,
-        '$.kind')) = 'failed' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NULL AND
-        (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL) OR ((json_extract(OLD.lifecycle,
-        '$.kind')) = 'deferred' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL AND
-        (json_extract(NEW.lifecycle, '$.kind')) IN ('triage_pending', 'full_pending'))"""
+    immutable_columns = ('assignment_id', 'recipient_lookup', 'wire_seq', 'message_id', 'recipient', 'audience', 'resolver_version', 'policy_version', 'accepted_at_ms', 'wake_mode')
 
     @property
     def recipient_identity(self):

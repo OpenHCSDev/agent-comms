@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -21,6 +21,34 @@ from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
     from .coordination_snapshot import RecoverySnapshot
+
+
+class OrdinalRule(ABC):
+    increment: int = 0
+    predecessors: type = LifecycleState
+
+    @property
+    @abstractmethod
+    def first(self) -> int | None: ...
+
+    def accepts(self, following: int | None, previous: ExecutionState) -> bool:
+        ordinal = previous.current_attempt_ordinal
+        expected = self.first if ordinal is None else ordinal + self.increment
+        return isinstance(previous, self.predecessors) and following == expected
+
+
+class PreservedOrdinal(OrdinalRule):
+    first = None
+
+
+@dataclass(frozen=True)
+class AdvancedOrdinal(OrdinalRule):
+    predecessors: type
+    increment: int = 1
+
+    @property
+    def first(self) -> int:
+        return self.increment
 
 
 @dataclass(frozen=True)
@@ -78,8 +106,10 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     def accepts_attempt(self, phase) -> bool:
         return False
 
+    ordinal_rule: ClassVar[OrdinalRule] = PreservedOrdinal()
+
     def accepts_previous(self, previous: ExecutionState) -> bool:
-        return self.current_attempt_ordinal == previous.current_attempt_ordinal
+        return self.ordinal_rule.accepts(self.current_attempt_ordinal, previous)
 
     def validate_snapshot(self, snapshot, authorized: bool) -> None:
         """State-specific cross-lifecycle rules, after common identities agree."""
@@ -150,6 +180,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
 
 class ActiveExecution(AttemptExecution):
     active = True
+    ordinal_rule = AdvancedOrdinal(StartsAttempt)
 
     def require_final_response(self) -> None:
         pass
@@ -164,11 +195,6 @@ class ActiveExecution(AttemptExecution):
 
     def accepts_attempt(self, phase):
         return not phase.terminal
-
-    def accepts_previous(self, previous):
-        return (
-            previous.starts_attempt and self.ordinal == (previous.current_attempt_ordinal or 0) + 1
-        )
 
     def validate_snapshot(self, snapshot, authorized):
         if not snapshot.is_current:

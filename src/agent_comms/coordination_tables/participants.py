@@ -11,10 +11,10 @@ from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     Column,
     ColumnGuard,
+    CounterAdvance,
     ForeignKey,
     FrozenColumns,
     GuardedColumns,
-    GuardedUpdates,
     ImmutableRows,
     MonotoneColumns,
     NoDelete,
@@ -68,12 +68,11 @@ class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
         return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerGenerations(NoDelete, GuardedUpdates, FrozenColumns, ParticipantIdentity, CoordinatorTable, TypedTable):
+class OwnerGenerations(CounterAdvance, NoDelete, FrozenColumns, ParticipantIdentity, CoordinatorTable, TypedTable):
+
+    counter_column = 'generation'
 
     immutable_columns = ('owner_lookup',)
-    update_condition = """(NEW.generation != OLD.generation AND ( NEW.generation != OLD.generation + 1 OR EXISTS (SELECT 1 FROM
-        attempts WHERE owner_lookup = OLD.owner_lookup AND owner_generation = OLD.generation AND phase NOT IN
-        ({terminal_attempt_names}))))"""
 
     owner_lookup: Annotated[str, Column(primary_key=True)]
     owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
