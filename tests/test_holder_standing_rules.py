@@ -262,8 +262,10 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="unanswered unit messages"):
-        SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
+    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
+    assert SayVerb(
+        units="worker", body_file="unused", answers=("not-a-message",)
+    ).answer_references(ctx) == ()
 
 
 def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
@@ -277,8 +279,10 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
             verb.apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="REFUSED: --answers"):
-        SendVerb(unit="worker", body_file="unused", answers=(question.message_id,)).apply(ctx)
+    # Naming it again after it was answered names nothing open, so it answers nothing.
+    assert SendVerb(
+        unit="worker", body_file="unused", answers=(question.message_id,)
+    ).answer_references(ctx) == ()
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
