@@ -86,9 +86,12 @@ Everything lands as one batch through the merge queue, drop-on-fail. Then one in
 
 ## Done means
 
+Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
+
 - `git grep -n "offset\|max_bytes\|bus.jsonl\|bus_meta\|_wire_lock_path\|has_private_wire_fields" src` returns no bus hits.
 - The deleted modules are gone.
 - A process killed mid-publish leaves the whole message or none of it.
+- A reader that meets a held bus lock waits for it and never ends a turn (step C). Today `NativeSourceCursor._advance_proven` (`native_source_cursor.py:83`) takes the boundary with `blocking=False`, and with no contention allowance when no input is committed (`:79-80`). So any concurrent writer ends the turn with `BlockingIOError`: three times on core-5d8da75aa between 12:20 and 12:39 on 2026-10-21, with no install running.
 - Every history converts with every record round-tripping.
 - On every machine: Toad pages history, delivery wakes units, claims hold, and a real message to a live agent is answered.
 - Lines deleted are reported first; the census confirms.

@@ -61,6 +61,7 @@ from agent_comms.messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
+from .service_passes import ServicePassStore
 from .todos import DirectiveText, ReviewedHeadVerdict
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from .tools import (
@@ -597,11 +598,12 @@ class Connector:
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
+        passes = ServicePassStore.at(self.root)
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
-                UnownedOrderWatch(), self.service_wire)),
+                UnownedOrderWatch(), self.service_wire, passes)),
             asyncio.create_task(Coordination.watch_worker(
-                CommanderHeartbeat(), self.service_wire)),
+                CommanderHeartbeat(), self.service_wire, passes)),
         )
         try:
             yield

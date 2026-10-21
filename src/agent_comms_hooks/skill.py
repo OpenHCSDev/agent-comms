@@ -1,7 +1,8 @@
 """At session start, resume and compaction, write the commander's sources and order them read.
 
-The sources are the commander's voice, the indictment, the packaged spine, the recorded failures, the
-commander skill, the packaged rules and the pinned refactor-audit pattern catalog. Claude Code caps
+The sources are the commander's voice, the indictment, the recorded failures, the commander skill,
+the packaged rules and the refactor-audit catalog's index; a rung file is read when an order or
+roast cites its pattern ID. Claude Code caps
 injected hook text at 10,000 characters and the sources are far longer, so they
 go into parts beside the transcript and the hook injects the order to read
 each part. The reread hook repeats that order as context grows.
@@ -21,15 +22,26 @@ from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import ContextCadence, SourcesOrder, ToolUseReminder
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
 class CommanderStart(SourcesOrder):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
+    unreadable: ClassVar[tuple[type[Exception], ...]] = (
+        FileNotFoundError, PermissionError, IsADirectoryError, UnicodeError, ValidationError,
+    )
+    """How the installed commander configuration fails to read; the sources still go out."""
 
     def due(self, tokens: int) -> bool:
-        return True
+        """Every session the commander's bridge binding does not rule out: a session bound to
+        another bus thread (a Claude unit) never gets the commander's sources."""
+        try:
+            commander = CommanderConfig.read(CommanderConfig.path()).commander
+        except self.unreadable:
+            return True
+        return WatchClaim(self.session_id).state().may_serve(commander)
 
     def prepare(self) -> None:
         """A start or compaction drops what was read, so every reminder is due again."""
@@ -53,21 +65,15 @@ class CommanderStart(SourcesOrder):
 
     @classmethod
     def sources(cls) -> str:
-        catalog = Slop.catalog()
-        readme = catalog / "README.md"
         return "\n\n".join(
             (
                 cls.notice(),
                 CommanderConfig.packaged_voice().read_text(encoding="utf-8", newline=""),
                 CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
-                CommanderConfig.packaged_spine().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
                 RuleFile.document(CommanderConfig.packaged_skill())[1],
                 *(rule.render() for rule in RuleFile.packaged()),
-                *(
-                    path.read_text(encoding="utf-8", newline="")
-                    for path in (readme, *sorted(set(catalog.glob("*.md")) - {readme}))
-                ),
+                (Slop.catalog() / "README.md").read_text(encoding="utf-8", newline=""),
             )
         )
 
@@ -75,13 +81,7 @@ class CommanderStart(SourcesOrder):
     def notice() -> str:
         try:
             return f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
-        except (
-            FileNotFoundError,
-            PermissionError,
-            IsADirectoryError,
-            UnicodeError,
-            ValidationError,
-        ):
+        except CommanderStart.unreadable:
             return "No commander is configured (installed configuration is missing or invalid)."
 
 
