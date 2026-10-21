@@ -6,10 +6,10 @@ from dataclasses import replace
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.thread_presentation import ThreadRetired
+from agent_comms.thread_presentation import NoThreadPresentation, ThreadRetired
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,
-    ThreadMissing, ThreadsObserved, ViewsRetired,
+    ThreadPresented, ThreadsObserved, ViewsRetired,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from test_observer_death import readable
@@ -41,7 +41,8 @@ def test_observer_reports_a_deleted_thread(comms):
     assert isinstance(result.activity['surviving'], ObservedActivity)
     assert result.activity['surviving'].thread == 'surviving'
     assert result.activity['deleted'] == DeletedThread('deleted')
-    assert isinstance(result.results['deleted'], ThreadMissing)
+    assert isinstance(result.results['deleted'], ThreadPresented)
+    assert result.results['deleted'].presentation == NoThreadPresentation()
     status.observed(result)
     assert isinstance(status.rows.rows['deleted'].status, ThreadRetired)
     previous = result.activity['surviving'].timestamp
@@ -99,7 +100,8 @@ async def test_observer_process_survives_deleted_interest_and_keeps_serving(comm
                     elif isinstance(result, ViewsRetired):
                         retired = result
         assert missing.activity['deleted'] == DeletedThread('deleted')
-        assert isinstance(missing.results['deleted'], ThreadMissing)
+        assert isinstance(missing.results['deleted'], ThreadPresented)
+        assert missing.results['deleted'].presentation == NoThreadPresentation()
         assert retired.retired.threads == frozenset({original})
         surviving = comms.registry.require('surviving')
         comms.registry.declare(replace(surviving, title=GivenThreadText('Still updating after deletion')))
