@@ -442,7 +442,7 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
-    """An open request, admitted by its declared member rather than a state string."""
+    """An open request, selected by its declared member rather than a state string."""
 
 
 class ClosedListedPullRequest(ListedPullRequest):
@@ -2684,7 +2684,7 @@ class OrderMessage(TodoOperation):
 class RecordPullRequest(TodoCommand):
     actor: ThreadIncarnation
     link: PullRequestLink
-    generation: str | None = None
+    generation: str
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
