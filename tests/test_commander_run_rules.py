@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.change_report import FileLine
+from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -22,8 +23,13 @@ def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path):
         order=checked)
     assert FieldCodec.decode(Todo, FieldCodec.encode(todo)) == todo
     assert planned in todo.order.instructions(todo)
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolRefusedError):
         ApplicationOrderRun('a grep passed')
+    with pytest.raises(ToolRefusedError):
+        checked.run.require_artifact(str(tmp_path / 'missing.png'))
+    with pytest.raises(ToolRefusedError):
+        checked.run.require_closing('The unrelated result does not describe the requested application run.')
+    checked.run.require_closing(planned)
 
 
 def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path):
