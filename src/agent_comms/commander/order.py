@@ -74,7 +74,6 @@ from agent_comms.todos import (
     OrderMessage,
     OrderProgress,
     PendingProblemOrder,
-    PlannedInstallDeadline,
     PullRequestLink,
     RecordPullRequest,
     Slop,
@@ -928,25 +927,6 @@ class UnstrikeVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
-
-
-@dataclass(frozen=True, kw_only=True)
-class InstallVerb(OrderVerb):
-    help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: Annotated[
-        str, Argument(flags=("at",), options={"help": "HH:MM the install is due"})
-    ]
-    installer: Annotated[
-        str,
-        Argument(
-            flags=("installer",), options={"help": "the unit that runs the install"}
-        ),
-    ]
-
-    def run(self, ctx: Commander) -> None:
-        planned = RecordedEventTime(time.time()).at_clock(self.at)
-        PlannedInstallDeadline(planned, self.installer).plan(ctx.comms.root)
-        print(f'install due {self.at}, run by {self.installer}')
 
 
 @dataclass(frozen=True, kw_only=True)
