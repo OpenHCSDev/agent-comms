@@ -728,7 +728,7 @@ class ChangedInstall(Install[CarriedRehearsal]):
 
 class UnchangedInstall(Install[UnchangedRehearsal]):
     """The checkout already sits at the target and the relocked lock is the installed one:
-    nothing to rehearse, hold or restart. It only plans the next install."""
+    nothing to rehearse, hold or restart."""
 
     def rehearsal(self) -> UnchangedRehearsal:
         return UnchangedRehearsal()
@@ -736,7 +736,6 @@ class UnchangedInstall(Install[UnchangedRehearsal]):
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
         self.installed.publish()
         RootRuntime.publish(self.root, self.installed.runtime)
-        self.installer.plan_next(self.root, time.time())
         return UnchangedRun()
 
 
@@ -772,7 +771,6 @@ class FreshInstall(Install[FreshRehearsal]):
         RootRuntime.publish(self.root, self.staged.runtime)
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
-        self.installer.plan_next(self.root, time.time())
         return CreatedRun(services, route)
 
 
@@ -835,7 +833,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         RootRuntime.publish(root, staged.runtime)
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
-        installer.plan_next(root, time.time())
     except BaseException as error:
         print(f"install: install failed ({type(error).__name__}: {error}); "
               "restoring original installation", file=sys.stderr)

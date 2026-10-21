@@ -22,6 +22,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.native_child import PiSessionChild
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.queued_input import InitialInput
 from agent_comms.storage_rules import StorageRule
 from agent_comms.native_arguments import GivenArguments, GivenBinary
@@ -37,14 +38,19 @@ async def wait_for(predicate):
 
 
 class NativeBackendFixture:
+    @staticmethod
+    def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
+        """The real thread incarnation used by a direct native turn on this bus."""
+        return Comms(root).registry.new_thread(
+            'direct-native', frozenset(), str(project),
+        ).incarnation.require_recorded()
+
     def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
         self.root, self.project, self.session, self.provider = root, project, session, provider
         self.config = config
         self.package = package
         self.persistent = PersistentPiSession()
-        self.participant = Comms(root).registry.new_thread(
-            'direct-native', frozenset(), str(project),
-        ).incarnation.require_recorded()
+        self.participant = self.participant_at(root, project)
         self.starts = []
         self.children: list[PiSessionChild] = []
         self.observed = []
