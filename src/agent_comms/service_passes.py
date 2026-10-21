@@ -43,5 +43,11 @@ class ServicePassStore(RuntimeFile, LockedStore[ServicePasses]):
     def passed(self, watch: str) -> None:
         """A pass that succeeds ends its failure; an unfailed watch writes nothing."""
         if watch in self.read().failing:
-            self.update(lambda passes: replace(passes, failing={
-                name: failing for name, failing in passes.failing.items() if name != watch}))
+            self.update(
+                lambda passes: replace(
+                    passes,
+                    failing={
+                        name: failing for name, failing in passes.failing.items() if name != watch
+                    },
+                )
+            )
