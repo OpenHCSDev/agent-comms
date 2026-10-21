@@ -23,7 +23,7 @@ class RecordedEventSeconds(FieldRepresentation):
     def encode(cls, value: object) -> float:
         if not isinstance(value, RecordedEventTime):
             raise TypeError("A Unix-seconds field requires a recorded event time")
-        return value.at
+        return value.to_number(1)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -47,7 +47,7 @@ class NullableEventSeconds(FieldRepresentation):
     def encode(cls, value: object) -> object:
         if not isinstance(value, EventTime):
             raise TypeError("A source clock requires an event time")
-        return next((timestamp * cls.units_per_second for timestamp in value.timestamps()), None)
+        return value.to_number(cls.units_per_second)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -104,11 +104,17 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         self.require_recorded("A delivery")
 
     @abstractmethod
+    def to_number(self, units_per_second: int) -> object: ...
+
+    @abstractmethod
     def continued_from(self, original_at: float): ...
 
 
 @dataclass(frozen=True)
 class UnrecordedEventTime(EventTime):
+    def to_number(self, units_per_second: int) -> object:
+        return None
+
     def continued_from(self, original_at):
         return RecordedEventTime(original_at)
 
@@ -141,6 +147,9 @@ class RecordedEventTime(EventTime):
         day = time.localtime(self.at)
         at = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, hour, minute, 0, 0, 0, -1))
         return RecordedEventTime(at + 86400 if at < self.at - 60 else at)
+
+    def to_number(self, units_per_second: int) -> float:
+        return self.at * units_per_second
 
     def recorded_at(self, label: str) -> float:
         return self.at
