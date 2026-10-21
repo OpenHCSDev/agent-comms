@@ -3,7 +3,8 @@
 The server is a transport over the ToolRequest family: ``tools/list`` reports every member
 and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the bus thread claude-ai.
 OAuth stands in front of every MCP request. An unknown browser waits for the owner's
-single-use approval link sent on comms. Approval remembers that browser on this issuer;
+single-use approval link sent on comms. Its page requires a POST confirmation and then
+remembers that browser on this issuer;
 subsequent sign-ins need no repeated step. Grant storage retains only secret digests under
 ``~/.local/state/agent-comms/connector/``.
 
@@ -665,7 +666,8 @@ class Connector:
             headers={
                 "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
                 "Content-Security-Policy": (
-                    "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+                    f"default-src 'none'; form-action 'self' {held.query.redirect_uri}; "
+                    "frame-ancestors 'none'; base-uri 'none'"
                 ),
             },
             text=(f"<!doctype html><title>Approve connector</title><p>Connect {client}?</p>"

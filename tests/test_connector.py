@@ -403,7 +403,8 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
         assert preview.status == 200 and not preview.cookies
         page = await preview.text()
         assert page.count("<button ") == 1 and '<form method="post">' in page
-        assert "frame-ancestors 'none'" in preview.headers["Content-Security-Policy"]
+        policy = preview.headers["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in policy and login.query.redirect_uri in policy
         assert store.path.read_bytes() == before
         assert not store.read().trusted_browsers and not store.read().codes
     approved = await client.post(link.path, allow_redirects=False)
@@ -411,7 +412,8 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
     assert not store.read().requests and store.read().trusted_browsers
     assert (await client.post(link.path, allow_redirects=False)).status == 400
     code = parse_qs(urlsplit(approved.headers["Location"]).query)["code"][0]
-    assert store.read().holds(await login.redeem(client, code))
+    token = await login.redeem(client, code)
+    assert store.read().holds(token)
 
 
 async def test_pending_authorizations_are_bounded(client, store, comms):
