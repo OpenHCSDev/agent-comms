@@ -53,6 +53,7 @@ def ancestor_probe(
     ancestor = package.parent.parent / "bufferutil"
     ancestor.mkdir(mode=0o700)  # Exclusive: never replace an existing dependency.
     marker = root / "ancestor-executed"
+    dependency = package / "node_modules/ws/lib/buffer-util.js"
     code = (
         f"require('node:fs').writeFileSync({json.dumps(str(marker))}, 'executed'); "
         "module.exports={mask(){},unmask(){}};"
@@ -68,7 +69,7 @@ def ancestor_probe(
                 node,
                 "--no-global-search-paths",
                 "-e",
-                f"require({json.dumps(str(package / 'node_modules/ws/lib/buffer-util.js'))})",
+                f"require({json.dumps(str(dependency))})",
             ],
             env=env,
             preexec_fn=deny,
@@ -78,10 +79,14 @@ def ancestor_probe(
         assert control.returncode == 0 and marker.exists(), (control.returncode, control.stderr)
         marker.unlink()  # Only the known disposable control marker, never session evidence.
         script = """import {registerHooks} from 'node:module';
+import {pathToFileURL} from 'node:url';
+const requiringModule=pathToFileURL(process.argv[4]).href;
 const seen=[];
 registerHooks({resolve(specifier,context,next){
   try {return next(specifier,context);} catch(error) {
-    if(specifier==='bufferutil') seen.push({code:error.code,parent:context.parentURL});
+    // Node 22 supplies a resolved URL for CJS; newer Node supplies the bare name.
+    // Observe the actual requiring module, not either resolver representation.
+    if(context.parentURL===requiringModule) seen.push({code:error.code,parent:context.parentURL});
     throw error;
   }
 }});
@@ -104,6 +109,7 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
                 fence.as_uri(),
                 str(entry),
                 (package / "node_modules/ws/wrapper.mjs").as_uri(),
+                str(dependency),
             ],
             env=env,
             preexec_fn=deny,
@@ -116,7 +122,7 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
         assert result["factory"] == "function" and result["seen"], result
         assert all(
             item["code"] == "ERR_NATIVE_IMPORT_BOUNDARY"
-            and item["parent"].endswith("/ws/lib/buffer-util.js")
+            and Path.from_uri(item["parent"]) == dependency
             for item in result["seen"]
         ), result
         assert not marker.exists(), "Ancestor dependency executed under fence"

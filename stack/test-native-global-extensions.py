@@ -24,6 +24,10 @@ from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_pi import CAPABILITY
+from agent_comms.pi_commands import GetState
+from agent_comms.pi_events import ExtensionError
+from agent_comms.pi_rpc import PiRpcChannel
 
 
 def main(fixture: Path):
@@ -125,9 +129,9 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
         cwd=project, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True, preexec_fn=deny)
     reply = None
-    extension_errors = []
+    request = GetState()
     try:
-        child.stdin.write('{"type":"get_state","id":"startup"}\n')
+        child.stdin.write(PiRpcChannel.command_bytes(request).decode())
         child.stdin.flush()
         selector = selectors.DefaultSelector()
         selector.register(child.stdout, selectors.EVENT_READ)
@@ -138,28 +142,22 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
             line = child.stdout.readline()
             if not line:
                 break
-            message = json.loads(line)
-            if message.get("type") == "extension_error":
-                extension_errors.append(message)
-            if message.get("id") == "startup":
-                reply = message
+            event = PiRpcChannel.decode_record(line.encode(), strict=True)
+            assert not isinstance(event, ExtensionError), event
+            if event.responds_to(request):
+                reply = event
                 break
-        assert reply and reply.get("success"), f"No successful get_state; exit={child.poll()}"
-        assert not extension_errors, extension_errors
-        assert reply["data"]["nativeInputProofCapability"] == "pi-native-input-v1-live-only", reply
+        assert reply and reply.success, f"No successful get_state; exit={child.poll()}"
+        state = reply.data.require_payload()
+        assert state.native_input_proof_capability == CAPABILITY, reply
         state_received_seconds = time.monotonic() - started
     finally:
         child.terminate()
         _, stderr = child.communicate(timeout=10)
         (root / "startup-stderr.txt").write_text(stderr)
     assert "Failed to load extension" not in stderr, stderr
-    model = reply["data"].get("model")
-    print(json.dumps({"ok":True, "automatic_extensions":registered, "get_state":{
-        "success":reply["success"], "messageCount":reply["data"]["messageCount"],
-        "nativeInputProofCapability":reply["data"]["nativeInputProofCapability"],
-        "model_field_present":"model" in reply["data"],
-        "model":{key:model[key] for key in ("provider", "id")} if model else None,
-        "thinkingLevel":reply["data"]["thinkingLevel"]},
+    print(json.dumps({"ok":True, "automatic_extensions":registered,
+        "get_state":FieldCodec.encode(reply),
         "saved_session_bytes":session.stat().st_size, "network":"kernel-denied",
         "saved_source_sha256_before":saved_source_sha256,
         "saved_source_sha256_after":hashlib.sha256(session.read_bytes()).hexdigest(),
