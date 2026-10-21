@@ -212,7 +212,7 @@ def prepare_mcp_dependencies(extension: Path, destination: Path, environment: di
             [
                 "npm",
                 "ci",
-                "--offline",
+                "--prefer-offline",
                 "--ignore-scripts",
                 "--omit=dev",
                 "--omit=peer",

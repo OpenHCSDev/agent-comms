@@ -13,7 +13,6 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UninstalledRepositoryError,
 )
-from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import InstallDue
@@ -32,7 +31,7 @@ from agent_comms.installer.runtime_resolution import (
     RuntimeResolution,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -40,6 +39,9 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
     CommitDelivery,
+    DoneTodoState,
+    GoalRef,
+    OpenTodoState,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
@@ -47,14 +49,14 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
-from agent_comms.work_branches import WorkBranches
 from order_scope_fixture import FIX_SCOPE
 from cutover.carry_install_schedule import InstallSchedule
+from source_revision_fixture import SourceRepository
 
 
 @dataclass(frozen=True)
 class ProofBuildCheckout:
-    repository: Repo
+    repository: SourceRepository
     oldest: str
     installed: str
     newer: str
@@ -71,20 +73,8 @@ def proof_build_checkouts(
     checkouts = []
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):
-        checkout = tmp_path / package.declared_name
-        subprocess.run(("git", "init", str(checkout)), check=True, capture_output=True)
-        subprocess.run(
-            (
-                "git",
-                "remote",
-                "add",
-                "origin",
-                f"https://github.com/{package.repository.to_wire()}.git",
-            ),
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-        )
+        source = SourceRepository.create(tmp_path / 'source' / package.declared_name, package.repository)
+        checkout = source.checkout
         commits = []
         for number in range(3):
             subprocess.run(
@@ -110,14 +100,9 @@ def proof_build_checkouts(
                     ("git", "rev-parse", "HEAD"), cwd=checkout, text=True
                 ).strip()
             )
-        graph = ProofBuildCheckout(Repo.of(checkout), *commits)
+        graph = ProofBuildCheckout(source, *commits)
+        subprocess.run(('git', 'push', 'origin', 'main'), cwd=checkout, check=True, capture_output=True)
         checkouts.append(graph)
-        subprocess.run(
-            ("git", "update-ref", f"refs/remotes/origin/{WorkBranches.main}", graph.newer),
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-        )
         packages[package.distribution] = PackageRecord(
             version="1",
             source=GitRecord(
@@ -137,6 +122,63 @@ def proof_build_checkouts(
     current.parent.mkdir(parents=True)
     current.symlink_to(runtime, target_is_directory=True)
     return tuple(checkouts)
+
+
+@pytest.mark.parametrize("run, after_install", (
+    (MechanicalOrderRun(), DoneTodoState),
+    (ApplicationOrderRun("Open the installed application and confirm the retained order is working"),
+     OpenTodoState),
+))
+def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
+    run, after_install, proof_build_checkouts, comms, tmp_path,
+):
+    from agent_comms.launch_runtime import LaunchRuntime
+    from test_todos import order, thread
+
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    checkout = graph.repository.checkout
+    subprocess.run(("git", "merge-base", "--is-ancestor", graph.newer, "HEAD"),
+                   cwd=checkout, check=True)
+    subprocess.run(("git", "merge-base", "--is-ancestor", graph.newer, "origin/main"),
+                   cwd=checkout, check=True)
+    lead = thread("lead", comms.root, 1.0)
+    comms.registry.register(lead)
+    merged = replace(order(graph.repository), run=run).merged(graph.newer)
+    todo = comms.goals.todos.create(
+        "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
+        creator=lead, owner=lead, generation="fixture-goal",
+        goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
+        review_at=RecordedEventTime(1000), order=merged,
+    )
+    with pytest.raises(DeliveredCommitNotInstalledError):
+        merged.require_installation()
+    observed = run.after_merge(todo, merged)
+    assert observed == todo  # Waiting again does not manufacture a revision.
+    assert observed.state is OpenTodoState
+    assert not observed.order.accepted
+    artifact = tmp_path / "application-proof.txt"
+    works = "Open the installed application and confirm the retained order is working"
+    artifact.write_text(works)
+    with pytest.raises(DeliveredCommitNotInstalledError):
+        ThreadCaller("lead").invoke(CommsProblemCloseTool(
+            problem=todo.id, works=works, artifact=str(artifact),
+        ), comms)
+    assert comms.goals.todos.get(todo.id) == todo
+
+    runtime = LaunchRuntime.installed()
+    resolution = RuntimeResolution.at(runtime.prefix)
+    RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime.prefix)
+    accepted = run.after_merge(todo, merged)
+    assert accepted.state is after_install
+    assert merged.waiting_on_install(todo, {}) == (todo,)
+    ThreadCaller("lead").invoke(CommsProblemCloseTool(
+        problem=todo.id, works=works, artifact=str(artifact),
+    ), comms)
+    closed = comms.goals.todos.get(todo.id)
+    assert closed.state is DoneTodoState
+    assert closed.order.accepted
+    assert FieldCodec.decode(Todo, FieldCodec.encode(closed)) == closed
 
 
 def test_runtime_package_family_owns_installed_commits(proof_build_checkouts):
@@ -189,7 +231,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for graph in proof_build_checkouts
         if graph.repository.github == CorePackage.repository
     )
-    source = Comms(tmp_path / "source")
+    source = Comms(tmp_path / "bus")
     source.messaging.initialize_private_initial_protocol()
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
@@ -240,7 +282,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
             build = delivery.proof_build
             order = PendingProblemOrder(
                 scope=FIX_SCOPE,
-                owner=FileLine(__file__, 1),
+                owner=FIX_SCOPE.shape.parents[0],
                 check=OrderCheck(str(checkout), "printf 0", CountCheckResult(0)),
                 edits=("Record the copied application proof on its installed build.",),
                 banned=("Do not change the source bus.",),

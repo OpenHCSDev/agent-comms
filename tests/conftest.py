@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 from source_programs import SourcePrograms
+from source_revision_fixture import SourceRepository
 
 from agent_comms import candidate_maintenance
 from agent_comms.bus_publication import AgentOrigin
@@ -55,6 +56,11 @@ class TranscriptRecords:
 
 
 transcript_records = TranscriptRecords()
+
+
+@pytest.fixture
+def source_repository(tmp_path):
+    return SourceRepository.create(tmp_path / 'source')
 
 
 @pytest.fixture

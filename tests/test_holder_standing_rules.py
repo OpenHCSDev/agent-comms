@@ -9,10 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
+from source_revision_fixture import SourceRepository
 
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
@@ -37,25 +36,27 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Repo
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.todos import DeliverTodo, FixScope, FixShape, OperationDelivery, PendingProblemOrder, TodoConflict
+from agent_comms.todos import (
+    DeliverTodo, OperationDelivery, OrderMessage,
+    PendingProblemOrder, TodoConflict,
+)
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import CommsOrderDeliverTool
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path):
+def held_bus(comms, tmp_path, source_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
-    Repo.git(tmp_path, "init", "-q", "-b", "main")
-    Repo.git(tmp_path, "-c", "user.name=Held-order fixture", "-c", "user.email=held@example.invalid",
-             "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Held-order source")
-    Repo.git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    source = source_repository
+    scope = source.scope()
     for name in ("lead", "worker", "outsider"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(tmp_path)))
+        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout)))
     comms.goals.update_goal("lead", SetGoalAction(
         text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
     ))
@@ -66,8 +67,8 @@ def held_bus(comms, tmp_path):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-                check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
+                id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
+                check=OrderCheck(str(source.checkout), "printf 1", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
                 first_call_deadline=RecordedEventTime(now + 3600),
@@ -182,22 +183,36 @@ def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
     assert held_bus.goals.todos.get("P2") == delivered
 
 
+def test_blocked_holder_reissues_pending_sibling_but_never_the_claimed_order(held_bus):
+    todo = held_bus.goals.todos.get("P2")
+    sent = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo))
+    held_bus.goals.todos.apply("P2", OrderMessage(
+        todo.revision, held_bus.registry.require("lead").incarnation, sent.message.message_id,
+    ))
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P2", pull_request=1, head="a" * 40,
+        report="The source is published for the commander to inspect before accepting delivery.",
+    ), held_bus)
+    claimed = held_bus.goals.todos.get("P2")
+    pending = held_bus.goals.todos.get("P1")
+    blocked_holder(held_bus)
+    violation, = Blocked.violations(held_bus, "lead")
+    assert violation.orders == ("P1",)
+    violation.enforce(held_bus, "lead")
+    assert held_bus.goals.todos.get("P2") == claimed
+    assert held_bus.goals.todos.get("P1").order.id != pending.order.id
+
+
 def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(held_bus, tmp_path):
-    owner = tmp_path / "owner.py"
-    owner.write_text("class Owner:\n    pass\n")
+    original = held_bus.goals.todos.get('P1').order.checked()
+    owner = Path(original.check.directory) / original.owner.file
+    owner.write_text(SourceRepository.main_source)
     now = time.time()
     held_bus.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P3", commander="lead", request="request",
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Repair P3",
         review_at=RecordedEventTime(now + 3600),
-        order=PendingProblemOrder(
-            id="order-P3", owner=FileLine(str(owner), 1),
-            scope=FixScope(FixShape(parents=(FileLine(str(owner), 1),), members=())),
-            run=MechanicalOrderRun(), check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
-            edits=("Repair the existing owner",), banned=("No second store",),
-            report="Report the result", at=RecordedEventTime(now - 3600),
-            first_call_deadline=RecordedEventTime(now + 3600),
-        ),
+        order=replace(original, id='order-P3'),
     ))
     accepted = held_bus.goals.todos.get("P3").order.checked().id
     owner.write_text('"""The unit moved its class while working the order."""\n\n\nclass Owner:\n    pass\n')

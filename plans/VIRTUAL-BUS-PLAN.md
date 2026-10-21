@@ -86,6 +86,8 @@ Everything lands as one batch through the merge queue, drop-on-fail. Then one in
 
 ## Done means
 
+Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
+
 - `git grep -n "offset\|max_bytes\|bus.jsonl\|bus_meta\|_wire_lock_path\|has_private_wire_fields" src` returns no bus hits.
 - The deleted modules are gone.
 - A process killed mid-publish leaves the whole message or none of it.
