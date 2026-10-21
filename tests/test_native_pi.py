@@ -14,7 +14,9 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiRpcLaunch, NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiRpcLaunch, NativePiTerminalFailure
+from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
@@ -253,8 +255,9 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
         FieldCodec.decode(NativeContextJournal,later).insert(db)
     assert NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start).request_generation == 2
     assert NativeContextProof.read_evidence(files, INPUT_ID, request_generation=1, session_entry_start=record.start) == recorded
-    assert recorded.corroborates_input(INPUT_ID, files=files)
-    assert not recorded.corroborates_input('e'*32, files=files)
+    with NativeEntry.open_evidence(session) as evidence:
+        assert recorded.corroborates_input(INPUT_ID, files=files, evidence=evidence)
+        assert not recorded.corroborates_input('e'*32, files=files, evidence=evidence)
     input_event = InputCommitted(input_id=INPUT_ID,session_id='sid',session_entry_id='entry',session_entry_start=record.start)
     context_event = ContextCommitted.from_wire({key:value for key,value in first.items() if key != 'schema'})
     assert _verify_context(files,INPUT_ID,'sid',input_event,context_event) == recorded

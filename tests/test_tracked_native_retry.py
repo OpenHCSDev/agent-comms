@@ -9,7 +9,8 @@ from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededPro
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
 from agent_comms.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
 from agent_comms.turn_usage import UsageAccount

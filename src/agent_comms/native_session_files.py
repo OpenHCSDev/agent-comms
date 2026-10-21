@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Self
 
 from .errors import RelationViolationError
+from .native_failures import NativePiUnavailable
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.field_codec import Id128Text
 from agent_comms.participant_identity import ParticipantIdentity
@@ -146,22 +147,20 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
 
     @staticmethod
     def require_private_directory(directory: Path) -> None:
-        from agent_comms.native_pi import NativePiUnavailable
-
         if ".." in directory.parts:
             raise NativePiUnavailable("Native Pi session directory is not lexical")
         try:
             TrustedAncestorRole.require_path(directory)
         except ValueError as error:
             raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
-        if PrivateDirectoryRole.violation(directory.lstat()) is not None:
-            raise NativePiUnavailable("Native Pi session directory must be owner-only")
+        try:
+            PrivateDirectoryRole.require(directory.lstat())
+        except RelationViolationError as error:
+            raise NativePiUnavailable("Native Pi session directory must be owner-only") from error
 
     @classmethod
     def prepare_private_directory(cls, directory: Path) -> None:
         """Commit creation and re-sync the owner-private ancestor chain on reuse."""
-        from agent_comms.native_pi import NativePiUnavailable
-
         missing: list[Path] = []
         current = directory
         while True:
@@ -181,8 +180,11 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
             parent = directory.parent
             while True:
                 fsync_directory(parent)
-                info = parent.lstat()
-                if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
+                if parent == parent.parent:
+                    break
+                try:
+                    PrivateDirectoryRole.require(parent.lstat())
+                except RelationViolationError:
                     break
                 parent = parent.parent
         except OSError as error:

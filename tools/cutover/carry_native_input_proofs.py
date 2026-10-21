@@ -5,7 +5,7 @@ paths are deliberately not followed: a practice copy must not mutate its source.
 """
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,30 +51,24 @@ class ProofRelocation(NativeSessionFiles):
         if self.source not in present:
             raise FileNotFoundError(self.source)
         self.prepare_private_directory(self.input_proof.parent)
+        moves = tuple(zip(SQLiteFile.files(self.source), SQLiteFile.files(self.input_proof), strict=True))
         moved: list[Path] = []
         try:
-            for source, destination in reversed(tuple(zip(
-                SQLiteFile.files(self.source), SQLiteFile.files(self.input_proof), strict=True,
-            ))):
+            for source, destination in reversed(moves):
                 if source in present:
                     source.rename(destination)
                     moved.append(source)
                     fsync_directory(destination.parent)
                     fsync_directory(source.parent)
-        except BaseException as error:
-            failures = [error]
-            for source, destination in zip(
-                SQLiteFile.files(self.source), SQLiteFile.files(self.input_proof), strict=True,
-            ):
-                if source in moved:
-                    try:
-                        destination.rename(source)
-                        fsync_directory(source.parent)
-                        fsync_directory(destination.parent)
-                    except OSError as rollback:
-                        failures.append(rollback)
-            if len(failures) > 1:
-                raise BaseExceptionGroup("Native proof move and rollback failed", failures)
+        except BaseException:
+            # ExitStack attempts every restore even if one fails, and preserves
+            # the original move and cleanup failures in the exception chain.
+            with ExitStack() as rollback:
+                for source, destination in reversed(moves):
+                    if source in moved:
+                        rollback.callback(fsync_directory, destination.parent)
+                        rollback.callback(fsync_directory, source.parent)
+                        rollback.callback(destination.rename, source)
             raise
         return (*moved, *(path for path in SQLiteFile.files(self.input_proof) if path.exists()))
 

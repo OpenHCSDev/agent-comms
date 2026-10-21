@@ -14,7 +14,9 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.participant_identity import ParticipantIdentity
 from .native_session_reopen import NativeSessionIdentity
-from agent_comms.native_pi import NativePiUnavailable, _session_location
+from agent_comms.native_pi import _session_location
+from agent_comms.native_failures import NativePiUnavailable
+from .field_codec import boundary_decoder
 from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
@@ -79,6 +81,7 @@ class SelectedSession:
         return ()
 
     @classmethod
+    @boundary_decoder
     def for_launch(
         cls, directory: Path, path: Path | None, *, root: Path,
         worktree: Path, owner: ParticipantIdentity,

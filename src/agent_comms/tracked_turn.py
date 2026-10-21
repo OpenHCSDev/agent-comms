@@ -27,11 +27,11 @@ from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_package import VerifiedNativePackage
+from .native_failures import NativePiUnavailable
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
     NativePiPromptRejected,
-    NativePiUnavailable,
     NativeTurnResult,
     _verify_context,
 )

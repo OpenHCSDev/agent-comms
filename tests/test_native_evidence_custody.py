@@ -12,7 +12,8 @@ import pytest
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_input_record import NativeInputLocation
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.coordinator import Coordination
 from agent_comms.store_files import StoreLockContention, _store_lock
 from test_native_pi import INPUT_ID, _evidence

@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, boundary_decoder
+from .native_failures import NativeRequestFailure, NativePiUnavailable
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
@@ -45,32 +46,6 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
-
-
-class NativeRequestFailure(RuntimeError):  # noqa: N818 - nominal request outcome
-    """A failed input is reported and settled without authorizing a retry."""
-
-    @property
-    def public_failure(self) -> str:
-        return str(self)
-
-    @property
-    def rejected_response(self) -> pi.Response | None:
-        return None
-
-
-class NativePiUnavailable(NativeRequestFailure):  # noqa: N818 - nominal fail-closed outcome
-    """Tracked execution failed closed without committing a coordinator fact."""
-
-    native_stderr = ""
-
-    @property
-    def diagnostic_evidence(self):
-        return {"stderr": self.native_stderr}
-
-    @property
-    def public_failure(self):
-        return f"{self}; the input is uncertain."
 
 
 class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model outcome
@@ -134,9 +109,8 @@ class NativePiPromptRejected(NativePiUnavailable):
         self.response = response
         super().__init__("Native Pi rejected the tracked prompt (see diagnostic)")
 
-    @property
-    def rejected_response(self) -> pi.Response:
-        return self.response
+    def publish(self, publisher):
+        return publisher(self.public_failure, native_response=self.response, source_error=self)
 
 
 class NativePiOperationFailed(NativePiUnavailable):
@@ -343,7 +317,7 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
 
     def corroborates_input(
         self, input_id: str, *, files: NativeSessionFiles,
-        evidence: NativeEvidenceRead | None = None
+        evidence: NativeEvidenceRead,
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
@@ -359,6 +333,7 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
         ) == self
 
     @classmethod
+    @boundary_decoder
     def read_evidence(
         cls, files: NativeSessionFiles, input_id: str, *, request_generation: int | None = None,
         evidence: NativeEvidenceRead | None = None,

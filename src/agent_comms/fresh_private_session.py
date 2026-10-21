@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, SavedSessionFile
 from .native_session_reopen import NativeSessionIdentity

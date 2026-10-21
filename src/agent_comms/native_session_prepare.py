@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.participant_identity import ParticipantIdentity
 
-import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from pathlib import Path
@@ -13,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
 from .coordinator import Coordination
@@ -96,7 +95,6 @@ class NativeSessionPreparation(backend.NativeSession):
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
-        task = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
@@ -106,15 +104,11 @@ class NativeSessionPreparation(backend.NativeSession):
         preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))
         async with session_writer_fence(launch.session.session_file):
-            try:
-                async with aclosing(preparation.run()) as stream:
-                    async for event in stream:
-                        if isinstance(event, events.Done) and not event.ok:
-                            raise NativePiUnavailable(event.text)
-                state = preparation.native.attestation.state
-                assert state is not None
-                await observe(state, state.agent_info(preparation))
-                return state
-            finally:
-                if task is not None:
-                    await backend.terminate_task_process(task)
+            async with aclosing(preparation.run()) as stream:
+                async for event in stream:
+                    if isinstance(event, events.Done) and not event.ok:
+                        raise NativePiUnavailable(event.text)
+            state = preparation.native.attestation.state
+            assert state is not None
+            await observe(state, state.agent_info(preparation))
+            return state

@@ -17,7 +17,7 @@ from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
 from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction

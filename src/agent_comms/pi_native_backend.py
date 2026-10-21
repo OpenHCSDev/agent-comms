@@ -11,6 +11,8 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from .native_failures import NativePiUnavailable
+
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -297,7 +299,6 @@ class PiNativeBackend(
 
     async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .native_pi import NativePiUnavailable
         from .pi_commands import Compact
 
         try:
@@ -341,7 +342,6 @@ class PiNativeBackend(
         ))
 
     async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
 
         commands = []

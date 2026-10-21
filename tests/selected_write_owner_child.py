@@ -1,72 +1,56 @@
-"""Disposable provider-free worker for public ACP selected-write integration test."""
-
+"""Real ACP owner/native fixture; explicit auto-wake policy holds operator dispatch."""
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 
-from agent_comms.tracked_turn import TrackedTurnSession
-import agent_comms.native_pi as native_pi
-import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-import agent_comms.worker as worker
-from agent_comms.input_drain import InputDrain
-from agent_comms.session_lifecycle import SessionLifecycle
-from delivery_owner_fixture import reply_turn_finished
-from test_coordinated_runtime import _fake_model
+from agent_comms.active_route import ActiveRoute
+from agent_comms.comms import wire
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordinator import Coordination
+from agent_comms.launch_root import LaunchRoot
+from delivery_owner_fixture import canonical_agent, reply_turn_finished
+from native_backend_fixture import NativeBackendFixture
+
+
+async def wait_for(path: Path):
+    async with asyncio.timeout(30):
+        while not path.exists():
+            await asyncio.sleep(0.01)
 
 
 async def main(base: Path) -> None:
-    from agent_comms import native_package
-
-    native_package.MANIFEST = Path(os.environ["AC_TEST_NATIVE_MANIFEST"]).resolve(strict=True)
-    ready = base / "registered"
-    for _ in range(600):
-        if ready.exists():
-            break
-        await asyncio.sleep(0.01)
-    else:
-        raise RuntimeError("parent did not register child")
-    fake, calls = _fake_model(decision="FULL")
-    TrackedTurnSession.execute = fake
-    original_start = SessionLifecycle.start_owner
-    InputDrain.ensure_live_drain = lambda self, _: None  # fixture-only dispatch hold
-
-    async def started(self, *args, **kwargs):
-        await original_start(self, *args, **kwargs)
-        agent = self.effects
-        print(json.dumps({"event": "ready", "pid": os.getpid()}), flush=True)
-
-        async def once() -> None:
-            go = base / "dispatch"
-            for _ in range(1200):
-                if go.exists():
-                    break
-                await asyncio.sleep(0.01)
-            else:
-                raise RuntimeError("parent did not release fixture dispatch")
+    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    comms = wire()
+    await wait_for(base / "registered")
+    stopped = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stopped.set)
+    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
+        agent = canonical_agent(
+            comms, auto_wake=False, runtime_enabled=True,
+            agent_bin="pi", agent_args=NativeBackendFixture.native_arguments(),
+        )
+        try:
+            await agent.sessions.start_owner(str(base / "project"), "beta")
+            print(json.dumps({"event": "ready", "pid": os.getpid()}), flush=True)
+            await wait_for(base / "dispatch")
+            agent.inputs.auto_wake = True
             count = await agent._drain_private_nk(
-                "beta", agent._comms.owners.require_private_launch().wire_root_id
+                "beta", comms.owners.require_private_launch().wire_root_id,
             )
             await reply_turn_finished(agent, "beta")
-            print(
-                json.dumps(
-                    {
-                        "event": "terminal",
-                        "pid": os.getpid(),
-                        "drained": count,
-                        "fake_inputs": len(calls),
-                    }
-                ),
-                flush=True,
-            )
-
-        asyncio.create_task(once())
-
-    SessionLifecycle.start_owner = started
-    await worker.run()
+            print(json.dumps({"event": "terminal", "pid": os.getpid(), "drained": count}), flush=True)
+            await stopped.wait()
+        finally:
+            await agent.shutdown()
+            assert not agent.turns.persistent_backends
+            print(json.dumps({"event": "retired", "pid": os.getpid()}), flush=True)
 
 
 if __name__ == "__main__":

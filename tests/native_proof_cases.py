@@ -10,18 +10,10 @@ from pathlib import Path
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativeContextRecord
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.pi_events import ContextCommitted
 
 
 def _context_fields(row: dict[str, object]) -> dict[str, object]:
     return {key: row[key] for _, key in FieldCodec.record_fields(NativeContextRecord)}
-
-
-def emitted_context(row: dict[str, object]) -> ContextCommitted:
-    """The fake emits the same complete native fields it wrote to the journal."""
-    return ContextCommitted.from_wire({
-        ContextCommitted.wire_tag: ContextCommitted.wire_kind(), **_context_fields(row),
-    })
 
 
 def append_input_entry(session: Path, entry: dict[str, object]) -> int:

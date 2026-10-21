@@ -24,7 +24,7 @@ from .native_package import (
     VerifiedNativePackage,
     pinned_native_package,
 )
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .wire_log import WireLog
 
