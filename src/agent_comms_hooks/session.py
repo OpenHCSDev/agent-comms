@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import os
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.child_process import ParentedProcess, ProcessIdentity
-from agent_comms.cli_bridges.monitor import EndSession, VerifySession
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.monitor import EndSession
 from agent_comms.cli_bridges.shared import Serve
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
-from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim
+from agent_comms_hooks.watch import LiveWatch, WatchClaim
 
 
 @dataclass(frozen=True)
@@ -32,42 +30,7 @@ class SessionHook(ClaudeTranscriptHook):
         return owner
 
     def start(self) -> None:
-        claim = WatchClaim(self.session_id)
-        if not isinstance(claim.state(), RecordedWatch):
-            return
-        owner = self.owner()
-        request = VerifySession.model_validate(dict(owner=owner))
-        with claim.launching():
-            state = claim.state()
-            if not isinstance(state, RecordedWatch):
-                return
-            try:
-                request.exchange(claim)
-                return
-            except (FileNotFoundError, ConnectionRefusedError) as error:
-                if isinstance(state, LiveWatch):
-                    raise RuntimeError(
-                        "An older watch still owns this session. "
-                        "Stop that Monitor once, then connect."
-                    ) from error
-            runtime = LaunchRuntime.installed()
-            command = Serve(owner=owner, transcript=Path(self.transcript_path)).command(
-                state.record, runtime)
-            log = claim.path.with_suffix(".log")
-            with log.open("ab") as output:
-                child = ParentedProcess.launch(
-                    command, env=runtime.environment(os.environ), output=output, runtime=runtime)
-            deadline = time.monotonic() + 30
-            while child.alive() and time.monotonic() < deadline:
-                try:
-                    request.exchange(claim)
-                    return
-                except FileNotFoundError, ConnectionRefusedError:
-                    time.sleep(0.05)
-            raise RuntimeError(
-                f"Session bridge startup not observed (PID {child.pid}); inspect {log}. "
-                "No launch retry."
-            )
+        Serve.launch(WatchClaim(self.session_id), self.owner, Path(self.transcript_path))
 
     def end(self) -> None:
         claim = WatchClaim(self.session_id)

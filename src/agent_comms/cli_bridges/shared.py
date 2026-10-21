@@ -28,7 +28,7 @@ from pydantic import Field, TypeAdapter, model_validator
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import ChangeReport
-from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
+from agent_comms.child_process import AttachedChild, ProcessIdentity, SpawnedProcess, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
     EmittedOutcome,
@@ -51,7 +51,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
-from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -65,6 +65,7 @@ from .monitor import (
     PauseSession,
     ReaderState,
     SessionInformation,
+    VerifySession,
     read_monitor,
 )
 
@@ -496,6 +497,46 @@ class Serve(Watch):
             '--transcript', str(self.transcript),
         )
 
+    @classmethod
+    def launch(cls, claim: WatchClaim, owner: Callable[[], ProcessIdentity],
+               transcript: Path) -> None:
+        """The session hook supplies its identity; Serve owns launch and readiness."""
+        if not isinstance(claim.state(), RecordedWatch):
+            return
+        operation = cls(owner=owner(), transcript=transcript)
+        operation.owner.require_alive()
+        request = VerifySession(owner=operation.owner)
+        with claim.launching():
+            state = claim.state()
+            if not isinstance(state, RecordedWatch):
+                return
+            try:
+                request.exchange(claim)
+                return
+            except (FileNotFoundError, ConnectionRefusedError) as error:
+                if isinstance(state, LiveWatch):
+                    raise RuntimeError(
+                        'An older watch still owns this session. '
+                        'Stop that Monitor once, then connect.'
+                    ) from error
+            runtime = LaunchRuntime.installed()
+            command = operation.command(state.record, runtime)
+            log = claim.path.with_suffix('.log')
+            with log.open('ab') as output:
+                child = SpawnedProcess.launch(
+                    command, env=runtime.environment(os.environ), output=output, runtime=runtime)
+            deadline = time.monotonic() + 30
+            while child.alive() and time.monotonic() < deadline:
+                try:
+                    request.exchange(claim)
+                    return
+                except (FileNotFoundError, ConnectionRefusedError):
+                    time.sleep(.05)
+            raise RuntimeError(
+                f'Session bridge startup not observed (PID {child.pid}); inspect {log}. '
+                'No launch retry.'
+            )
+
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
         claims = set()
@@ -518,7 +559,7 @@ class Serve(Watch):
     async def execute(self, bridge: LineMonitorBridge) -> None:
         if self.transcript.stem != bridge.binding.thread:
             raise ValueError('The live transcript belongs to another Claude session')
-        self.owner.require_ancestor_of(os.getpid())
+        self.owner.require_alive()
         await bridge.registered_watch(self)
 
     def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup) -> None:
@@ -539,7 +580,7 @@ class SessionBridge:
                 self.observed.process.signal(signal.SIGTERM)
             print(f'Session bridge {self.claim.thread}: owner exited; left stopped', file=sys.stderr)
             return ()
-        self.observed.owner.require_ancestor_of(self.observed.process.pid)
+        self.observed.owner.require_alive()
         peer = resources.enter_context(PauseSession(
             owner=self.observed.owner, process=self.observed.process).connection(self.claim))
         stream = resources.enter_context(peer.makefile('rb'))

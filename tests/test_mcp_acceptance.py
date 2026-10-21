@@ -33,7 +33,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from agent_comms.child_process import ParentedProcess
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy
@@ -55,7 +55,7 @@ def _node_run(node, env, script, cwd, artifact):
     stdout = stderr = b""
     error = None
     try:
-        with ParentedProcess.launch(tuple(command), cwd=cwd, env=env, output=subprocess.PIPE) as child:
+        with SpawnedProcess.launch(tuple(command), cwd=cwd, env=env, output=subprocess.PIPE) as child:
             try:
                 stdout, stderr = child.process.communicate(timeout=15)
                 outcome = child.reap()

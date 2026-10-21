@@ -17,7 +17,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.owner_lifecycle import NoRelease
-from agent_comms.child_process import ObservedProcess, ParentedProcess
+from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import Comms
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
@@ -96,7 +96,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
 
 
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
-    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
         comms = Comms(tmp_path)
         comms.registry.declare(

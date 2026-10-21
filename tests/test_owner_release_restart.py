@@ -15,7 +15,7 @@ import pytest
 from agent_comms.child_process import (
     ExitedOutcome,
     ObservedProcess,
-    ParentedProcess,
+    SpawnedProcess,
     SignaledOutcome,
 )
 
@@ -178,7 +178,7 @@ while True: time.sleep(0.01)
         "AGENT_COMMS_AGENT_BIN": sys.executable,
         "AGENT_COMMS_AGENT_ARGS": shlex.join((str(script),)),
     }
-    child = ParentedProcess.launch((sys.executable, str(script)), env=env)
+    child = SpawnedProcess.launch((sys.executable, str(script)), env=env)
     comms = Comms(root)
     try:
         wait_for(root / "ready")

@@ -255,6 +255,10 @@ class ProcessIdentity(RecordMember, ProcessState):
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def require_alive(self) -> ProcessIdentity:
+        """Validate this recorded PID and start time against the live process."""
+        return Platform.current().require(self)
+
     def runs_here(self) -> bool:
         return os.getpid() == self.pid
 
@@ -924,15 +928,15 @@ class ChildLaunch(ABC):
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-    ) -> ParentedProcess:
-        """Record the parent's process handle before the platform allows exec."""
+    ) -> SpawnedProcess:
+        """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
                 self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
                 stderr=stderr, **self.options,
             )
             identity = Platform.current().identity(process.pid)
-            child = ParentedProcess(process, identity, reservation.store)
+            child = SpawnedProcess(process, identity, reservation.store)
             try:
                 self.record(identity, reservation)
             except BaseException:
@@ -1737,8 +1741,8 @@ class RecordedRuntimeGroup(ObservedProcess):
         self.platform.group_members(self.identity)
 
 
-class ParentedProcess(SynchronousProcess):
-    """Owns the OS child handle, its reap result, and any captured pipe streams."""
+class SpawnedProcess(SynchronousProcess):
+    """A launched process handle; surviving the launcher does not preserve its parent."""
 
     def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
                  registration: ChildRegistration = NO_CHILD_REGISTRATION):
@@ -1755,7 +1759,7 @@ class ParentedProcess(SynchronousProcess):
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
-    ) -> ParentedProcess:
+    ) -> SpawnedProcess:
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime) as launch:
@@ -1795,7 +1799,7 @@ class ParentedProcess(SynchronousProcess):
         finally:
             self.close_streams()
 
-    def __enter__(self) -> ParentedProcess:
+    def __enter__(self) -> SpawnedProcess:
         return self
 
     def __exit__(self, *_):

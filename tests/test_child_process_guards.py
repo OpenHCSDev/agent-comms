@@ -39,10 +39,10 @@ def test_process_cleanup_has_no_bare_pid_or_optional_parent_api() -> None:
     import inspect
     from typing import get_type_hints
 
-    for owner in (child_process.ParentedProcess, child_process.ObservedProcess):
+    for owner in (child_process.SpawnedProcess, child_process.ObservedProcess):
         assert get_type_hints(owner.__init__)["identity"] is child_process.ProcessIdentity
         assert "pid" not in inspect.signature(owner).parameters
-    assert get_type_hints(child_process.ParentedProcess.__init__)["process"] == (
+    assert get_type_hints(child_process.SpawnedProcess.__init__)["process"] == (
         child_process.subprocess.Popen[bytes]
     )
     assert "process" not in inspect.signature(child_process.ObservedProcess).parameters

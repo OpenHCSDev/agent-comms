@@ -62,7 +62,7 @@ class BridgeReplacement(BridgeExit):
             print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
                   file=sys.stderr)
             return
-        operation.owner.require_ancestor_of(os.getpid())
+        operation.owner.require_alive()
         runtime.require_available()
         command = operation.command(record, runtime)
         os.execve(command[0], command, runtime.environment(os.environ))
@@ -269,9 +269,9 @@ class VerifySession(SessionRequest):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        if self.owner != service.owner:
+        if self.owner != service.owner or not service.owner.alive():
             return SessionRefused.model_validate(
-                dict(error="This bridge belongs to a different Claude process incarnation")
+                dict(error="This bridge belongs to a different or exited Claude process incarnation")
             )
         return SessionReady()
 
