@@ -35,6 +35,7 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import WorkBranchError
+from order_scope_fixture import FIX_SCOPE
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -43,6 +44,29 @@ def git(directory: Path, *arguments: str) -> str:
          '-c', 'user.email=checkout@example.invalid', *arguments),
         check=True, capture_output=True, text=True, timeout=15,
     ).stdout
+
+
+def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus, tmp_path):
+    rule = checkout_bus.registry.storage_rule
+    worker = checkout_bus.registry.require('worker')
+    checkout = rule.order_checkout('worker', 'P1')
+    other = tmp_path / 'toad'
+    other.mkdir()
+    git(other, 'init', '-q', '--initial-branch=main')
+    git(other, 'commit', '-q', '--allow-empty', '-m', 'Second repository')
+    git(other, 'remote', 'add', 'origin', 'https://github.com/OpenHCSDev/toad.git')
+    lockstep = rule.repository_checkout('worker', 'P1', RepositoryName('OpenHCSDev', 'toad'))
+    git(other, 'worktree', 'add', '-q', '-b', 'worker-toad', str(lockstep))
+    misnamed = checkout.with_name('worker--P1--textual')
+    git(other, 'worktree', 'add', '-q', '-b', 'worker-misnamed', str(misnamed))
+
+    assert checkout.name == 'worker--P1'
+    assert lockstep.name == 'worker--P1--toad'
+    assert rule.owns_checkout(worker, checkout) and rule.owns_checkout(worker, lockstep)
+    assert not rule.owns_checkout(worker, misnamed)
+    assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)
+    assert lockstep in rule.checkouts_of(worker)
+    assert misnamed not in rule.checkouts_of(worker)
 
 
 @pytest.fixture
@@ -76,7 +100,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), run=MechanicalOrderRun(),
+        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(home), 'true'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
