@@ -16,6 +16,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from agent_comms.native_package import PACKAGE_LAYOUT, VerifiedNativePackage, pinned_native_package
+
 
 def network_denial() -> Callable[[], None]:
     """Filter only fixture subprocesses. Any attempted network syscall kills them."""
@@ -47,12 +49,11 @@ def ancestor_probe(
     package: Path, root: Path, env: dict[str, str], deny: Callable[[], None]
 ) -> dict:
     """Admit real PR77, then reach a committed ws entry's optional ancestor require."""
-    assert package.is_relative_to("/var/tmp") or package.is_relative_to(
-        "/dev/shm"
-    ), "Disposable package required"
+    assert package.is_relative_to(root), "Owned fixture package required"
     ancestor = package.parent.parent / "bufferutil"
     ancestor.mkdir(mode=0o700)  # Exclusive: never replace an existing dependency.
     marker = root / "ancestor-executed"
+    dependency = package / "node_modules/ws/lib/buffer-util.js"
     code = (
         f"require('node:fs').writeFileSync({json.dumps(str(marker))}, 'executed'); "
         "module.exports={mask(){},unmask(){}};"
@@ -68,7 +69,7 @@ def ancestor_probe(
                 node,
                 "--no-global-search-paths",
                 "-e",
-                f"require({json.dumps(str(package / 'node_modules/ws/lib/buffer-util.js'))})",
+                f"require({json.dumps(str(dependency))})",
             ],
             env=env,
             preexec_fn=deny,
@@ -78,10 +79,14 @@ def ancestor_probe(
         assert control.returncode == 0 and marker.exists(), (control.returncode, control.stderr)
         marker.unlink()  # Only the known disposable control marker, never session evidence.
         script = """import {registerHooks} from 'node:module';
+import {pathToFileURL} from 'node:url';
+const requiringModule=pathToFileURL(process.argv[4]).href;
 const seen=[];
 registerHooks({resolve(specifier,context,next){
   try {return next(specifier,context);} catch(error) {
-    if(specifier==='bufferutil') seen.push({code:error.code,parent:context.parentURL});
+    // Node 22 supplies a resolved URL for CJS; newer Node supplies the bare name.
+    // Observe the actual requiring module, not either resolver representation.
+    if(context.parentURL===requiringModule) seen.push({code:error.code,parent:context.parentURL});
     throw error;
   }
 }});
@@ -104,6 +109,7 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
                 fence.as_uri(),
                 str(entry),
                 (package / "node_modules/ws/wrapper.mjs").as_uri(),
+                str(dependency),
             ],
             env=env,
             preexec_fn=deny,
@@ -116,7 +122,7 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
         assert result["factory"] == "function" and result["seen"], result
         assert all(
             item["code"] == "ERR_NATIVE_IMPORT_BOUNDARY"
-            and item["parent"].endswith("/ws/lib/buffer-util.js")
+            and Path.from_uri(item["parent"]) == dependency
             for item in result["seen"]
         ), result
         assert not marker.exists(), "Ancestor dependency executed under fence"
@@ -126,10 +132,11 @@ console.log(JSON.stringify({factory:typeof factory,dependencyEntry:process.argv[
         shutil.rmtree(ancestor)
 
 
-def main(launcher: Path, package: Path) -> None:
+def main(launch: VerifiedNativePackage, root: Path) -> None:
     # Nothing inherited except executable lookup. No provider keys/live identity,
     # NODE_OPTIONS, user Pi configuration, project trust or saved MCP approval.
-    root = Path(tempfile.mkdtemp(prefix="pr95-canonical-rpc-", dir="/var/tmp"))
+    package = launch.path
+    command = launch.node("agent-comms-project-bootstrap.mjs")
     agent, project = root / "agent", root / "project"
     agent.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
@@ -141,7 +148,7 @@ def main(launcher: Path, package: Path) -> None:
         "PI_SKIP_VERSION_CHECK": "1",
         "CI": "true",
         "NO_COLOR": "1",
-        "TMPDIR": "/var/tmp",
+        "TMPDIR": str(root),
     }
     deny = network_denial()
     node = shutil.which("node")
@@ -150,7 +157,7 @@ def main(launcher: Path, package: Path) -> None:
     # outside this fixture's no-network-probe scope. Retain the child filter.
     extension = package / "agent-comms-extensions/pi-mcp-client"
     install = subprocess.run(
-        [str(launcher), "install", str(extension)],
+        [*command, "install", str(extension)],
         cwd=project,
         env=env,
         preexec_fn=deny,
@@ -177,7 +184,7 @@ def main(launcher: Path, package: Path) -> None:
         (agent / "settings.json").write_text(json.dumps(guarded_settings))
         for operation in ("install", "remove"):
             rejected = subprocess.run(
-                [str(launcher), operation, "npm:unapproved-fixture"],
+                [*command, operation, "npm:unapproved-fixture"],
                 cwd=project,
                 env=online_env,
                 preexec_fn=deny,
@@ -190,7 +197,7 @@ def main(launcher: Path, package: Path) -> None:
         guarded_settings["packages"] = [*settings["packages"], "npm:unapproved-fixture"]
         (agent / "settings.json").write_text(json.dumps(guarded_settings))
         rejected = subprocess.run(
-            [str(launcher), "--mode", "rpc", "--no-session"],
+            [*command, "--mode", "rpc", "--no-session"],
             cwd=project,
             env=online_env,
             preexec_fn=deny,
@@ -232,7 +239,7 @@ def main(launcher: Path, package: Path) -> None:
     )
     child = subprocess.Popen(
         [
-            str(launcher),
+            *command,
             "--offline",
             "--mode",
             "rpc",
@@ -328,4 +335,11 @@ def main(launcher: Path, package: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]).resolve(strict=True), Path(sys.argv[2]).resolve(strict=True))
+    with tempfile.TemporaryDirectory(prefix="native-import-rpc-") as directory:
+        root = Path(directory)
+        native_root = root / "native"
+        native_root.mkdir(mode=0o700)
+        package = native_root / PACKAGE_LAYOUT
+        package.parent.mkdir(parents=True, mode=0o700)
+        shutil.copytree(pinned_native_package(), package)
+        main(VerifiedNativePackage.acquire(package), root)

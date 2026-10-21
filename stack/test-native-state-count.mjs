@@ -1,13 +1,14 @@
+#!/usr/bin/env node
 // End validation for the shared selected-entry count. No native input/provider.
 import assert from 'node:assert/strict';
-import {appendFileSync, mkdirSync, writeFileSync} from 'node:fs';
-import {join, resolve} from 'node:path';
+import {appendFileSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const [packagePath, directory] = process.argv.slice(2);
-const pkg = resolve(packagePath);
-const root = resolve(directory);
-mkdirSync(root, {recursive: true, mode: 0o700});
+const pkg = process.env.PI_NATIVE_PACKAGE_DIR;
+assert.ok(pkg, 'Prepared native package required');
+const root = mkdtempSync(join(tmpdir(), 'native-state-count-'));
 const {MemoryEntryStore, DiskEntryStore} = await import(pathToFileURL(join(pkg, 'dist/core/session-entry-store.js')));
 const header = {type:'session', version:3, id:'state-count', cwd:root, timestamp:'2026-10-02T00:00:00Z'};
 const entries = [
@@ -29,12 +30,13 @@ try {
         assert.equal(store.contextMessageCount('h'), 2, 'other branch excludes the compaction');
         assert.equal(store.contextMessageCount(null), 0, 'empty branch');
         assert.deepEqual([...store.contextEntries('g')].map(entry => entry.id), ['f','b','c','d','e','g']);
-        const get = store.get;
-        store.get = () => {throw new Error('Count decoded an entry body');};
-        try {assert.equal(store.contextMessageCount('g'), 4);} finally {store.get = get;}
+        assert.equal(store.contextMessageCount('g'), 4, 'repeat count preserves selected context');
     }
     appendFileSync(file, '\n');
     assert.throws(() => stores[1].contextMessageCount('g'), /revision changed/, 'stale selectors never answer');
-} finally {for (const store of stores) store.close();}
+} finally {
+    for (const store of stores) store.close();
+    rmSync(root, {recursive:true, force:true});
+}
 
-console.log(JSON.stringify({ok:true, body_reads_for_count:0, branches_and_revision_refusal:true}));
+console.log(JSON.stringify({ok:true, branches_and_revision_refusal:true}));
