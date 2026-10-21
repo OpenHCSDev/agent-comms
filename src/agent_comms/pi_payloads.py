@@ -197,10 +197,10 @@ class PiPayload(ExternalField):
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
         for f, key in FieldCodec.record_fields(cls):
+            if key in data:
+                continue
             # Native null means omitted where the declaration names its not-reported member.
-            if key in value and key not in data and not (
-                value[key] is None and isinstance(f.default, PiPayload)
-            ):
+            if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = FieldCodec.normalize_external(hints[f.name], value[key], value)
         return data
 

@@ -136,7 +136,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return cast(type[Self], member)
 
     @classmethod
-    def member_or_default(cls, name: str | None, capability: type) -> type[Self]:
+    def member_or_default(cls, name: object, capability: type) -> type[Self]:
         """An absent or unknown external name selects one declared default member."""
         try:
             return cls.member_named(name)

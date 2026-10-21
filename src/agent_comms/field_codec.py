@@ -35,7 +35,7 @@ from typing import (
 )
 from uuid import uuid4
 
-from typing_extensions import TypeAliasType
+from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
@@ -756,7 +756,7 @@ class ExternalNull(ExternalField, MroDispatch):
         return super().normalize_external(value, record)
 
     @classmethod
-    def from_wire(cls, value: object):
+    def from_wire(cls, value: object) -> Self:
         return FieldCodec.decode(cls, cls.normalize_external(value, {}))
 
 
@@ -766,6 +766,7 @@ class DefaultExternalName:
 
 class ExternalName(ExternalField, DeclaredFamily):
     @classmethod
+    @boundary_decoder
     def from_external(cls, value: object) -> type[Self]:
         return cls.member_or_default(
             FieldCodec.decode(str | None, value), DefaultExternalName,
@@ -929,7 +930,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
 
     @classmethod
     def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        # The null representation, not an inherited record normalizer, admits this input.
+        # The null representation validates input; a record normalizer must not reshape it.
         return value
 
     @classmethod
@@ -1343,7 +1344,7 @@ class FieldCodec(MroDispatch, Sealed):
         return compile_decoder(declared).encode_document(value)
 
     @classmethod
-    def decode_document(cls, declared: type[T], data: object) -> T:
+    def decode_document(cls, declared: TypeForm[T], data: object) -> T:
         return cast(T, compile_decoder(declared).decode_document(data))
 
     @classmethod
@@ -1362,7 +1363,7 @@ class FieldCodec(MroDispatch, Sealed):
         return _member_decoder(type(value)).encode(value)
 
     @classmethod
-    def decode_bound(cls, target: type[T], data: object, **context: object) -> T:
+    def decode_bound(cls, target: TypeForm[T], data: object, **context: object) -> T:
         return cast(T, compile_decoder(target).decode_bound(data, context))
 
     @classmethod
@@ -1410,7 +1411,7 @@ class FieldCodec(MroDispatch, Sealed):
         return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
 
     @classmethod
-    def decode(cls, target: type[T], data: object) -> T:
+    def decode(cls, target: TypeForm[T], data: object) -> T:
         return cast(T, compile_decoder(target).decode_bound(data, {}))
 
     @classmethod
@@ -1963,7 +1964,9 @@ class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
         return compile_decoder(type(value)).encode(value)
 
 
-def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
+def _declared_member[Family: DeclaredFamily](
+    family: type[Family], name: str,
+) -> type[Family]:
     """A wire name the family does not declare is malformed data."""
     try:
         return family.member_named(name)
@@ -2298,7 +2301,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
-        return _member_decoder(member).decode_bound(payload, context)
+        return cast(Member, _member_decoder(member).decode_bound(payload, context))
 
 
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
@@ -2433,7 +2436,7 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
             other is not annotation and issubclass(other, annotation) for other in members
         )
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
-        return plan(annotation)
+        return cast(ValueDecoder[object], plan(annotation))
     return _member_decoder(annotation)
 
 
