@@ -3,16 +3,25 @@
 The plan's table (plans/remaining-slop-plan.md, Order 1) names each layer's module
 prefixes; a module no prefix claims takes the highest layer among the modules it
 imports, so it adds no violation of its own. Every import that still runs downward
-in the order, or into a top layer from outside it, is a violation. Modules that no
-console script reaches through static imports are listed as deletion candidates.
+in the order, or into a top layer from outside it, is a violation.
+
+The stack (stack/pyproject.toml) declares the client packages installed with Core from
+git sources: Toad and Textual import agent_comms modules. Each client is read at its
+branch head, so its imports root the reachability like a console script does. Modules
+neither reaches are listed as deletion candidates, and a client import naming a module
+Core no longer has fails --check, the step the merge queue runs.
 
     python tools/module_layers.py > docs/layout/MODULE_LAYERS.md
+    python tools/module_layers.py --check
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
+import subprocess
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from functools import cached_property
@@ -91,13 +100,98 @@ class ImportNames(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+@dataclass(frozen=True)
+class ClientImport:
+    """One import statement in a stack client naming an agent_comms module."""
+
+    client: str
+    path: str
+    line: int
+    module: str
+    names: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return f"{self.client}:{self.path}:{self.line} imports {self.module}"
+
+
+class ClientImportNames(ast.NodeVisitor):
+    """Records each absolute agent_comms module one client file imports."""
+
+    def __init__(self, client: str, path: str, found: list[ClientImport]) -> None:
+        self.client, self.path, self.found = client, path, found
+
+    def record(self, node: ast.stmt | ast.expr, module: str, names: tuple[str, ...] = ()) -> None:
+        if module.split(".")[0] == PACKAGE:
+            self.found.append(ClientImport(self.client, self.path, node.lineno, module, names))
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self.record(node, alias.name)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        match node:
+            case ast.ImportFrom(module=str(module), level=0):
+                self.record(node, module, tuple(alias.name for alias in node.names))
+
+    def visit_Call(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(
+                func=ast.Attribute(attr="import_module"), args=[ast.Constant(str() as name), *_]
+            ):
+                self.record(node, name)
+        self.generic_visit(node)
+
+
+@dataclass(frozen=True)
+class StackClient:
+    """A package the stack installs from a git source, read from a checkout of it."""
+
+    name: str
+    checkout: Path
+
+    @staticmethod
+    def sources(stack: Path) -> dict[str, tuple[str, str]]:
+        """Each git source stack/pyproject.toml declares: name to (url, branch)."""
+        match tomllib.loads((stack / "pyproject.toml").read_text()):
+            case {"tool": {"uv": {"sources": dict() as sources}}}:
+                found = {}
+                for name, source in sources.items():
+                    match source:
+                        case {"git": str(url), "branch": str(branch)}:
+                            found[name] = (url, branch)
+                return found
+        raise ValueError(f"{stack / 'pyproject.toml'} declares no [tool.uv.sources] table")
+
+    @classmethod
+    def fetched(cls, stack: Path, into: Path) -> tuple[StackClient, ...]:
+        """Shallow clones of every git source at its declared branch head."""
+        clients = []
+        for name, (url, branch) in StackClient.sources(stack).items():
+            checkout = into / name
+            subprocess.run(
+                ["git", "clone", "--quiet", "--depth", "1", "--branch", branch, url, str(checkout)],
+                check=True,
+            )
+            clients.append(cls(name, checkout))
+        return tuple(clients)
+
+    @cached_property
+    def imports(self) -> tuple[ClientImport, ...]:
+        found: list[ClientImport] = []
+        for path in sorted(self.checkout.rglob("*.py")):
+            relative = str(path.relative_to(self.checkout))
+            ClientImportNames(self.name, relative, found).visit(ast.parse(path.read_text(), relative))
+        return tuple(found)
+
+
 class Package:
     """The agent_comms source tree: its modules, their imports and their layers."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, clients: tuple[StackClient, ...] = ()) -> None:
         self.src = root / "src"
         self.pyproject = root / "pyproject.toml"
         self.root = self.src / PACKAGE / "__init__.py"  # read for reachability, never a unit
+        self.clients = clients
 
     @cached_property
     def files(self) -> dict[str, Path]:
@@ -180,13 +274,44 @@ class Package:
                 return tuple(sorted({target.partition(":")[0] for target in scripts.values()}))
         raise ValueError(f"{self.pyproject} declares no [project.scripts] table")
 
+    def provides(self, module: str) -> bool:
+        return module == PACKAGE or module in self.files
+
+    def client_targets(self, entry: ClientImport) -> tuple[str, ...]:
+        """The modules one client import loads: a named submodule, else the module itself."""
+        if not self.provides(entry.module):
+            return ()
+        named = tuple(f"{entry.module}.{name}" for name in entry.names)
+        return tuple(name for name in named if name in self.files) or (entry.module,)
+
+    @cached_property
+    def client_imports(self) -> tuple[ClientImport, ...]:
+        return tuple(entry for client in self.clients for entry in client.imports)
+
+    @cached_property
+    def missing(self) -> tuple[ClientImport, ...]:
+        """Client imports naming an agent_comms module this tree does not have."""
+        return tuple(entry for entry in self.client_imports if not self.provides(entry.module))
+
+    @cached_property
+    def client_surface(self) -> dict[str, set[str]]:
+        """Each unit a client imports directly, with the clients importing it."""
+        surface: dict[str, set[str]] = {}
+        for entry in self.client_imports:
+            for target in self.client_targets(entry):
+                if target != PACKAGE:
+                    surface.setdefault(self.unit(target), set()).add(entry.client)
+        return dict(sorted(surface.items()))
+
     @cached_property
     def unreached(self) -> tuple[str, ...]:
-        """Units no console script reaches through static imports, package __init__s included."""
+        """Units no console script or stack client reaches through static imports,
+        package __init__s included."""
         edges: dict[str, set[str]] = {}
         for edge in self.imports:
             edges.setdefault(edge.source, set()).add(edge.target)
-        seen, todo = set(), [PACKAGE, *self.entry_points]
+        clients = (target for entry in self.client_imports for target in self.client_targets(entry))
+        seen, todo = set(), [PACKAGE, *self.entry_points, *clients]
         while todo:
             module = todo.pop()
             if module in seen:
@@ -236,15 +361,52 @@ class Package:
             )
         lines += [
             "",
+            "## Stack client imports",
+            "",
+            "Units the git sources in `stack/pyproject.toml` import directly, read at each "
+            "branch head. Deleting one breaks that client; `--check` refuses it.",
+            "",
+            "| Unit | Imported by |",
+            "|---|---|",
+        ]
+        lines += [
+            f"| `{unit.removeprefix(PACKAGE + '.')}` | {', '.join(sorted(clients))} |"
+            for unit, clients in self.client_surface.items()
+        ]
+        lines += [
+            "",
             "## Deletion candidates",
             "",
-            "No console script in `pyproject.toml` reaches these through static imports or literal "
-            "`import_module` calls. Prove each unused with an import hook before deleting it.",
+            "No console script in `pyproject.toml` and no stack client reaches these through "
+            "static imports or literal `import_module` calls. Prove each unused with an import "
+            "hook before deleting it.",
             "",
         ]
         lines += [f"- `{unit.removeprefix(PACKAGE + '.')}`" for unit in self.unreached]
         return "\n".join(lines) + "\n"
 
 
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.partition("\n")[0])
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail when a stack client imports an agent_comms module this tree lacks",
+    )
+    arguments = parser.parse_args()
+    with tempfile.TemporaryDirectory() as clones:
+        package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones)))
+        if not arguments.check:
+            sys.stdout.write(package.markdown())
+            return 0
+        for entry in package.missing:
+            print(f"missing: {entry}", file=sys.stderr)
+        print(
+            f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
+            f"{len(package.missing)} name a module this tree lacks"
+        )
+        return 1 if package.missing else 0
+
+
 if __name__ == "__main__":
-    sys.stdout.write(Package(ROOT).markdown())
+    sys.exit(main())
