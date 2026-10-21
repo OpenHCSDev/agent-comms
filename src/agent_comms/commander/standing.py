@@ -18,7 +18,6 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.goal_presentation import BlockedExecution
-from agent_comms.goals import Goal
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest, PageBounds
 from agent_comms.message_reference import MessageReference

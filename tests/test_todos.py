@@ -57,7 +57,6 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoConflict,
-    TodoError,
     TodoState,
     TodoStore,
     WithdrawTodo,
