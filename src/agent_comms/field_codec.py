@@ -1733,6 +1733,10 @@ class ValueDecoder[T](ABC):
         """Select an in-process union case using its compiled declaration."""
         return isinstance(value, self.target)
 
+    def accepts_external_value(self, value: object) -> bool:
+        """A structural container match does not validate its contents."""
+        return False
+
     def encode_document(self, value: T) -> object:
         return self.encode(value)
 
@@ -1835,6 +1839,9 @@ class _ExactScalarDecoder(_ScalarDecoder):
         return type(data) is self.target
 
     def accepts_value(self, value: object) -> bool:
+        return self.accepts(value)
+
+    def accepts_external_value(self, value: object) -> bool:
         return self.accepts(value)
 
     def encode(self, value: object) -> object:
@@ -2046,7 +2053,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
         return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
 
     def normalize_external(self, data: object, record: Mapping[str, object]) -> object:
-        if self.accepts_value(data):
+        if any(alternative.accepts_external_value(data) for alternative in self.alternatives):
             return data
         return DecodedValue(self.decode_candidates(lambda alternative: alternative.decode_bound(
             alternative.normalize_external(data, record), record,

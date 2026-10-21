@@ -318,6 +318,17 @@ def test_malformed_response_commands_are_not_unknown_commands(command):
         Response.from_wire({"type": "response", "command": command})
 
 
+def test_union_container_shape_does_not_skip_member_validation_and_normalization():
+    @dataclass(frozen=True)
+    class ContainerOrMessage(PiPayload):
+        selected: dict[str, int] | PiMessage
+
+    message = ContainerOrMessage.from_wire({"selected": {"role": "user", "content": "hi"}})
+    assert isinstance(message.selected, PiMessage)
+    assert message.selected.text == "hi"
+    assert ContainerOrMessage.from_wire({"selected": {"items": 3}}).selected == {"items": 3}
+
+
 @pytest.mark.parametrize("wire", [
     {"type": "text_start", "contentIndex": 0},
     {"type": "text_delta", "delta": "native text"},
