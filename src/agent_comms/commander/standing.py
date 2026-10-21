@@ -221,8 +221,18 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         return tuple(found)
 
 
+class PlanRule(UndatedStandingRule, declared_name=None):
+    """A rule read from one look at the plans and the commander's orders."""
+
+    @staticmethod
+    def plan_reading(comms: Comms, commander: str) -> PlanReading:
+        return CommanderConfig.read_root(comms.root).plan_reading(
+            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        )
+
+
 @dataclass(frozen=True)
-class PlanIdle(UndatedStandingRule):
+class PlanIdle(PlanRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
     phase: type[PlanPhase]
@@ -230,9 +240,7 @@ class PlanIdle(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = CommanderConfig.read_root(comms.root).plan_reading(
-            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
-        )
+        reading = cls.plan_reading(comms, commander)
         return tuple(
             cls(phase, reading)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -247,6 +255,37 @@ class PlanIdle(UndatedStandingRule):
             f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
             f" ({self.phase.plan.document}), no open order; done when"
             f" {self.phase.evidence.describe()} -> {self.phase.task.instruction}"
+        )
+
+
+@dataclass(frozen=True)
+class PlanStalled(PlanRule):
+    """A ready phase that a unit has held past the window while main still lacks it. Holding an
+    order is not moving the plan: something structural keeps it still (steps that only land
+    together, a blocked holder, a missing owner), and re-sending the order changes nothing."""
+
+    phase: type[PlanPhase]
+    since: float
+    window: ClassVar[int] = 2 * 60 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading, now = cls.plan_reading(comms, commander), time.time()
+        return tuple(
+            cls(phase, since)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(reading) and phase.ordered(reading)
+            for since in (phase.ordered_since(reading),)
+            if now - since >= cls.window
+        )
+
+    def line(self) -> str:
+        hours = (time.time() - self.since) / 3600
+        return (
+            f"PLAN STALLED: {self.phase.plan.declared_name} phase {self.phase.declared_name}"
+            f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
+            " it still and change that this wake: integrate steps that only land together,"
+            " take it over, or reassign it"
         )
 
 

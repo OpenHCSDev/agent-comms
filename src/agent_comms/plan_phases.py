@@ -87,8 +87,19 @@ class PlanPhase(OrderPhase, declared_name=None):
         return reading.holds(cls.evidence)
 
     @classmethod
+    def holding(cls, reading: PlanReading) -> tuple[Todo, ...]:
+        """The open orders serving this phase that a unit holds."""
+        return tuple(todo for todo in cls.serving(reading.todos) if todo.state.open and todo.holder)
+
+    @classmethod
     def ordered(cls, reading: PlanReading) -> bool:
-        return any(todo.state.open and todo.holder for todo in cls.serving(reading.todos))
+        return bool(cls.holding(reading))
+
+    @classmethod
+    def ordered_since(cls, reading: PlanReading) -> float:
+        """When the oldest order still holding this phase was given."""
+        return min(todo.order.checked().at.recorded_at("A plan order")
+                   for todo in cls.holding(reading))
 
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
