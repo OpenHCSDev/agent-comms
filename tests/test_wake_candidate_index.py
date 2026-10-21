@@ -6,9 +6,12 @@ import pytest
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import Bus, PrivateRecord, PublicRecord
+from agent_comms.candidate_maintenance import drain_candidate_catchup, schedule_candidate_catchup
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.messages import InfoKind, Message
+from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_candidate_index import CommittedAppendHint, WakeCandidateIndex
@@ -78,6 +81,32 @@ def test_scan_progress_includes_non_candidate_suffix_and_is_bounded(bus, owner, 
     page = index.page(root_id=hint.root_id, recipient_lookup=owner.lookup,
                       after_seq=0, required_through_seq=hint.seq)
     assert tuple(row.source_seq for row in page.entries) == (first.seq,)
+
+
+def test_background_maintenance_coalesces_committed_sequences(bus, owner, peer):
+    first = append_reply(bus, peer, owner)
+    schedule_candidate_catchup(bus, first.seq)
+    last = append_reply(bus, peer, owner)
+    schedule_candidate_catchup(bus, last.seq)
+    drain_candidate_catchup(bus.path.parent)
+    index = WakeCandidateIndex(bus)
+    assert index.through_seq == last.seq
+    assert tuple(row.source_seq for row in index.page(
+        root_id="a" * 32, recipient_lookup=owner.lookup, after_seq=0,
+        required_through_seq=last.seq).entries) == (first.seq, last.seq)
+
+
+def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
+    messages = tuple(bus.append(lambda seq, target=target: PublicRecord.of(
+        Message("sender", target, "visible", InfoKind, seq=seq)))
+        for target in ("#team", "#elsewhere", "#team", "#team"))
+    first, _, middle, last = messages
+    scope = ChannelDisplayScope("#team", frozenset(("#team",)))
+    assert ReadLedger._proved_read_prefix(bus, scope, ConversationCursor(), (last.seq,)) == 0
+    assert ReadLedger._proved_read_prefix(
+        bus, scope, ConversationCursor(), (first.seq, last.seq)) == middle.seq - 1
+    assert ReadLedger._proved_read_prefix(
+        bus, scope, ConversationCursor(middle.seq - 1, (last.seq,)), (middle.seq,)) == last.seq
 
 
 def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, peer):

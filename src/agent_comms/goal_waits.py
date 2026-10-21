@@ -200,7 +200,10 @@ class RecordedGoalWait(GoalWait):
         if not self.owner_matches(owner):
             return False
         after = self.after_seq
-        while records := bus.inbox(owner.name, after, 1):
+        while records := bus.received(
+            owner.lookup, after=after, limit=1, descending=False,
+            sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
+        ):
             record, = records
             if any(self.matches(original, owner) for original in record.deliveries()):
                 return True

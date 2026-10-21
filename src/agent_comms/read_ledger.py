@@ -7,6 +7,7 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -37,6 +38,7 @@ from .bus import Bus
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .messages import Message
+    from .read_basis import MessageDisplayScope
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
@@ -157,10 +159,28 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
             viewer, snapshot.threads[viewer].created_at,
             tuple(DisplayedConversation(
                 conversation, sequences := tuple(sorted(members)),
-                0,
+                self._proved_read_prefix(
+                    source, conversation.scope(provenance),
+                    document.for_conversation(
+                        viewer, conversation, snapshot, ObservedPath.at(source.path)),
+                    sequences),
             ) for conversation, members in grouped.items()),
             RecordedBusIdentity.capture(source.path),
         )
+
+    @staticmethod
+    def _proved_read_prefix(
+        source: Bus, scope: MessageDisplayScope, previous: ConversationCursor,
+        sequences: tuple[int, ...],
+    ) -> int:
+        """Find the first unread scoped seq; never decode the intervening history."""
+        through = max((*sequences, *previous.exceptions, previous.high_water))
+        predicate, parameters = scope.index_predicate
+        missing = source.scoped_page(
+            f"({predicate}) AND seq NOT IN (SELECT value FROM json_each(?))",
+            (*parameters, json.dumps((*sequences, *previous.exceptions))),
+            lower=previous.high_water, upper=through + 1, limit=1)
+        return missing[0].seq - 1 if missing else through
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
         if not displayed.bus_identity.matches(ObservedPath.at(Bus.path_in(self.path.parent))):
