@@ -29,11 +29,10 @@ from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, PrivateRecord, RecordBuilder
+    from agent_comms.bus import Bus, BusReader, PrivateRecord, RecordBuilder
 
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
-    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -260,8 +259,8 @@ class InitialOrigin(ABC):
         """Refuse a sender this origin cannot speak for."""
 
     @abstractmethod
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
-        """Check the sender and message ID against the bus before appending."""
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+        """Check the sender and message ID on the actual append connection."""
 
     @abstractmethod
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
@@ -279,7 +278,7 @@ class AgentOrigin(InitialOrigin):
             RelationViolationError("Initial sender must be a visible registered executable.")
         )
 
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
@@ -305,8 +304,12 @@ class HumanOrigin(InitialOrigin):
         if message.sender != self.sender:
             raise RelationViolationError("Local USER origin differs from registered identity.")
 
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
-        source.require_new_human_message(sender, message_id)
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+        from .bus_tables import MessageIdentitySource
+
+        with source.observing() as db:
+            if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):
+                raise HumanSendRefusedError("Human message identity was already published.")
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         try:
