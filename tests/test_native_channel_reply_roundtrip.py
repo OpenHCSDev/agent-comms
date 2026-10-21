@@ -2,6 +2,9 @@
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.launch_runtime import RestoredRuntime
+from acp.schema import SessionNotification
 
 import asyncio
 import hashlib
@@ -33,6 +36,22 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
 tmp_path = private_root_fixture
+
+
+def start_source_owner(comms, name):
+    """Use the shared interpreter, but retain this fixture's exact source imports.
+
+    Ordinary owner starts intentionally discard PYTHONPATH and would launch
+    shared main, making the branch client a read-only other-build attachment.
+    Guarded restarts then preserve this real original launch normally.
+    """
+    thread = comms.registry.require(name)
+    with (comms.registry.storage_rule.room_for_start(thread, comms.root),
+          _store_lock(comms.owners._wire_lock_path)):
+        return comms.owners._launch_owner_unlocked(
+            thread, NativeArguments.default_binary,
+            launch_runtime=RestoredRuntime(Path(sys.executable)),
+        )
 
 
 @pytest.mark.parametrize(
@@ -232,7 +251,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     class Client:
         async def session_update(self, **kwargs):
-            facts.extend(decode_updates(kwargs["update"].field_meta))
+            notification = SessionNotification.model_validate(kwargs)
+            facts.extend(decode_updates(notification.update.field_meta))
 
     attachment.on_connect(Client())
 
@@ -255,7 +275,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     try:
         for name in projects:
-            await asyncio.to_thread(comms.owners.start, name)
+            await asyncio.to_thread(start_source_owner, comms, name)
         await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
         if restart_after_reply:
             for name, project in projects.items():
@@ -364,7 +384,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            return any(state.active is None and state.finished_turn_id for state in states)
+            return any(not state.active.executing and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(

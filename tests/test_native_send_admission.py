@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import array
-import fcntl
 import json
 import os
 import sqlite3
 import subprocess
 import sys
-import termios
 import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+if sys.platform == "linux":
+    import fcntl
+    import termios
 
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
@@ -186,6 +188,7 @@ async def _same_loop_backpressure_case(directory: Path, case_name: str):
     print("BOUNDED_UNKNOWN_REAPED", flush=True)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
 @pytest.mark.parametrize("case", PromptWriteCase.members_with(PromptWriteCase),
                          ids=lambda case: case.declared_name)
 def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, case):

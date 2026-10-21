@@ -11,6 +11,7 @@ import pytest
 import agent_comms.agent_events as events
 from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from pi_session_turn import one_turn_events
 
 
@@ -36,14 +37,11 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path):
     assert caught.value.filename == str(missing)
 
 
-async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, monkeypatch):
+async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, native_runtime_package):
     from agent_comms.acp import CommsClient
     from agent_comms.comms import Comms
     from agent_comms.runtime import socket_path
 
-    package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
-    if not package:
-        pytest.skip("Prepared package is required; headless startup makes no provider request")
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
@@ -68,7 +66,8 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         for key in ("PI_PROMPT", "PI_PARENT_ID"):
             env.pop(key, None)
         async with BoundedRun.session(
-            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())"),
+            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())",
+             *LaunchRoot.from_path(comms.root).arguments()),
             cwd=caller_project,
             env=env,
             timeout=20,
@@ -83,8 +82,13 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             assert registered.worktree == str(project)
             client = CommsClient(comms)
             try:
+                initialized = await client.initialize(protocol_version=1)
+                assert initialized.agent_capabilities.prompt_capabilities.image
                 loaded = await client.load_session(str(project), "headless")
-                assert loaded.field_meta["agentComms"]["imagePrompts"]
+                configuration = next(update for update in decode_updates(loaded.field_meta)
+                                     if isinstance(update, CoordinationChangedUpdate))
+                assert configuration.thread == registered.incarnation
+                assert configuration.wire_root == str(comms.root)
                 response = await client.prompt(
                     "headless", [{"type": "text", "text": "!relay #all headless native route"}]
                 )
