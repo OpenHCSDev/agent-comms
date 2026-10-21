@@ -284,24 +284,22 @@ class NativeInputProofs(Carry):
             plans.append(kind.for_identity(source, root=root, owner=source.owner))
         return tuple(plans)
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        root = root.resolve(strict=True)
-        return tuple(path for plan in cls.relocations(root) for path in plan.source_files) + tuple(
+    def backup_files(self) -> tuple[Path, ...]:
+        root = self.root.resolve(strict=True)
+        return tuple(path for plan in self.relocations(root) for path in plan.source_files) + tuple(
             path for primary in NativeInputProof.matching_in(root)
             for path in SQLiteFile.files(primary) if path.exists()
         )
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        root = root.resolve(strict=True)
-        plans = cls.relocations(root)
-        if not apply:
+    def carry(self) -> Carried:
+        root = self.root.resolve(strict=True)
+        plans = self.relocations(root)
+        if not self.apply:
             return Carried(len(plans))
         written = {path for plan in plans for path in plan.relocate()}
         converted = 0
         for path in sorted(NativeInputProof.matching_in(root)):
-            cls.require_confined(root, path)
+            self.require_confined(root, path)
             NativeSessionFileRole.require(path.lstat())
             with closing(CoordinationStore.recovering_snapshot(path)) as db:
                 differs = NativeContextJournal.schema_differs(db)

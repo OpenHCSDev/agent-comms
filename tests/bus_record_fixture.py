@@ -3,9 +3,11 @@
 from multiprocessing.context import ForkServerContext
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.bus import Bus, PrivateRecord
+from agent_comms.comms import Comms
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.envelope_claim_transitions import UnscopedClaims
-from agent_comms.messages import ClaimMessage
+from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
@@ -16,14 +18,21 @@ publication_processes = ForkServerContext()
 publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(".")[0]])
 
 
-def record_from(declaration, message):
+def prepare_native_comms(comms: Comms) -> Comms:
+    """Validate native-root authority before installing data or opening a coordinator."""
+    comms.registry.prepare_native_root()
+    Bus.install(Bus.path_in(comms.root))
+    return comms
+
+
+def record_from(declaration, message, *, sender_lookup="a" * 32, recipient_lookup="b" * 32):
     capabilities = {}
     if issubclass(declaration, Delivered):
         audience = freeze_audience(
             message,
-            (FrozenRecipient("b" * 32, message.target),),
+            (FrozenRecipient(recipient_lookup, message.target),),
             "c" * 64,
-            sender_lookup="a" * 32,
+            sender_lookup=sender_lookup,
             sender_name=message.sender,
         )
         capabilities.update(
@@ -53,3 +62,12 @@ def record_from(declaration, message):
             ),
         )
     return declaration.from_message(message, **capabilities)
+
+
+def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole(), answers=()):
+    def build(seq, db):
+        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq, role=role,
+                          answers=answers)
+        return record_from(PrivateRecord, message,
+                           sender_lookup=sender.lookup, recipient_lookup=recipient.lookup)
+    return bus.append(build)

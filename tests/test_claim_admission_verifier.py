@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from conftest import publish_initial
 import os
 import sys
@@ -52,12 +54,12 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         parent.mkdir(mode=0o700)
         resource = parent / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = prepare_native_comms(Comms(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
                 comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        root_id = comms.registry.prepare_native_root().namespace
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:

@@ -7,6 +7,8 @@ the owner's event loop with the wire, bus and registry locks held.
 """
 
 from __future__ import annotations
+
+from bus_record_fixture import prepare_native_comms
 from agent_comms.context_store import UNREAD_CONTEXT
 
 from conftest import publish_initial
@@ -83,10 +85,10 @@ def selected_turn():
         worktree.mkdir(mode=0o700)
         resource = worktree / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = prepare_native_comms(Comms(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        root_id = comms.registry.prepare_native_root().namespace
         record_context(comms, "Alice", 1)
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         record_context(comms, "Alice", 2)

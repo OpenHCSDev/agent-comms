@@ -150,10 +150,12 @@ def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path,
         db.execute('UPDATE todo SET "order"=json_remove(?, ?) WHERE id=?',
                    (json.dumps(FieldCodec.encode(folded)), '$.original.scope', original.id))
     before = CoordinationStore.digest(path)
-    dry_run = OrderScopes.carry(copied, apply=False)
+    migration = OrderScopes(copied, comms.root, tmp_path / 'spill', False)
+    dry_run = migration.carry()
     assert dry_run == Carried(len(TRIAGE_PROBLEMS) + 2)
     assert CoordinationStore.digest(path) == before
-    applied = OrderScopes.carry(copied, apply=True)
+    migration = replace(migration, apply=True)
+    applied = migration.carry()
     assert applied == Carried(len(TRIAGE_PROBLEMS) + 2, rewritten=tuple(
         str(file.relative_to(copied)) for file in SQLiteFile.files(path)))
     converted = TodoStore(copied)
@@ -161,5 +163,5 @@ def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path,
         assert converted.get(problem).order.checked().scope == TriageScope()
     for declaration in converted.get(original.id).order_history:
         assert declaration.scope == FixScope(FixShape(parents=(declaration.owner,), members=()))
-    assert OrderScopes.carry(copied, apply=True) == Carried(0)
+    assert migration.carry() == Carried(0)
     assert comms.goals.todos.get(original.id) == original

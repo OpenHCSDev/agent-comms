@@ -108,12 +108,10 @@ def carry(root: Path, *, apply: bool) -> int:
 class ReviewTimers(Carry):
     """Todo rows keep their instant as the review timer; clock strikes become plain strikes."""
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return tuple(root.glob(f"{TodoStore.path_in(root).name}*"))
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(self.root.glob(f"{TodoStore.path_in(self.root).name}*"))
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        changed = carry(root, apply=apply)
-        rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
-        return Carried(changed, {}, rewritten if changed and apply else ())
+    def carry(self) -> Carried:
+        changed = carry(self.root, apply=self.apply)
+        rewritten = tuple(path.name for path in self.backup_files())
+        return Carried(changed, {}, rewritten if changed and self.apply else ())

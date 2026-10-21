@@ -233,18 +233,16 @@ def carry(path: Path) -> FileCarried:
 class DeclaredSchema(Carry):
     """Durable files and session input proofs keep every row on their declared schema."""
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return tuple(path for store in pending(root) for path in SQLiteFile.files(store.path)
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(path for store in pending(self.root) for path in SQLiteFile.files(store.path)
                      if path.exists())
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        stale = pending(root)
-        if not apply:
+    def carry(self) -> Carried:
+        stale = pending(self.root)
+        if not self.apply:
             return Carried(len(stale))
         carried = tuple(carry(store.path) for store in stale)
         return Carried(len(carried), {
             "renamed": sum(len(item.renamed()) for item in carried),
             "retired_rows": sum(sum(item.retired.values()) for item in carried),
-        }, tuple(str(item.path.relative_to(root)) for item in carried))
+        }, tuple(str(item.path.relative_to(self.root)) for item in carried))

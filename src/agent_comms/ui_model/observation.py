@@ -681,8 +681,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         key = SidebarSent(revision.expiry_period, type(self.stage), revision)
         if not self.sent.changed_since(key):
             return
-        result = self.stage.read(self.request, comms, revision)
-        yield from result.finish_read(self, key)
+        yield from self.stage.read(self.request, comms, revision).finish_read(self, key)
 
     def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
         self.sent = result.send_state(key)

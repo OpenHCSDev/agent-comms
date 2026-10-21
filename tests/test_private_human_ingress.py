@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from agent_comms.channel_targets import CommandTarget
 import os
 import subprocess
@@ -34,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
@@ -43,7 +45,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     install_private_cohort_schema(store)
     for name in lookups:
         store.participants.register(lookups[name], name, name, committed=True)
-    return comms, store, comms.messaging.initialize_private_initial_protocol(), lookups
+    return comms, store, comms.registry.prepare_native_root().namespace, lookups
 
 
 def _public_messages(comms: Comms) -> tuple[Message, ...]:

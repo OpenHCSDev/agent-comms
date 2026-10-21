@@ -24,12 +24,13 @@ from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, I
 from agent_comms.messages import Message
 from agent_comms.page_traversal import NewerTraversal
 from agent_comms.private_path import ObservedPath
+from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer, CapturedSelection, DisplayBasis, DisplayViewer,
     ListedDeliveries, NamedViewer, WatchAcknowledgment,
 )
 from agent_comms.routing import DeliveryScope
-from agent_comms.publisher import Publisher
+
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms

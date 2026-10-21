@@ -64,6 +64,7 @@ class Publisher:
     channels: ChannelCatalog
     opened_activity: Callable[[], AbstractContextManager[ActivityClocks]]
 
+
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot,
         catalog: CatalogDocument, activity: ActivityClocks,
