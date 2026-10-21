@@ -96,7 +96,7 @@ jobs:
           Stack(Path.cwd(), runtime=LaunchRuntime.running()).install_native()
           PY
       - name: Rehearse an install through the installed CLI
-        run: timeout 300 pytest -n 0 -q -o faulthandler_timeout=60 -p no:cacheprovider tests/test_install_rehearsal.py
+        run: timeout 300 python -m pytest -n 0 -q -o 'pythonpath=. tools' -o faulthandler_timeout=60 -p no:cacheprovider tests/test_install_rehearsal.py
 
   review-verdict:
     name: review-verdict
