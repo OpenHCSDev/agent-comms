@@ -40,8 +40,7 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
-from .wake_candidate_index import ThreadWake
-from .watched import ChangeSignal, DirectorySource
+from .watched import ChangeSignal, DirectorySource, FileSource
 
 DIRECTORY = "owner-restart-queue"
 
@@ -387,14 +386,6 @@ async def run(comms: Comms) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        def pending_sources():
-            with queue.locked():
-                return frozenset(
-                    ThreadWake.at(comms.root, record.selection.identity.incarnation.lookup)
-                    for record in queue.active_records()
-                    if record.state.pending and record.target.is_current_watcher
-                )
-
         def release_if_empty():
             # Enqueue and release share this lock, so no request is orphaned.
             with queue.locked():
@@ -406,17 +397,14 @@ async def run(comms: Comms) -> None:
                     _start_watcher(comms.root, pending[0].target)
                 return True
 
-        while True:
-            sources = await Coordination.run_worker(pending_sources)
-            async with ChangeSignal.opened(DirectorySource(queue.active_directory), *sources) as changes:
-                # Admit notifications before reading committed state. A new
-                # queue target discovered by step must be admitted before wait.
+        sources = tuple(FileSource(path) for path in comms.bus.bus.source_paths(comms.root))
+        async with ChangeSignal.opened(DirectorySource(queue.active_directory), *sources) as changes:
+            while True:
+                # Admit the committed source before checking the queued owners.
                 changes.prepare()
                 await Coordination.run_worker(lambda: step(comms))
                 if await Coordination.run_worker(release_if_empty):
                     return
-                if sources != await Coordination.run_worker(pending_sources):
-                    continue
                 await changes.wait()
     finally:
         os.close(lock)

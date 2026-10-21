@@ -10,7 +10,6 @@ from agent_comms.installer.backup import bus_files
 from agent_comms.typed_table import DerivedStore
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeInputProof
-from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
@@ -49,7 +48,6 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
         review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     assert todo.id == "declared-files"
-    drain_candidate_catchup(comms.root)
     declared = RootFile.paths_in(comms.root)
     assert PrivateOwnerRenameIntent.path_in(comms.root) in declared
     # Directory traversal observes the outcome; it is not the production inventory.

@@ -1,7 +1,5 @@
 """Real SQLite appends drive bounded wake scans and dependency reply reads."""
 
-import asyncio
-from contextlib import AsyncExitStack
 from dataclasses import replace
 
 import pytest
@@ -9,10 +7,11 @@ import pytest
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
 from agent_comms.bus import Bus, BusRecord, PrivateRecord, PublicRecord
-from agent_comms.candidate_maintenance import drain_candidate_catchup, schedule_candidate_catchup
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
+from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
 from agent_comms.notification_assignment import (
     AnsweredResponse, AssignmentActivity, NotificationAssignment, UnansweredResponse,
@@ -20,10 +19,11 @@ from agent_comms.notification_assignment import (
 from agent_comms.notification_progress import ShownToModelProgress
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.registration import Registration
+from agent_comms.proven_source_coverage import SourcePrefix
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
-from agent_comms.wake_candidate_index import CommittedAppendHint, ThreadWake, WakeCandidateIndex
-from agent_comms.watched import ChangeSignal
+from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import FullWake, MessageAudience
 from test_bus import record_from
 
@@ -70,7 +70,7 @@ def test_recipient_query_follows_frozen_delivery_membership(bus, declaration):
 def test_three_committed_messages_are_candidates_by_their_bus_sequences(bus, owner, peer):
     messages = tuple(append_reply(bus, peer, owner, str(n)) for n in range(3))
     index = WakeCandidateIndex(bus)
-    assert index.maintain() == messages[-1].seq
+    assert index.through_seq == messages[-1].seq
     page = index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
                       after_seq=0, required_through_seq=messages[-1].seq)
     assert tuple(row.source_seq for row in page.entries) == tuple(row.seq for row in messages)
@@ -78,63 +78,62 @@ def test_three_committed_messages_are_candidates_by_their_bus_sequences(bus, own
     assert not page.has_more
 
 
-@pytest.mark.asyncio
-async def test_committed_candidates_wake_only_their_recipient(bus, owner, peer):
-    recipients = (owner, *(RecordedThreadIncarnation(f"idle-{n}", 2000.0 + n)
-                           for n in range(22)))
-    sources = tuple(ThreadWake.at(bus.path.parent, recipient.lookup)
-                    for recipient in recipients)
-    async with AsyncExitStack() as stack:
-        signals = tuple([await stack.enter_async_context(ChangeSignal.opened(source))
-                         for source in sources])
-        for signal in signals:
-            signal.prepare()
-        message = append_reply(bus, peer, owner)
-        index = WakeCandidateIndex(bus)
-        assert index.maintain() == message.seq
-        await asyncio.wait_for(signals[0].wait(), 1)
-        assert index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
-                          after_seq=0, required_through_seq=message.seq).entries[0].source_seq == message.seq
-        assert all(signal.empty() for signal in signals[1:])
-
-
-def test_rebuild_recreates_the_same_candidate_rows(bus, owner, peer):
-    messages = tuple(append_reply(bus, peer, owner, str(n)) for n in range(3))
+def test_new_reader_observes_same_committed_candidates_without_catchup(bus, owner, peer):
+    first = append_reply(bus, peer, owner)
     index = WakeCandidateIndex(bus)
-    index.maintain()
+    last = append_reply(bus, peer, owner)
     query = dict(root_id="a" * 32, recipient_lookup=owner.lookup,
-                 after_seq=0, required_through_seq=messages[-1].seq)
-    before = index.page(**query)
-    assert index.rebuild() == messages[-1].seq
-    assert index.page(**query) == before
+                 after_seq=0, required_through_seq=last.seq)
+    assert index.page(**query) == WakeCandidateIndex(bus).page(**query)
+    assert tuple(row.source_seq for row in index.page(**query).entries) == (first.seq, last.seq)
+    assert not index.page(**{**query, "recipient_lookup": peer.lookup}).entries
 
 
-def test_scan_progress_includes_non_candidate_suffix_and_is_bounded(bus, owner, peer):
+def test_committed_prefix_includes_non_candidate_suffix_without_another_writer(bus, owner, peer):
     first = append_reply(bus, peer, owner)
     public = tuple(bus.append(lambda seq, db: PublicRecord.from_message(
         Message("external", "owner", "public", InfoKind, seq=seq))) for _ in range(3))
     index = WakeCandidateIndex(bus)
-    hint = CommittedAppendHint.capture("a" * 32, public[-1].seq)
-    assert not index.catch_up_committed_append(hint, max_rows=2)
-    assert index.through_seq == public[0].seq
-    assert index.catch_up_committed_append(hint, max_rows=2)
-    assert index.maintain() == public[-1].seq
-    page = index.page(root_id=hint.root_id, recipient_lookup=owner.lookup,
-                      after_seq=0, required_through_seq=hint.seq)
+    assert index.through_seq == public[-1].seq
+    page = index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
+                      after_seq=0, required_through_seq=public[-1].seq)
+    assert page.through_seq == public[-1].seq
     assert tuple(row.source_seq for row in page.entries) == (first.seq,)
 
 
-def test_background_maintenance_coalesces_committed_sequences(bus, owner, peer):
-    first = append_reply(bus, peer, owner)
-    schedule_candidate_catchup(bus, first.seq)
-    last = append_reply(bus, peer, owner)
-    schedule_candidate_catchup(bus, last.seq)
-    drain_candidate_catchup(bus.path.parent)
+def test_candidate_page_uses_bounded_recipient_keyset(bus, owner, peer):
+    messages = tuple(append_reply(bus, peer, owner) for _ in range(3))
+    query = dict(root_id="a" * 32, recipient_lookup=owner.lookup,
+                 required_through_seq=messages[-1].seq, limit=2)
     index = WakeCandidateIndex(bus)
-    assert index.through_seq == last.seq
-    assert tuple(row.source_seq for row in index.page(
-        root_id="a" * 32, recipient_lookup=owner.lookup, after_seq=0,
-        required_through_seq=last.seq).entries) == (first.seq, last.seq)
+    first = index.page(after_seq=0, **query)
+    assert tuple(row.source_seq for row in first.entries) == tuple(row.seq for row in messages[:2])
+    assert first.has_more
+    last = index.page(after_seq=first.entries[-1].source_seq, **query)
+    assert tuple(row.source_seq for row in last.entries) == (messages[-1].seq,)
+    assert not last.has_more
+
+
+def test_startup_observation_is_unconditional_even_without_messages(bus, owner):
+    assert NoPrivateObservation().has_unobserved_inputs(bus, owner.lookup)
+
+
+def test_settled_observation_filters_committed_recipient_suffix(bus, peer):
+    registry = Registration(RegistryFile.path_in(bus.path.parent))
+    thread = registry.declare(registry.new_thread(
+        "observed", frozenset(), str(bus.path.parent)))
+    recipient = thread.incarnation.require_recorded()
+    first = append_reply(bus, peer, recipient)
+    with registry.store.reading() as document:
+        entry = document.entry(thread.name)
+    prefix = SourcePrefix.capture(bus, 0)
+    observed = PrivateObservation(prefix, entry, ())
+    assert not observed.has_unobserved_inputs(bus, recipient.lookup)
+    append_reply(bus, peer, RecordedThreadIncarnation("elsewhere", 9000.0))
+    assert not observed.has_unobserved_inputs(bus, recipient.lookup)
+    append_reply(bus, peer, recipient)
+    assert observed.has_unobserved_inputs(bus, recipient.lookup)
+    assert prefix.through_seq == first.seq
 
 
 def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):

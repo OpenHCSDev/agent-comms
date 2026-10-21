@@ -1,83 +1,39 @@
-"""Disposable wake candidates, indexed in bounded batches by bus sequence.
-
-These rows are hints, never authority to deliver or start a model turn.
-"""
+"""Bounded wake-candidate reads from the bus's indexed frozen recipients."""
 
 from __future__ import annotations
 
-import hashlib
 import sqlite3
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
 
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CandidateQuery
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .mro_dispatch import MroDispatch, handles
-from .typed_table import Column, DerivedStore, Index, TypedTable
+from .field_codec import MalformedRecord
 from .wake_policy import WakePolicy
-from .watched import FileSource
-
-
-class ThreadWake(FileSource):
-    """One recipient's transient native hint; committed rows own every position."""
-
-    @classmethod
-    def at(cls, root: Path, recipient_lookup: str) -> ThreadWake:
-        # Lookup syntax belongs to ParticipantIdentity, not filesystem names.
-        # Hash only the resource address; never store or compare it as a position.
-        key = hashlib.sha256(recipient_lookup.encode()).hexdigest()
-        directory = root / ".thread-wakes" / key
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        return cls(directory / "changed")
-
-    def notify(self) -> None:
-        self.path.write_bytes(b"")
-
-    @classmethod
-    def notify_many(cls, root: Path, recipients: Iterable[str]) -> None:
-        for lookup in set(recipients):
-            cls.at(root, lookup).notify()
 
 
 class ProjectionUnavailableError(RuntimeError):
     """Original delivery remains available when the optional projection fails."""
 
 
-class ProjectionRebuildRequiredError(ProjectionUnavailableError):
-    """The disposable projection requires explicit rebuilding."""
-
-
-class CandidateTable:
-    """Derived candidate rows and the progress of their one maintenance pass."""
-
-
-@dataclass(frozen=True)
-class CandidateScan(CandidateTable, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
-    through_seq: Annotated[int, Column(check="through_seq>=0")]
-
-    @classmethod
-    def through(cls, db: sqlite3.Connection) -> int:
-        return next((row.through_seq for row in cls.select(db)), 0)
-
-
-@dataclass(frozen=True)
-class Candidate(CandidateTable, TypedTable):
-    source_seq: Annotated[int, Column(primary_key=True)]
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    source_seq: int
     message_id: str
-    recipient_lookup: Annotated[str, Column(primary_key=True)]
+    recipient_lookup: str
     sender: str
     target: str
-    wake_mode: type[WakePolicy] | None
-    without_rowid = True
-    indexes = (
-        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NOT NULL"),
-        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NULL"),
-    )
+    wake_mode: type[WakePolicy]
+
+    @classmethod
+    def for_recipient(cls, record: Delivered, lookup: str) -> tuple[Candidate, ...]:
+        return tuple(
+            cls(record.seq, record.message_id, lookup, record.sender, record.target,
+                decision.candidate_wake_mode())
+            for declared in record.decisions if declared.recipient == lookup
+            for decision in declared.claim_decisions()
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,117 +43,45 @@ class CandidatePage:
     has_more: bool
 
 
-@dataclass(frozen=True, slots=True)
-class CommittedAppendHint:
-    """Untrusted post-commit scheduling hint, not delivery authority."""
+@dataclass(frozen=True)
+class WakeCandidateIndex:
+    """ReceivedSource's (lookup, seq) primary key is the candidate read index.
 
-    root_id: Annotated[str, Id128Text]
-    seq: int
+    The bus append owns its capability projections and SQLite maintains their
+    indexes in that same transaction. There is no second store or maintenance.
+    """
 
-    def __post_init__(self) -> None:
-        if self.seq <= 0:
-            raise ValueError("append hint requires a positive committed sequence")
-
-    @classmethod
-    def capture(cls, root_id: str, seq: int) -> CommittedAppendHint:
-        return FieldCodec.decode(cls, {"root_id": root_id, "seq": seq})
-
-    def validated(self) -> CommittedAppendHint:
-        return FieldCodec.decode(type(self), FieldCodec.encode(self))
-
-
-class WakeCandidateIndex(DerivedStore, MroDispatch):
-    """One bounded scan; candidate inserts and scanned-through seq commit together."""
-
-    batch_rows = 64
-    rows = tuple(TypedTable.members_with(CandidateTable))
-    schema_error = ProjectionRebuildRequiredError
-
-    def __init__(self, bus: Bus):
-        self.bus = bus
+    bus: Bus
 
     @property
     def root(self) -> Path:
         return self.bus.path.parent
 
-    @staticmethod
-    def _validate_limits(max_rows: int) -> None:
-        if type(max_rows) is not int or not 1 <= max_rows <= 256:
-            raise ValueError("max_rows must be between 1 and 256")
-
-    @handles(Delivered)
-    def _insert_candidates(
-        self, record: Delivered, db: sqlite3.Connection, recipients: set[str],
-    ) -> None:
-        for recipient, decision in zip(record.audience.recipients, record.decisions, strict=True):
-            candidate = Candidate(
-                record.seq, record.message_id, recipient.recipient_lookup,
-                record.sender, record.target, decision.candidate_wake_mode())
-            candidate.insert(db)
-            recipients.add(candidate.recipient_lookup)
-
     @property
     def through_seq(self) -> int:
-        with self.snapshot() as db:
-            return CandidateScan.through(db)
-
-    def maintain(self, *, max_rows: int = batch_rows) -> int:
-        """Read one keyset page outside the derived writer; commit its exact progress."""
-        self._validate_limits(max_rows)
-        prior = self.through_seq
-        records = self.bus.since(prior, max_rows)
-        recipients: set[str] = set()
-        with self.writing() as db:
-            current = CandidateScan.through(db)
-            if current != prior:
-                return current
-            for record in records:
-                self.dispatch_sync(record, db, recipients)
-            through = records[-1].seq if records else prior
-            CandidateScan(1, through).upsert(db)
-        if records:
-            ThreadWake.notify_many(self.root, recipients)
-        return through
-
-    def rebuild(self, *, max_rows: int = batch_rows) -> int:
-        """Discard the disposable projection, then start its bounded scan from zero."""
-        self._validate_limits(max_rows)
-        with self.writing() as db:
-            Candidate.delete(db)
-            CandidateScan.delete(db)
-        return self.maintain(max_rows=max_rows)
-
-    def notify_committed_append(self, *, root_id: str, seq: int) -> CommittedAppendHint:
-        """Schedule only after Bus.append commits and outer locks release."""
-        return CommittedAppendHint.capture(root_id, seq)
-
-    def catch_up_committed_append(
-        self, hint: CommittedAppendHint, *, max_rows: int = batch_rows,
-    ) -> bool:
-        """Do at most one bounded batch; report whether this committed seq was scanned."""
-        hint = hint.validated()
-        self._validate_limits(max_rows)
-        if self.through_seq >= hint.seq:
-            return True
-        return self.maintain(max_rows=max_rows) >= hint.seq
+        return self.bus.revision()
 
     def page(
         self, *, root_id: str, recipient_lookup: str, after_seq: int,
         required_through_seq: int, limit: int = 32,
     ) -> CandidatePage:
-        """Read one bounded page; consumers still verify delivery and live ownership."""
         request = CandidateQuery.capture(
             root_id=root_id, recipient_lookup=recipient_lookup, after_seq=after_seq,
             required_through_seq=required_through_seq, limit=limit)
         try:
-            with self.snapshot() as db:
-                through = CandidateScan.through(db)
+            with self.bus.reading() as source:
+                through = source.revision()
                 if through < request.required_through_seq:
-                    raise ProjectionUnavailableError("candidate projection has not caught up")
-                data = Candidate.select(
-                    db, where="{source_seq}>? AND {wake_mode} IS NOT NULL",
-                    parameters=(request.after_seq,), recipient_lookup=request.recipient_lookup,
-                    order_by=("source_seq",), limit=request.limit + 1)
-                return CandidatePage(through, tuple(data[:request.limit]), len(data) > request.limit)
+                    raise ProjectionUnavailableError("requested bus prefix is not committed")
+                records = source.received(
+                    request.recipient_lookup, after=request.after_seq,
+                    before=through + 1, descending=False,
+                    limit=request.limit + 1)
+                return CandidatePage(
+                    through,
+                    tuple(candidate for record in records[:request.limit]
+                          for candidate in Candidate.for_recipient(record, request.recipient_lookup)),
+                    len(records) > request.limit,
+                )
         except (OSError, sqlite3.DatabaseError, MalformedRecord) as error:
             raise ProjectionUnavailableError("candidate projection read unavailable") from error
