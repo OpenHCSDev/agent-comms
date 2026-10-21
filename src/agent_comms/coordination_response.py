@@ -50,9 +50,7 @@ from agent_comms.publisher import ResponseWrites
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.typed_table import (
     Column,
-    DurableTables,
     ForeignKey,
-    SharedFileTables,
     SQLiteForeignKeys,
     SqlValue,
     TypedRow,
@@ -62,7 +60,7 @@ from agent_comms.typed_table import (
 from .locked_store import RegistryFile
 
 
-class ResponseTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class ResponseTable(PrivateRuntimeSchema):
     """An immutable response definition with its write checks and append evidence."""
 
     @classmethod
