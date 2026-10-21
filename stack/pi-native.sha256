@@ -22,7 +22,7 @@ fef47246f4ce18621bae844a940e7d009cefc7df7cdf00ccb98198d9c407a696  dist/core/sess
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
 498cec2fd963cd6f693fa653af947607d2faf9de1510dc56c7301a50311bd49e  dist/core/sdk.js
 f2ef42f5e0c70fff5cdb36e760f02195348ff8284093d9a87e51e812e47e48e6  dist/core/native-proof-journal.js
-a0ec3b4a7652c0ea9ea106eb102f5998e8a2c00bdf52da41e2af6c469436b828  dist/core/native-proof-schema.js
+b382dd789961aa8d9954239a1ce869ee8baa1388bf4d37c4d812ac9a2dbb76e7  dist/core/native-proof-schema.js
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 bd6cfc604781d55db4dc34a0463544c1f323611429ac8d5fc5ebde31642132fb  agent-comms-extensions/global-agent-comms/index.mjs
 7162c92d37ec9d070f918ce05c4be8c8c191cf3e1559351d56c4cd4e6e050dba  dist/agent-comms-imports.json
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 4c964a66778c161c6f1b5562ffc148921ec6aa930d01d1cb8789492bbd4f1be9
-# agent-comms-native-inputs-v1 9baf13a3e9e4411e607f50b14e4b357770af38ce7afb793b163b7f7a4fd10f25
+# agent-comms-native-tree-v1 cc4b59d2f756ca9e99282f18b75603b8fb33c200c70745246ef9c63ba46f3375
+# agent-comms-native-inputs-v1 7c7807a18dd9341e19b178a83572b9eac9a5fbc3c467de68e0925131d1bf3125
