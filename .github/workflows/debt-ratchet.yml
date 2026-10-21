@@ -91,6 +91,30 @@ jobs:
       - name: Rehearse an install through the installed CLI
         run: timeout 300 pytest -n 0 -q -o faulthandler_timeout=60 -p no:cacheprovider tests/test_install_rehearsal.py
 
+  review-verdict:
+    name: review-verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      statuses: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+    steps:
+      # A pull request is pushed before its verdict exists; the queue's group
+      # is where the commander's verdict on the head must already be success.
+      - name: The commander's verdict on the queued head is success
+        if: github.event_name == 'merge_group'
+        shell: bash
+        run: |
+          [[ $QUEUE_REF =~ /pr-([0-9]+)- ]]
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${BASH_REMATCH[1]}" --jq .head.sha)
+          verdict=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "agent-comms/review")][0].state // "none"')
+          echo "PR #${BASH_REMATCH[1]} head $head: agent-comms/review=$verdict"
+          [[ $verdict == success ]]
+
   ratchet:
     name: debt-${{ matrix.kind }}
     runs-on: ubuntu-latest
