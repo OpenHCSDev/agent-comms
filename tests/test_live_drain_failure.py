@@ -70,10 +70,9 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         assert all("recorded_at" not in encoded for encoded in encoded_diagnostics)
         assert all(encoded["kind"] == "unavailable_drain" for encoded in encoded_diagnostics)
         # Without a real dependency change, failure neither retries nor repairs the schema.
-        log = comms.root / "activity.jsonl"
-        observed = log.read_bytes()
+        observed = comms.agents.activity.current("beta", active=True)
         await asyncio.sleep(1.3)
-        assert log.read_bytes() == observed
+        assert comms.agents.activity.current("beta", active=True) == observed
         with sqlite3.connect(path) as db:
             assert (
                 db.execute(
@@ -96,9 +95,9 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         )
         assert owner_view(comms).presentation.summary == "Ready"
         assert not owner_view(comms).presentation.status.details
-        recovered = log.read_bytes()
+        recovered = comms.agents.activity.current("beta", active=True)
         await asyncio.sleep(1.3)
-        assert log.read_bytes() == recovered
+        assert comms.agents.activity.current("beta", active=True) == recovered
     finally:
         await agent.shutdown()
 
@@ -119,10 +118,10 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         assert current.thread.turn_record.read().executing
         assert current.presentation.status.working
         assert not current.presentation.status.details
-        activity = (comms.root / "activity.jsonl").read_bytes()
+        activity = comms.agents.activity.current("beta", active=True)
         async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
-        assert (comms.root / "activity.jsonl").read_bytes() == activity
+        assert comms.agents.activity.current("beta", active=True) == activity
     finally:
         comms.agents.finish_turn(lease)
         await agent.shutdown()
@@ -219,13 +218,13 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
     owner = comms.registry.snapshot().owner_identity("beta")
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
-    log = (comms.root / "activity.jsonl").read_bytes()
+    activity = comms.agents.activity.current("beta", active=True)
 
     try:
         with pytest.raises(asyncio.CancelledError):
             async with drain_failures(comms, "beta", owner):
                 raise asyncio.CancelledError()
-        assert (comms.root / "activity.jsonl").read_bytes() == log
+        assert comms.agents.activity.current("beta", active=True) == activity
         assert owner_view(comms).activity.readiness.source_diagnostic() == first
     finally:
         await agent.shutdown()

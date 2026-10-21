@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -11,25 +12,27 @@ from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.bus import Bus, ClaimRecord, PrivateRecord, PublicRecord
+from agent_comms.bus_publication import InitialOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
-
+from agent_comms.field_codec import Id128Text
+from agent_comms.messages import ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
+from agent_comms.store_files import _store_lock
 
 from .active_route import guard_original_root_write
-from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-from agent_comms.bus import Bus, ClaimRecord, PrivateRecord, PublicRecord
 from .bus_activity_index import ActivityClocks
-from agent_comms.bus_publication import InitialOrigin
 from .channel_targets import CommandTarget, NamedTarget
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .envelope_claim_transitions import (
     ClaimOwner,
     ClaimRelease,
-    ClaimScope,
     ClaimTransition,
+    RecordedScope,
     ReleasedClaims,
     WakeClaims,
 )
@@ -38,16 +41,13 @@ from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.field_codec import Id128Text
 from .mentions import ThreadMention
-from agent_comms.messages import ClaimNoticeKind, Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from agent_comms.store_files import _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
@@ -174,17 +174,17 @@ class ClaimWrites(PrivateWrites):
             previous = source.claim(resource)
         return previous.acquire(claim, snapshot, publish)
 
-    def _publish_claim_transition_unlocked[Change: ClaimTransition](
+    def _publish_claim_transition_unlocked(
         self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, message: Message,
-        make_transition: Callable[..., Change], *, activity: ActivityClocks,
-    ) -> Change:
+        make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
+    ) -> ClaimTransition:
         """One typed transition, checked before append under the registry cut."""
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
         sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
-            def build(seq: int) -> ClaimRecord:
+            def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
                 )
@@ -193,7 +193,7 @@ class ClaimWrites(PrivateWrites):
                 return ClaimRecord.of(stored, source.prepare_claim(transition, snapshot))
 
             try:
-                return self.bus.append(build).claim_transition
+                return self.bus.append(build).require_claim_transition()
             except (OSError, RelationViolationError) as error:
                 raise ClaimEnvelopeUnknownError(
                     "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
@@ -240,7 +240,8 @@ class InitialWrites(PrivateWrites):
             if message.seq <= previous:
                 raise ValueError("Initial history must have ascending unique sequences")
             previous = message.seq
-            self.bus.append(lambda seq: PublicRecord.of(replace(message.history_snapshot, seq=seq)))
+            self.bus.append(lambda seq, db, original=message.history_snapshot:
+                            PublicRecord.from_message(replace(original, seq=seq)))
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
@@ -301,7 +302,7 @@ class InitialWrites(PrivateWrites):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
-            def build(seq: int) -> PrivateRecord:
+            def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
                     snapshot=snapshot, original_source=source,
@@ -330,7 +331,7 @@ class InitialWrites(PrivateWrites):
                     sender_thread.role.register_sender(store.participants, sender_lookup, sender)
                     for thread, lookup in zip(selected, lookups, strict=True):
                         store.participants.register(lookup, thread.name, thread.name, committed=True)
-                return PrivateRecord.of(
+                return PrivateRecord.from_message(
                     stored, audience=audience, decisions=decisions,
                     control=ControlClassification.ORDINARY.value,
                 )
@@ -367,7 +368,7 @@ class ResponseWrites(PrivateWrites):
         role.require_executable(RelationViolationError("Keyed response sender must be executable."))
         if intent.publication_key != canonical_publication_key(intent.execution_id, target.name):
             raise RelationViolationError("Response publication key does not match its route.")
-        def build(seq: int):
+        def build(seq: int, db: sqlite3.Connection):
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
             )

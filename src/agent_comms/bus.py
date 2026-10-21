@@ -4,58 +4,48 @@ from __future__ import annotations
 
 import sqlite3
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import (
     Addressed,
-    BusRecord,
     BusRow,
     BusTables,
+    BusProjectionTables,
     KeyedPublication,
     SentSource,
     ReceivedSource,
     AnsweredSource,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import MessageNotificationError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import ClaimMessage, Message
+from agent_comms.messages import BusRecord, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
 
 
-@dataclass(frozen=True)
-class PublicRecord(BusRecord, Message):
+class PublicRecord(BusRecord):
     pass
 
 
-@dataclass(frozen=True)
 class ClaimRecord(PublicRecord, ClaimMessage):
     pass
 
 
-@dataclass(frozen=True)
-class PrivateRecord(BusRecord, Message, Delivered):
+class PrivateRecord(Delivered):
     pass
 
 
-@dataclass(frozen=True)
 class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
 
 
-class MessageNotificationError(RuntimeError):
-    """The message committed; only notifying its readers failed."""
-
-    def __init__(self, record: BusRecord) -> None:
-        self.record = record
-        super().__init__(f"Message {record.seq}/{record.message_id} was sent, but notification failed.")
+type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
 class Bus(StoreWriter, DurableFile):
@@ -65,26 +55,51 @@ class Bus(StoreWriter, DurableFile):
 
     def __init__(self, path: Path):
         super().__init__(path)
-        for member in BusRecord.members_with(BusRecord):
-            member.tables()
-        with self.writing() as db:
-            if not SQLiteTableName.stored(db):
-                BusTables.create_schema(db)
-            BusTables.require_schema(db)
 
     @contextmanager
-    def writing(self):
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
             db.execute("PRAGMA foreign_keys=ON")
             with self.transaction(db):
+                if not SQLiteTableName.stored(db):
+                    BusTables.create_schema(db)
+                    BusProjectionTables.create_schema(db)
+                BusTables.require_schema(db)
+                BusProjectionTables.require_schema(db)
                 yield db
 
-    def append(self, build: Callable[[int], BusRecord]) -> BusRecord:
+    @contextmanager
+    def observing(self) -> Iterator[sqlite3.Connection]:
+        """Borrow one existing read-only snapshot, including for an archived bus."""
+        with CoordinationStore.observing(self.path) as db:
+            BusTables.require_schema(db)
+            BusProjectionTables.require_schema(db)
+            yield db
+
+    def revision(self) -> int:
+        with self.observing() as db:
+            return BusRow.last_seq(db)
+
+    def backup(self, destination: Path) -> None:
+        """Copy a consistent SQLite snapshot, never replace an existing destination."""
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        destination.touch(mode=0o600, exist_ok=False)
+        try:
+            with self.observing() as source, closing(
+                CoordinationStore.writer(destination, isolation_level=None)
+            ) as target:
+                source.backup(target)
+        except BaseException:
+            destination.unlink()
+            raise
+
+    def append(self, build: RecordBuilder) -> BusRecord:
         with ExitStack() as writes:
             db = writes.enter_context(self.writing())
             MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
             seq = BusRow.next_seq(db)
-            record = build(seq)
+            record = build(seq, db)
             committed = self._record(db, BusRow.require(db, seq=record.append_to(db, seq)))
             try:
                 writes.close()
@@ -105,20 +120,20 @@ class Bus(StoreWriter, DurableFile):
         return FieldCodec.decode_record(member, values)
 
     def lookup(self, seq: int) -> BusRecord:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing() as db:
             headers = BusRow.select(db, seq=seq)
             if not headers:
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
             return self._record(db, headers[0])
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing() as db:
             return tuple(self._record(db, row) for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
 
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing() as db:
             addressed = Addressed.table.select(
                 db, where="{seq} > ?", parameters=(after,), order_by=("seq",), limit=limit,
                 target=target)
@@ -131,7 +146,7 @@ class Bus(StoreWriter, DurableFile):
     ) -> tuple[Message, ...]:
         """A captured display scope narrows the addressed table before decoding."""
         with self.observing() as db:
-            upper = self.revision() + 1 if upper is None else upper
+            upper = BusRow.last_seq(db) + 1 if upper is None else upper
             order = "DESC" if descending else "ASC"
             members = ""
             if kinds:
@@ -172,7 +187,7 @@ class Bus(StoreWriter, DurableFile):
     def _source_page(self, query, parameters, *, after=0, before=None, limit=100,
                      descending=True, sequences=()):
         with self.observing() as db:
-            before = self.revision() + 1 if before is None else before
+            before = BusRow.last_seq(db) + 1 if before is None else before
             selected = ""
             if sequences:
                 selected = " AND seq IN (" + ",".join("?" for _ in sequences) + ")"

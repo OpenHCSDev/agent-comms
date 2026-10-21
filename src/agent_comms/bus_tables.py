@@ -9,22 +9,18 @@ from functools import cache
 from inspect import get_annotations
 from typing import Annotated, get_type_hints
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms import messages
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, SharedFileTables, TypedTable
 from agent_comms.message_reference import MessageReference
 
 
-class BusRecord(DeclaredFamily, affix="Record"):
-    """The record family also owns the header's stored class identity."""
-
-
-class BusTables(DurableTables, AppendOnlyTables):
+class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
     """Bus history cannot be rebuilt from another source."""
 
 
-class BusProjectionTables(DerivedTables):
+class BusProjectionTables(SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
 
 
@@ -55,8 +51,14 @@ class AnsweredSource(TypedTable, BusProjectionTables):
 @dataclass(frozen=True)
 class BusRow(TypedTable, BusTables):
     seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
-    kind: type[BusRecord]
+    kind: type[messages.BusRecord]
     at: float
+
+    @classmethod
+    def last_seq(cls, db: sqlite3.Connection) -> int:
+        return FieldCodec.decode(int, db.execute(
+            cls._sql(f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{cls.declared_name}"')
+        ).fetchone()[0])
 
     @classmethod
     def next_seq(cls, db: sqlite3.Connection) -> int:
@@ -90,6 +92,9 @@ class BusCapability(BusTables):
     """The hierarchy and each dataclass declaration own their table union."""
 
     table = _CapabilityTable()
+
+    def deliveries(self) -> tuple:
+        return ()
 
     @classmethod
     @cache
