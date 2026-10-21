@@ -53,19 +53,16 @@ if TYPE_CHECKING:
 _OWNER_LOSS_ISSUER = object()
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class VerifiedOwnerLoss(ABC):
     """A native owner's attested release, valid only inside its registry lock."""
 
     attempt: AttemptRecord
     release: OwnerReleaseEvidence
-    _issuer: object = field(repr=False)
-    _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
     boundary: NativeBoundary = field(repr=False)
-
-    def __init__(self, **_unsupported: object) -> None:
-        raise RecoveryBlocked("owner-loss proof requires an observed native owner release")
+    _issuer: object = field(default=_OWNER_LOSS_ISSUER, init=False, repr=False)
+    _active: bool = field(default=True, init=False, repr=False)
 
     @classmethod
     @contextmanager
@@ -107,22 +104,12 @@ class VerifiedOwnerLoss(ABC):
             try:
                 if source is None:
                     release = release.require_owner_loss(registry, attempt.owner_identity)
-                    proof = object.__new__(UndispatchedOwnerLoss)
+                    proof = UndispatchedOwnerLoss(attempt, release, store, boundary)
                 else:
                     release = release.require_native_loss(registry, source)
-                    proof = object.__new__(DispatchedOwnerLoss)
-                    object.__setattr__(proof, "native_input", source)
+                    proof = DispatchedOwnerLoss(attempt, release, store, boundary, native_input=source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
                 raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
-            for name, value in (
-                ("attempt", attempt),
-                ("release", release),
-                ("_issuer", _OWNER_LOSS_ISSUER),
-                ("_active", True),
-                ("_store", store),
-                ("boundary", boundary),
-            ):
-                object.__setattr__(proof, name, value)
             try:
                 yield proof
             finally:
@@ -152,7 +139,7 @@ class VerifiedOwnerLoss(ABC):
     def require_native_input(self) -> NativeRuntimeInput: ...
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class UndispatchedOwnerLoss(VerifiedOwnerLoss):
     """No input row was recorded; exact stopped owner loss still leaves UNKNOWN."""
 
@@ -172,11 +159,11 @@ class UndispatchedOwnerLoss(VerifiedOwnerLoss):
         recovery_cls.abandon_released_native_attempt(store, execution_id)
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class DispatchedOwnerLoss(VerifiedOwnerLoss):
     """The recorded input owns generation and original session observations."""
 
-    native_input: NativeRuntimeInput
+    native_input: NativeRuntimeInput = field(kw_only=True)
 
     def require_native_input(self) -> NativeRuntimeInput:
         return self.native_input
