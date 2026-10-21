@@ -110,7 +110,9 @@ try {
         execFileSync('git',['init','-q'],{cwd:root});
         writeFileSync(join(root,'uncommitted.txt'),'dirty');
     }
+    const {NativeProof}=await import(join(pkg,'dist/core/native-proof-journal.js'));
     const agentSessionConfig={cwd:root,agentDir:root,modelRuntime:runtime,model,
+        nativeInputProof:NativeProof.fromPath(join(root,'context-proof.sqlite'),manager.getSessionId()),
         sessionManager:manager,settingsManager:settings,resourceLoader:loader,noTools:'all'};
     ({session}=await pi.createAgentSession(agentSessionConfig));
     const events=[];

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.native_session_files import NativeSessionFiles
+from .native_failures import NativePiUnavailable
 
 import os
 import shutil
@@ -293,7 +294,6 @@ class RecoveryMonitorCapability:
         """Settle the old input without re-running it or fabricating delivery."""
         from .native_entries import NativeEntry
         from .native_pi import NativeContextProof
-        from .native_failures import NativePiUnavailable
         from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision

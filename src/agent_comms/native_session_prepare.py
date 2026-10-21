@@ -35,11 +35,8 @@ class PreparedSession(UnwrittenPrompt):
         self, inputs: FollowingInputs, session: backend.NativeSession,
     ) -> bool:
         session.native.forget_context()
-        state = session.native.attestation.state
-        assert state is not None
-        identity = session.native.attestation.identity
-        if identity is None:
-            raise NativePiUnavailable("Native preparation did not attest the saved session")
+        state = session.native.attestation.require_state()
+        identity = session.native.attestation.require_identity()
         session.launch.session.attest(identity)
         if (
             state.is_streaming is not False
@@ -108,7 +105,6 @@ class NativeSessionPreparation(backend.NativeSession):
                 async for event in stream:
                     if isinstance(event, events.Done) and not event.ok:
                         raise NativePiUnavailable(event.text)
-            state = preparation.native.attestation.state
-            assert state is not None
+            state = preparation.native.attestation.require_state()
             await observe(state, state.agent_info(preparation))
             return state
