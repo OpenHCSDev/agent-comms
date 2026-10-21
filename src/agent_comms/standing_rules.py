@@ -134,7 +134,6 @@ class DatedStandingRule(StandingRule, declared_name=None):
         return self.began() >= after
 
 
-@dataclass(frozen=True)
 class OwedAnswer(StandingRule, declared_name=None):
     """A message to the commander owed an answer past its window. Every member gates the
     commander's answering verbs until an action names it with --answers, so an answer cannot
@@ -145,6 +144,7 @@ class OwedAnswer(StandingRule, declared_name=None):
         """The original message this violation is owed an answer to."""
 
 
+@dataclass(frozen=True)
 class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
