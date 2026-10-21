@@ -19,11 +19,11 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import CommanderReread, ContextCadence
+from agent_comms_hooks.reread import ContextCadence, SourcesOrder
 
 
 @dataclass(frozen=True)
-class CommanderStart(CommanderReread):
+class CommanderStart(SourcesOrder):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
 
@@ -32,6 +32,7 @@ class CommanderStart(CommanderReread):
 
     def prepare(self) -> None:
         self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
+        self.drift.write_text(CommanderConfig.packaged_drift().read_text(encoding="utf-8"), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
             old.unlink()

@@ -66,6 +66,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_voice() -> Path:
         return Path(str(files(__package__) / 'voice.md'))
 
+    @staticmethod
+    def packaged_drift() -> Path:
+        return Path(str(files(__package__) / 'drift.md'))
+
     @field_validator('root')
     @classmethod
     def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
