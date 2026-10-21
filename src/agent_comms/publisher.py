@@ -239,8 +239,12 @@ class InitialWrites(PrivateWrites):
             if message.seq <= previous:
                 raise ValueError("Initial history must have ascending unique sequences")
             previous = message.seq
-            self.bus.append(lambda seq, original=message.history_snapshot:
-                            PublicRecord.from_message(replace(original, seq=seq)))
+            def build_history(
+                seq: int, original: Message = message.history_snapshot,
+            ) -> PublicRecord:
+                return PublicRecord.from_message(replace(original, seq=seq))
+
+            self.bus.append(build_history)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:

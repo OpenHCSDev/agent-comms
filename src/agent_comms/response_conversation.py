@@ -1,7 +1,10 @@
 """A response's immutable recipients derive from its original committed cohorts."""
 
+from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
@@ -15,6 +18,9 @@ from .coordination_errors import IdentityConflict
 from .coordination_tables.responses import ResponseObligation
 from .message_reference import MessageReference
 from .messages import Message
+
+if TYPE_CHECKING:
+    from agent_comms.bus import KeyedPrivateRecord
 
 
 @dataclass(frozen=True)
@@ -94,7 +100,7 @@ class ResponseConversation:
             sender_name=self.responder.canonical_thread,
         )
 
-    def record(self, seq: int, message: Message, intent):
+    def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
         from agent_comms.bus import KeyedPrivateRecord
         from agent_comms.delivery_policy import ResponseDeliveryPolicy
         from agent_comms.wake import ControlClassification
