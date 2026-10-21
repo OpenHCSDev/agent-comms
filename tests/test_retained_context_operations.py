@@ -6,12 +6,17 @@ from agent_comms.lifecycle_capability import Unresolved
 
 import json
 
+import pytest
+
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.cli import main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
+
+
+pytestmark = pytest.mark.usefixtures("durable_home")
 
 
 def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
