@@ -84,7 +84,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     assert isinstance(comms.goals.goal_wait("bob"), RecordedGoalWait)
 
 
-def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
+def test_idle_live_alternative_keeps_wait_cycle_open(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
@@ -101,13 +101,12 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
         "alice",
         StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
     )
-    with pytest.raises(ValueError):
-        comms.goals.update_goal(
-            "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
-        )
+    comms.goals.update_goal(
+        "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
+    )
 
-    assert isinstance(comms.goals.goal_wait("bob"), NoGoalWait)
-    assert comms.registry.require("bob").goal == bob
+    assert isinstance(comms.goals.goal_wait("bob"), RecordedGoalWait)
+    assert comms.goals.goal_execution("bob").state is GoalExecutionState.STANDBY
 
 
 def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
@@ -145,6 +144,44 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
         comms.goals.update_goal(
             "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
         )
+
+
+def test_standby_entry_accepts_idle_live_dependency(tmp_path):
+    comms = canonical_goal_wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid())))
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    assert not comms.agents.is_working(
+        comms.registry.require("bob").incarnation, comms.registry.snapshot())
+    comms.goals.update_goal("alice", StandbyGoalAction(
+        expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",)))
+    assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
+    assert comms.goals.recover_closed_goal_wait("alice") == ()
+    assert comms.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
+
+
+def test_idle_live_dependency_keeps_wait_group_open(tmp_path):
+    comms = canonical_goal_wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.agents.begin_turn(name, f"{name}-turn")
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    comms.goals.update_goal("bob", SetGoalAction(text="Finish work and answer later"))
+    comms.goals.update_goal("alice", StandbyGoalAction(
+        expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",)))
+    comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+
+    assert isinstance(comms.goals.goal_wait("bob"), NoGoalWait)
+    assert not comms.agents.is_working(
+        comms.registry.require("bob").incarnation, comms.registry.snapshot())
+    assert comms.goals.recover_closed_goal_wait("alice") == ()
+    assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
+    assert comms.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
 
 
 @pytest.mark.parametrize("pending_reply", [False, True])

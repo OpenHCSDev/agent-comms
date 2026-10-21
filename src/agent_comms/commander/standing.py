@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from ..comms import Comms
-from ..goal_actions import OrderGoalAction
+from ..goal_actions import ReissuedOrderGoalAction
 from ..goals import Goal, GoalRevision
 from ..goal_states import BlockedState
 from ..goal_history import GoalHistoryStore
+from ..goal_generation import GenerationState, RetryableGeneration
 from ..message_page import MessageReadRequest
 from ..message_reference import MessageReference
 from ..messages import Message
@@ -89,17 +90,47 @@ class Detached(HolderCannotRun):
 
 
 @dataclass(frozen=True)
-class Blocked(HolderCannotRun):
+class BlockedHolder(HolderCannotRun, declared_name=None):
+    """A holder whose blocked goal is idle; its attempt ledger decides what may follow."""
+
     block_record: Path
     goal: GoalRevision
 
     @staticmethod
-    def stalled(comms: Comms, thread: Thread) -> bool:
-        return not thread.executing and any(isinstance(goal.state, BlockedState) for goal in thread.goal)
+    @abstractmethod
+    def accepts(generation: GenerationState) -> bool: ...
+
+    @classmethod
+    def stalled(cls, comms: Comms, thread: Thread) -> bool:
+        store = comms.goals.open_goal_store()
+        return not thread.executing and any(
+            isinstance(goal.state, BlockedState) and cls.accepts(store.require_generation(goal.id).lifecycle)
+            for goal in thread.goal)
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
         return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().revision_key)
+
+
+@dataclass(frozen=True)
+class UnresolvedBlock(BlockedHolder):
+    """An attempt with an unknown outcome: Core never retries it, so it is never replayed."""
+
+    @staticmethod
+    def accepts(generation: GenerationState) -> bool:
+        return not isinstance(generation, RetryableGeneration)
+
+    def line(self) -> str:
+        return (f"UNRESOLVED BLOCK {self.unit}: orders {', '.join(self.orders)}; "
+                f"goal {self.goal.id}@{self.goal.revision} has an attempt with an unknown result "
+                "-> inspect it, then fail or finish the attempt")
+
+
+@dataclass(frozen=True)
+class Blocked(BlockedHolder):
+    @staticmethod
+    def accepts(generation: GenerationState) -> bool:
+        return isinstance(generation, RetryableGeneration)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         for problem in self.orders:
@@ -159,8 +190,9 @@ class UnitAskUnanswered(UndatedStandingRule):
     sent_at: float
     seconds: ClassVar[int] = 15 * 60
 
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    @staticmethod
+    def asks(comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
+        """Holders' messages to the commander, sent by ``before``, that no commander reply answers."""
         held = HolderCannotRun.holders(comms, commander)
         if not held:
             return ()
@@ -168,11 +200,15 @@ class UnitAskUnanswered(UndatedStandingRule):
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
         since = min(todo.order.checked().at.recorded_at("A held order")
                     for todos in held.values() for todo in todos)
-        request = UnansweredUnitAsks(
-            RepliesDisplayScope(snapshot.names_for(commander), peers), since, time.time() - cls.seconds,
-        )
+        return comms.bus.log.read_page(UnansweredUnitAsks(
+            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
+        ))
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        snapshot = comms.registry.snapshot()
         return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
-                     for message in comms.bus.log.read_page(request))
+                     for message in cls.asks(comms, commander, time.time() - cls.seconds))
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.sent_at) // 60))
@@ -201,9 +237,9 @@ class UnownedWheelSpin(UndatedStandingRule):
                       key=lambda thread: thread.name)
 
     @staticmethod
-    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> OrderGoalAction:
+    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> ReissuedOrderGoalAction:
         now = time.time()
-        return OrderGoalAction(
+        return ReissuedOrderGoalAction(
             problem=todo.id, expected_revision=todo.revision,
             order=todo.order.reissued(now), request=todo.goal.request(),
             review_at=todo.reissued_review(now), commander=commander, assigner=assigner,

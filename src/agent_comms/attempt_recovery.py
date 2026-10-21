@@ -8,6 +8,7 @@ from .native_failures import NativePiUnavailable
 import os
 import shutil
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -28,6 +29,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_results import Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.executions import CurrentExecutions
 from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
 )
@@ -38,6 +40,8 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution
+from agent_comms.native_claim_epoch import UnrecordedNativeClaim
+from agent_comms.typed_table import RowNotFoundError
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
@@ -50,20 +54,16 @@ if TYPE_CHECKING:
 _OWNER_LOSS_ISSUER = object()
 
 
-@dataclass(frozen=True, slots=True, init=False)
-class VerifiedOwnerLoss:
+@dataclass(frozen=True, slots=True)
+class VerifiedOwnerLoss(ABC):
     """A native owner's attested release, valid only inside its registry lock."""
 
     attempt: AttemptRecord
-    native_input: NativeRuntimeInput
     release: OwnerReleaseEvidence
-    _issuer: object = field(repr=False)
-    _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
     boundary: NativeBoundary = field(repr=False)
-
-    def __init__(self, **_unsupported: object) -> None:
-        raise RecoveryBlocked("owner-loss proof requires an observed native owner release")
+    _issuer: object = field(default=_OWNER_LOSS_ISSUER, init=False, repr=False)
+    _active: bool = field(default=True, init=False, repr=False)
 
     @classmethod
     @contextmanager
@@ -92,31 +92,26 @@ class VerifiedOwnerLoss:
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
-            source = NativeRuntimeInput.one(
-                store.session._connection,
-                **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
-            )
-            if source is None or source.owner_identity != attempt.owner_identity:
-                raise RecoveryBlocked("native attempt has no matching dispatched owner")
             try:
                 release = comms.owners.releases.get(attempt.owner_thread)
             except (OSError, RelationViolationError, MalformedRecord) as error:
                 raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
             try:
-                release = release.require_native_loss(registry, source)
+                try:
+                    source = NativeRuntimeInput.require(
+                        store.session._connection,
+                        **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
+                    )
+                except RowNotFoundError:
+                    release = release.require_owner_loss(registry, attempt.owner_identity)
+                    proof = UndispatchedOwnerLoss(attempt, release, store, boundary)
+                else:
+                    if source.owner_identity != attempt.owner_identity:
+                        raise RecoveryBlocked("native attempt has a conflicting dispatched owner")
+                    release = release.require_native_loss(registry, source)
+                    proof = DispatchedOwnerLoss(attempt, release, store, boundary, native_input=source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
                 raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
-            proof = object.__new__(cls)
-            for name, value in (
-                ("attempt", attempt),
-                ("native_input", source),
-                ("release", release),
-                ("_issuer", _OWNER_LOSS_ISSUER),
-                ("_active", True),
-                ("_store", store),
-                ("boundary", boundary),
-            ):
-                object.__setattr__(proof, name, value)
             try:
                 yield proof
             finally:
@@ -136,16 +131,65 @@ class VerifiedOwnerLoss:
         )
 
     def require_native_exit(self) -> None:
-        """Inspect the original launch resources while owner exclusion is held.
-
-        A recorded selected journal supplements the original allocated directory
-        check. Earlier directory-bound launches recorded identity only with
-        the later context record. Without a recorded send grant, the exact stopped declaration
-        supplies any saved selection instead. Missing send records never establish
-        that a native child did not launch.
-        """
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
+
+    @abstractmethod
+    def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None: ...
+
+    @abstractmethod
+    def require_native_input(self) -> NativeRuntimeInput: ...
+
+
+@dataclass(frozen=True, slots=True)
+class UndispatchedOwnerLoss(VerifiedOwnerLoss):
+    """No input row was recorded; exact stopped owner loss still leaves UNKNOWN."""
+
+    def require_native_exit(self) -> None:
+        super(UndispatchedOwnerLoss, self).require_native_exit()
+        release = self.release.require_owner_loss(self.boundary.registry, self.attempt.owner_identity)
+        current = self.boundary.registry.require(release.name)
+        try:
+            UnrecordedNativeClaim().require_release(release, self.boundary.registry, current)
+        except RelationViolationError as error:
+            raise RecoveryBlocked(str(error)) from error
+
+    def require_native_input(self) -> NativeRuntimeInput:
+        raise RecoveryBlocked("native attempt has no original input")
+
+    def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
+        recovery_cls.abandon_released_native_attempt(store, execution_id)
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchedOwnerLoss(VerifiedOwnerLoss):
+    """The recorded input owns generation and original session observations."""
+
+    native_input: NativeRuntimeInput = field(kw_only=True)
+
+    def require_native_input(self) -> NativeRuntimeInput:
+        return self.native_input
+
+    def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
+        from agent_comms.coordination_response import PublicationAppendDispatches
+
+        self.require_native_exit()
+        PublicationAppendDispatches.resolve_retained(
+            store, self.boundary.bus, self.boundary,
+            owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+            execution_id=execution_id,
+        )
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        if pointer.unresolved:
+            execution_id = pointer.execution_id.require("the owner pointer names no execution")
+            try:
+                recovery_cls.recover_released_native_attempt(store, execution_id)
+            except RecoveryBlocked:
+                recovery_cls.abandon_released_native_attempt(store, execution_id)
+
+    def require_native_exit(self) -> None:
+        """Observe the recorded input's original launch resources, never a successor's."""
+        super(DispatchedOwnerLoss, self).require_native_exit()
         session_files = self.native_input.sent_owner_claimed_generation.recovery_session_files(
             self.native_input, self.boundary.registry.require(self.release.name)
         )
@@ -245,19 +289,19 @@ class RecoveryMonitorCapability:
         """An explicit stop retires only the exited owner's original local attempt."""
         from .comms import Comms
 
-        if not (CoordinationStore.path_in(root)).exists():
-            return  # No native coordinator, hence no selected attempt claims.
-        acknowledgement = Comms(root).owners.releases.get(owner.name)
+        comms = Comms(root)
+        acknowledgement = comms.owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
+        store = comms.goals.open_goal_store()
+        owner.goal.stopped_permit(store).stop(store)
+        if not (CoordinationStore.path_in(root)).exists():
+            return  # Goal claims can exist without a selected native execution.
         cls.recover_owner(root, owner)
 
     @classmethod
     def recover_owner(cls, root: Path, owner) -> None:
         """Resolve an exited predecessor once, before this worker begins draining."""
-        from .coordination_response import PublicationAppendDispatches
-        from .coordination_tables.executions import CurrentExecutions
-
         path = CoordinationStore.path_in(root)
         if not path.exists():
             return
@@ -266,26 +310,9 @@ class RecoveryMonitorCapability:
             pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
             if pointer is None or not pointer.unresolved:
                 return
-            # The released owner and exact keyed dispatch prove an existing
-            # frozen reply before any attempt is marked uncertain.
             execution_id = pointer.execution_id.require("the owner pointer names no execution")
             with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-                loss.require_native_exit()
-                PublicationAppendDispatches.resolve_retained(
-                    store, loss.boundary.bus, loss.boundary,
-                    owner_lookup=lookup, owner_thread=owner.name,
-                    execution_id=execution_id,
-                )
-            pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
-            if pointer is not None and pointer.unresolved:
-                execution_id = pointer.execution_id.require("the owner pointer names no execution")
-                try:
-                    cls.recover_released_native_attempt(store, execution_id)
-                except RecoveryBlocked:
-                    # Stop cannot reconstruct absent or broken provider proof.
-                    # The existing monitor still demands the same exact release
-                    # and native exit before recording UNKNOWN, never replay.
-                    cls.abandon_released_native_attempt(store, execution_id)
+                loss.settle(cls, store, execution_id, owner)
 
     @classmethod
     def recover_released_native_attempt(cls, store, execution_id):
@@ -330,7 +357,7 @@ class RecoveryMonitorCapability:
                     session.require_context(proof)
                     terminal = evidence.stopped_input(source.input_id)
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            if loss.native_input != source:
+            if loss.require_native_input() != source:
                 raise StaleRevision("native input changed during recovery")
             loss.require_native_exit()
             for kept in revision.revisions():
@@ -420,7 +447,7 @@ class RecoveryMonitorCapability:
             assert attempt is not None  # The release observer requires an attempt.
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = loss.native_input
+            reserved = loss.require_native_input()
             original_session = reserved.require_session_identity()
             session_file = Path(session_file).absolute()
             original_session.require_session(str(session_file))
@@ -481,17 +508,14 @@ class RecoveryMonitorCapability:
         expected_execution_revision: int,
         expected_pointer_revision: int,
         evidence: MonitorEvidence,
-        owner_loss: VerifiedOwnerLoss | None = None,
+        owner_loss: VerifiedOwnerLoss,
         replay_facts: ReplayFact = ReplayFact.NONE,
     ) -> Applied[RecoverySnapshot]:
         if not evidence.subprocess_dead:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
         replay_facts = ReplayFact(replay_facts)
-        if (
-            not isinstance(owner_loss, VerifiedOwnerLoss)
-            or not owner_loss.issued_for(store)
-        ):
+        if not owner_loss.issued_for(store):
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
         with store.session.settlement(owner_loss.boundary) as boundary:
             db = store.session._connection

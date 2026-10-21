@@ -1,6 +1,7 @@
 ---
 name: slop-and-polymorphism
 description: "inheritance as much as possible: a branch, a string identity, Any, an env var, a forwarder, a helper object or a sibling-only edit is presumed slop; the fact belongs on its owning type, shared behaviour in a parent, overlapping capabilities in mixins composed by the MRO; fix structure in the current change"
+drift: "Workaround in your hand? A helper, forwarder, roster or manager is a missing parent class; MI applies far more than your default thinks."
 audience: fleet
 type: hard-rule
 ---

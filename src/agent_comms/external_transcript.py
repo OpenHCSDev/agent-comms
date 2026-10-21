@@ -29,14 +29,13 @@ from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from .typed_table import (
     Column,
-    DurableTables,
+    DurableStore,
     ForeignKey,
     Generated,
     Index,
     RealStorage,
     StoreWriter,
     TypedRow,
-    TypedStore,
     TypedTable,
 )
 from .wire_watch import WatchSource, WireWatch
@@ -280,7 +279,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             return
         from .registration import Registration
         thread = Registration(RegistryFile.path_in(root)).require(original.owner_thread)
-        original.require_recorded_owner(thread)
+        original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
             publication = TurnDraftPublication(transcript, connection, input_id)
@@ -417,7 +416,7 @@ class StoreRead(TranscriptSource):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TranscriptSource, TypedStore, DurableTables):
+class ExternalTranscript(TranscriptSource, DurableStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path

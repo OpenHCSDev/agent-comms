@@ -18,6 +18,7 @@ from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.locked_store import DurableFile
 from agent_comms.typed_table import (
     SQLiteTableName,
     StoreWriter,
@@ -105,7 +106,7 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore(StoreWriter):
+class CoordinationStore(StoreWriter, DurableFile):
     """Own SQLite read snapshots and the shared writer busy policy."""
 
     filename = "coordination.sqlite3"

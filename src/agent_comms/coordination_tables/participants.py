@@ -6,6 +6,7 @@ from typing import Annotated
 from dataclasses import dataclass
 
 from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     Column,
@@ -89,6 +90,13 @@ class OwnerGenerations(ParticipantIdentity, CoordinatorTable, TypedTable):
     owner_lookup: Annotated[str, Column(primary_key=True)]
     owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
+
+    def require_recorded_owner(self, thread):
+        """Join original coordinator naming/birth; grant no live ownership."""
+        expected = type(self)(owner_lookup=thread.incarnation.lookup,
+                              owner_thread=thread.name, generation=self.generation)
+        if self != expected:
+            raise IdentityConflict("Native input belongs to another recorded owner")
 
     @classmethod
     def references(cls):

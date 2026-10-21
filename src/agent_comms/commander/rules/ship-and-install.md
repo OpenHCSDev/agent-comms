@@ -1,6 +1,7 @@
 ---
 name: ship-and-install
 description: "merged fixes are installed the same hour; installs stop every unit at once instead of waiting on turns; the merge queue is the only gate; our own packages track latest; every wait or gate must name the failure it alone prevents, and slowness is a defect fixed now"
+drift: "Every wait, gate or one-at-a-time step names the failure it alone prevents, or it goes."
 audience: fleet
 type: feedback
 ---

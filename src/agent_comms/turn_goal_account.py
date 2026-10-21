@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from .goal_attempts import (
-    GoalAttemptError, GoalAttemptStore, GoalTurnPermit, LaunchPermit, NoLaunchPermit,
+from agent_comms.goal_attempts import (
+    GoalAttemptError, GoalAttemptStore, LaunchPermit,
 )
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
@@ -118,10 +119,11 @@ class TurnGoalAccount:
         return snapshot.canonical_name(self.owner.name)
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
-        goal_id = self.comms.registry.require(self.thread_name).goal.reported_id()
-        permit = self.originated.get(goal_id, self.permit)
-        if not permit.charge_for(goal_id, self.comms.goals, str(event.response_id), event.usage):
-            self.unattributed_usage.append((str(event.response_id), event.usage))
+        for goal in self.comms.registry.require(self.thread_name).goal:
+            permit = self.originated.get(goal.id, self.permit)
+            if permit.charge_for(goal.id, self.comms.goals, str(event.response_id), event.usage):
+                return
+        self.unattributed_usage.append((str(event.response_id), event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         self.has_productive_tool |= bool(event.ok)

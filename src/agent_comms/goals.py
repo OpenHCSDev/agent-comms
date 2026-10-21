@@ -26,6 +26,7 @@ from .field_codec import (
     RecordMember, SubclassUnion,
 )
 from .goal_states import ActiveGoal, GoalState
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
@@ -641,6 +642,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
                                claim_scope: int) -> FailedTurnProjection: ...
 
     @abstractmethod
+    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit: ...
+
+    @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
                permit: LaunchPermit, turn: TurnId) -> None: ...
 
@@ -726,6 +730,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
+    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+        return NoLaunchPermit()
+
     def __iter__(self) -> Iterator[Goal]:
         return iter(())
 
@@ -833,6 +840,9 @@ class Goal(RecordMember, GoalDeclaration):
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
+        return store.stopped_permit(self.id)
 
     def __iter__(self) -> Iterator[Goal]:
         yield self

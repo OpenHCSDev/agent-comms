@@ -10,11 +10,13 @@ from pathlib import Path
 import pytest
 
 from connector_readiness import ConnectorReadiness
+from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.host_services import HostService, ServiceNotServingError
-from agent_comms.host_services.connector import SystemdConnectorService
+from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_the_connector_is_a_declared_service():
@@ -33,7 +35,6 @@ def connector_service(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     store = ConnectorStore.owned()
     store.update(lambda grants: grants)
-    launch = LaunchRoot.from_path(copied)
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]
@@ -42,7 +43,7 @@ def connector_service(comms, tmp_path, monkeypatch):
     readiness = ConnectorReadiness()
     environment = readiness.environment({**os.environ, "PYTHONPATH": str(project / "src")})
     command = (
-        sys.executable, "-u", str(Path(sys.executable).parent / "agent-comms-connector"),
+        sys.executable, str(Path(sys.executable).parent / "agent-comms-connector"),
         "serve", "--root", str(copied), "--port", str(port),
     )
 
@@ -56,14 +57,11 @@ def connector_service(comms, tmp_path, monkeypatch):
 
     class ManagedConnector(SystemdConnectorService, declared_name=None):
         @classmethod
-        def running(cls):
-            return tuple(
-                cls(process.pid, launch=launch, store=store, port=port)
-                for process in children if process.poll() is None
-            )
+        def pid(cls) -> int:
+            return next((process.pid for process in children if process.poll() is None), 0)
 
         def restart(self) -> None:
-            previous = next(process for process in children if process.pid == self.pid)
+            previous = next(process for process in children if process.pid == self.pid())
             previous.terminate()
             previous.wait(timeout=5)
             start()
@@ -89,20 +87,26 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
 
 
-def test_systemd_restart_declares_readiness_before_restarting(comms, tmp_path, monkeypatch):
+def test_connector_unit_owns_exec_start_and_readiness(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    commands: list[tuple[str, ...]] = []
-    monkeypatch.setattr(subprocess, "run", lambda command, check: commands.append(command))
+    root = tmp_path / "bus with spaces %and $value"
+    command = ConnectorVerb.parse((
+        "install-service", "--root", str(root), "--port", "18821",
+        "--issuer", "https://connector.example.test",
+    ))
+    assert isinstance(command, InstallServiceVerb)
     service = SystemdConnectorService(
-        1, launch=LaunchRoot.from_path(comms.root), store=ConnectorStore.owned(),
+        launch=LaunchRoot.from_path(command.root), port=command.port,
     )
-    service.restart()
-    assert "Type=notify" in service.readiness_file.read_text()
-    assert service.readiness_file.parent.name == f"{SystemdConnectorService.unit}.d"
-    assert commands == [
-        ("systemctl", "--user", "daemon-reload"),
-        ("systemctl", "--user", "restart", SystemdConnectorService.unit),
-    ]
+    text = service.unit_text(service.exec_arguments(command.issuer))
+    expected = (
+        f'ExecStart="{LaunchRuntime.current_pointer()}/bin/agent-comms-connector" '
+        f'"serve" "--root" "{tmp_path}/bus with spaces %%and $$value" "--port" "18821" '
+        '"--issuer" "https://connector.example.test"'
+    )
+    assert expected in text.splitlines()
+    assert "Type=notify" in text.splitlines()
+    assert "NotifyAccess=main" in text.splitlines()
 
 
 def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service):

@@ -7,12 +7,15 @@ import sys
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
 from . import ServiceNotServingError, SystemdUserService
 from ..active_route import ActiveRoute
 from ..comms import client_wire
-from ..connector import CALLER, LOOPBACK, PORT, ConnectorVerb, ToolCall, ToolsCallMessage, ToolsCallReply
+from ..connector import (
+    CALLER, LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb,
+    ToolCall, ToolsCallMessage, ToolsCallReply,
+)
 from ..connector_store import ConnectorStore
 from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..errors import RelationViolationError, ToolRefusedError
@@ -68,7 +71,33 @@ class ConnectorService:
 class SystemdConnectorService(ConnectorService, SystemdUserService):
     """Systemd adds process lifetime to the same configured endpoint and serving proof."""
 
-    unit = "agent-comms-connector.service"
+    program = ConnectorVerb.program
+    unit = f"{program}.service"
+
+    @classmethod
+    def from_process(cls, pid: int) -> Self:
+        # Our installed console script's argv is interpreter, script, verb, options.
+        endpoint = ServeVerb.parse(cls.process_arguments(pid)[2:])
+        return cls(launch=LaunchRoot.from_path(endpoint.root), port=endpoint.port)
+
+    def exec_arguments(self, issuer: str) -> tuple[str, ...]:
+        endpoint = ServeVerb(root=self.launch.path, port=self.port, issuer=issuer)
+        return endpoint.command_arguments()
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
+    """Write and enable the connector's declared unit without starting it."""
+
+    help = "Install the complete user service unit through the current runtime"
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        service = SystemdConnectorService(
+            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
+        )
+        service.install(service.exec_arguments(self.issuer))
+        print(service.unit_file)
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -19,9 +19,9 @@ import secrets
 import sqlite3
 import stat
 import tempfile
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, closing, suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -55,19 +55,15 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .locked_store import DurableFile, SQLiteFile
-from .ordinary_turn_rules import OrdinaryGoalGrantCheck
+from agent_comms.goal_turn_permit import GoalTurnPermit
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
-    from .turn_terminal import TurnTerminal
     from .goal_management import Goals
-    from .goals import GoalDeclaration
-    from .thread_identity import TurnId
     from .threads import Thread
     from .turn_context import TurnContext
-    from .turn_goal_account import TurnGoalAccount, VerifiedGoalSettlement
 
 
 class GoalAttemptError(RuntimeError):
@@ -125,10 +121,17 @@ class Generation(GoalLedgerTable, TypedTable):
         f"json_extract(lifecycle,'$.kind') IN {GenerationState.sql_choices()}",
     )
 
-    def failure_identity(self) -> GoalAttemptIdentity:
-        self.lifecycle.require_failure()
+    @property
+    def attempt_identity(self) -> GoalAttemptIdentity:
         assert self.attempt_id is not None
         return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
+
+    def failure_identity(self) -> GoalAttemptIdentity:
+        self.lifecycle.require_failure()
+        return self.attempt_identity
+
+    def has_ready_grant(self, number: int, digest: str) -> bool:
+        return self.lifecycle.ready and self.number == number and self.ready_digest == digest
 
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
@@ -247,8 +250,7 @@ class Reservation:
     ) -> bool:
         if not store._is_generation(generation):
             return False
-        with closing(store._connect()) as conn:
-            return AttemptRecord.read_in(conn, self.attempt_id).holds(self, phase)
+        return store.read_attempt(self.attempt_id).holds(self, phase)
 
 
 @dataclass(frozen=True)
@@ -281,10 +283,13 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     def read_in(cls, conn: sqlite3.Connection, attempt_id: str) -> LedgerAttempt:
         """The ledger's answer for one attempt ID, decoded once here: its record or its absence."""
         try:
-            record = cls.one(conn, attempt_id=attempt_id)
+            with closing(cls.stream(conn, attempt_id=attempt_id)) as records:
+                return next(
+                    (RecordedAttempt(record) for record in records),
+                    MissingAttempt(f"Goal attempt {attempt_id} has no ledger row."),
+                )
         except MalformedRecord as error:
             raise StorageUncertainError("Invalid persisted goal attempt.") from error
-        return MissingAttempt() if record is None else RecordedAttempt(record)
 
     def advance(
         self,
@@ -309,8 +314,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     def matches_resolution(
         cls, store: GoalAttemptStore, attempt_id: str, phase: GoalAttemptPhase, resolution: str
     ) -> bool:
-        with closing(store._connect()) as conn:
-            return AttemptRecord.read_in(conn, attempt_id).resolved_as(phase, resolution)
+        return store.read_attempt(attempt_id).resolved_as(phase, resolution)
 
 
 @dataclass(frozen=True)
@@ -319,6 +323,9 @@ class LedgerAttempt(DeclaredFamily, affix="Attempt"):
 
     Each member answers what the store asks of an attempt; nothing above decides it by None.
     """
+
+    @abstractmethod
+    def stopped_permit(self) -> GoalTurnPermit: ...
 
     @abstractmethod
     def reserved_by(self, reservation: Reservation, refusal: GoalAttemptError) -> AttemptRecord:
@@ -344,6 +351,9 @@ class LedgerAttempt(DeclaredFamily, affix="Attempt"):
 @dataclass(frozen=True)
 class RecordedAttempt(LedgerAttempt):
     record: AttemptRecord
+
+    def stopped_permit(self) -> GoalTurnPermit:
+        return LaunchPermit(self.record.reservation)
 
     def reserved_by(self, reservation: Reservation, refusal: GoalAttemptError) -> AttemptRecord:
         if self.record.reservation != reservation:
@@ -377,6 +387,11 @@ class RecordedAttempt(LedgerAttempt):
 @dataclass(frozen=True)
 class MissingAttempt(LedgerAttempt):
     """The ledger holds no record for an attempt ID that was named."""
+
+    diagnostic: str = "The goal generation names no attempt."
+
+    def stopped_permit(self) -> GoalTurnPermit:
+        raise StorageUncertainError(self.diagnostic)
 
     def reserved_by(self, reservation: Reservation, refusal: GoalAttemptError) -> AttemptRecord:
         raise refusal
@@ -442,73 +457,6 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
 
 
-class GoalTurnPermit(ABC):
-    """The turn's launch authority, including a turn that has no goal claim."""
-
-    @property
-    @abstractmethod
-    def claims(self) -> tuple[LaunchPermit, ...]: ...
-
-    def check_grant(self, store: GoalAttemptStore) -> None:
-        for permit in self.claims:
-            OrdinaryGoalGrantCheck(permit=permit, store=store).require_valid()
-
-    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
-        for permit in self.claims:
-            claims.callback(permit.retire_unverified, store)
-        return bool(self.claims)
-
-    def settle(self, account: TurnGoalAccount, terminal: TurnTerminal) -> None:
-        for permit in self.claims:
-            account.settle_launched(permit, terminal)
-
-    def stop(self, store: GoalAttemptStore) -> None:
-        for permit in self.claims:
-            permit.stop(store)
-
-    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
-        for permit in self.claims:
-            account.block_active_goal(diagnostic)
-
-    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-                    goal: GoalDeclaration, turn: TurnId) -> None:
-        for permit in self.claims:
-            goal.settle(settlement, store, permit, turn)
-
-    @abstractmethod
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
-
-    @abstractmethod
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
-
-    @abstractmethod
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: PiUsage) -> bool: ...
-
-    @abstractmethod
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
-
-
-class NoLaunchPermit(GoalTurnPermit):
-    claims: ClassVar[tuple[LaunchPermit, ...]] = ()
-
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
-        return False
-
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: PiUsage) -> bool:
-        return False
-
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
-        return context
-
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
-        generation = store.snapshot(goal_id)
-        if generation and generation.lifecycle.allows_resume(True):
-            store.retire_goal(goal_id, expected_generation=generation.number,
-                              attempt_id=generation.attempt_id)
-
-
 @dataclass(frozen=True, slots=True)
 class LaunchPermit(GoalTurnPermit):
     reservation: Reservation
@@ -519,13 +467,12 @@ class LaunchPermit(GoalTurnPermit):
 
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         """Read the original attempt, even after its successor generation advances."""
-        with closing(store._connect()) as conn:
-            original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
+        original = store.read_attempt(self.reservation.attempt_id)
         return original.reserved_by(self.reservation, StaleAttemptError(
             "Original launch attempt changed or is unavailable.",
         )).phase.verified_progress
 
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+    def charge_for(self, goal_id: str, goals: Goals, response: str,
                    usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
@@ -851,6 +798,14 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
             raise MissingGoalGenerationError(goal_id)
         return generation
 
+    def read_attempt(self, attempt_id: str) -> LedgerAttempt:
+        with closing(self._connect()) as conn:
+            return AttemptRecord.read_in(conn, attempt_id)
+
+    def stopped_permit(self, goal_id: str) -> GoalTurnPermit:
+        generation = self.require_generation(goal_id)
+        return generation.lifecycle.stopped_permit(self, generation)
+
     def authorize_current_retry(self, goal_id: str, decision: str) -> None:
         """The current generation owns how an explicit retry or fresh order proceeds."""
         generation = self.require_generation(goal_id)
@@ -870,29 +825,21 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
             lambda conn: write(conn, digest),
             lambda value: (
                 self._is_generation(value)
-                and self._read_ready_digest(value.goal_id, value.number) == digest
+                and self.require_generation(value.goal_id).has_ready_grant(value.number, digest)
             ),
         )
         self._ready_grants[(goal_id, generation)] = grant
         return result
 
-    def _read_ready_digest(self, goal_id: str, generation: int) -> str | None:
-        with closing(self._connect()) as conn:
-            try:
-                row = Generation.one(conn, goal_id=goal_id, number=generation)
-            except (sqlite3.Error, MalformedRecord) as error:
-                raise StorageUncertainError("Cannot read ready authority state.") from error
-        return row.ready_digest if row is not None and row.lifecycle.ready else None
-
     def ready_grant(self, goal_id: str, generation: int) -> str:
         """Delegate only this instance's acknowledged READY authority to a supervisor."""
-        grant = self._ready_grants.get((goal_id, generation))
-        if grant is None or self._read_ready_digest(goal_id, generation) != Generation.grant_digest(
-            grant
-        ):
-            raise UnresolvedAttemptError(
-                "No acknowledged ready grant is available; decide explicitly."
-            )
+        refusal = UnresolvedAttemptError("No acknowledged ready grant is available; decide explicitly.")
+        try:
+            grant = self._ready_grants[(goal_id, generation)]
+        except KeyError as error:
+            raise refusal from error
+        if not self.require_generation(goal_id).has_ready_grant(generation, Generation.grant_digest(grant)):
+            raise refusal
         return grant
 
     def recover_unreserved_ready(self, goal_id: str, expected_generation: int) -> Generation:

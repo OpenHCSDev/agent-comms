@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from uuid import uuid4
 
 from agent_comms import field_codec
+from agent_comms.input_disposition import InputDispositions
 
 from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
@@ -261,8 +262,6 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         report_turn = ctx.report_turn
         review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
         wait_targets = review.targets
-        from .input_disposition import InputDispositions
-
         aliases = review.owners
         dispositions = InputDispositions(ctx.goals.root)
         unknown = {row.key: row for row in review.unknown}
@@ -293,15 +292,13 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             )
         snapshot = ctx.goals.registry.snapshot()
         if not any(
-            ctx.goals.agents.is_working(target.incarnation, snapshot)
+            ctx.goals.agents.is_live(target.incarnation, snapshot)
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
-                f"No declared dependency is working ({names}). "
-                "A running/ready process or queued input does not prove active work. "
-                "Message or restart the responsible agent, inspect its status, "
-                "then declare standby only while a target is actually working."
+                f"No declared dependency is live ({names}). "
+                "Inspect its registered process before declaring standby."
             )
         closed = GoalWaits.closed_wait_group(
             thread.name,
@@ -524,15 +521,19 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
         """Refuse invalid orders before reserving their Todo."""
-        self.order.require_wording()
+        self.require_sendable()
         commander = ctx.goals.registry.require(self.commander)
         commander.goal.require().require_id(self.request).require_active().order.require_request()
         self.review_at.require_recorded("A review time")
+        request = GoalRef(commander.name, commander.created_at, self.request)
+        return request
+
+    def require_sendable(self) -> None:
+        """A new order's wording and source references hold against the tree it is sent with."""
+        self.order.require_wording()
         self.order.owner.require_exists(Path(self.order.check.directory))
         self.order.scope.require_references(Path(self.order.check.directory))
         self.order.check.require_directory()
-        request = GoalRef(commander.name, commander.created_at, self.request)
-        return request
 
     def create(self, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
@@ -559,6 +560,18 @@ class OrderGoalAction(ProblemOrderGoalAction):
             owner=ctx.thread, assigner=self.assigner,
             generation=generation, goal=goal, review_at=self.review_at, order=self.order,
             traced=self.traced)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReissuedOrderGoalAction(OrderGoalAction):
+    """Core hands a holder an order its Todo already accepted.
+
+    The order was sendable when accepted; its unit has edited the sources it names
+    since, so they are not checked again against the moved tree.
+    """
+
+    def require_sendable(self) -> None:
+        pass
 
 
 @dataclass(frozen=True, kw_only=True)

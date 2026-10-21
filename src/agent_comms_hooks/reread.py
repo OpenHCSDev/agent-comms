@@ -3,7 +3,8 @@
 Claude Code runs this after every tool call, so like every hook it imports only
 the standard library. The session start hook writes the sources into parts
 beside the transcript; each reminder fires every `every` tokens of its own, and
-all due reminders go out in one hook output.
+all due reminders go out in one hook output. A sources order counts from the
+reply after its parts were read, never from when it was sent.
 """
 
 from __future__ import annotations
@@ -49,6 +50,40 @@ class RereadMark(HookRecord):
     """The context size at the last reread of one session."""
 
     tokens: int
+
+
+@dataclass(frozen=True)
+class RereadOrder(HookRecord):
+    """A sources order not yet read: the parts still unread, and the context of the reply
+    that issued the latest part read. Its mark settles only at a later reply, so the reads
+    themselves are counted as read instead of as growth toward the next order."""
+
+    unread: list[str]
+    read_in: int
+
+
+@dataclass(frozen=True)
+class ToolInput(HookRecord):
+    """A tool call's input; a member is named as Claude Code names its tool, and the
+    family itself stands for every tool no member declares."""
+
+    def read_paths(self) -> frozenset[str]:
+        return frozenset()
+
+    @classmethod
+    def called(cls, tool_name: str, tool_input: dict) -> ToolInput:
+        members = {member.__name__: member for member in cls.__subclasses__()}
+        return members.get(tool_name, cls).decode(tool_input)
+
+
+@dataclass(frozen=True)
+class Read(ToolInput):
+    """The Read tool's input: it reads the one file it names."""
+
+    file_path: str
+
+    def read_paths(self) -> frozenset[str]:
+        return frozenset((self.file_path,))
 
 
 @dataclass(frozen=True)
@@ -121,28 +156,74 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
 class ToolUseReminder(ContextCadence, ABC):
     """A reminder checked after every tool call; each direct subclass is one reminder."""
 
+    tool_name: str
+    tool_input: dict
+
+    def read_paths(self) -> frozenset[str]:
+        return ToolInput.called(self.tool_name, self.tool_input).read_paths()
+
 
 @dataclass(frozen=True)
 class SourcesOrder(ContextCadence, ABC):
-    """The order to read every source part; session start and the reread share its mark."""
+    """The order to read every source part.
+
+    Session start and the reread share its order file and its mark.
+    """
 
     mark_suffix: ClassVar[str] = ".reread.json"
 
+    @property
+    def order(self) -> Path:
+        return Path(self.transcript_path).with_suffix(".reread-order.json")
+
+    def outstanding(self) -> RereadOrder:
+        return RereadOrder.decode(json.loads(self.order.read_text()))
+
     def message(self, tokens: int) -> str:
-        paths = sorted(self.parts.iterdir())
+        unread = self.outstanding().unread
         return (
-            f"Read each of these {len(paths)} files in full with the Read tool before any other"
+            f"Read each of these {len(unread)} files in full with the Read tool before any other"
             " action: they are the indictment, the recorded failures, the commander skill, every"
             " packaged rule and the refactor-audit pattern catalog. A summary or memory of them"
-            " does not count as reading them.\n" + "\n".join(map(str, paths))
+            " does not count as reading them.\n" + "\n".join(unread)
         )
+
+    def take(self, tokens: int) -> tuple[str, ...]:
+        """An order names every part; its mark waits until they are read."""
+        if not self.due(tokens):
+            return ()
+        self.prepare()
+        unread = [str(path) for path in sorted(self.parts.iterdir())]
+        self.order.write_text(json.dumps(asdict(RereadOrder(unread, -1))))
+        return (self.message(tokens),)
 
 
 @dataclass(frozen=True)
 class CommanderReread(SourcesOrder, ToolUseReminder):
-    """Orders the commander's sources read again."""
+    """Orders the commander's sources read again, and settles each order once it is read."""
 
     every: ClassVar[int] = 100_000
+
+    def take(self, tokens: int) -> tuple[str, ...]:
+        """An outstanding order is repeated only when another action comes before its reads.
+
+        Each part read crosses it off. After the last one, the mark is the context of the
+        next reply, which holds the reads, so the next order comes `every` tokens of work later.
+        """
+        if not self.order.exists():
+            return super().take(tokens)
+        order = self.outstanding()
+        read = self.read_paths() & frozenset(order.unread)
+        if read:
+            unread = [path for path in order.unread if path not in read]
+            self.order.write_text(json.dumps(asdict(RereadOrder(unread, tokens))))
+            return ()
+        if order.unread:
+            return (self.message(tokens),)
+        if tokens != order.read_in:
+            self.mark.write_text(json.dumps(asdict(RereadMark(tokens))))
+            self.order.unlink()
+        return ()
 
 
 @dataclass(frozen=True)

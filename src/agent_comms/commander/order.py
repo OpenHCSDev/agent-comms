@@ -103,7 +103,7 @@ from ..tools import (
     TodoList,
 )
 from .config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -805,17 +805,20 @@ class DirectiveVerb(CommanderVerb):
         tuple[str, ...],
         Argument(
             flags=("--answers",),
-            options={"nargs": "+", "help": "original directive message IDs this action answers"},
+            options={"nargs": "+",
+                     "help": "original directive or unanswered unit message IDs this action answers"},
         ),
     ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
         thread = ctx.comms.registry.require(self.who(ctx))
-        originals = tuple(message for goal in thread.goal.active()
-                          for message in goal.order.directive_messages(ctx.comms.goals)
-                          if message.message_id in self.answers)
+        answerable = (*(message for goal in thread.goal.active()
+                        for message in goal.order.directive_messages(ctx.comms.goals)),
+                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
+        originals = tuple(message for message in answerable if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
-            sys.exit('REFUSED: --answers must name original directives on this request.')
+            sys.exit('REFUSED: --answers must name original directives on this request '
+                     'or unanswered unit messages to this commander.')
         return tuple(message.reference for message in originals)
 
     def gate(self, ctx: Commander) -> None:

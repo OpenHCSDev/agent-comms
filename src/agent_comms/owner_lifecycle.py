@@ -10,18 +10,19 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from uuid import uuid4
 
 from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
-    SpawnedProcess,
     Platform,
     ProcessIdentity,
     ProcessState,
+    SpawnedProcess,
     SynchronousProcess,
 )
 from .cli_result import CliResult
@@ -32,7 +33,13 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
+from .native_arguments import (
+    ConfiguredBinary,
+    InheritedArguments,
+    LaunchArguments,
+    LaunchBinary,
+    NativeArguments,
+)
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -43,12 +50,12 @@ from .restart_refusals import (
 from .restart_scope import AllOwners, RestartScope
 from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
-from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .thread_owned_state import ThreadOwnedState
+from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .threads import Thread
 from .tool_result import ToolResult
 from .turn_lease import NoTurnRecord
-from .typed_table import Column, DurableTables, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, DurableStore, JsonStorage, TypedTable
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -155,7 +162,13 @@ class OwnerRelease(ABC):
     @abstractmethod
     def matches(self, expected) -> bool: ...
     @abstractmethod
-    def require_native_loss(self, snapshot, source): ...
+    def require_owner_loss(self, snapshot, owner_identity): ...
+
+    def require_native_loss(self, snapshot, source):
+        release = self.require_owner_loss(snapshot, source.owner_identity)
+        current = snapshot.require(release.name)
+        source.sent_owner_claimed_generation.require_release(release, snapshot, current)
+        return release
 
 
 class NoRelease(OwnerRelease):
@@ -165,7 +178,7 @@ class NoRelease(OwnerRelease):
     def matches(self, expected) -> bool:
         return False
 
-    def require_native_loss(self, snapshot, source):
+    def require_owner_loss(self, snapshot, owner_identity):
         raise RelationViolationError("native owner release acknowledgement is missing")
 
 
@@ -197,17 +210,16 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
             return False
         return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
-    def require_native_loss(self, snapshot, source) -> None:
-        """A recorded release confirms only its exact dead process and input generation.
+    def require_owner_loss(self, snapshot, owner_identity):
+        """Attest only this recorded owner's release and dead process.
 
-        A recorded send can be fenced by a later release in the same incarnation.
-        An unrecorded epoch instead needs the exact current stopped acknowledgement. Both
-        paths preserve UNKNOWN; neither says bytes were unwritten or permits retry.
+        Input generation belongs to the recorded input, not to owner-loss proof.
+        Neither this release nor missing input proves bytes were unwritten.
         """
         if not self.incarnation().current(snapshot):
             raise RelationViolationError("Released native owner incarnation changed")
         current = snapshot.require(self.name)
-        source.require_recorded_owner(current)
+        owner_identity.require_recorded_owner(current)
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
@@ -215,12 +227,11 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
-        source.sent_owner_claimed_generation.require_release(self, snapshot, current)
         return self
 
 
 @dataclass(frozen=True)
-class OwnerReleaseStore(ThreadOwnedState, TypedStore, DurableTables):
+class OwnerReleaseStore(ThreadOwnedState, DurableStore):
     root: Path
     filename = "owner_releases.sqlite3"
     rows = (OwnerReleaseEvidence,)
@@ -454,8 +465,6 @@ class OwnerLifecycle:
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
-        from .attempt_recovery import RecoveryMonitorCapability
-
         for thread, generation in owners:
             self._finish_stopped_owner(thread, generation)
             RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
@@ -483,6 +492,9 @@ class OwnerLifecycle:
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
+        # Retire the predecessor while its released declaration is still stopped.
+        # Reserving the replacement PID first destroys that observation.
+        RecoveryMonitorCapability.recover_owner(self.root, thread)
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
