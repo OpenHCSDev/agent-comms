@@ -31,58 +31,47 @@ class Bash(ToolInput):
     script_flag: ClassVar[re.Pattern[str]] = re.compile(r"-\w*c")
     seconds: ClassVar[re.Pattern[str]] = re.compile(r"(\d+)s?")
     pgrep_f: ClassVar[re.Pattern[str]] = re.compile(r"\bpgrep\s+(?:-\w*\s+)*-\w*f")
-    separators: ClassVar[str] = ";&|\n()"
     max_seconds: ClassVar[int] = 3600
 
+    # The shell's quoting, declared once: a single-quoted run, a double-quoted run (where a
+    # backslash escapes), one escaped character, or one plain character. An unclosed quote
+    # runs to the end of the command, as it does while the shell reads on.
+    piece: ClassVar[str] = r"""'(?:[^']*)'?|"(?:\\.|[^"\\])*"?|\\.|[^'"\\{plain}]"""
+    segment: ClassVar[re.Pattern[str]] = re.compile(f"(?:{piece.format(plain=';&|\n()')})+", re.S)
+    """Text between top-level separators; quoted or escaped separators stay inside it."""
+    word: ClassVar[re.Pattern[str]] = re.compile(f"(?:{piece.format(plain=r'\s')})+", re.S)
+    unquote: ClassVar[re.Pattern[str]] = re.compile(r"""'([^']*)'?|"((?:\\.|[^"\\])*)"?|\\(.)""", re.S)
+
     def segments(self) -> tuple[tuple[str, ...], ...]:
-        """The command's unquoted words, split at its top-level separators; quoted text,
-        separators included, stays inside its word."""
-        segments, words, word, quote, escaped = [], [], [], "", False
-        for char in self.command:
-            if escaped:
-                word.append(char)
-                escaped = False
-            elif char == "\\" and quote != "'":
-                escaped = True
-            elif quote:
-                if char == quote:
-                    quote = ""
-                else:
-                    word.append(char)
-            elif char in "'\"":
-                quote = char
-            elif char.isspace() or char in self.separators:
-                if word:
-                    words.append("".join(word))
-                    word = []
-                if char in self.separators:
-                    segments.append(tuple(words))
-                    words = []
-            else:
-                word.append(char)
-        if word:
-            words.append("".join(word))
-        return tuple(segment for segment in (*segments, tuple(words)) if segment)
+        """The command's unquoted words, split at its top-level separators."""
+        return tuple(
+            words for text in self.segment.findall(self.command)
+            if (words := tuple(
+                self.unquote.sub(lambda quoted: "".join(filter(None, quoted.groups())), word)
+                for word in self.word.findall(text)
+            ))
+        )
+
+    def holds_loop(self) -> bool:
+        return any(map(self.runs_loop, self.segments()))
 
     def runs_loop(self, segment: tuple[str, ...]) -> bool:
         """A loop keyword at command position, or in the script a shell runs with -c."""
         words = tuple(dropwhile(self.openers.__contains__, segment))
         if words[:1] == ("timeout",):
             words = words[2:]
-        if words[:1] and words[0] in self.loops:
-            return True
-        return (
-            len(words) >= 3
-            and bool(self.shell.fullmatch(words[0]))
-            and bool(self.script_flag.fullmatch(words[1]))
-            and any(map(Bash(words[2]).runs_loop, Bash(words[2]).segments()))
-        )
+        match words:
+            case (keyword, *_) if keyword in self.loops:
+                return True
+            case (program, flag, script, *_) if self.shell.fullmatch(program) and self.script_flag.fullmatch(flag):
+                return Bash(script).holds_loop()
+        return False
 
     def bounded(self, segment: tuple[str, ...]) -> bool:
-        if segment[:1] != ("timeout",) or len(segment) < 2:
-            return False
-        bound = self.seconds.fullmatch(segment[1])
-        return bool(bound) and int(bound.group(1)) <= self.max_seconds
+        match segment:
+            case ("timeout", limit, *_) if bound := self.seconds.fullmatch(limit):
+                return int(bound.group(1)) <= self.max_seconds
+        return False
 
     def unbounded_wait(self) -> tuple[str, ...]:
         """Why this command's wait loop could run forever; empty when it holds no loop."""
