@@ -680,4 +680,4 @@ class ReplayAssessments(
 
 
 # The fixed external snapshot format is still a row object or JSON null.
-type ReplayAssessment = ReplayAssessments | NoReplayAssessment
+ReplayAssessment = ReplayAssessments | NoReplayAssessment

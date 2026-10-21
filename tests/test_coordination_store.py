@@ -43,6 +43,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
+from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordination_tables.executions import (
@@ -509,7 +510,6 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
 
 
 def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
-    from agent_comms.coordination_snapshot import RecoverySnapshot
     from agent_comms.coordination_tables.recovery import RecoveryAudit
 
     with store(db_path) as db:

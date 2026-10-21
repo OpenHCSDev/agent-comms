@@ -36,7 +36,7 @@ from agent_comms.coordination_tables.assignments import (
     WakeAssignment,
 )
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.executions import ReplayAssessments
+from agent_comms.coordination_tables.executions import NoReplayAssessment, ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
     ExecutionOrigin,
@@ -946,7 +946,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             attempt=attempt_record,
             assignments=(),
             links=(),
-            replay=None,
+            replay=NoReplayAssessment(),
             obligations=(),
             publication_intents=(),
             publication_evidence=(),

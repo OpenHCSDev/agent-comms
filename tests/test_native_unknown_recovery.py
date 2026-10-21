@@ -133,7 +133,8 @@ def running_successor(comms):
         new_owner=True,
     )
     successor, _ = comms.registry.lease_local_turn("beta", "productive-successor")
-    assert successor.process_alive and successor.turn_record.read().executing
+    assert successor.process_alive
+    successor.turn_record.read().require_active()
     return successor
 
 
@@ -142,7 +143,8 @@ def test_undispatched_original_recovers_beside_a_running_successor(released_star
     successor = running_successor(comms)
     recover_starting_owner(released_starting)
     assert comms.registry.require("beta") == successor
-    assert successor.process_alive and successor.turn_record.read().executing
+    assert successor.process_alive
+    successor.turn_record.read().require_active()
     comms.registry.release_turn(successor.require_turn_lease())
 
 
@@ -390,7 +392,8 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
         assert input_evidence(store) == before_input
     assert (root / "bus.jsonl").read_bytes() == before_bus
     assert comms.registry.require("beta") == successor
-    assert successor.process_alive and successor.turn_record.read().executing
+    assert successor.process_alive
+    successor.turn_record.read().require_active()
     comms.registry.release_turn(successor.require_turn_lease())
 
 
