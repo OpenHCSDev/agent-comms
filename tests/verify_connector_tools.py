@@ -86,7 +86,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         order=pending,
         request="request",
         review_at=RecordedEventTime(time.time() + 600),
-        commander="claude-ai",
+        commander="claude-ai", assigner=comms.registry.require('claude-ai').incarnation,
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         text="Measure the connector order.",
     )

@@ -149,6 +149,7 @@ class CheckedPhaseTask(PhaseTask):
             order=order,
             request=order.request(commander, (self.problem,)),
             commander=commander.name,
+            assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)

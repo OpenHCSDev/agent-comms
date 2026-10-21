@@ -74,7 +74,7 @@ class Messaging:
             publisher: OwnerPublisher = self.bus.publisher
             committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         try:
-            todos.correct(owner.name, committed.message_id, body)
+            todos.correct(owner.incarnation, committed.message_id, body)
         except TodoError as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:

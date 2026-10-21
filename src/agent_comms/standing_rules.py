@@ -152,6 +152,10 @@ class OwedAnswer(StandingRule, declared_name=None):
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         """This member's messages an action may answer now, inside their window or past it."""
 
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        """Whether an action naming these open messages answers this one."""
+        return any(message.message_id == self.message.message_id for message in named)
+
     @classmethod
     def answerable(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         """Every message an action may name with --answers, read from each member once."""

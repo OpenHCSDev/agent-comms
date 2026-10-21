@@ -103,6 +103,16 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     ) -> T:
         return otherwise()
 
+    @property
+    def commanding_identity(self) -> ThreadIncarnation:
+        return self
+
+    def acting_for(self, authority: ThreadIncarnation) -> ThreadIncarnation:
+        """This recorded assigner acting again under its order's commander.
+
+        A birthless member (Core's watcher) carries its own authority."""
+        return self
+
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
@@ -126,7 +136,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
                              if name == canonical.name))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     """The recorded creation owns identity; names remain registry-resolved routes.
 
@@ -136,6 +146,14 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
 
     name: str = field(compare=False)
     created_at: float
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ThreadIncarnation):
+            return NotImplemented
+        return self.wire_birth == other.wire_birth
+
+    def __hash__(self) -> int:
+        return hash(self.wire_birth)
 
     @property
     def wire_birth(self) -> float:
@@ -156,6 +174,9 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def selects_lookup(self, lookup: str) -> bool:
         return self.lookup == lookup
 
+    def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
+        return CommanderForkIdentity(self.name, self.created_at, authority)
+
     @property
     def birth_description(self) -> str:
         return f"created {self.created_at}"
@@ -174,6 +195,20 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
         """The creation lookup, computed once for this recorded incarnation."""
         identity = f"agent-comms:thread-creation:v1\0{float(self.created_at)!r}".encode()
         return hashlib.sha256(identity).hexdigest()[:32]
+
+
+@dataclass(frozen=True, eq=False)
+class CommanderForkIdentity(RecordedThreadIncarnation):
+    """A registered actor's parent authority, resolved before any Todo transaction.
+
+    The ordinary incarnation wire form records the actor, not a reusable authority.
+    """
+
+    authority: ThreadIncarnation
+
+    @property
+    def commanding_identity(self) -> ThreadIncarnation:
+        return self.authority
 
 
 class BirthlessIncarnation(ThreadIncarnation):

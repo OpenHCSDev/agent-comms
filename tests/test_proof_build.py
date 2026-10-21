@@ -23,7 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
     CommitRecord,
@@ -150,7 +150,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
-        creator=lead, owner=lead, generation="fixture-goal",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
         goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
         review_at=RecordedEventTime(1000), order=merged,
     )
@@ -300,7 +300,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request="request",
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead",
+                        commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),
@@ -421,21 +421,16 @@ def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path
     schedule.write_text('{"at": 0, "installer": "retired"}')
     history = root / "saved-session"
     history.write_bytes(b"preserved original history")
-    chain = CarryChain.at(Path(__file__).resolve().parents[1])
-    ledger = CarryLedger(root)
-    ledger.write(())
-    assert InstallSchedule in chain.pending(ledger.applied())
+    assert InstallSchedule in CarryChain.at(Path(__file__).resolve().parents[1]).steps
     migration = InstallSchedule(root, root, tmp_path / 'spill', False)
     assert migration.backup_files() == (schedule,)
     assert migration.carry().changed == 1
     assert schedule.exists()
-
     migration = replace(migration, apply=True)
-    result = ledger.apply(InstallSchedule.name(), migration.carry)
+    result = migration.carry()
 
     assert result.changed == 1
     assert schedule.name in result.rewritten
     assert not schedule.exists()
     assert history.read_bytes() == b"preserved original history"
-    assert InstallSchedule not in chain.pending(ledger.applied())
     assert migration.carry().changed == 0

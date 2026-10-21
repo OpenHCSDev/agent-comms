@@ -26,7 +26,6 @@ from agent_comms.commander.standing import (
     HeartbeatSilent,
     HolderCannotRun,
     UnitAskUnanswered,
-    UnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
@@ -34,14 +33,16 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, DirectiveGoalAction, SetGoalAction
+from agent_comms.goal_actions import (
+    CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
+)
 from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_page import MessagePageRequest
@@ -81,6 +82,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request="request",
+            assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
@@ -162,9 +164,7 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", UnownedWheelSpin.order_for(
-        todo, "lead", held_bus.registry.require("lead").incarnation,
-    ))
+    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(todo, "lead"))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(
@@ -295,8 +295,10 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="unanswered unit messages"):
-        SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
+    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
+    assert SayVerb(
+        units="worker", body_file="unused", answers=("not-a-message",)
+    ).answer_references(ctx) == ()
 
 
 def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
@@ -310,8 +312,10 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
             verb.apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="REFUSED: --answers"):
-        SendVerb(unit="worker", body_file="unused", answers=(question.message_id,)).apply(ctx)
+    # Naming it again after it was answered names nothing open, so it answers nothing.
+    assert SendVerb(
+        unit="worker", body_file="unused", answers=(question.message_id,)
+    ).answer_references(ctx) == ()
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
@@ -468,31 +472,30 @@ def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
     with closing(GoalAttemptStore.database(path)) as db:
         GoalWorkDecision.create(db)
         db.commit()
-    ledger = CarryLedger(held_bus.root)
-    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
     before = path.read_bytes()
     migration = GoalWorkDecisions(
         held_bus.root, held_bus.root, held_bus.root.parent / 'spill', True)
     with pytest.raises(RelationViolationError):
-        ledger.apply(GoalWorkDecisions.name(), migration.carry)
+        migration.carry()
     assert path.read_bytes() == before
-    assert GoalWorkDecisions.name() not in ledger.applied()
 
 
-def test_install_discovers_and_records_decision_cutover_once(held_bus):
+def test_install_discovers_the_decision_cutover_from_its_dry_run_and_runs_it_once(held_bus):
     chain = CarryChain.at(Path(__file__).resolve().parents[1])
     assert GoalWorkDecisions in chain.steps
+
+    def dry_run(step):
+        return step(held_bus.root, held_bus.root, held_bus.root.parent / 'spill', False).carry()
+
+    assert chain.pending(dry_run) == ()
     legacy_decision_table(held_bus)
-    ledger = CarryLedger(held_bus.root)
-    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
-    assert GoalWorkDecisions in chain.pending(ledger.applied())
+    assert chain.pending(dry_run)[0] is GoalWorkDecisions
     migration = GoalWorkDecisions(
         held_bus.root, held_bus.root, held_bus.root.parent / 'spill', True)
-    first = ledger.apply(GoalWorkDecisions.name(), migration.carry)
-    assert first.changed == 1 and ledger.filename in first.rewritten
-    second = ledger.apply(GoalWorkDecisions.name(), migration.carry)
+    assert migration.carry().changed == 1
+    second = migration.carry()
     assert second.changed == 0 and second.rewritten == ()
-    assert GoalWorkDecisions not in chain.pending(ledger.applied())
+    assert chain.pending(dry_run) == ()
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
@@ -542,3 +545,36 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+
+
+def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
+    from agent_comms.commander.vibe_check import VibeCheckSender
+
+    VibeCheckSender.register(held_bus.registry)
+    now = time.time()
+    burst = [publish(held_bus, VibeCheckSender.sender, "lead", now - 30 + line) for line in range(4)]
+    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 4
+    publish(held_bus, "lead", VibeCheckSender.sender, now - 20, answers=(burst[0].reference,))
+    assert VibeCheckSender.unanswered(held_bus, "lead", time.time()) == ()
+    later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
+    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus, "lead", time.time())] == [
+        later.message_id]
+
+
+def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
+    """The gate reads an answer the way UnansweredBurst reads it once sent: naming any line of
+    an escalation burst covers the sender's other lines, while another sender's stay owed."""
+    from agent_comms.commander.vibe_check import (
+        ChokeholdSender, ChokeholdUnanswered, VibeCheckSender, VibeCheckUnanswered,
+    )
+
+    VibeCheckSender.register(held_bus.registry)
+    ChokeholdSender.register(held_bus.registry)
+    now = time.time() - 3600
+    checks = [publish(held_bus, VibeCheckSender.sender, "lead", now + line) for line in range(3)]
+    holds = [publish(held_bus, ChokeholdSender.sender, "lead", now + 10 + line) for line in range(3)]
+    vibe = [VibeCheckUnanswered(message) for message in checks]
+    hold = [ChokeholdUnanswered(message) for message in holds]
+    assert all(rule.answered_by((checks[-1],)) for rule in vibe)
+    assert not any(rule.answered_by((checks[-1],)) for rule in hold)
+    assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))

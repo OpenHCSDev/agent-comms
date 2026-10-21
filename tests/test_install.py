@@ -19,7 +19,6 @@ from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
 from agent_comms.installer.backup import UpgradeRefused, bus_files
-from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.practice import declared_files, practice_copy
 from agent_comms.locked_store import BusFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -40,7 +39,6 @@ def bus(directory: Path) -> tuple[Path, RecordedBusIdentity]:
 def test_fresh_install_is_excluded_by_every_declared_bus_input(private_directory):
     root = private_directory / "bus"
     root.mkdir(mode=0o700)
-    chain = CarryChain.at(REPO)
     assert BusFile.fresh(root)
     for owner, directory in BusFile.declarations_in(root):
         path = owner.path_in(directory)
@@ -52,8 +50,6 @@ def test_fresh_install_is_excluded_by_every_declared_bus_input(private_directory
         path.unlink()
     Bus.install(Bus.path_in(root))
     assert not BusFile.fresh(root)
-    CarryLedger(root).start(chain)
-    assert chain.pending(CarryLedger(root).applied()) == ()
 
 
 def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(private_directory):
