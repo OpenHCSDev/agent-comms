@@ -310,7 +310,7 @@ class Item(TaggedWire, ABC):
     def phase(self) -> TurnPhase:
         return ModelWaitPhase(self.doing)
 
-class AccumulatedItem(Item, ABC):
+class AccumulatedItem(Item):
     @abstractmethod
     def accumulator(self, started_at: EventTime) -> PresentableDraft: ...
 
