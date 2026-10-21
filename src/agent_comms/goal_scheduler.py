@@ -31,7 +31,6 @@ from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
-from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -104,7 +103,7 @@ class GoalScheduler:
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
         """Read/recover the original READY grant in its joined storage worker."""
-        with _store_lock(self.comms._wire_lock_path):
+        with self.comms.registry.store.locked():
             snapshot = self.comms.registry.snapshot()
             thread = snapshot.require(self.sessions.require(session_id))
             try:
@@ -152,7 +151,7 @@ class GoalScheduler:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
-        # update_goal owns the wire lock and atomically rechecks both this
+        # update_goal owns the registry lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,

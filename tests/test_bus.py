@@ -104,6 +104,7 @@ def test_real_message_record_round_trip(bus, declaration, role):
     )
     assert intent.matches_publication(stored)
     assert stored.messages() == (stored,)
+    assert tuple(bus.message_history()) == (Message.from_message(stored),)
     assert stored.deliveries() == ((stored,) if issubclass(declaration, Delivered) else ())
     for delivery in stored.deliveries():
         assert not delivery.direct_for("unaddressed")
@@ -236,6 +237,21 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
+
+
+def test_bulk_history_keeps_one_snapshot_across_pages(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    assert tuple(bus.message_history()) == ()
+    originals = tuple(Message.from_message(bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", f"message {seq}", InfoKind, seq=seq),
+    ))) for _ in range(101))
+    history = bus.message_history()
+    assert next(history) == originals[0]
+    later = Message.from_message(bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "after export started", InfoKind, seq=seq),
+    )))
+    assert tuple(history) == originals[1:]
+    assert tuple(bus.message_history()) == (*originals, later)
 
 
 def append_until_header(path, ready):

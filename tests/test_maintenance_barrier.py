@@ -63,7 +63,6 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
     from agent_comms.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
-    from agent_comms.store_files import _store_lock
 
     class ScratchCutover(MaintainedOwnerCutover):
         def require_selection(self, snapshot, owners):
@@ -76,7 +75,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
-    with _store_lock(comms.root / 'wire'):
+    with comms.registry.store.locked():
         cutover.require_restart_phase(comms.owners)
         from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
@@ -84,21 +83,9 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
         assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
-    with _store_lock(comms.root / 'wire'):
+    with comms.registry.store.locked():
         with pytest.raises(RelationViolationError):
             cutover.require_restart_phase(comms.owners)
-
-
-def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
-    hold = gate.begin(MaintenanceOperator.current())
-    with _store_lock(gate.wire_path) as lock:
-        assert gate.clear_stopped(hold, lock.descriptor).phase is ReadyPhase
-    assert gate.read().phase is ReadyPhase
-    with _store_lock(tmp_path / 'unrelated') as other:
-        with pytest.raises(RelationViolationError):
-            next_hold = gate.begin(MaintenanceOperator.current())
-            gate.clear_stopped(next_hold, other.descriptor)
 
 
 def test_production_only_import_cannot_reach_disposable_control(tmp_path: Path) -> None:
@@ -291,7 +278,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / "wire"):
+    async with _async_store_lock(root / "registry.json"):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -337,7 +324,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / "wire"), pytest.raises(RelationViolationError):
+    with _store_lock(root / "registry.json"), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 

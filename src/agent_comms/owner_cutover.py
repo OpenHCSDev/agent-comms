@@ -22,9 +22,9 @@ if TYPE_CHECKING:
 class OwnerCutover(ABC):
     """An operation owns its audience and retained maintenance proof.
 
-    Selection validation precedes every fence or signal. Installation runs with
-    the existing wire lock held, after original process exit and before
-    replacement launch. A member must not reacquire that lock or start owners.
+    Selection validation precedes every fence or signal. Installation runs
+    after original process exit and before replacement launch. Each replacement
+    reserves its exact stopped declaration in the registry transaction.
     """
 
     def restart(self, lifecycle: OwnerLifecycle, request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
@@ -54,7 +54,7 @@ class OwnerCutover(ABC):
             raise OwnerMaintenancePendingRefusal()
 
     def stopped_resources(self, lifecycle: OwnerLifecycle):
-        """Acquire installation resources after readers exit, before the wire lock."""
+        """Acquire installation resources after the selected readers exit."""
         return nullcontext()
 
     @abstractmethod
@@ -99,7 +99,7 @@ class MaintainedOwnerCutover(OwnerCutover):
     """Stop an exact fleet while its durable Draining state holds new turns.
 
     The publisher obtains maintenance_hold before polling idle owners. It
-    clears that exact hold under the wire lock after known-safe publication
+    clears that exact hold under the registry lock after known-safe publication
     (or on a known-safe abort), before any replacement launch. UNKNOWN outcomes
     remain closed for explicit review rather than reopening on exception text.
     """
@@ -133,7 +133,7 @@ class StoppedOwnerInstallation(OwnerCutover):
 
 
 class PreserveOwnerRuntime(StoppedOwnerInstallation):
-    """Normal retained restart needs no wire/index installation."""
+    """Normal retained restart needs no installation."""
 
     def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
         return stopped.handoff.launch_runtime

@@ -7,14 +7,12 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-import json
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
-from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
 from agent_comms import field_codec
@@ -35,15 +33,11 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .private_path import FileObservation, FileRevision, MissingFile
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
-from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .wire_log import CurrentSnapshotOpening
-from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
@@ -686,7 +680,6 @@ class RelationshipStore(DurableFile, ThreadOwnedState, LockedStore[RelationshipD
 class ThreadRelationships:
     """One root-scoped service, retained by Comms; no timers or owner actions."""
 
-    RECENT_BYTES = 2 * 1024 * 1024
     RECENT_MESSAGES = 512
 
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, views: HistoryViews):
@@ -694,23 +687,17 @@ class ThreadRelationships:
         self.registry = registry
         self.bus = bus
         self.views = views
-        self._wire_lock_path = root / "wire"
         self.store = RelationshipStore.at(root)
-        self._lock = RLock()
-        self._recent_revision: FileObservation = MissingFile()
-        self._recent: tuple[Message, ...] = ()
-        self._limited = False
 
     def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
         return self.views.revision()
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
 
     @staticmethod
     def _goal_contacts(
@@ -745,22 +732,20 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            contacts, diagnostics = self._goal_contacts(registry)
-            return (
-                tuple(row for row in contacts if row.counterpart(thread) is not None),
-                tuple(row for row in diagnostics if row.owner == thread.name),
-            )
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        contacts, diagnostics = self._goal_contacts(registry)
+        return (
+            tuple(row for row in contacts if row.counterpart(thread) is not None),
+            tuple(row for row in diagnostics if row.owner == thread.name),
+        )
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            contacts, _ = self._goal_contacts(registry)
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        contacts, _ = self._goal_contacts(registry)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
         records: dict[ThreadIncarnation, list[RelationRecord]] = {}
         for peer in registry.threads.values():
@@ -790,10 +775,9 @@ class ThreadRelationships:
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = registry.require(owner)
-            relations = self.peer_relations(owner)
+        registry = self.registry.snapshot()
+        thread = registry.require(owner)
+        relations = self.peer_relations(owner)
         messages, _ = self._recent_messages()
         correspondents: dict[str, float] = {}
         for message in messages:
@@ -816,107 +800,69 @@ class ThreadRelationships:
 
     def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
-            contacts, diagnostics = self._goal_contacts(registry)
-            visible: dict[ThreadIncarnation, RelationshipEntry] = {}
-            for relation in (*explicit, *contacts):
-                identity = relation.counterpart(thread)
-                if identity is None:
-                    continue
-                visible[identity] = relation.entry(
-                    identity, None, identity.current(registry), visible.get(identity),
-                )
-            return Contacts(
-                explicit,
-                tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
-                tuple(row for row in diagnostics if row.owner == thread.name),
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
+        contacts, diagnostics = self._goal_contacts(registry)
+        visible: dict[ThreadIncarnation, RelationshipEntry] = {}
+        for relation in (*explicit, *contacts):
+            identity = relation.counterpart(thread)
+            if identity is None:
+                continue
+            visible[identity] = relation.entry(
+                identity, None, identity.current(registry), visible.get(identity),
             )
+        return Contacts(
+            explicit,
+            tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
+            tuple(row for row in diagnostics if row.owner == thread.name),
+        )
 
     def edit(
         self, owner: str, action: type[RelationshipEdit], peer: str, note: str = ""
     ) -> Collaboration | None:
         command = action(note)
-        with _store_lock(self._wire_lock_path):
-            first = self.registry.require(owner)
-            first.role.require_executable(ValueError("Collaborations relate agent threads"))
-            registry = self.registry.snapshot()
-            peer = registry.canonical_name(peer)
-            result = None
+        first = self.registry.require(owner)
+        first.role.require_executable(ValueError("Collaborations relate agent threads"))
+        registry = self.registry.snapshot()
+        peer = registry.canonical_name(peer)
+        result = None
 
-            def change(document: RelationshipDocument) -> RelationshipDocument:
-                nonlocal result
-                resolved = document.resolved(registry)
-                changed, result = command.apply(
-                    RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
-                )
-                return document if changed == document else changed
+        def change(document: RelationshipDocument) -> RelationshipDocument:
+            nonlocal result
+            resolved = document.resolved(registry)
+            changed, result = command.apply(
+                RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
+            )
+            return document if changed == document else changed
 
-            self.store.update(change)
-            return result
+        self.store.update(change)
+        return result
 
     def set_order(self, owner: str, group: type[SortableRelationshipGroup],
                   order: type[ThreadSort]) -> type[ThreadSort]:
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(owner)
-            registry = self.registry.snapshot()
-            self.store.update(
-                lambda document: group.ordered(document.resolved(registry), thread, order)
-            )
+        thread = self.registry.require(owner)
+        registry = self.registry.snapshot()
+        self.store.update(
+            lambda document: group.ordered(document.resolved(registry), thread, order)
+        )
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
-        """Decode a bounded tail from one fixed opened bus cut."""
-        path = self.bus.log.path
-        revision = FileRevision.capture(path)
-        with self._lock:
-            if revision == self._recent_revision:
-                return self._recent, self._limited
-            with self.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-                return self._opened_recent_messages(source)
-
-
-    def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
-        if not source.changed_since(self._recent_revision):
-            return self._recent, self._limited
-        for previous in self._recent_revision.revisions():
-            if (source.same_file(previous.identity)
-                    and source.boundary > previous.size
-                    and previous.holds_cut(source.revision, previous.size)):
-                start = max(previous.size, source.boundary - self.RECENT_BYTES)
-                data, start = source.tail_bytes(source.boundary - start)
-                contiguous = start == previous.size
-                break
-        else:
-            data, start = source.tail_bytes(self.RECENT_BYTES)
-            contiguous = False
-        lines = data.splitlines(keepends=True)
-        if start and not contiguous and lines:
-            lines.pop(0)  # A bounded cut may begin in a partial record.
-        messages = (self._recent if contiguous else ()) + tuple(
-            message
-            for line in lines
-            if line.endswith(b"\n") and line.strip()
-            for message in WireRecord.public_from_wire(json.loads(line)).messages()
-        )
-        limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
-        messages = messages[-self.RECENT_MESSAGES :]
-        self._recent_revision = source.revision if source.boundary else MissingFile()
-        self._recent, self._limited = messages, limited
-        return messages, limited
+        """One bounded sequence page, on a single committed read snapshot."""
+        with self.bus.bus.reading() as source:
+            messages = source.page(source.revision() + 1, self.RECENT_MESSAGES + 1)
+        return tuple(reversed(messages[:self.RECENT_MESSAGES])), len(messages) > self.RECENT_MESSAGES
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = registry.require(owner)
-            state = self.store.read().resolved(registry)
-            edges = state.collaborations
-            goal_contacts, goal_diagnostics = self._goal_contacts(registry)
-            delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
+        registry = self.registry.snapshot()
+        thread = registry.require(owner)
+        state = self.store.read().resolved(registry)
+        edges = state.collaborations
+        goal_contacts, goal_diagnostics = self._goal_contacts(registry)
+        delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
             for view in self.views.thread_views(RosterVisibility(archived=True))

@@ -21,7 +21,6 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
-from .store_files import SharedLock, _store_lock
 from .thread_execution import CommanderForkExecution
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
@@ -109,6 +108,29 @@ class Registration:
                 return self._commit_registration(edit, replace(
                     change, thread=replace(change.thread, goal=goal))).thread
 
+    def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
+        """Reserve one process against the exact stopped launch it prepared.
+
+        The registry transaction, not a root-wide lock, prevents concurrent
+        starters from replacing each other's reservation. Unrelated metadata
+        comes from the current declaration rather than the launch's old copy.
+        """
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if not current.same_launch(original):
+                raise RelationViolationError("Owner launch changed before process reservation.")
+            if current.process_alive:
+                raise RelationViolationError("Thread already has a live owner process.")
+            edit.document.status(current.name).require_visible(
+                "Only visible agent threads can be started.")
+            owned = replace(current.without_turn(), process_identity=process)
+            change = self._commit_registration(edit, edit.document.prepare_registration(
+                owned, _RUNNING_STATUS, new_owner=True))
+            return RegistryOwner(
+                thread=change.thread,
+                claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
+            )
+
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):
         """The CLI bridge owns its registered endpoint until that same process leaves."""
@@ -138,7 +160,7 @@ class Registration:
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
-        with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
+        with self.store.editing() as edit:
             change = edit.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
@@ -155,16 +177,15 @@ class Registration:
         preserves omitted provenance and a current executor before applying the same
         registration effects. No pre-read can authorize a stale owner replacement.
         """
-        with _store_lock(self.store.path.parent / "wire"):
-            return self._declare_unlocked(thread, status)
+        return self._declare_unlocked(thread, status)
 
     def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
-        """Cross-store callers already holding wire use the same registry transaction."""
+        """Cross-store declarations share the registry's own edit transaction."""
         with self.store.editing() as edit:
             return self._declare_in(edit, thread, status)
 
     def _claim_unlocked(self, thread: Thread) -> Thread:
-        """The wire caller holds inbox authority; namespace allocation stays registry-owned."""
+        """The caller holds inbox authority; namespace allocation stays registry-owned."""
         with self.store.editing() as edit:
             requested = thread.for_claim(edit.document.claim_name(thread.name))
             return self._declare_in(edit, requested, RunningThreadStatus())
