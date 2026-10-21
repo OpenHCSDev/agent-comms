@@ -293,20 +293,12 @@ class ChokeholdReleased(ChokeholdAnswer):
         )
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        refused = []
         for unit in self.held(comms):
-            try:
-                comms.goals.update_goal(unit, ActiveGoalAction(), actor=OwnerInvocable)
-            except ValueError as error:
-                refused.append(f"{unit}: {error}")
+            comms.goals.update_goal(unit, ActiveGoalAction(), actor=OwnerInvocable)
         ChokeholdSender.burst(
             comms,
             commander,
-            (
-                "You quoted it. Units resumed.",
-                *refused,
-                "Now do the structural change you named, this turn.",
-            ),
+            ("You quoted it. Units resumed.", "Now do the structural change you named, this turn."),
         )
 
     def line(self) -> str:

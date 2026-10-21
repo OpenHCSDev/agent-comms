@@ -56,9 +56,11 @@ class ChokeholdPause(PauseSource):
     lifts_on_compliance = True
 
     def instruction(self) -> str:
-        from .turn_context import InstructionFile
-
-        return InstructionFile.read("chokehold-pause.md").content
+        return (
+            "Your commander ignored the heartbeat's vibe check, so the heartbeat paused every"
+            " unit under it until it complies. Do not resume or continue this goal; Core resumes"
+            " it when the commander answers."
+        )
 
 
 @dataclass(frozen=True)
