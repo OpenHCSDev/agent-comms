@@ -53,23 +53,19 @@ class ProofRelocation(NativeSessionFiles):
         self.prepare_private_directory(self.input_proof.parent)
         moves = tuple(zip(SQLiteFile.files(self.source), SQLiteFile.files(self.input_proof), strict=True))
         moved: list[Path] = []
-        try:
+        # The move itself is inside the stack: rollback receives its original
+        # exception and chains any cleanup failures while attempting every undo.
+        with ExitStack() as rollback:
             for source, destination in reversed(moves):
                 if source in present:
                     source.rename(destination)
+                    rollback.callback(fsync_directory, destination.parent)
+                    rollback.callback(fsync_directory, source.parent)
+                    rollback.callback(destination.rename, source)
                     moved.append(source)
                     fsync_directory(destination.parent)
                     fsync_directory(source.parent)
-        except BaseException:
-            # ExitStack attempts every restore even if one fails, and preserves
-            # the original move and cleanup failures in the exception chain.
-            with ExitStack() as rollback:
-                for source, destination in reversed(moves):
-                    if source in moved:
-                        rollback.callback(fsync_directory, destination.parent)
-                        rollback.callback(fsync_directory, source.parent)
-                        rollback.callback(destination.rename, source)
-            raise
+            rollback.pop_all()
         return (*moved, *(path for path in SQLiteFile.files(self.input_proof) if path.exists()))
 
 
