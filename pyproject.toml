@@ -91,7 +91,7 @@ path = "src/agent_comms/__init__.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "tools"]
+pythonpath = [".", "src", "tools"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

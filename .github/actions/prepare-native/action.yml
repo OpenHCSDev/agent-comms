@@ -14,7 +14,7 @@ runs:
     - name: Warm locked MCP dependencies
       shell: bash
       working-directory: extensions/pi-mcp-client
-      run: npm ci --ignore-scripts --omit=dev --omit=peer --no-audit --no-fund
+      run: npm ci --ignore-scripts --no-audit --no-fund
     - name: Prepare pinned native Pi
       shell: bash
       run: stack/bin/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"

@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+env:
+  AC_NATIVE_STACK_BIN: ${{ github.workspace }}/stack/bin/pi-native
+
 jobs:
   stack:
     runs-on: ubuntu-latest
@@ -47,7 +50,7 @@ jobs:
       - name: Check native RPC compaction against localhost provider
         run: |
           uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov 'pytest-xdist>=3.6' 'pytest-timeout>=2.3'
-          PYTHONPATH="$PWD/src" AC_NATIVE_STACK_BIN="$PWD/stack/bin/pi-native" \
+          PYTHONPATH="$PWD/src" \
             stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_persistent_compaction.py --no-cov -q
 
   test:

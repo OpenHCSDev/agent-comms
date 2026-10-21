@@ -16,6 +16,7 @@ from agent_comms.exporting import (
     JsonlFormat,
     MaxBytesLimit,
     RecentLimit,
+    SelectableWireExportFormat,
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
@@ -43,7 +44,7 @@ CASES = list(
             DmScope(("alice", "bob")),
         ],
         [FullLimit(), MaxBytesLimit(850), RecentLimit(2.0)],
-        (member() for member in WireExportFormat.members_with(WireExportFormat)),
+        (member() for member in SelectableWireExportFormat.members_with(SelectableWireExportFormat)),
     )
 )
 
