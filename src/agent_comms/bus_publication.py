@@ -29,7 +29,7 @@ from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, PrivateRecord
+    from agent_comms.bus import Bus, PrivateRecord, RecordBuilder
 
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
@@ -66,6 +66,16 @@ class Delivered(BusRecord, declared_name=None):
     audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
     control: str
+
+    def projections(self):
+        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
+
+        yield from super().projections()
+        yield SentSource(self.audience.sender_lookup, self.seq)
+        for recipient in self.audience.recipients:
+            yield ReceivedSource(recipient.recipient_lookup, self.seq)
+            if self.direct_for(recipient.recipient_lookup):
+                yield DirectReplySource(recipient.recipient_lookup, self.seq)
 
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)
@@ -254,7 +264,7 @@ class InitialOrigin(ABC):
         """Check the sender and message ID against the bus before appending."""
 
     @abstractmethod
-    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
+    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         """Commit the record, reporting failure as this origin requires."""
 
 
@@ -272,7 +282,7 @@ class AgentOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
-    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
+    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         return bus.append(build)
 
 
@@ -298,7 +308,7 @@ class HumanOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         source.require_new_human_message(sender, message_id)
 
-    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
+    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         try:
             return bus.append(build)
         except MessageNotificationError:

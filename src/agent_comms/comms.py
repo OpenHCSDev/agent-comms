@@ -27,7 +27,6 @@ from .relationships import ThreadRelationships
 from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
 from .transcripts import Transcripts
-from .wire_log import WireLog
 
 
 class Comms:
@@ -38,10 +37,9 @@ class Comms:
         self.route = resolve_comms_route(root)
         self.route.observe_root()
         publisher.prepare_root(self.root)
-        self._wire_lock_path = self.root / "wire"
         self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
-            WireLog.path_in(self.root),
+            self.root,
             self.registry,
             publisher,
             projection=projection,

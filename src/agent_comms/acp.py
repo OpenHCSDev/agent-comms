@@ -81,7 +81,6 @@ from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
@@ -365,7 +364,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(WireLog.path_in(self._comms.root), self._comms.registry, ResponseWrites)
+        bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
         def read_claim():
             with bus.log.checked_read() as source:
                 return source.marker.claimed_after_seq

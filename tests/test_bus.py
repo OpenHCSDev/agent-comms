@@ -16,14 +16,14 @@ from agent_comms.bus import (
     PublicRecord,
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin
-from agent_comms.bus_tables import BusRow, BusTables, KeyedPublication
+from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource, KeyedPublication
 from agent_comms.envelope_claim_transitions import ClaimRelease, ReleasedClaims
 from agent_comms.errors import (
     HumanSendRefusedError,
     MessageNotificationError,
     RelationViolationError,
 )
-from agent_comms.messages import ClaimMessage, InfoKind, Message
+from agent_comms.messages import ClaimHistoryKind, ClaimMessage, InfoKind, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
     canonical_publication_key,
@@ -76,7 +76,7 @@ def test_real_message_record_round_trip(tmp_path, declaration):
     bus = Bus(Bus.path_in(tmp_path))
     message = Message("author", "worker", "hello", InfoKind, seq=1)
     record = record_from(declaration, message)
-    stored = bus.append(lambda seq: replace(record, seq=seq))
+    stored = bus.append(lambda seq, db: replace(record, seq=seq))
     assert stored.seq > 0
     assert bus.lookup(stored.seq) == stored == record
     assert Bus(bus.path).lookup(stored.seq) == stored
@@ -93,13 +93,13 @@ def test_real_message_record_round_trip(tmp_path, declaration):
 def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     first = bus.append(
-        lambda seq: record_from(
+        lambda seq, db: record_from(
             KeyedPrivateRecord, Message("author", "worker", "first", InfoKind, seq=seq)
         )
     )
     with closing(sqlite3.connect(bus.path)) as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
-    assert bus.append(lambda seq: replace(first, seq=seq, body="different")) == first
+    assert bus.append(lambda seq, db: replace(first, seq=seq, body="different")) == first
     with closing(sqlite3.connect(bus.path)) as db:
         assert {table: table.count(db) for table in TypedTable.members_with(BusTables)} == before
         assert db.execute("SELECT seq FROM sqlite_sequence").fetchall() == [(first.seq,)]
@@ -110,7 +110,7 @@ def test_every_bus_table_rejects_update_and_delete(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     stored = tuple(
         bus.append(
-            lambda seq: record_from(
+            lambda seq, db: record_from(
                 declaration, Message("author", "worker", "kept", InfoKind, seq=seq)
             )
         )
@@ -128,13 +128,13 @@ def test_every_bus_table_rejects_update_and_delete(tmp_path):
 def test_inbox_filters_target_and_orders_by_sequence(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     first = bus.append(
-        lambda seq: PublicRecord.from_message(Message("author", "worker", "one", InfoKind, seq=seq))
+        lambda seq, db: PublicRecord.from_message(Message("author", "worker", "one", InfoKind, seq=seq))
     )
     other = bus.append(
-        lambda seq: PublicRecord.from_message(Message("author", "other", "two", InfoKind, seq=seq))
+        lambda seq, db: PublicRecord.from_message(Message("author", "other", "two", InfoKind, seq=seq))
     )
     last = bus.append(
-        lambda seq: record_from(
+        lambda seq, db: record_from(
             PrivateRecord, Message("author", "worker", "three", InfoKind, seq=seq)
         )
     )
@@ -145,6 +145,26 @@ def test_inbox_filters_target_and_orders_by_sequence(tmp_path):
     assert bus.inbox("other", 0, 10) == (other,)
     assert bus.inbox("absent", 0, 10) == ()
     assert bus.page(last.seq + 1, 2) == (last, other)
+
+
+def test_scoped_and_frozen_source_queries_are_sequence_bounded(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    original = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "#other", "original", InfoKind, seq=seq)))
+    notice = bus.append(lambda seq, db: record_from(PrivateRecord,
+        Message("author", "worker", "notice", ClaimHistoryKind, seq=seq)))
+    reply = bus.append(lambda seq, db: record_from(PrivateRecord,
+        Message("author", "worker", "reply", InfoKind, seq=seq, answers=(original.reference,))))
+    assert bus.scoped_page("target=?", ("worker",), descending=True, limit=1) == (reply,)
+    assert bus.scoped_page("target=?", ("worker",), upper=reply.seq, limit=1) == (notice,)
+    assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (reply,)
+    assert bus.conversation("b" * 32, limit=2) == (reply, notice)
+    assert bus.sent("a" * 32, limit=1) == (reply,)
+    assert bus.received("b" * 32, after=original.seq, limit=1, descending=False,
+                        sender_lookups=("a" * 32,), source=DirectReplySource) == (reply,)
+    assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
+    assert bus.replies((original.reference,)) == (reply,)
+    assert bus.deliveries_for_references((reply.reference,)) == (reply,)
 
 
 def append_until_header(path, ready):
@@ -166,7 +186,7 @@ def append_until_header(path, ready):
 
     bus = PausedBus(path)
     bus.append(
-        lambda seq: PublicRecord.from_message(
+        lambda seq, db: PublicRecord.from_message(
             Message("author", "worker", "interrupted", InfoKind, seq=seq)
         )
     )
@@ -192,7 +212,7 @@ def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
                 table: table.count(db) for table in TypedTable.members_with(BusTables)
             } == before
         stored = bus.append(
-            lambda seq: PublicRecord.from_message(
+            lambda seq, db: PublicRecord.from_message(
                 Message("author", "worker", "after crash", InfoKind, seq=seq)
             )
         )
@@ -216,7 +236,7 @@ def test_human_refusal_rolls_back_the_header(tmp_path):
     with pytest.raises(HumanSendRefusedError, match="was not sent"):
         origin.append(
             bus,
-            lambda seq: record_from(
+            lambda seq, db: record_from(
                 PrivateRecord, Message("author", "worker", "refused", InfoKind, seq=seq)
             ),
         )
@@ -231,7 +251,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
     with pytest.raises(MessageNotificationError) as failed:
         origin.append(
             bus,
-            lambda seq: record_from(
+            lambda seq, db: record_from(
                 PrivateRecord, Message("author", "worker", "sent", InfoKind, seq=seq)
             ),
         )
@@ -251,7 +271,7 @@ def test_readonly_archive_and_backup_use_the_same_bus(tmp_path):
         pass
     assert bus.revision() == 0
     committed = bus.append(
-        lambda seq: PublicRecord.from_message(
+        lambda seq, db: PublicRecord.from_message(
             Message("author", "worker", "archived", InfoKind, seq=seq)
         )
     )
