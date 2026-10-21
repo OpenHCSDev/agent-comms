@@ -7,12 +7,14 @@ import os
 import secrets
 import shutil
 import json
+import logging
 import time
 from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.active_route import active_route_path
@@ -26,6 +28,7 @@ from agent_comms.connector import (
     ServeVerb,
     ApproveVerb,
     RevokeVerb,
+    RouteAccessLogger,
 )
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.maintenance_barrier import (
@@ -187,6 +190,26 @@ async def test_a_refused_call_answers_its_own_request_id(client, store):
         "/mcp", json=call, headers={"Authorization": f"Bearer {token}"})).json()
     assert refused["id"] == 7
     assert "undeclared" in refused["error"]["message"]
+
+
+async def test_access_log_names_the_route_and_never_its_values(client, store, root, caplog):
+    """Served the way the service serves: run_app's AppRunner with the connector's logger."""
+    connector = Connector(store, "http://127.0.0.1:18766", root)
+    runner = web.AppRunner(connector.application(), access_log_class=RouteAccessLogger)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = runner.addresses[0][1]
+    try:
+        with caplog.at_level(logging.INFO, logger="aiohttp.access"):
+            async with ClientSession() as session:
+                await session.get(f"http://127.0.0.1:{port}/authorize",
+                                  params={"state": "one-use-value"})
+    finally:
+        await runner.cleanup()
+    lines = [record.getMessage() for record in caplog.records if record.name == "aiohttp.access"]
+    assert lines and "/authorize" in lines[0] and " 400 " in lines[0]
+    assert all("one-use-value" not in line for line in lines), lines
 
 
 async def test_registration_accepts_only_the_claude_callback(client):

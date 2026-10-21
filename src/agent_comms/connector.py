@@ -36,6 +36,7 @@ from typing import Annotated, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from aiohttp import web
+from aiohttp.abc import AbstractAccessLogger
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions
@@ -253,18 +254,26 @@ class InvalidMcpRequest:
 
 @dataclass(frozen=True)
 class McpErrorReply(McpEnvelope):
-    """A refusal answers the request it refuses: JSON-RPC allows a null id only when the
-    request's own id cannot be read, and a client never matches a null id to its call."""
+    """A refusal of a request whose own id cannot be read: JSON-RPC answers it with null."""
 
     error: InvalidMcpRequest
-    id: int | str | None = None
+    id: None = None
 
-    @classmethod
-    def refusing(cls, data: object, error: Exception) -> Self:
+    @staticmethod
+    def refusing(data: object, error: Exception) -> McpErrorReply | AddressedErrorReply:
+        """A client never matches a null id to its call, so a readable id is always answered."""
         match data:
             case {"id": int() | str() as request_id}:
-                return cls(InvalidMcpRequest(str(error)), request_id)
-        return cls(InvalidMcpRequest(str(error)))
+                return AddressedErrorReply(InvalidMcpRequest(str(error)), request_id)
+        return McpErrorReply(InvalidMcpRequest(str(error)))
+
+
+@dataclass(frozen=True)
+class AddressedErrorReply(McpEnvelope):
+    """A refusal answering the request it refuses."""
+
+    error: InvalidMcpRequest
+    id: int | str
 
 
 @dataclass(frozen=True)
@@ -659,6 +668,15 @@ class Connector:
         return response
 
 
+class RouteAccessLogger(AbstractAccessLogger):
+    """One line per request, naming the route template: paths and queries carry
+    one-use secrets and OAuth values, and headers carry bearer tokens, so neither is logged."""
+
+    def log(self, request: web.Request, response: web.StreamResponse, time: float) -> None:
+        # A route renders as its method and path template, never the matched values.
+        self.logger.info("%s %s %.3fs", request.match_info.route, response.status, time)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One connector command: its options are its fields, and its parser comes from them."""
@@ -697,10 +715,8 @@ class ServeVerb(ConnectorVerb):
             app = connector.application()
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
-        # One line per request; the format names no header, so no bearer token is logged.
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-        web.run_app(app, host=LOOPBACK, port=self.port,
-                    access_log_format='"%r" %s %b %Tfs')
+        web.run_app(app, host=LOOPBACK, port=self.port, access_log_class=RouteAccessLogger)
         return 0
 
 
