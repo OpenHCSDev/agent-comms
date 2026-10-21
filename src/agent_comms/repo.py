@@ -98,7 +98,9 @@ class Checkout:
     path: Path
 
     @classmethod
-    def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Checkout:
+    def add(
+        cls, repository: Path | str, path: Path | str, revision: str, *options: str
+    ) -> Checkout:
         subprocess.run(
             ("git", "-C", str(repository), "worktree", "add", *options, str(path), revision),
             capture_output=True,
@@ -113,7 +115,16 @@ class Checkout:
     def prepare(self) -> None:
         """Populate the pinned submodules; an already populated tree costs one status read."""
         subprocess.run(
-            ("git", "-C", str(self.path), "submodule", "update", "--init", "--recursive", "--checkout"),
+            (
+                "git",
+                "-C",
+                str(self.path),
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+                "--checkout",
+            ),
             capture_output=True,
             text=True,
             check=True,

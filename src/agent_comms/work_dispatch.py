@@ -74,7 +74,9 @@ class WorkDispatch:
             text=True,
             timeout=60,
         )
-        Checkout.add(self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}")
+        Checkout.add(
+            self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
+        )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
             replace(candidate, session_file=SavedSessionFile(location.read_key)),
