@@ -280,6 +280,7 @@ class StoredRead[T](ABC):
     def raised(self) -> T:
         """The value, or the failure raised again for a caller that answers it itself."""
 
+
 @dataclass(frozen=True)
 class ReadValue[T](StoredRead[T]):
     value: T
