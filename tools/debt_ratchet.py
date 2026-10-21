@@ -501,6 +501,14 @@ class ChangedSource:
         base_source = git(repo, "show", f"{base}:{path}") if listed else b""
         return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines), base_source)
 
+    @classmethod
+    def departed(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
+        """A changed module present at the base, read for what left it; a module the head
+        deleted is empty there."""
+        listed = git(repo, "ls-tree", "--name-only", head, "--", path).strip()
+        source = git(repo, "show", f"{head}:{path}") if listed else b""
+        return cls(path, source, frozenset(), git(repo, "show", f"{base}:{path}"))
+
 
 class ScopeNames(ast.NodeVisitor):
     """Each node's enclosing class and function names, dotted, through the AST's own dispatch."""
@@ -534,7 +542,9 @@ class CleanChangedLines(OccurrenceMeasure):
 
     An occurrence is identified by its enclosing scope and its source text, so rewriting
     the rest of a line around an unchanged occurrence writes nothing new, while a different
-    occurrence elsewhere never pays for a new one.
+    occurrence elsewhere never pays for a new one. Scopes are class and function names, not
+    modules, so an occurrence that leaves one changed module and arrives in another, as a
+    class moved between files, is the same occurrence moved, not a new one written.
     """
 
     @staticmethod
@@ -542,11 +552,24 @@ class CleanChangedLines(OccurrenceMeasure):
         return range(node.lineno, node.end_lineno + 1)
 
     @staticmethod
-    def introduced(repo: Path, base: str, head: str, path: str) -> dict[str, list[int]]:
-        """Each strict measure's sites on the path's changed lines."""
-        source = ChangedSource.read(repo, base, head, path)
-        return {f"{measure.__name__}:{path}": measure.changed_sites(source)
-                for measure in Measure.members_with(CleanChangedLines)}
+    def introduced(
+        repo: Path, base: str, head: str, paths: tuple[str, ...], departed_from: tuple[str, ...],
+    ) -> dict[str, list[int]]:
+        """Each strict measure's sites on each path's changed lines. Occurrences that left the
+        changed modules in ``departed_from`` (those present at the base) pay for the same
+        occurrences arriving elsewhere."""
+        sources = [ChangedSource.read(repo, base, head, path) for path in paths]
+        left = [ChangedSource.departed(repo, base, head, path) for path in departed_from]
+        found: dict[str, list[int]] = {}
+        for measure in Measure.members_with(CleanChangedLines):
+            departed: Counter[tuple[str, str]] = Counter()
+            for source in left:
+                gone = measure.identities(source.base_tree, source.path)
+                gone.subtract(measure.identities(source.tree, source.path))
+                departed.update(+gone)
+            for source in sources:
+                found[f"{measure.__name__}:{source.path}"] = measure.changed_sites(source, departed)
+        return found
 
     @staticmethod
     def scopes(tree: ast.AST) -> dict[ast.AST, str]:
@@ -566,8 +589,9 @@ class CleanChangedLines(OccurrenceMeasure):
         return found
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The first changed line of each occurrence written there that the base lacks."""
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+        """The first changed line of each occurrence written there that the base lacks and no
+        changed module gave up; a moved occurrence spends the departure it came from."""
         scopes = cls.scopes(source.tree)
         unwritten = cls.identities(source.tree, source.path)
         unwritten.subtract(cls.identities(source.base_tree, source.path))
@@ -576,9 +600,11 @@ class CleanChangedLines(OccurrenceMeasure):
             if ((count := cls.occurrences(node))
                     and (touched := source.lines.intersection(cls.site_lines(node)))):
                 identity = scopes[node], ast.unparse(node)
-                written = max(0, min(count, unwritten[identity]))
-                unwritten[identity] -= written
-                sites.extend([min(touched)] * written)
+                arrived = max(0, min(count, unwritten[identity]))
+                unwritten[identity] -= arrived
+                moved = min(arrived, departed[identity])
+                departed[identity] -= moved
+                sites.extend([min(touched)] * (arrived - moved))
         return sites
 
 
@@ -682,8 +708,9 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+        prose = cls.prose_lines(source) & source.lines
+        return [*super().changed_sites(source, departed), *prose]
 
 
 @dataclass(frozen=True)
@@ -2045,8 +2072,11 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
         parts = {measure: [pool.submit(part)
                            for part in measure.parts(repo, base, head, paths, root)]
                  for measure in measures}
-        sites = [pool.submit(CleanChangedLines.introduced, repo, base, head, path)
-                 for path in sorted(paths & python_paths(repo, head, root))]
+        sites = [pool.submit(
+            CleanChangedLines.introduced, repo, base, head,
+            tuple(sorted(paths & python_paths(repo, head, root))),
+            tuple(sorted(paths & python_paths(repo, base, root))),
+        )]
         # Each measure combines as soon as its parts finish, while slower checkers still run.
         measured = {}
         owners = {future: measure for measure, futures in parts.items() for future in futures}
