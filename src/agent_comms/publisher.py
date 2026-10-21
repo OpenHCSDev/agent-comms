@@ -269,8 +269,9 @@ class ResponseWrites(PrivateWrites):
     ) -> Message:
         """Publish against the caller's held registry snapshot."""
 
-        matched, previous_sequence, metadata = self.log.keyed_publication_unlocked(intent)
-        if matched is not None:
+        for matched in self.bus.keyed_messages(intent.publication_key):
+            if not intent.matches_publication(matched):
+                raise RelationViolationError("Response publication key has different message content.")
             return matched
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.

@@ -61,8 +61,12 @@ class HumanSendError(RelationViolationError):
     """A human send Core did not complete; delivery_failure decodes each member for the sender."""
 
 
-class HumanSendRefusedError(ToolRefusedError, HumanSendError):
+class HumanSendRefusedError(HumanSendError, ToolRefusedError):
     """The send transaction rolled back; the human's message was not sent."""
+
+
+class HumanInitialUnknownError(HumanSendError):
+    """A private USER initial may be committed; inspect its ID, never retry."""
 
 
 class CommittedMessageError(RuntimeError):

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Final, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Final, Self
 
 from agent_comms.audience_manifest import FrozenAudience
+from agent_comms.bus_tables import BusRow
 from agent_comms.errors import (
     HumanSendRefusedError,
     CommittedMessageError,
@@ -18,6 +21,7 @@ from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     _PRIVATE_WIRE_PREFIX,
     NoResponseAcknowledgement,
+    KeyedResponseAcknowledgement,
     ResponseAcknowledgement,
     _canonical,
     has_private_wire_fields,
@@ -27,9 +31,10 @@ from .delivery_policy import DeliveryPolicy
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
+from agent_comms.typed_table import Column, Generated, sql_literal
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, BusReader, PrivateRecord, RecordBuilder
+    from agent_comms.bus import Bus, BusReader, RecordBuilder
 
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
@@ -67,10 +72,14 @@ class Delivered(BusRecord, declared_name=None):
     control: str
 
     def projections(self):
-        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
+        from .bus_tables import AnsweredBySource, DirectReplySource, ReceivedSource, SentSource
 
         yield from super().projections()
         yield SentSource(self.audience.sender_lookup, self.seq)
+        for original in self.answers:
+            yield AnsweredBySource(
+                original=original, lookup=self.audience.sender_lookup, seq=self.seq,
+            )
         for recipient in self.audience.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
             if self.direct_for(recipient.recipient_lookup):
@@ -90,6 +99,38 @@ class Delivered(BusRecord, declared_name=None):
         authored = (self.audience.sender_lookup == recipient_lookup
                     and self.message.retains_authored_task)
         return self.messages() if addressed or authored else ()
+
+
+class KeyedPublication(BusRecord, declared_name=None):
+    """One publication key binds one Message's content, not its encoded receipt."""
+
+    acknowledgement: KeyedResponseAcknowledgement
+    publication_key: ClassVar[Generated] = Generated(
+        str, Column(generated=(
+            "json_extract(acknowledgement, "
+            + sql_literal("$." + json.dumps(
+                FieldCodec.field_plan(KeyedResponseAcknowledgement, "publication_key").key,
+                ensure_ascii=False,
+            )) + ")"
+        ), unique=True),
+    )
+
+    @classmethod
+    def publication_sequences(cls, db: sqlite3.Connection, publication_key: str) -> tuple[int, ...]:
+        return tuple(row.seq for row in KeyedPublication.table.select(
+            db, publication_key=publication_key, limit=1,
+        ))
+
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        for original_seq in self.publication_sequences(db, self.acknowledgement.publication_key):
+            header = BusRow.require(db, seq=original_seq)
+            original = header.kind.read_from(db, original_seq)
+            if self.publication_snapshot != original.publication_snapshot:
+                raise RelationViolationError(
+                    "Response publication key has different message content."
+                )
+            return original_seq
+        return super().append_to(db, seq)
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
-    from .bus import Bus
+    from .bus import BusReader
     from .messages import Message
     from .message_page import MessagePage, PageWindow
     from .read_basis import MessageDisplayScope
@@ -93,12 +93,12 @@ class PageTraversal(ABC):
 
     @abstractmethod
     def records(
-        self, source: Bus, scope: MessageDisplayScope, *, limit: int, kinds=(),
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
     ) -> tuple[Message, ...]: ...
 
     @abstractmethod
     def opposite(
-        self, source: Bus, scope: MessageDisplayScope, *, limit: int, kinds=(),
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
     ) -> tuple[Message, ...]: ...
 
     @staticmethod

@@ -7,7 +7,7 @@ import time
 from dataclasses import Field, dataclass, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
-from typing import Annotated, get_type_hints
+from typing import Annotated, ClassVar, Self, get_origin, get_type_hints
 
 from agent_comms import messages
 from agent_comms.coordination_errors import IdentityConflict
@@ -16,7 +16,6 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index, SharedFileTables, TypedTable
 from agent_comms.message_reference import MessageReference
 
@@ -63,6 +62,13 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
 class AnsweredSource(TypedTable, BusProjectionTables):
     original: Annotated[MessageReference, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
+
+
+@dataclass(frozen=True)
+class AnsweredBySource(AnsweredSource, ParticipantSource):
+    """An answer bound to its committed sender incarnation, not its route name."""
+
+    indexes = (Index(("original", "lookup", "seq")),)
 
 
 @dataclass(frozen=True)
@@ -184,7 +190,9 @@ class _CapabilityTable:
         return make_dataclass(
             BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
             [("seq", Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]),
-             *((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner))],
+             *((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
+             *((name, hints[name], vars(owner)[name]) for name in get_annotations(owner)
+               if get_origin(hints[name]) is ClassVar and name in vars(owner))],
             bases=(TypedTable, BusTables),
             namespace={"__module__": owner.__module__},
             frozen=True,
@@ -222,6 +230,17 @@ class BusCapability(BusTables):
             })
             for table in self.tables())
 
+    @classmethod
+    def read_from(cls, db: sqlite3.Connection, seq: int) -> Self:
+        """Reconstruct this declared value from its own capability tables."""
+        values = {}
+        for table in cls.tables():
+            rows = table.select(db, seq=seq)
+            if not rows:
+                raise RelationViolationError(f"Bus row {seq} lacks {table.declared_name}")
+            values.update({item.name: getattr(rows[0], item.name) for item in fields(table)})
+        return FieldCodec.construct(cls, values)
+
     def projections(self):
         return iter(())
 
@@ -243,13 +262,3 @@ class BusCapability(BusTables):
 class Addressed(BusCapability):
     sender: Annotated[str, WireName("from"), WireOrder(2)]
     target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
-
-
-@dataclass(frozen=True)
-class KeyedPublication(BusCapability):
-    acknowledgement: Annotated[KeyedResponseAcknowledgement, Column(unique=True)]
-
-    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
-        """A keyed publication appended again answers with the sequence it first got."""
-        prior = KeyedPublication.table.select(db, acknowledgement=self.acknowledgement)
-        return prior[0].seq if prior else super().append_to(db, seq)

@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, BusSnapshot, PublicRecord
+from bus_record_fixture import record_from
+from agent_comms.bus import Bus, BusSnapshot, PrivateRecord, PublicRecord
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.bus_tables import BusRow, MessageIdentitySource
 from agent_comms.errors import HumanSendRefusedError
@@ -16,6 +17,9 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.locked_store import RegistryFile
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.message_bus import MessageBus
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
+from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.messaging import Messaging
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
@@ -48,6 +52,25 @@ def pages(messages):
 
 def test_message_bus_pages_five_channel_messages_two_at_a_time(tmp_path):
     assert pages(channel_bus(tmp_path)) == [(5, 4), (3, 2), (1,)]
+
+
+@pytest.mark.parametrize("traversal", [OlderTraversal(), OlderTraversal(8), NewerTraversal(3)])
+def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
+    messages = channel_bus(tmp_path)
+    request = MessagePageRequest(
+        ChannelDisplayScope("#history", frozenset({"#history"})),
+        PageBounds(traversal, limit=2),
+    )
+    with messages.bus.reading() as source:
+        before = request.read_opened(source)
+        messages.bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "#history", "later", InfoKind, seq=seq)))
+        retained = request.read_opened(source)
+        assert retained == before
+        assert tuple(row.seq for row in retained.messages) == (4, 5)
+        assert retained.has_older and not retained.has_newer
+    latest = request.read_opened(messages.bus)
+    assert latest != retained
 
 
 def test_archived_database_pages_read_only(tmp_path):
@@ -130,6 +153,27 @@ def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
         assert tuple(row.seq for row in reader.page(7, 2)) == (5, 4)
     with pytest.raises(sqlite3.ProgrammingError):
         reader.lookup(1)
+
+
+def test_reply_existence_uses_exact_reference_and_frozen_author(tmp_path):
+    messages = channel_bus(tmp_path)
+    original = messages.bus.lookup(1).reference
+    other = messages.bus.lookup(2).reference
+    messages.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "#history", "unattested answer", InfoKind,
+                seq=seq, answers=(original,))))
+    assert not messages.bus.has_reply(original, sender_lookup="a" * 32)
+    with messages.bus.reading() as source:
+        assert not source.has_reply(original, sender_lookup="a" * 32)
+        messages.bus.append(lambda seq, db: record_from(
+            PrivateRecord, Message("renamed-author", "worker", "frozen answer", InfoKind,
+                                   seq=seq, answers=(original,))))
+        assert not source.has_reply(original, sender_lookup="a" * 32)
+    assert messages.bus.has_reply(original, sender_lookup="a" * 32)
+    assert not messages.bus.has_reply(original, sender_lookup="b" * 32)
+    assert not messages.bus.has_reply(other, sender_lookup="a" * 32)
+    changed_identity = replace(original, message_id="0" * len(original.message_id))
+    assert not messages.bus.has_reply(changed_identity, sender_lookup="a" * 32)
 
 
 def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):
