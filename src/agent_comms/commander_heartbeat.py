@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.message_bus import WatchPass
 from agent_comms.registration import Registration
+from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
-from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 
@@ -57,22 +57,9 @@ class CommanderObservation:
 
 
 @dataclass
-class CommanderHeartbeat(WatchPass[tuple[CommanderObservation, ...]]):
-    sender: ClassVar[str] = "commander-heartbeat"
+class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ...]]):
+    sender = "commander-heartbeat"
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
-
-    @classmethod
-    def register(cls, registry: Registration) -> None:
-        """Declare the shared service sender before any worker or restart publication."""
-        if cls.sender not in registry:
-            registry.declare(
-                registry.new_thread(
-                    cls.sender,
-                    frozenset(),
-                    str(registry.store.path.parent),
-                    execution=ExternalThreadExecution,
-                )
-            )
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:

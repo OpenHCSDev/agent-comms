@@ -13,14 +13,42 @@ import sys
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, TextIO
+from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
+from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
+from agent_comms.messages import InfoKind, Message
+from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
+
+
+@dataclass(frozen=True)
+class InstallReport(ServiceSender):
+    """Publish the install's own typed result, never an interpretation of its logs."""
+
+    sender: ClassVar[str] = "installer"
+    root: Path
+
+    def post(self, lines: tuple[str, ...]) -> Message:
+        with client_wire(self.root) as comms:
+            self.register(comms.registry)
+            return comms.bus.publisher.publish_ordinary(
+                Message(sender=self.sender, target="#comms", body="\n".join(lines),
+                        type=InfoKind), origin=AgentOrigin())
+
+    def starting(self, upgrade: Upgrade) -> Message:
+        return self.post(("Install starting", *upgrade.lines()))
+
+    def finished(self, upgrade: Upgrade) -> Message:
+        return self.post(("Install finished", *upgrade.lines()))
+
+    def failed(self, error: UpgradeRefused) -> Message:
+        return self.post(error.lines())
 
 
 @dataclass(frozen=True)
@@ -71,7 +99,7 @@ class InstallRun:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.rehearse, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses)
+                       self.harnesses, InstallReport(self.root))
 
     def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:
