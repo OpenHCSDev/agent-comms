@@ -380,6 +380,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         with practice_copy(ctx.root, copied_path) as (root, _measurement):
+            (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
                 ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
@@ -405,7 +406,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                     shim.chmod(0o755)
                 monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
                 observed = []
-                # Heartbeat also consumes released work; exercise its standalone owner first.
+                # Run the standalone watcher while the released checkout is still pending.
                 for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
                     start = calls.stat().st_size
                     watch.watch_pass(lambda: nullcontext(copied))
