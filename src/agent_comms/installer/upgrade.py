@@ -62,7 +62,7 @@ from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses, RuntimeProcessOutcome
 from agent_comms.storage_rules import StorageRule
@@ -517,11 +517,13 @@ class TargetTree(AbstractContextManager["TargetTree"]):
         return self.path / "src", self.path / STEPS.parent
 
     def add(self) -> None:
-        Checkout.add(self.repo, self.path, self.revision, "--detach", "-q")
+        ScratchCheckout.add(self.repo, self.path, self.revision, "--detach", "-q")
 
     def close(self) -> None:
+        """Retire the owned tree, then dispose scratch even if retirement fails."""
         try:
-            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
+            if self.path.is_dir():
+                ScratchCheckout(self.path).retire()
         finally:
             shutil.rmtree(self.scratch, ignore_errors=True)
 

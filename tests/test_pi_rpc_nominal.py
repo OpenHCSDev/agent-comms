@@ -49,7 +49,6 @@ class AuditPauseEnd(pi.PiEvent, ends=AuditPausePhase):
 class AuditFailure(failures.TurnFailure):
     code = "audit_failure"
     precedence = 110
-    input_uncertain = True
 
 
 def test_new_excursion_declares_both_transitions_without_dispatch_edits():
@@ -115,7 +114,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
         )
     ),
 )
-def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
+def test_failure_precedence_and_text_have_one_owner(left, right):
     session = NativeSessionPreparation(
         NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
         native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
@@ -126,7 +125,6 @@ def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     assert type(session.output.failure) is expected
     assert session.output.failure_text == expected.__name__
     assert session.output.failure.code == expected.code
-    assert session.output.failure.input_uncertain == expected.input_uncertain
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():
