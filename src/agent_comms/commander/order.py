@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import asyncio
 import dataclasses
 import re
 import subprocess
@@ -34,7 +33,6 @@ from typing import Annotated, ClassVar, Self
 from pydantic import PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
-from agent_comms.child_process import BoundedRun
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
@@ -53,7 +51,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_tool_call import SelectedToolDenied
-from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -74,6 +72,8 @@ from agent_comms.todos import (
     OrderedHunt,
     OrderMessage,
     OrderProgress,
+    OrderText,
+    OrderWords,
     PendingProblemOrder,
     PullRequestLink,
     RecordPullRequest,
@@ -241,9 +241,11 @@ class OrderFile:
         return f'{self.defect}\n{self.why_stupid}{reason}'
 
     def problems_found(self, clean: bool) -> list[str]:
+        wording: tuple[type[OrderWords], ...] = (*OUTGOING, OrderText)
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
-                    for error in DirectiveText.refused(text)]
+                    for family in wording
+                    if (error := family.refused(text))]
         if len(self.defect.split()) < 8:
             problems.append('defect: fix: describe what fails in at least eight words')
         if not self.why_stupid.strip():
@@ -266,15 +268,14 @@ class OrderFile:
         reading = context.plan_reading(context.comms.goals.todos.history_for_commander(context.incarnation))
         problems = list(self.order.phase.order_refusals(reading, self.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder)
-        busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
-                     for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
+        busy = tuple(todo for todo in held if todo.holder == unit and todo.id not in group)
         if busy:
             snapshot = context.comms.registry.snapshot()
             occupied = {todo.holder for todo in held} | {context.commander} | context.parked
             idle = sorted(thread.name for thread in snapshot.threads.values()
                           if thread.name not in occupied and thread.role.executor(thread)
                           and snapshot.status(thread.name).active)
-            problems.append(f'{unit} already holds plan orders '
+            problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
@@ -292,16 +293,14 @@ class OrderFile:
                 problems.append(str(error))
         return problems
 
-    def check_refusals(self) -> tuple[str, ...]:
-        """The order owns check legality; the result owns the required measurement."""
+    def check_refusals(self, context: CommanderContext) -> tuple[str, ...]:
+        """Send and correction use the check owner's clean-main acceptance rule."""
         try:
             with MalformedRecord.refusing('order.check'):
                 self.order.require_writable()
                 check = self.order.check
                 if Path(check.directory).is_dir():
-                    ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
-                                                    cwd=check.directory, timeout=90))
-                    return check.result.distance(ran).unproven(check.command, 0)
+                    check.require_acceptance(context.worktrees)
         except MalformedRecord as error:
             return (f'order.check: {error}; fix: supply a focused measurable command',)
         return ()
@@ -353,7 +352,7 @@ class OrderFile:
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
         problems.extend(self.assignment_refusals(context, unit, group, listed, new, traced))
         problems.extend(self.source_refusals(context, traced))
-        problems.extend(self.check_refusals())
+        problems.extend(self.check_refusals(context))
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
@@ -614,24 +613,14 @@ class Commander(CommanderContext):
         document.send_back(self, unit, group, replacing, clean, reassign, struck_already)
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Core replaces a wrong check of an open order. The new check must already pass on main, so a
-        correction fixes the commander's check and never passes undelivered work: done still runs it on
-        the --sha it is given."""
+        """Replace a wrong check using the same rule as send; done still checks the delivered SHA."""
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        def git(*args: str) -> str:
-            return subprocess.run(['git', '-C', check.directory, *args],
-                                  capture_output=True, text=True).stdout.strip()
-        head = git('rev-parse', 'HEAD')
-        if head != git('rev-parse', 'origin/main') or git('status', '--porcelain', '-uno'):
-            sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
-                     'the corrected check runs on main')
-        check.result.require(asyncio.run(BoundedRun.run(
-            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
+        check.require_acceptance(self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
@@ -1141,7 +1130,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
-    help = "replace an open order's wrong check with one passing on main; keeps its review timer and strikes"
+    help = "replace an open order's wrong check using send's rule; keeps its review timer and strikes"
     pid: Annotated[str, Argument(flags=("pid",))]
     check: Annotated[
         str,
