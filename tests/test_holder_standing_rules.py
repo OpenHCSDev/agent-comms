@@ -41,7 +41,7 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_page import MessagePageRequest
@@ -436,27 +436,26 @@ def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
     with closing(GoalAttemptStore.database(path)) as db:
         GoalWorkDecision.create(db)
         db.commit()
-    ledger = CarryLedger(held_bus.root)
-    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
     before = path.read_bytes()
     with pytest.raises(RelationViolationError):
-        ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+        GoalWorkDecisions.carry(held_bus.root, apply=True)
     assert path.read_bytes() == before
-    assert GoalWorkDecisions.name() not in ledger.applied()
 
 
-def test_install_discovers_and_records_decision_cutover_once(held_bus):
+def test_install_discovers_the_decision_cutover_from_its_dry_run_and_runs_it_once(held_bus):
     chain = CarryChain.at(Path(__file__).resolve().parents[1])
     assert GoalWorkDecisions in chain.steps
+
+    def dry_run(step):
+        return step.carry(held_bus.root, apply=False)
+
+    assert chain.pending(dry_run) == ()
     legacy_decision_table(held_bus)
-    ledger = CarryLedger(held_bus.root)
-    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
-    assert GoalWorkDecisions in chain.pending(ledger.applied())
-    first = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
-    assert first.changed == 1 and ledger.filename in first.rewritten
-    second = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+    assert chain.pending(dry_run)[0] is GoalWorkDecisions
+    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 1
+    second = GoalWorkDecisions.carry(held_bus.root, apply=True)
     assert second.changed == 0 and second.rewritten == ()
-    assert GoalWorkDecisions not in chain.pending(ledger.applied())
+    assert chain.pending(dry_run) == ()
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
