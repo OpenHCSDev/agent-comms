@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from functools import cached_property, partial
+from functools import partial
 from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock
@@ -44,21 +46,35 @@ class TurnTranscriptUpdate(TranscriptUpdate):
 
 
 class TranscriptReplay:
-    def __init__(self, comms: Comms, runtime: RuntimeServer):
-        self.comms, self.runtime = comms, runtime
+    """Active transcript consumers, rather than the runtime, retain their shared reader."""
 
-    @cached_property
-    def reads(self):
-        # Replay and subscription share this process and its request/wait lifetime.
-        return self.runtime._resources.enter_context(ObservationProcess.awaited(self.comms.route))
+    def __init__(self, comms: Comms):
+        self.comms = comms
+        self._subscriptions: list[ObservationProcess] = []
+
+    @contextmanager
+    def observing(self) -> Iterator[ObservationProcess]:
+        reads = (self._subscriptions[0] if self._subscriptions
+                 else ObservationProcess.awaited(self.comms.route))
+        self._subscriptions.append(reads)
+        try:
+            yield reads
+        finally:
+            self._subscriptions.remove(reads)
+            if not self._subscriptions:
+                reads.close()
 
     async def replay(self, session_id: str, client: RuntimeServer | SocketClient) -> None:
-        snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), session_id))
-        await self._publish(session_id, snapshot, client)
+        with self.observing() as reads:
+            snapshot = await reads.read(ReadTranscript(str(self.comms.root), session_id))
+            await self._publish(session_id, snapshot, client)
 
-    async def subscribe(self, session_id: str, client: SocketClient) -> None:
-        snapshot = await self.reads.read(SubscribeTranscript(str(self.comms.root), session_id))
-        await self._publish(session_id, snapshot, client)
+    @asynccontextmanager
+    async def subscribe(self, session_id: str, client: SocketClient) -> AsyncIterator[None]:
+        with self.observing() as reads:
+            snapshot = await reads.read(SubscribeTranscript(str(self.comms.root), session_id))
+            await self._publish(session_id, snapshot, client)
+            yield
 
     async def _publish(
         self,
