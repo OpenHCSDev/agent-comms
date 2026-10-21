@@ -12,7 +12,7 @@ from .page_traversal import OlderTraversal, PageCursor, PageTraversal
 from .read_basis import (
     DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
 )
-from .bus import Bus
+from .bus import BusReader
 
 @dataclass(frozen=True, slots=True)
 class MessagePage:
@@ -126,7 +126,7 @@ class MessageReadRequest[T](ABC):
     def empty(self) -> T: ...
 
     @abstractmethod
-    def read_opened(self, source: Bus) -> T: ...
+    def read_opened(self, source: BusReader) -> T: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,15 +139,16 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     def kinds(self):
         return MessageKind.members_with(MessageKind)
 
-    def read_opened(self, source: Bus) -> MessagePage:
+    def read_opened(self, source: BusReader) -> MessagePage:
         traversal = self.bounds.traversal
         window = PageWindow(self.bounds)
-        opposite = bool(traversal.opposite(source, self.scope, limit=1, kinds=self.kinds()))
-        more = False
-        for row in traversal.records(source, self.scope, limit=self.bounds.limit + 1, kinds=self.kinds()):
-            if not window.take(traversal, row):
-                more = True
-                break
+        with source.reading() as reader:
+            opposite = bool(traversal.opposite(reader, self.scope, limit=1, kinds=self.kinds()))
+            more = False
+            for row in traversal.records(reader, self.scope, limit=self.bounds.limit + 1, kinds=self.kinds()):
+                if not window.take(traversal, row):
+                    more = True
+                    break
         return traversal.result(window, more, opposite)
 
     def displayed(self, reads, document, viewer, snapshot, conversation_snapshot, source):

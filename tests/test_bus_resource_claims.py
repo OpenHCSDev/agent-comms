@@ -1,6 +1,5 @@
 """Resource ownership, originals and derived rows share the actual Bus transaction."""
 
-import multiprocessing
 import os
 import signal
 import sqlite3
@@ -26,7 +25,7 @@ from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.typed_table import StoreCommittedError, TypedTable
-from test_bus import record_from
+from bus_record_fixture import publication_processes, record_from
 
 
 @dataclass(frozen=True)
@@ -235,9 +234,8 @@ def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: Cl
     before = claims.counts()
     resource = str(tmp_path / "owned.py")
     scope = claims.scope("alice", "a" * 32)
-    context = multiprocessing.get_context("spawn")
-    reader, writer = context.Pipe(duplex=False)
-    child = context.Process(target=append_until_projected,
+    reader, writer = publication_processes.Pipe(duplex=False)
+    child = publication_processes.Process(target=append_until_projected,
                             args=(claims.bus.path.parent, scope, resource, writer))
     child.start()
     writer.close()
