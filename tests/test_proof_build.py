@@ -16,6 +16,7 @@ from agent_comms.build_identity import (
 from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.standing import InstallDue
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
@@ -39,7 +40,6 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
     CommitDelivery,
     FileDeliveryEvidence,
-    InstallDue,
     OperationDelivery,
     PendingProblemOrder,
     Todo,

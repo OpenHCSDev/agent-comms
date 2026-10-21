@@ -62,7 +62,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.build_identity import BuildIdentity, RecordedBuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import BuildIdentity, UnrecordedBuildIdentity
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import InfoKind, Message
@@ -77,7 +77,6 @@ from agent_comms.recorded_time import (
 )
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
@@ -1062,33 +1061,6 @@ class MergedProgress(FoundProgress):
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
-
-
-@dataclass(frozen=True)
-class InstallDue(UndatedStandingRule):
-    """Each configured main not contained in the installed build needs an install."""
-
-    why: str
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        # Import here: commander configuration uses Comms, which imports todos.
-        from agent_comms.commander.config import CommanderConfig
-
-        config = CommanderConfig.read_root(comms.root)
-        installed = RecordedBuildIdentity.installed()
-        due = []
-        for repo in config.repos:
-            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
-            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if not installed.contains(main, repo.checkout):
-                recorded = installed.for_repository(repo)
-                due.append(cls(f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
-        return tuple(due)
-
-    def line(self) -> str:
-        return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
-                "agent-comms install and posts the result to the commander")
 
 
 @dataclass(frozen=True)
