@@ -17,7 +17,11 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
-from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
+from agent_comms.native_tool_call import (
+    DuplicateToolCallIdentity,
+    OwnerToolConnection,
+    SelectedToolDenied,
+)
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
@@ -28,8 +32,8 @@ def _wire(token: str, **changes: object) -> bytes:
     return (json.dumps(data) + "\n").encode("utf-8")
 
 
-async def query(path: Path, payload: bytes) -> bool:
-    reader, writer = await asyncio.open_unix_connection(str(path))
+async def query(connection: OwnerToolConnection, payload: bytes) -> bool:
+    reader, writer = await asyncio.open_unix_connection(connection.path)
     try:
         writer.write(payload)
         await writer.drain()
@@ -132,7 +136,7 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
         )
         await wrong.start()
         try:
-            assert not await query(wrong.listener.path, _wire(token))
+            assert not await query(wrong.listener.connection, _wire(token))
         finally:
             await wrong.close()
         server = broker.SelectedToolSocket(
@@ -150,10 +154,10 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
                 {"contents": "\ud800"},
                 {"root": "forged"},
             ):
-                assert not await query(server.listener.path, _wire(token, **changes))
+                assert not await query(server.listener.connection, _wire(token, **changes))
             assert not observed and not server.calls
             arguments = {"resource": "notes.txt", "contents": "é"}
-            pending = asyncio.create_task(query(server.listener.path, _wire(token)))
+            pending = asyncio.create_task(query(server.listener.connection, _wire(token)))
             await asyncio.sleep(0)
             assert not pending.done()  # Socket arrival is not a native start.
             server.announce(
@@ -173,8 +177,10 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
                 )
             )
             assert await pending
-            assert not await query(server.listener.path, _wire("0" * 64))
-            assert not await query(server.listener.path, _wire(token))  # Consumed exactly once.
+            assert not await query(server.listener.connection, _wire("0" * 64))
+            assert not await query(
+                server.listener.connection, _wire(token)
+            )  # Consumed exactly once.
             assert observed == [
                 broker.SelectedToolRequest(
                     "call_1", broker.SelectedWriteArguments("notes.txt", "é")
@@ -232,7 +238,7 @@ async def test_listener_isolated_from_previous_turn_and_keeps_session_ledger(
                 args=arguments,
             )
         )
-        assert await query(server.listener.path, _wire(token))
+        assert await query(server.listener.connection, _wire(token))
         server.tool_finished(
             ToolExecutionEnd(
                 tool_call_id="call_1",
