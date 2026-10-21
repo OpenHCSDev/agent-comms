@@ -612,7 +612,7 @@ class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable):
     preserve_wait = True
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        goal.order.require_edit()
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")
