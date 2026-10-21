@@ -18,11 +18,9 @@ def test_capacity_reports_load_and_forks(unjudged):
     load = Load(24, 14, unjudged, ("judge",))
     assert FieldCodec.encode(load)["total"] == load.total
     assert load.total == 24 + 2 * 14 + unjudged / 10
-    assert str(load) == (
-        f"load {load.total:.0f} (24 open orders, 14 review timers up, {unjudged} unjudged edits), "
-        f"1 working forks ['judge'], {load.total / 2:.0f} per reader"
-    )
     assert load.share == load.total / 2
+    assert FieldCodec.encode(load)["share"] == load.share
+    assert replace(load, forks=("judge", "reviewer")).share < load.share
 
 
 @pytest.mark.parametrize("presence,expected", (

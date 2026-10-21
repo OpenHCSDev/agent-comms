@@ -37,17 +37,25 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         since = min(
             order.at.recorded_at("A held order") for todo in todos for order in todo.order_history
         )
-        questions = comms.bus.log.read_page(cls(
-            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
-        ))
+        questions = comms.bus.log.read_page(
+            cls(
+                RepliesDisplayScope(snapshot.names_for(commander), peers),
+                since,
+                before,
+            )
+        )
         return tuple(message for message in questions if issubclass(message.type, NeedsAnswerKind))
 
     def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
         answered: set[MessageReference] = set()
         found: list[Message] = []
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
+        with closing(
+            index.recent_offsets(
+                self.since,
+                predicate=self.scope.index_predicate,
+                before_offset=source.boundary,
+            )
+        ) as offsets:
             for row in self.indexed_records(source, offsets):
                 message = row.message
                 if message.sender in self.scope.first_names:
@@ -62,12 +70,19 @@ class SenderMessages(UnansweredUnitAsks):
     """Everything the other side sent the commander in the window, answered or not."""
 
     def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            return tuple(row.message for row in self.indexed_records(source, offsets)
-                         if row.message.sender not in self.scope.first_names
-                         and row.message.timestamp <= self.before)
+        with closing(
+            index.recent_offsets(
+                self.since,
+                predicate=self.scope.index_predicate,
+                before_offset=source.boundary,
+            )
+        ) as offsets:
+            return tuple(
+                row.message
+                for row in self.indexed_records(source, offsets)
+                if row.message.sender not in self.scope.first_names
+                and row.message.timestamp <= self.before
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,9 +94,13 @@ class UnansweredBurst(UnansweredUnitAsks):
     def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
         replied: dict[MessageReference, float] = {}
         sent: list[Message] = []
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
+        with closing(
+            index.recent_offsets(
+                self.since,
+                predicate=self.scope.index_predicate,
+                before_offset=source.boundary,
+            )
+        ) as offsets:
             for row in self.indexed_records(source, offsets):
                 message = row.message
                 if message.sender in self.scope.first_names:

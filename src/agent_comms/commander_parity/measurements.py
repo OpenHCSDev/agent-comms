@@ -10,7 +10,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
 from agent_comms.commander_parity.load import LoadComparison, state_files
 from agent_comms.comms import Comms
-from agent_comms.standing_rules import DiskLow, IndependentStandingRule, StandingRule
+from agent_comms.standing_rules import DiskLow, StandingRule
 from agent_comms.storage_rules import StorageViolation
 from agent_comms.ui_model.unit_state import UnitState
 
@@ -36,10 +36,12 @@ class RuleComparison(ParityComparison):
         )
 
     @classmethod
-    def read[Rule: IndependentStandingRule](cls, owner: type[Rule]) -> ParityComparison:
-        method = owner.violations
+    def read(cls, owner: type[StandingRule]) -> ParityComparison:
+        method = owner.scan_observed
         if not isinstance(method, MethodType):
-            return UnverifiedParity(f"{owner.__qualname__}.violations is not a bound classmethod")
+            return UnverifiedParity(
+                f"{owner.__qualname__}.scan_observed is not a bound classmethod"
+            )
         code = method.__func__.__code__
         config = CommanderConfig.read(CommanderConfig.path())
         comms = Comms(config.root)
@@ -62,7 +64,7 @@ class RuleComparison(ParityComparison):
             monitoring.free_tool_id(monitoring.PROFILER_ID)
         if len(observed) != 1:
             return UnverifiedParity(
-                f"Expected one {owner.__qualname__}.violations call: {len(observed)}"
+                f"Expected one {owner.__qualname__}.scan_observed call: {len(observed)}"
             )
         native = tuple(rule for rule in observed[0] if rule.broke_after(0.0))
         return cls(
@@ -88,7 +90,7 @@ class StorageComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> StorageComparison:
-        return cls(RuleComparison.read(StorageViolation), RuleComparison.read(DiskLow))
+        return cls(RuleComparison.read(StorageViolation.scan_owner()), RuleComparison.read(DiskLow))
 
 
 def measured_load() -> ParityComparison:

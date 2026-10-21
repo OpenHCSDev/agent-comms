@@ -29,7 +29,10 @@ from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import (
-    IndependentStandingRule, OwedAnswer, StandingRule, UndatedStandingRule,
+    IndependentStandingRule,
+    OwedAnswer,
+    StandingRule,
+    UndatedStandingRule,
 )
 
 if TYPE_CHECKING:
