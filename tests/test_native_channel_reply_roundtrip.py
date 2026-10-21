@@ -1,7 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_package import pinned_native_package
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.launch_runtime import RestoredRuntime
 from acp.schema import SessionNotification
@@ -61,8 +60,8 @@ def start_source_owner(comms, name):
      (False, False, False, True)],
     ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
 )
-async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads):
-    package = pinned_native_package()
+async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads, native_runtime_package):
+    package = native_runtime_package.path
     requests = []
     failures = []
     request_times = []
@@ -264,6 +263,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     await asyncio.sleep(0.05)
         except TimeoutError:
             print("TIMEOUT", description, "ACP facts", repr(facts), flush=True)
+            print("wire history", read_history(comms), flush=True)
+            for diagnostic in sorted((comms.root / "diagnostics").glob("*")):
+                if diagnostic.is_file():
+                    print(diagnostic.name, diagnostic.read_text(), flush=True)
             with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
                 print(
                     "native receipts",

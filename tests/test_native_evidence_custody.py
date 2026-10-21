@@ -36,7 +36,7 @@ def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, read
 
 
 def test_held_native_reader_refuses_a_new_hardlink(tmp_path):
-    # All decoded readers inherit this physical source. Check its lifetime once,
+    # Every decoder borrows this physical source. Check its lifetime once,
     # rather than restating the same assertion for each decoding capability.
     session = _evidence(tmp_path)
     with PrivateEvidenceRead.open(session) as reader:
