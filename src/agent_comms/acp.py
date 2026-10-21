@@ -50,7 +50,7 @@ from .acp_extension import (
 )
 from .acp_failure import NativeTurnError
 from .cohort_foreground import _accept_visible_deliveries
-from .turn_terminal import EndedWithoutResult, TurnTerminal
+from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
@@ -102,6 +102,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
         private_selected_tool_intent: SelectedToolIntent | None = None,
+        owner_stop: TurnInterruption = EndedWithoutResult(),
     ):
         self._comms = comms
         if private_selected_tool_intent is not None:
@@ -126,6 +127,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self,
             agent_bin=agent_bin,
             agent_args=agent_args,
+            owner_stop=owner_stop,
         )
         self.sessions = self.session_lifecycle_class(
             comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self

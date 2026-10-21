@@ -47,7 +47,7 @@ from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
-from .turn_terminal import EndedWithoutResult, TurnTerminal
+from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -88,10 +88,12 @@ class TurnRunner:
         *,
         agent_bin: LaunchBinary,
         agent_args: LaunchArguments,
+        owner_stop: TurnInterruption = EndedWithoutResult(),
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
+        self.owner_stop = owner_stop
         self.agent_bin = agent_bin.configured()
         self.agent_args = agent_args.configured()
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}

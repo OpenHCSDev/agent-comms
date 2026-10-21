@@ -18,7 +18,12 @@ if TYPE_CHECKING:
     from .turn_progress import TurnProgress
 
 
-class TurnTerminal(ABC):
+class TurnInterruption(ABC):
+    @abstractmethod
+    def interrupting(self, prior: TurnTerminal) -> TurnTerminal: ...
+
+
+class TurnTerminal(TurnInterruption):
     """Own interruption and settlement policy, never a nullable result flag."""
 
     @staticmethod
@@ -30,8 +35,8 @@ class TurnTerminal(ABC):
             raise TypeError("Turn cancellation requires a declared terminal")
         return terminal
 
-    def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
-        return self
+    def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
+        return prior
 
     def reported(self, event: Done) -> Done:
         return event
@@ -95,11 +100,11 @@ class EndedWithoutResult(FailedGoalTurn):
     def failure_reason(self) -> FailureReason:
         return terminal_failure_reason({})
 
-    def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
-        return terminal
-
 
 class OperatorStopped(TurnTerminal):
+    def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
+        return self
+
     def settle_launched(self, account, permit, store, captured, current) -> None:
         self.settle_origin(account, permit, store, captured.id, current)
 
@@ -111,8 +116,11 @@ class OperatorStopped(TurnTerminal):
         raise asyncio.CancelledError(self)
 
 
-class OwnerStop(asyncio.Future[TurnTerminal]):
+class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):
     """The worker's existing stop wait carries the operator's actual reason."""
+
+    def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
+        return self.terminal.interrupting(prior)
 
     def request(self) -> None:
         if not self.done():

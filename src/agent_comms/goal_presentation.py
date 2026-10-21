@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -73,7 +73,6 @@ class GoalExecutionSource:
 class GoalExecution(SubclassUnion, affix="Execution"):
     """The complete execution family consumed by commands, views and the commander."""
 
-    terminal: ClassVar[bool] = False
     toggle_label: ClassVar[str] = "Pause"
 
     @property
@@ -92,11 +91,8 @@ class GoalExecution(SubclassUnion, affix="Execution"):
     def waiting_for(self, goal: Goal) -> bool:
         return False
 
-    def unit_blocks(self) -> bool:
-        return False
-
-    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...]) -> None:
-        pass
+    def unit_blocks(self) -> tuple[BlockedExecution, ...]:
+        return ()
 
     @abstractmethod
     def validate_goal(self, goal: GoalCheckpoint) -> None: ...
@@ -121,8 +117,8 @@ class BoundGoalExecution(RecordMember, GoalExecution, declared_name=None):
     label: ClassVar[str]
 
     @property
-    @abstractmethod
-    def summary(self) -> str: ...
+    def summary(self) -> str:
+        return self.label
 
     def presentation(self, title: str) -> ThreadPresentation:
         return ThreadPresentation(title, self.glyph, self.summary)
@@ -144,10 +140,6 @@ class RunnableExecution(BoundGoalExecution):
     label = "Active"
 
     @property
-    def summary(self) -> str:
-        return "Active"
-
-    @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import PausedGoalAction
         return PausedGoalAction
@@ -157,20 +149,10 @@ class RunnableExecution(BoundGoalExecution):
 class RunningExecution(RunnableExecution):
     label = "Running"
 
-    @property
-    def summary(self) -> str:
-        return "Running"
-
 
 @dataclass(frozen=True)
 class CompletedExecution(BoundGoalExecution):
-    terminal = True
     label = "Completed"
-    toggle_label = "Completed"
-
-    @property
-    def summary(self) -> str:
-        return "Completed"
 
 
 @dataclass(frozen=True)
@@ -178,10 +160,6 @@ class PausedExecution(WaitingExecution):
     source: PauseSource
     label = "Paused"
     toggle_label = "Resume"
-
-    @property
-    def summary(self) -> str:
-        return "Paused"
 
     @property
     def toggle(self) -> type[GoalAction]:
@@ -238,8 +216,8 @@ class BlockedExecution(WaitingExecution, declared_name=None):
         summary = reason[:157] + "…" if len(reason) > 160 else reason
         return f"Blocked · {summary}"
 
-    def unit_blocks(self) -> bool:
-        return True
+    def unit_blocks(self) -> tuple[BlockedExecution, ...]:
+        return (self,)
 
     def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
@@ -249,8 +227,9 @@ class BlockedExecution(WaitingExecution, declared_name=None):
         from .commander.standing import UnownedWheelSpin
         from .goal_actions import GoalPrecondition
         from .thread_identity import CoreWatcherIncarnation
-        from dataclasses import replace
 
+        if comms.goals.goal_execution(unit) != self:
+            return
         observed = comms.registry.require(unit).goal.require_id(self.goal_id)
         for problem in orders:
             todo = comms.goals.todos.get(problem)
