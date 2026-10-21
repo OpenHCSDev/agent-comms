@@ -60,7 +60,7 @@ from .pi_payloads import PiUsage
 from .typed_table import Column, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
-    from .agent_events import Done
+    from .turn_terminal import TurnTerminal
     from .goal_management import Goals
     from .goals import GoalDeclaration
     from .thread_identity import TurnId
@@ -465,9 +465,13 @@ class GoalTurnPermit(ABC):
             claims.callback(permit.retire_unverified, store)
         return bool(self.claims)
 
-    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
+    def settle(self, account: TurnGoalAccount, terminal: TurnTerminal) -> None:
         for permit in self.claims:
             account.settle_launched(permit, terminal)
+
+    def stop(self, store: GoalAttemptStore) -> None:
+        for permit in self.claims:
+            permit.stop(store)
 
     def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
         for permit in self.claims:
@@ -571,11 +575,23 @@ class LaunchPermit(GoalTurnPermit):
         """
         if not progress_witness.strip():
             raise ValueError("A nonempty verified progress witness is required.")
+        return self.advance_ready(store, SucceededAttempt(), progress_witness=progress_witness)
+
+    def stop(self, store: GoalAttemptStore) -> None:
+        """Retire this attempt, not its goal or the right to make a fresh input."""
+        if not self.has_verified_progress(store):
+            self.advance_ready(store, FailedAttempt(), resolution="Operator stopped goal turn.")
+
+    def advance_ready(
+        self, store: GoalAttemptStore, phase: GoalAttemptPhase, *,
+        progress_witness: str | None = None, resolution: str | None = None,
+    ) -> Generation:
+        """The ledger owns the single next-generation transaction and ready grant."""
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             attempt = reservation.require_current(conn, ClaimedAttempt())
-            attempt.advance(conn, SucceededAttempt(), progress_witness=progress_witness)
+            attempt.advance(conn, phase, progress_witness=progress_witness, resolution=resolution)
             current = Generation(
                 reservation.goal_id,
                 reservation.generation,

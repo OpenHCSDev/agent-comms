@@ -7,7 +7,7 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -20,6 +20,7 @@ from .acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
+from .turn_terminal import FailedGoalTurn
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -251,7 +252,7 @@ class CompactionEnd(CompactionEvent):
 
 
 @dataclass(frozen=True)
-class Done(AgentEvent):
+class Done(AgentEvent, FailedGoalTurn):
     text: str
     ok: bool
     reason_code: str | None = None
@@ -266,6 +267,46 @@ class Done(AgentEvent):
         outcome = (SuccessfulNativeTurnOutcome() if self.ok else
                    FailedNativeTurnOutcome.resolve(self, error, document, original))
         return replace(self, outcome=outcome)
+
+    @property
+    def failure_reason(self) -> str:
+        from .diagnostics import terminal_failure_reason
+
+        return terminal_failure_reason(asdict(self))
+
+    def failure_observation(self, account, permit, captured):
+        return None if self.ok else super().failure_observation(account, permit, captured)
+
+    def observe_goal(self, account) -> None:
+        if not self.ok:
+            account.permit.block(account, "Backend turn failed; inspect local diagnostics before resuming.")
+        elif account.productive_tool is None and not str(self.text or "").strip():
+            account.permit.block(account,
+                "Backend reported success without assistant output "
+                "or tool activity; inspect the session before resuming.")
+
+    def settle_launched(self, account, permit, store, captured, current) -> None:
+        from .turn_goal_account import VerifiedGoalSettlement
+
+        if self.ok:
+            current.settle(VerifiedGoalSettlement, store, permit, account.turn)
+        super().settle_launched(account, permit, store, captured, current)
+
+    def settle_origin(self, account, permit, store, goal_id, current) -> None:
+        from .turn_goal_account import OriginGoalSettlement
+
+        if self.ok:
+            permit.settle_goal(OriginGoalSettlement, store, current, account.turn)
+        super().settle_origin(account, permit, store, goal_id, current)
+
+    def reported(self, event: Done) -> Done:
+        return replace(event, ok=False, text="Duplicate native terminal result")
+
+    async def prepare_publication(self, progress) -> Done:
+        return self
+
+    async def report_failure(self, progress, error):
+        return self.outcome
 
 
 @dataclass(frozen=True)

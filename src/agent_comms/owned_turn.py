@@ -43,6 +43,7 @@ from .turn_input_source import (
     ScheduledOriginalInput,
 )
 from .turn_progress import TurnProgress
+from .turn_terminal import TurnTerminal
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 
 if TYPE_CHECKING:
@@ -431,7 +432,9 @@ class OwnedTurn:
         try:
             await self.prepare_native()
             await self.stream()
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as error:
+            self.progress.result = self.progress.result.interrupted(
+                TurnTerminal.from_cancellation(error))
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
             state = await Coordination.run_worker(self.settle_unbound)
