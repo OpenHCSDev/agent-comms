@@ -15,7 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME, Binding, MonitorProbe, ResumedBridge, Serve,
 )
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -136,7 +136,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         (bridge,) = Serve.running(home)
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:
-            (paused,) = bridge.pause(resources)
+            paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert child.poll() is None
             # The paused process keeps the claim; no session hook sees it lapse.
@@ -178,7 +178,8 @@ def bridges_serving(state):
 
 def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_runtime(
         tmp_path, bridge_home, monkeypatch):
-    old, new = (SourcePrograms.create(tmp_path / name) for name in ('old', 'new'))
+    old = SourcePrograms.current(tmp_path / 'source-programs')
+    new = LaunchRuntime.installed()
     with session_bridge(tmp_path, bridge_home, (str(old.script(claude.main)),)) as (
             home, claim, observed, child, log):
         current = home / LaunchRuntime.current_pointer().relative_to(Path.home())
@@ -190,11 +191,9 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
         packet = json.dumps(dict(session_id=claim.thread, hook_event_name='SessionStart',
                                  transcript_path=str(observed.transcript)))
         (bridge,) = Serve.running(home)
-        bridges = SessionBridgeResumes()
         with ExitStack() as cleanup:
             with ExitStack() as resources:
-                bridges.pause(bridge, resources)
-                resources.callback(bridges.resume)
+                paused = bridge.pause(resources)
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
@@ -213,15 +212,16 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 cleanup.callback(stop, monitor)
-            bridges.require_resumed()
-            assert bridges.lines() == ()
+                outcome = paused.resume()
             resumed = InspectSession().information(claim)
+            assert outcome == ResumedBridge(claim.thread, observed.runtime, resumed.runtime)
             assert resumed.process == observed.process
             assert resumed.process.pid == child.pid
             assert resumed.runtime.prefix == new.prefix.resolve()
             state = claim.state()
             assert isinstance(state, LiveWatch)
-            assert Path(state.record.command[0]).resolve() == new.script(claude.main).resolve()
+            assert Path(state.record.command[0]).resolve() == new.interpreter.with_name(
+                old.script(claude.main).name).resolve()
             assert bridges_serving(home / '.local/state/agent-comms/claude-bridge-copy') == [child.pid]
             assert probe(monitor).session == claim.thread
             assert child.poll() is None, log.read_text()

@@ -13,9 +13,12 @@ import socket
 import subprocess
 import time
 from abc import abstractmethod
+from asyncio import Server
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar, Self, cast
+
+from aiohttp.web import TCPSite
 
 from ..declared_family import DeclaredFamily
 from ..launch_runtime import LaunchRuntime
@@ -23,6 +26,24 @@ from ..launch_runtime import LaunchRuntime
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+@dataclass(frozen=True)
+class BoundListener:
+    """A listening socket observed on the site that just started."""
+
+    site: TCPSite
+
+    @classmethod
+    def of(cls, site: TCPSite) -> Self:
+        server = site._server
+        if server is None:
+            raise ServiceNotServingError("The connector site has not started")
+        # TCPSite.start assigns loop.create_server's Server to BaseSite's wider annotation.
+        for bound in cast(Server, server).sockets:
+            if bound.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN):
+                return cls(site)
+        raise ServiceNotServingError("The connector site has no listening socket")
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -85,8 +106,8 @@ class SystemdUserService(HostService, declared_name=None):
     notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
 
     @classmethod
-    def ready(cls) -> None:
-        """Tell the supervisor this process serves.
+    def ready(cls, listener: BoundListener) -> None:
+        """Tell the supervisor this process has a bound listener.
 
         Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
         for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.

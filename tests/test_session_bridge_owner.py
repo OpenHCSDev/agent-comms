@@ -20,10 +20,12 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
+from source_programs import SourcePrograms
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
-        tmp_path, bridge_home, source_programs):
+        tmp_path, bridge_home):
+    source_programs = SourcePrograms.current(tmp_path / 'source-programs')
     home = bridge_home
     session = 'copied-session'
     comms = Comms(tmp_path / 'bus')
@@ -88,7 +90,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             assert observed.process.alive()
             (bridge,) = Serve.running(home)
             with ExitStack() as resources:
-                (paused,) = bridge.pause(resources)
+                paused = bridge.pause(resources)
                 assert paused.bridge.observed.owner == expected
                 assert isinstance(claim.state(), LiveWatch)
                 assert owner.poll() is None

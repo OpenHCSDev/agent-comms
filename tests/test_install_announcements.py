@@ -1,10 +1,16 @@
 """Typed installer results use the real publisher and retained channel history."""
+from dataclasses import replace
 from pathlib import Path
+import os
 import subprocess
 import sys
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.shared import (
+    OwnerExitedBridge, ReplacedBridge, ResumedBridge, UnobservedBridge,
+)
 from agent_comms.cli_commands import HistoryCliCommand, InstallResult
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -41,9 +47,17 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     comms = declare_test_bus(private_comms, channels=("comms",))
     report = InstallReport(comms.root)
     found = Upgrade("a" * 40, "b" * 40, comms.root, ("carry_order_scopes",))
+    outgoing = LaunchRuntime(Path("/outgoing/bin/python"))
+    target = LaunchRuntime(Path("/target/bin/python"))
+    owner = ProcessIdentity.capture(os.getpid())
+    successor = ProcessIdentity.capture(os.getppid())
+    live = replace(live, bridges=(
+        ResumedBridge("resumed", outgoing, target), OwnerExitedBridge("exited"),
+        ReplacedBridge("replaced", owner, successor), UnobservedBridge("unobserved"),
+    ))
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
-        live, InstallResult(NoConfigFile(), {}), (),
+        live, InstallResult(NoConfigFile(), {}),
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))

@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
+from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
@@ -251,11 +251,17 @@ class RetiringRehearsal(FreshRehearsal):
     """The bus at the root moves aside before a fresh one is created there."""
 
 
+@dataclass(frozen=True, kw_only=True)
 class LiveRun(DeclaredFamily, affix="Run"):
-    """What a live install changed."""
+    """What a live install changed, including every captured session bridge."""
+
+    bridges: tuple[BridgeResume, ...] = ()
+
+    def lines(self) -> tuple[str, ...]:
+        return (*self.details(), *(bridge.line() for bridge in self.bridges))
 
     @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
+    def details(self) -> tuple[str, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -265,7 +271,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     backup: BackupReport
     retired_backups: tuple[Annotated[Path, PathText], ...]
 
-    def lines(self) -> tuple[str, ...]:
+    def details(self) -> tuple[str, ...]:
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
             *self.stopped_lines(),
@@ -279,7 +285,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
 class UnchangedRun(LiveRun):
     """Published the installed runtime again and planned the next install."""
 
-    def lines(self) -> tuple[str, ...]:
+    def details(self) -> tuple[str, ...]:
         return ("Runtime republished; nothing carried",)
 
 
@@ -287,7 +293,7 @@ class UnchangedRun(LiveRun):
 class CreatedRun(RestartedServices, LiveRun, Extendable):
     route: str
 
-    def lines(self) -> tuple[str, ...]:
+    def details(self) -> tuple[str, ...]:
         return (f"Created bus; route: {self.route}", *self.service_lines())
 
 
@@ -295,8 +301,8 @@ class CreatedRun(RestartedServices, LiveRun, Extendable):
 class RetiredRun(CreatedRun, StoppedOwners):
     retired: Annotated[Path, PathText]
 
-    def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.stopped_lines(), f"Retired bus: {self.retired}")
+    def details(self) -> tuple[str, ...]:
+        return (*super().details(), *self.stopped_lines(), f"Retired bus: {self.retired}")
 
 
 @dataclass(frozen=True)
@@ -323,11 +329,9 @@ class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
-    unresumed: tuple[str, ...]
-    """Session bridges paused for the swap that did not come back."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines(), *self.unresumed)
+        return (*super().lines(), *self.live.lines())
 
 
 @dataclass(frozen=True)
@@ -615,12 +619,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
         install.announce(report)
-        bridges = SessionBridgeResumes()
-        live_run = install.install(rehearsal, bridges)
-        result = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
-                                  harnesses(), bridges.lines())
+        live_run = install.install(rehearsal)
+        result = InstalledUpgrade(current, target, root, names, rehearsal, live_run, harnesses())
         report.finished(result)
-        bridges.require_resumed()
         return result
     except UpgradeRefused as error:
         report.failed(error)
@@ -678,7 +679,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
 
-    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
+    def install(self, rehearsal: Rehearsed) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -686,10 +687,9 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            for bridge in Serve.running(self.installed.home):
-                bridges.pause(bridge, resources)
-            resources.callback(bridges.resume)
-            return self.live(rehearsal)
+            paused = tuple(bridge.pause(resources) for bridge in Serve.running(self.installed.home))
+            result = self.live(rehearsal)
+            return replace(result, bridges=tuple(bridge.resume() for bridge in paused))
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...
