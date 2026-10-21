@@ -97,6 +97,7 @@ from agent_comms.launch_root import LaunchRoot
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
@@ -508,7 +509,7 @@ class ThreadConfiguredResult(CliResult):
 @dataclass(frozen=True)
 class ConstraintPinnedResult(CliResult):
     pin: MessageReference
-    source: MessageReference
+    source: MessageReference | InputProvenance
 
 
 @dataclass(frozen=True)

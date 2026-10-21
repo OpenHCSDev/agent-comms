@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.cli import main
+from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
@@ -165,7 +166,8 @@ async def original_input_consumer_journey(tmp_path, command):
         code, result = invoke("pin-input-constraint", "beta", "--source", row.key,
                               "--worktree", origin.project)
         assert code == 0
-        assert result["source"] == FieldCodec.encode(row.context_provenance())
+        pinned = FieldCodec.decode(ConstraintPinnedResult, result)
+        assert pinned.source == row.context_provenance()
         pins.append(reference(result["pin"]))
     snapshot = comms.views.retained_context("beta")
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
