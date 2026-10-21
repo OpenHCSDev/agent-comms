@@ -16,7 +16,6 @@ from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -787,10 +786,6 @@ class NoRevision(ReadState):
 
 # typing evaluates class annotations with the class namespace as globals, so a
 # lambda written inside one cannot see this module; named functions can.
-def bus_route_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return BusRouteCounts.source_paths(views.bus.bus.path.parent)
-
-
 def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 
@@ -843,10 +838,6 @@ class WireRevision(ReadState):
         Differs(lambda before, current: not before.matches(current)),
     ]
     bus_seq: Annotated[int, WatchViews(STATUS_SOURCE)]
-    bus_routes: Annotated[
-        tuple[FileRevision, ...],
-        *revision_source(bus_route_paths, StoresView, SidebarView),
-    ]
     history: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.history.path,), *STATUS_SOURCE),

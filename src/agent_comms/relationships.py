@@ -7,14 +7,12 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-import json
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
-from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
 from agent_comms import field_codec
@@ -35,15 +33,12 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .private_path import FileObservation, FileRevision, MissingFile
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .wire_log import CurrentSnapshotOpening
-from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
@@ -686,7 +681,6 @@ class RelationshipStore(DurableFile, ThreadOwnedState, LockedStore[RelationshipD
 class ThreadRelationships:
     """One root-scoped service, retained by Comms; no timers or owner actions."""
 
-    RECENT_BYTES = 2 * 1024 * 1024
     RECENT_MESSAGES = 512
 
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, views: HistoryViews):
@@ -696,10 +690,6 @@ class ThreadRelationships:
         self.views = views
         self._wire_lock_path = root / "wire"
         self.store = RelationshipStore.at(root)
-        self._lock = RLock()
-        self._recent_revision: FileObservation = MissingFile()
-        self._recent: tuple[Message, ...] = ()
-        self._limited = False
 
     def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
@@ -869,44 +859,10 @@ class ThreadRelationships:
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
-        """Decode a bounded tail from one fixed opened bus cut."""
-        path = self.bus.log.path
-        revision = FileRevision.capture(path)
-        with self._lock:
-            if revision == self._recent_revision:
-                return self._recent, self._limited
-            with self.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-                return self._opened_recent_messages(source)
-
-
-    def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
-        if not source.changed_since(self._recent_revision):
-            return self._recent, self._limited
-        for previous in self._recent_revision.revisions():
-            if (source.same_file(previous.identity)
-                    and source.boundary > previous.size
-                    and previous.holds_cut(source.revision, previous.size)):
-                start = max(previous.size, source.boundary - self.RECENT_BYTES)
-                data, start = source.tail_bytes(source.boundary - start)
-                contiguous = start == previous.size
-                break
-        else:
-            data, start = source.tail_bytes(self.RECENT_BYTES)
-            contiguous = False
-        lines = data.splitlines(keepends=True)
-        if start and not contiguous and lines:
-            lines.pop(0)  # A bounded cut may begin in a partial record.
-        messages = (self._recent if contiguous else ()) + tuple(
-            message
-            for line in lines
-            if line.endswith(b"\n") and line.strip()
-            for message in WireRecord.public_from_wire(json.loads(line)).messages()
-        )
-        limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
-        messages = messages[-self.RECENT_MESSAGES :]
-        self._recent_revision = source.revision if source.boundary else MissingFile()
-        self._recent, self._limited = messages, limited
-        return messages, limited
+        """One bounded sequence page, on a single committed read snapshot."""
+        with self.bus.bus.reading() as source:
+            messages = source.page(source.revision() + 1, self.RECENT_MESSAGES + 1)
+        return tuple(reversed(messages[:self.RECENT_MESSAGES])), len(messages) > self.RECENT_MESSAGES
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
