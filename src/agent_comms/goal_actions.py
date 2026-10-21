@@ -571,13 +571,15 @@ class ReissuedOrderGoalAction(OrderGoalAction):
 
     @classmethod
     def for_todo(cls, todo: Todo, commander: str) -> Self:
-        """The order the Todo already accepted, handed again with a fresh review window."""
+        """The order the Todo already accepted, handed again with a fresh review window, by the
+        actor that assigned it."""
         now = time.time()
         order = todo.order.reissued(now)
         return cls(
             problem=todo.id, expected_revision=todo.revision,
             order=order, request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=todo.acting_assigner,
+            review_at=todo.reissued_review(now), commander=commander,
+            assigner=todo.acting_assigner,
             traced=order.owner)
 
     def require_sendable(self) -> None:

@@ -17,6 +17,7 @@ from conftest import declare_test_bus
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
+from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms import agent_events as events
 import asyncio
@@ -28,7 +29,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.standing import (
     HeartbeatSilent,
-    GoalCannotRun, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin,
+    GoalCannotRun, Detached, HolderCannotRun, UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import (
