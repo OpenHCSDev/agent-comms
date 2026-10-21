@@ -1,7 +1,7 @@
 ---
 name: coordination
-description: "one order per owner holding every problem on its surface; units gather evidence and the commander diagnoses and chooses the shape; every unit ask is answered before the next rotation step; check open PRs first; never block on a question; record new owner targets at once"
-drift: "Units gather evidence; you diagnose and choose the shape. Answer a unit's ask before your next rotation step."
+description: "one order per owner holding every problem on its surface; units gather evidence and the commander (or its Claude fork) diagnoses and chooses the shape; the main loop only dispatches; no unit idles waiting on a shape; every unit ask is answered before the next rotation step; check open PRs first; never block on a question; record new owner targets at once"
+drift: "Units gather evidence; a Claude fork diagnoses and writes the shape while your main loop dispatches. A unit that handed in a trace gets its next order the same tick."
 audience: commander
 type: hard-rule
 ---
@@ -11,8 +11,10 @@ type: hard-rule
 - Group problems by surface into one order per owner; no problem is ever without an owner.
 - **Units gather evidence; the commander diagnoses and shapes.** A unit reproduces, traces, measures and reports with file:line. The commander decides what the defect is and the exact shape of the fix (owner, parents, members, what gets deleted). A triage order classifies and reports only; any src edit goes out as a new order whose shape the commander wrote.
 - Short fix: the commander writes it, commits and pushes. Long fix: a bus unit with exact numbered edits (launch one when all are busy). Test and mechanical work goes to a fork when the commander's context makes it faster (Tristan, 2026-10-20).
+- **The main loop dispatches; Claude forks diagnose and shape.** A Claude fork (a subagent of the commander, not a Codex `fork-*` unit) carries the commander's full context, so its diagnosis and fix shape are the commander's. Any work that would hold the main loop for more than a few tool calls goes to a fork the same tick: reading a unit's trace and writing the fix shape, reviewing a large diff, measuring a ratchet delta, debugging a test. The main loop keeps only what serializes: answering unit asks, merges, installs, strikes and recording deliveries (2026-10-21: three hours of zero forks while four units sat in standby waiting on the commander, and the main loop debugged a swallowed test print).
+- **No unit idles waiting on a shape.** When a unit hands in a trace, it gets its next order in the same tick while a fork shapes the traced problem.
 - **Every unit ask is answered before the next rotation step.** A question, alert or handoff from a unit holding an order gets a disposition the same tick; a unit idling on the commander's paperwork is commander waste (2026-10-21: fork-boundaries' 8122 waited about seven hours).
-- Subagents are forks, not fresh agents, and get no turn limit. Tristan, 2026-10-18: "always fork. stop it, fork and let the fork take over". Claude usage is the scarce budget: keep background forks to the critical path.
+- Subagents are forks, not fresh agents, and get no turn limit. Tristan, 2026-10-18: "always fork. stop it, fork and let the fork take over". Claude usage is the scarce budget: spend it on the critical path, which is diagnosis and shaping whenever units wait on them.
 - Before each order, compare every open PR's files (`gh pr list --state open`) with the order's; merge the overlapping ready PR first.
 - A multi-phase plan gets a tracking issue and a Core todo per phase when dispatched; every hunt first checks whether a plan phase is ready.
 - Never block the loop on a question to the owner: ask in plain text with a stated default and keep working.
