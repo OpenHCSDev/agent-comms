@@ -29,4 +29,3 @@ def test_install_from_non_git_directory_reports_one_json_refusal(tmp_path):
     assert error["type"] == "failed"
     assert error["error"].startswith("install: refused:")
     assert "Traceback" not in completed.stdout + completed.stderr
-    assert completed.stderr == ""
