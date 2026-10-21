@@ -94,7 +94,6 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         HistoryMetadata,
         HistoryOffset,
     )
-    from cutover.carry_bus_read_identity import rebind_read_identity
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
     from agent_comms.errors import RelationViolationError, UnclaimedError
@@ -166,10 +165,15 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
             assert all(HistoryOffset.select(db, offset=line.offset) == [
                 HistoryOffset(line.offset, line.row.seq)] for line in rows)
         assert BusHistory.transfer(source, bus, metadata).changed == 0
-        assert rebind_read_identity(root, previous_identity).changed == 1
+        rebound = BusHistory.rebind_reads(root, previous_identity)
+        assert rebound.changed == 1
+        assert rebound.detail["read_viewers_before"] == rebound.detail["read_viewers_after"]
+        assert (rebound.detail["read_conversations_before"]
+                == rebound.detail["read_conversations_after"])
+        assert rebound.detail["read_transcripts_before"] == rebound.detail["read_transcripts_after"]
         assert ReadLedger.at(root).read() == replace(
             before, bus_identity=RecordedBusIdentity.capture(bus.path))
-        assert rebind_read_identity(root, previous_identity).changed == 0
+        assert BusHistory.rebind_reads(root, previous_identity).changed == 0
         bindings[previous_identity] = RecordedBusIdentity.capture(bus.path)
         assert source.read_bytes() == original_bytes
     assert HistoryCatalogSource.publish(

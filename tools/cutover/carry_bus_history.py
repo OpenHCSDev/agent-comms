@@ -531,6 +531,35 @@ class BusHistory(Carry):
             cls.require_confined(root, path)
         return tuple(sorted(paths))
 
+    @staticmethod
+    def rebind_reads(root: Path, original: RecordedBusIdentity) -> Carried:
+        """Replace one matching JSONL binding; ReadLedger owns every retained row."""
+        ledger = ReadLedger.at(root)
+        if not ledger.path.exists():
+            return Carried(0)
+        destination = Bus.path_in(root)
+        if not destination.is_file():
+            raise RelationViolationError("Read binding needs the verified SQLite bus")
+        converted = RecordedBusIdentity.capture(destination)
+        with ledger.locked():
+            document = ledger._read_unlocked()
+            if not document.bus_identity.matches(original):
+                return Carried(0)
+            rebound = replace(document, bus_identity=converted)
+            if rebound == document:
+                return Carried(0)
+            ledger._publish_unlocked(rebound)
+        return Carried(1, detail={
+            "read_viewers_before": len(document.messages),
+            "read_viewers_after": len(rebound.messages),
+            "read_conversations_before": sum(
+                len(c.conversations) for c in document.messages.values()),
+            "read_conversations_after": sum(
+                len(c.conversations) for c in rebound.messages.values()),
+            "read_transcripts_before": len(document.transcripts),
+            "read_transcripts_after": len(rebound.transcripts),
+        }, rewritten=(ledger.filename,))
+
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         source = root / cls.filename
