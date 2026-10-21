@@ -3,8 +3,8 @@ from dataclasses import replace
 
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_states import PausedGoal
-from agent_comms.goals import Goal, NoGoal
+from agent_comms.goal_states import BlockedGoal, PausedGoal
+from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
 from agent_comms.native_tools import CoordinationCall, ReadTool
 from agent_comms.pi_payloads import ProvidedToolResult
 from agent_comms.tools import GoalSet
@@ -25,3 +25,14 @@ def test_goal_publication_is_exact_and_coding_output_cannot_author_it():
     assert permission.allows(goal)
     assert not permission.allows(replace(goal, revision=goal.revision + 1, state=PausedGoal()))
     assert not permission.allows(replace(goal, id='another-commanders-goal'))
+
+
+def test_order_revision_keeps_the_granted_authority():
+    """An assigned or replaced problem order revises the goal; the running turn keeps working."""
+    granted = Goal(ProblemGoalOrder.text, "unit-goal", published_seq=0, order=ProblemGoalOrder())
+    permission = TurnGoalPermission(OwnerGoalPermission(granted))
+    ordered = replace(granted, revision=granted.revision + 1, progress="")
+    permission.require_current(ordered)
+    assert not permission.allows(replace(ordered, state=BlockedGoal("stopped by its owner")))
+    assert not permission.allows(replace(ordered, state=PausedGoal()))
+    assert not permission.allows(NoGoal())
