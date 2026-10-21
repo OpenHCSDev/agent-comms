@@ -25,7 +25,7 @@ from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypeVar
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
@@ -444,21 +444,9 @@ class GoalProviderUsage(GoalLedgerTable, TypedTable):
         return row.usage_json if row else None
 
 
-@dataclass(frozen=True)
-class GoalAttemptSchema(GoalLedgerTable, TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    ddl_digest: str
-
-    @classmethod
-    def current(cls) -> GoalAttemptSchema:
-        return cls(1, GoalLedgerTable.schema_digest())
-
-
 def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
     if GoalLedgerTable.schema_differs(conn):
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
-    if GoalAttemptSchema.select(conn) != [GoalAttemptSchema.current()]:
-        raise StorageUncertainError("Unsupported goal attempt schema declaration.")
 
 
 class GoalTurnPermit(ABC):
@@ -755,7 +743,6 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
                 conn.execute("PRAGMA foreign_keys=ON")
                 with cls.write_transaction(conn):
                     GoalLedgerTable.create_schema(conn)
-                    GoalAttemptSchema.current().insert(conn)
             cls._sync_paths(staging, directory)
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.

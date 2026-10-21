@@ -4,11 +4,9 @@ import sqlite3
 
 import pytest
 
-from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordinator import Coordination
-from agent_comms.threads import Thread
 from bus_history import read_history
 
 
@@ -18,7 +16,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     database = comms.root / "coordination.sqlite3"
     with sqlite3.connect(database) as db:
-        db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
+        db.execute("DROP TABLE claim_batch_members")
         before = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
     assert read_history(Comms(comms.root)) == []
     with Coordination(str(database)):
