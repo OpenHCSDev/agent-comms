@@ -102,6 +102,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def require_delivery(self) -> None:
         self.require_recorded("A delivery")
 
+    def latest_with(self, timestamp: float) -> float:
+        """The later of this instant and `timestamp`; an unrecorded instant bounds nothing."""
+        return timestamp
+
     @abstractmethod
     def to_number(self, units_per_second: int) -> object: ...
 
@@ -152,6 +156,9 @@ class RecordedEventTime(EventTime):
 
     def recorded_at(self, label: str) -> float:
         return self.at
+
+    def latest_with(self, timestamp: float) -> float:
+        return max(self.at, timestamp)
 
     def continued_from(self, original_at):
         return self

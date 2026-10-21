@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from .errors import RelationViolationError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
@@ -52,6 +53,9 @@ class ToolCaller(ABC):
 
     def subject(self, named: str) -> str:
         return named or self.own_thread()
+
+    def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
+        return ThreadCaller(self.acting_name(commander))
 
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
@@ -128,3 +132,18 @@ class ThreadCaller(ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
+
+    def retire(self, comms: Comms) -> None:
+        raise RelationViolationError('Only a commander fork can retire through this verb.')
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(ThreadCaller):
+    """Commander verbs use a registered child without copying registry procedures."""
+
+    def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
+        comms.registry.register_commander_child(self.name, commander, comms.goals)
+        return self
+
+    def retire(self, comms: Comms) -> None:
+        comms.registry.unregister(self.name)
