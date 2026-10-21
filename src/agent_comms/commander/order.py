@@ -28,7 +28,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from pydantic import PrivateAttr
+from pydantic import Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.cli_bridges.shared import DeclaredVerb
@@ -50,8 +50,10 @@ from agent_comms.field_codec import (
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.plan_phases import OrderPhase
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -88,7 +90,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
@@ -235,12 +237,13 @@ def revision(repo: str, ref: str) -> str:
 class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
+    actor: Annotated[
+        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
+    ] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
-    _caller: ThreadCaller = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
-        self._caller = ThreadCaller(self.commander)
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -262,23 +265,23 @@ class CommanderContext(CommanderConfig):
     def incarnation(self) -> ThreadIncarnation:
         return self.comms.registry.require(self.commander).incarnation
 
+    @property
+    def actor_name(self) -> str:
+        return self.actor.acting_name(self.commander)
+
+    @property
+    def actor_identity(self) -> ThreadIncarnation:
+        return self.actor.as_thread(self.commander).identity(self.comms)
+
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
         target = audience.target
-        published = self.comms.messaging.send(self.commander, target.name,
+        published = self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers)
         return published.message.message_id
 
     def call(self, tool):
-        return self._caller.invoke(tool, self.comms)
-
-    def commanding(self, caller: ThreadCaller) -> Self:
-        bound = self.model_copy(update={'commander': caller.name})
-        bound._caller = caller
-        return bound
-
-    def retire(self) -> None:
-        self._caller.retire(self.comms)
+        return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -295,13 +298,14 @@ class CommanderContext(CommanderConfig):
         return tuple(todo for todo in self.todos() if todo.holder)
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_by(self.incarnation, unit)
+        return self.comms.goals.todos.held_by(
+            self.incarnation, self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
         return self.comms.goals.todos.units(self.incarnation)
 
     def progress(self) -> dict[str, OrderProgress]:
-        listed: TodoList = self.call(CommsTodoListTool())
+        listed: TodoList = self.call(CommsTodoListTool(thread=self.commander))
         return listed.progress
 
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
@@ -317,6 +321,24 @@ class CommanderContext(CommanderConfig):
     def last_activity(self, unit):
         thread = self.comms.registry.require(unit)
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
+
+    def board_text(self) -> str:
+        """Render the live Todo view without saving a competing board file."""
+        lines = ['# Fleet board', '',
+                 "Live view of Core's Todo store; no board file is saved.", '',
+                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
+                 '| Strikes | Owner last acted |',
+                 '|---|---|---|---|---|---|---|---|---|---|']
+        listed, read = self.todos(), self.progress()
+        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
+        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
+            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
+                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
+                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
+        history = self.comms.goals.todos.history_for_commander(self.incarnation)
+        lines += ['', '## Withdrawn orders', '',
+                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
+        return '\n'.join(lines) + '\n'
 
 
 class Reassignment(SubclassUnion, affix="Reassignment"):
@@ -434,7 +456,7 @@ class Commander(CommanderContext):
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
-        if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
+        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         if new and document.problems:
             problems.append('problems: fix: omit IDs when creating a new problem')
@@ -509,18 +531,19 @@ class Commander(CommanderContext):
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request_id, review_at=review_at, commander=self.commander)))
+                order=order, request=request_id, review_at=review_at, commander=self.commander,
+                assigner=self.actor_identity)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=traced,
+                assigner=self.actor_identity, traced=traced,
                 order=order, request=request_id, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
+                self.comms.goals.todos.get(pid).revision, self.actor_identity, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
         print(f'{measured.summary}; review timer {review_at.clock()}')
@@ -575,24 +598,6 @@ class Commander(CommanderContext):
         self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         print(f'{pid} closed')
 
-    def board_text(self) -> str:
-        """Render the live Todo view without saving a competing board file."""
-        lines = ['# Fleet board', '',
-                 "Live view of Core's Todo store; no board file is saved.", '',
-                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
-                 '| Strikes | Owner last acted |',
-                 '|---|---|---|---|---|---|---|---|---|---|']
-        listed, read = self.todos(), self.progress()
-        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
-        for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
-            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
-                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
-                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        lines += ['', '## Withdrawn orders', '',
-                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-        return '\n'.join(lines) + '\n'
-
     def on_record(self, line: str, recorded: str, audience: VerdictAudience,
                   answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish what Core already recorded; no second narrative file.
@@ -619,7 +624,7 @@ class Commander(CommanderContext):
         todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
+        self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
                                       f'{why} (caught by {caught})',
                                       evidence=evidence), answers)
 
@@ -755,11 +760,12 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     ] = NoThreadCaller()
 
     def who(self, ctx: Commander) -> str:
-        return self.fork.acting_name(ctx.commander)
+        return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
         self.require_commander(ctx.comms.registry.require(ctx.commander))
-        ctx = ctx.commanding(self.fork.commanding(ctx.comms, ctx.commander))
+        self.fork.commanding(ctx.comms, ctx.commander)
+        ctx = ctx.model_copy(update={'actor': self.fork})
         self.gate(ctx)
         self.run(ctx)
 
@@ -790,18 +796,22 @@ class DirectiveVerb(CommanderVerb):
         ),
     ] = ()
 
+    def named(self, ctx: Commander) -> tuple[Message, ...]:
+        """The named messages still open. A name that is no longer open (answered, or out of
+        the owed set since it was read) needs no answer and is dropped, never refused: the
+        owed set moves while the commander writes, and refusing the whole verb over a closed
+        name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
+        that is wrong leaves its real message owed, and the gate below refuses that."""
+        return tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                     if message.message_id in self.answers)
+
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        originals = tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
-                          if message.message_id in self.answers)
-        if set(self.answers) != {message.message_id for message in originals}:
-            sys.exit('REFUSED: --answers must name original directives on this request '
-                     'or unanswered unit messages to this commander.')
-        return tuple(message.reference for message in originals)
+        return tuple(message.reference for message in self.named(ctx))
 
     def gate(self, ctx: Commander) -> None:
-        self.answer_references(ctx)
+        named = self.named(ctx)
         owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
-                     if rule.message.message_id not in self.answers)
+                     if not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
@@ -948,12 +958,10 @@ class DeliverVerb(OrderVerb):
         )
 
     def run(self, ctx: Commander) -> None:
-        ThreadCaller(self.who(ctx)).invoke(
-            CommsOrderDeliverTool(
-                problem=self.problem, pull_request=self.pull_request,
-                head=self.head, report=Path(self.report_file).read_text(),
-            ), ctx.comms,
-        )
+        ctx.call(CommsOrderDeliverTool(
+            problem=self.problem, pull_request=self.pull_request,
+            head=self.head, report=Path(self.report_file).read_text(),
+        ))
         print(f'{self.problem}: delivery claim recorded')
 
 
@@ -1115,8 +1123,8 @@ class RetireVerb(OrderVerb):
     help = "stop a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
-        ctx.retire()
-        print(f'{ctx.commander} retired')
+        ctx.actor.retire(ctx.comms)
+        print(f'{ctx.actor_name} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

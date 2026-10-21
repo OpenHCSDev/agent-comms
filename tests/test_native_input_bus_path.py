@@ -1,6 +1,10 @@
 """A saved native owner answers a fresh DM through its bus-owned proof resource."""
 import asyncio
 import json
+from contextlib import AsyncExitStack
+from time import perf_counter
+
+import agent_comms.native_package as native_package
 
 from agent_comms.native_arguments import NativeInputProofArgument
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof
@@ -8,12 +12,19 @@ from agent_comms.native_transcript import NativeTranscript
 from bus_history import read_history
 from delivery_owner_fixture import reply_turn_finished
 from native_backend_fixture import native_backend_fixture
+from native_package_acquisition_fixture import PackageTrace
 
 
 async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path, native_runtime_package):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
-        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+        trace = PackageTrace(native_package.package_tree_digest.__code__)
+        async with AsyncExitStack() as lifetime:
+            lifetime.enter_context(trace.active())
+            started = perf_counter()
+            agent, session = await lifetime.enter_async_context(
+                native.open_owner(runtime_enabled=True, auto_wake=True))
+            ready_seconds = perf_counter() - started
             comms = agent._comms
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=str(native.project))
             native.provider.text = 'The bus-owned native proof answered.'
@@ -41,4 +52,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
             assert proof.session_id == files.session_id
             assert not agent.turns.turn_state(session).active.phase.busy
             print('SAVED_OWNER_DM_REPLY_SCOPED_PROOF_AND_NATIVE_HANDOFF=PASS', sent.seq, files.input_proof)
+        assert trace.tree_hash_calls == 0
+        print('NATIVE_OWNER_READY_SECONDS', ready_seconds, 'TREE_HASH_CALLS', trace.tree_hash_calls,
+              'CORE_PACKAGE', native_package.__file__)
     assert all(child.retired for child in native.children)

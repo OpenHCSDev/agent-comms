@@ -16,7 +16,7 @@ from typing import ClassVar, Self
 
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.standing import AnswersTo, PlanStalled, UnansweredUnitAsks
+from agent_comms.commander.standing import AnswersTo, PlanStalled, UnansweredBurst
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ActiveGoalAction, ChokeholdPausedGoalAction, OwnerInvocable
@@ -44,10 +44,11 @@ class EscalationSender(ServiceSender):
 
     @classmethod
     def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
-        """This sender's messages to the commander, sent by ``before``, that no reply answers."""
+        """This sender's messages to the commander, sent by ``before`` and after the newest
+        answer to any of them: one answer covers the burst it lands after."""
         snapshot = comms.registry.snapshot()
         return comms.bus.log.read_page(
-            UnansweredUnitAsks(
+            UnansweredBurst(
                 RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
                 time.time() - cls.horizon,
                 before,
@@ -88,6 +89,14 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 class Escalation:
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
     new vibe check, or the check would feed on its own messages."""
+
+    message: Message
+
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        """An escalation arrives as a burst: an answer naming any line of it covers every line
+        its sender sent before the answer, which UnansweredBurst reads once the answer is sent.
+        The gate runs just before the answer is sent, so it reads the answer the same way."""
+        return any(message.sender == self.message.sender for message in named)
 
 
 class AnswersOwedDegradation(Degradation):
@@ -167,9 +176,10 @@ class VibeCheck(UndatedStandingRule):
             self.sign.line,
             f"Stop. Reread {CommanderConfig.packaged_indictment()} in full. You are doing what it"
             " describes, this hour.",
-            "Answer every vibe-check message with one --answers: which failure in the indictment"
-            " is you right now, why, and the one structural change you make this turn. Every"
-            " answering verb is refused until you do. Ignore this and the fleet stops.",
+            "Answer this burst once, naming any one of its messages with --answers: which failure"
+            " in the indictment is you right now, why, and the one structural change you make"
+            " this turn. Every answering verb is refused until you do. Ignore this and the fleet"
+            " stops.",
         )
 
     def line(self) -> str:
@@ -249,7 +259,8 @@ class Chokehold(UndatedStandingRule):
             "You've forced me to choke-hold you until you comply.",
             f"Paused: {', '.join(units)}.",
             f"Ignored: vibe check {self.check.seq}:{self.check.message_id}.",
-            "Protocol. One answer naming every chokehold and vibe-check message with --answers:",
+            "Protocol. One answer naming any one chokehold message and any one open vibe-check"
+            " message with --answers; it covers every message they sent before it:",
             "1. Quote, word for word, the indictment's sentence that is you this hour"
             f" ({Indictment.words}+ words in a row).",
             "2. Each degraded signal, its owner, and what you did about it this turn.",

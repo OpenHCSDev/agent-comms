@@ -150,6 +150,7 @@ class CheckedPhaseTask(PhaseTask):
             order=order,
             request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
             commander=commander.name,
+            assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)

@@ -58,6 +58,7 @@ class StoryCase(LifecycleCase):
                     .id,
                     review_at=saved.review_at,
                     commander=run.commander.commander,
+                    assigner=run.commander.actor_identity,
                     repo=saved.repo,
                     text="The second problem shares the same real sent order.",
                 ),

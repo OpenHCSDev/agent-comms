@@ -130,8 +130,10 @@ def launcher(tmp_path):
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Local Node fixture only")
-def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
-    stack, _ = launcher
+def test_qualified_build_uses_only_verified_copied_bootstrap(launcher, tmp_path):
+    stack, root = launcher
+    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    package = namespace["VerifiedNativePackage"].qualify(root)
     marker = tmp_path / "untrusted-ran"
     preload = tmp_path / "untrusted.mjs"
     preload.write_text(
@@ -140,15 +142,15 @@ def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     )
     env = dict(os.environ, NODE_OPTIONS=f"--import={preload.as_uri()}", NODE_PATH="untrusted")
     result = subprocess.run(
-        [str(stack / "bin/pi-native")], env=env, capture_output=True, timeout=10
+        package.node("agent-comms-project-bootstrap.mjs"),
+        env=package.node_environment(env), capture_output=True, timeout=10
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == ["trusted", None, None]
     assert not marker.exists()
 
 
-@pytest.mark.parametrize("command", [["pi-native"], ["prepare-pi-native", "--publish"]])
-def test_launch_and_publication_install_declared_source_with_one_link(launcher, tmp_path, command):
+def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
     stack, package = launcher
     snapshot = tmp_path / "extensions/global/index.ts"
     snapshot.parent.mkdir(parents=True)
@@ -186,10 +188,9 @@ def test_launch_and_publication_install_declared_source_with_one_link(launcher, 
     prepared = stack / f".pi-native-{build}"
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
-    script, *flags = command
-    launch = [str(stack / "bin" / script), *flags, *([str(deployments)] if flags else [])]
+    launch = [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)]
 
-    # The launch ends by exec'ing node; the sources are installed before that.
+    # Keep this publication fixture independent of the ambient Node installation.
     interpreter = tmp_path / "interpreter"
     interpreter.mkdir()
     (interpreter / "node").write_text("#!/bin/sh\nexit 0\n")
@@ -201,7 +202,7 @@ def test_launch_and_publication_install_declared_source_with_one_link(launcher, 
         assert result.returncode == 0, result.stderr
 
     run()
-    assert (deployments / f"native-current-{build}").is_dir() == bool(flags)
+    assert (deployments / f"native-current-{build}").is_dir()
     assert destination.read_bytes() == content
     assert destination.stat().st_nlink == 1
     assert stale_link.read_bytes() == b"stale\n"
@@ -226,11 +227,16 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
     assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
 
 
-@pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])
-def test_launch_and_existing_prepare_refuse_unlisted_dependency_drift(launcher, script):
+def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     stack, package = launcher
     (package / "dependency.js").write_text("// unpinned dependency change\n")
-    result = subprocess.run([str(stack / "bin" / script)], capture_output=True, timeout=10)
+    deployments = tmp_path / "deployments"
+    result = subprocess.run(
+        [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
+        capture_output=True, timeout=300,
+    )
+    assert deployments.is_dir()
+    assert not any(deployments.iterdir())
     assert result.returncode != 0
     assert not result.stdout
     assert b"differs from pinned artifact" in result.stderr

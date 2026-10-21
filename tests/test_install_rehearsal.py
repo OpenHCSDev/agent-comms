@@ -63,7 +63,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
 @pytest.mark.parametrize("repos", ((), ("--repos",)), ids=("kept-repos", "given-repos"))
 def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, tmp_path, repos):
     comms = private_comms
-    declare_test_bus(comms, threads=(
+    declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
     checkout = tmp_path / "checkout"

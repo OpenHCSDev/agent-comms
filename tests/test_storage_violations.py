@@ -96,10 +96,10 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         comms.registry.new_thread("worker", frozenset(), str(home))
     )
     comms.goals.todos.create(
-        "storage-case",
+        "P1",
         RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Fix the filesystem paths",
-        creator=lead,
+        creator=lead, assigner=lead.incarnation,
         owner=worker,
         generation="storage-case",
         review_at=RecordedEventTime(1000),
