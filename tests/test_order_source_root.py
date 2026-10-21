@@ -10,7 +10,7 @@ def test_pending_problem_order_from_outside_repository(tmp_path):
     repository = tmp_path / "repository"
     source = repository / "src" / "owner.py"
     source.parent.mkdir(parents=True)
-    source.write_text("owned = True\n")
+    source.write_text("class Owner:\n    pass\n")
     outside = tmp_path / "outside"
     outside.mkdir()
     program = """
@@ -23,7 +23,7 @@ from agent_comms.goals import OrderCheck, RequestGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.todos import PendingProblemOrder
+from agent_comms.todos import PendingProblemOrder, FixScope, FixShape
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 root, repository = map(Path, sys.argv[1:])
@@ -36,6 +36,7 @@ comms.goals.update_goal('lead', SetGoalAction(
 now = time.time()
 order = PendingProblemOrder(
     id='rooted-order', owner=FileLine('src/owner.py', 1),
+    scope=FixScope(FixShape(parents=(FileLine('src/owner.py', 1),), members=())),
     check=OrderCheck(str(repository), 'printf 1'), run=MechanicalOrderRun(),
     edits=('Repair the owning declaration',), banned=('No second store',),
     report='Report the result', at=RecordedEventTime(now),

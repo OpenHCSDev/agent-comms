@@ -40,6 +40,7 @@ Each order has: the defect in one plain sentence; the outcome the owner will see
   "order": {
     "kind": "pending",
     "owner": "src/example.py:1",
+    "scope": {"kind": "fix", "shape": {"parents": ["src/example.py:1"], "members": []}},
     "check": {"directory": "agent-comms", "command": "cat count.txt", "result": {"kind": "count", "expected": 1}},
     "edits": ["Delete the second store and derive the counter from its owner."],
     "banned": ["another writable copy"],
@@ -48,6 +49,8 @@ Each order has: the defect in one plain sentence; the outcome the owner will see
   }
 }
 ```
+
+`scope` is required. Fix scope names at least one parent class declaration and every related member class declaration as file:line references, not class-name strings. The example's parent reference assumes that line declares the owning class. Classification-only orders use `"scope": {"kind": "triage"}`: no source edits or commit deliveries. Their commander records the returned findings with `comms_order_done`, `"delivery": {"kind": "report", "report": "the findings"}` and `"claims": []`; that completes the triage row without fictitious installation evidence.
 
 The declaration supplies the ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}`. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
 - **A wrong check is corrected, not worked around.** `order check PID --check "repo :: cmd -> N" --why "..."` replaces a check that cannot pass on correct work; the new one must already pass on main. The order keeps its id, timer, holder and strikes, and no strike is recorded. Never record an op for a commit or close without the check.

@@ -38,6 +38,7 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
+from order_scope_fixture import FIX_SCOPE
 
 
 def seed(root: Path, project: Path) -> None:
@@ -68,7 +69,7 @@ def seed(root: Path, project: Path) -> None:
 def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     actor = FieldCodec.encode(comms.registry.require("claude-ai").incarnation)
     pending = PendingProblemOrder(
-        id="probe-order",
+        id="probe-order", scope=FIX_SCOPE,
         owner=FileLine(__file__, 1),
         run=MechanicalOrderRun(),
         check=OrderCheck(str(project), "printf 1", CountCheckResult(1)),

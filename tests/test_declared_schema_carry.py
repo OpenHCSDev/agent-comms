@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.change_report import FileLine
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
@@ -162,7 +164,7 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
     lead = Registration(tmp_path / "registry.json").new_thread(
         "lead", frozenset(), str(tmp_path), created_at=1.0)
     order = PendingProblemOrder(
-        id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
+        id="checked-order", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(tmp_path), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))

@@ -7,8 +7,11 @@ file:line text shape, its parsing and its existence check at a branch head.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import re
 import subprocess
+import textwrap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +81,20 @@ class FileLine(WireValue, SourceReference):
                     if line == self.line:
                         return
         raise MissingSourceLine(f"Source owner {path}:{self.line} does not exist.")
+
+    @classmethod
+    def class_declaration(cls, declaration: type) -> FileLine:
+        """Derive the class line, not a decorator line or a second class-name roster."""
+        source, start = inspect.getsourcelines(declaration)
+        node = ast.parse(textwrap.dedent("".join(source))).body[0]
+        return cls(inspect.getfile(declaration), start + node.lineno - 1)
+
+    def require_class(self, root: Path) -> None:
+        path = root / self.file
+        tree = ast.parse(path.read_text(), filename=str(path))
+        if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
+                   for node in ast.walk(tree)):
+            raise MissingSourceLine(f"scope shape reference {self.to_wire()} must name a class declaration")
 
     def to_wire(self) -> str:
         return f"{self.file}:{self.line}"
