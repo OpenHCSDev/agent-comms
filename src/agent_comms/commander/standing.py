@@ -264,15 +264,6 @@ class UnownedWheelSpin(UndatedStandingRule):
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    @staticmethod
-    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> ReissuedOrderGoalAction:
-        now = time.time()
-        return ReissuedOrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(now), request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
-            traced=todo.order.owner)
-
     def _identity(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.
         return type(self), self.todo.id
@@ -306,7 +297,7 @@ class UnownedWheelSpin(UndatedStandingRule):
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        cls.order_for(todo, commander, assigner), unit)))
+                        ReissuedOrderGoalAction.for_todo(todo, commander, assigner), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,

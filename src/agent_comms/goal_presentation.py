@@ -18,6 +18,7 @@ from .thread_presentation import ThreadPresentation
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .bus_publication import CommittedDelivery
+    from .comms import Comms
     from .goal_actions import GoalAction
     from .goal_attempts import Generation
     from .goal_failure_observation import GoalFailureEvidence
@@ -222,9 +223,10 @@ class BlockedExecution(WaitingExecution, declared_name=None):
         return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
                 f"{self.reason} -> Core reissues the orders")
 
-    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal) -> None:
-        from .commander.standing import UnownedWheelSpin
-        from .goal_actions import GoalPrecondition
+    def enforce_unit_block(
+        self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal,
+    ) -> None:
+        from .goal_actions import GoalPrecondition, ReissuedOrderGoalAction
         from .goals import GoalChangedError
         from .thread_identity import CoreWatcherIncarnation
 
@@ -234,7 +236,8 @@ class BlockedExecution(WaitingExecution, declared_name=None):
         for problem in orders:
             todo = comms.goals.todos.get(problem)
             todo.require_assignee(comms.registry.require(unit).incarnation, observed.id)
-            action = UnownedWheelSpin.order_for(todo, commander, CoreWatcherIncarnation.watcher())
+            action = ReissuedOrderGoalAction.for_todo(
+                todo, commander, CoreWatcherIncarnation.watcher())
             observed = comms.goals.update_goal(unit, replace(
                 action, expect=GoalPrecondition(
                     goal_id=observed.id, expected_state=observed.state,
@@ -269,7 +272,9 @@ class AttemptUnresolvedExecution(BlockedExecution):
         return (f"UNRESOLVED BLOCK {unit}: orders {', '.join(orders)}; "
                 f"goal {self.goal_id} -> {self.reason}")
 
-    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal) -> None:
+    def enforce_unit_block(
+        self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal,
+    ) -> None:
         pass
 
 
