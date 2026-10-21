@@ -20,6 +20,7 @@ from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore, Request
 from agent_comms.goals import Goal, UnorderedGoalOrder
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
+from agent_comms.lifecycle_capability import Complete
 from agent_comms.owner_requests import CompletedRequestState, OwnerRequestId, OpenRequestState, RequestDirective
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -38,8 +39,8 @@ class StoredRequestGoal(TypedRow):
     def request(self, commander: RecordedThreadIncarnation, created_at: float) -> OwnerRequest:
         if commander.created_at != self.owner_created_at:
             raise RelationViolationError("Retained request belongs to another commander incarnation.")
-        state = (CompletedRequestState(self.goal.progress) if self.goal.state.terminal
-                 else OpenRequestState())
+        state = (CompletedRequestState(self.goal.progress)
+                 if self.goal.state.items_with(Complete, self.goal) else OpenRequestState())
         return OwnerRequest(OwnerRequestId(self.goal.id), commander, self.goal.text,
                             state, self.directives, created_at)
 
@@ -66,21 +67,6 @@ class StoredRequestLink(TypedRow):
 # Both the query and the replacement use the new declaration's codec. The old
 # optional directives field had the empty-tuple default.
 UNORDERED = json.dumps(FieldCodec.encode(UnorderedGoalOrder()))
-
-
-def rebuild(db: sqlite3.Connection, row: type[TypedTable], changed: dict[str, str]) -> None:
-    """Copy every declared writable field; spell only the actual format changes."""
-    fields = row._writable_fields()
-    selected = ", ".join(f'{changed.get(item.name, row._column_list((item.name,)))} '
-                         f'AS {row._column_list((item.name,))}' for item in fields)
-    table = row.declared_name
-    temporary = f"request_carry_{table}"
-    db.execute(f'CREATE TEMP TABLE "{temporary}" AS SELECT {selected} FROM "{table}"')
-    row.drop(db)
-    row.create(db)
-    columns = row._column_list(tuple(item.name for item in fields))
-    db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {columns} FROM "{temporary}"')
-    db.execute(f'DROP TABLE "{temporary}"')
 
 
 def memory_copy(lifetime: ExitStack, path: Path) -> sqlite3.Connection:
@@ -216,7 +202,7 @@ class OwnerRequests(Carry):
             linked = 0
             if old_links:
                 (linked,) = todos.execute(f'SELECT count(*) FROM "{Todo.declared_name}" WHERE goal IS NOT NULL').fetchone()
-                rebuild(todos, Todo, {"request": "json_extract(goal,'$.goal_id')"})
+                Todo.rebuild(todos, {"request": "json_extract(goal,'$.goal_id')"})
             if todo_columns or requests:
                 TodoStore.require_schema(todos)
                 for _ in Todo.stream(todos):
@@ -227,7 +213,7 @@ class OwnerRequests(Carry):
             missing = set(RequestHistory.__dataclass_fields__) - set(history_columns)
             history_changed = bool(history_columns and (missing or prefixes))
             if history_changed:
-                rebuild(history, GoalHistoryEntry, {name: "NULL" for name in missing})
+                GoalHistoryEntry.rebuild(history, {name: "NULL" for name in missing})
                 for column, snapshots in sources.items():
                     for source in snapshots:
                         goal_column = GoalHistoryEntry._column_list((column,))

@@ -17,8 +17,7 @@ from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.carry import Carried, CarryChain
 from agent_comms.locked_store import SQLiteFile
@@ -68,12 +67,11 @@ def assigned(comms, scope, source, problem='P1'):
 
 
 def requested(comms, scope, source, problem='P1'):
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Classify the failing source or fix its declared parent', goal_id='request',
-        order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
+        'Classify the failing source or fix its declared parent').id
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(source), scope=scope), request='request',
+        problem=problem, order=replace(order(source), scope=scope), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
@@ -139,7 +137,7 @@ def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path,
         store.create(problem, original.repo, 'Classify the source', creator=lead, owner=worker,
                      assigner=lead.incarnation,
                      generation=original.held().generation, review_at=original.review_at,
-                     goal=original.goal, order=replace(order(source_repository), scope=TriageScope()))
+                     request=original.request.require(), order=replace(order(source_repository), scope=TriageScope()))
     copied = tmp_path / 'copy'
     StoreBackup.copy_tree(comms.root, copied)
     path = TodoStore.path_in(copied)

@@ -47,7 +47,7 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     )
     todo = store.create(
         "P1", repository.github, "Inspect the request owner",
-        creator=commander, owner=worker, generation="request-family",
+        creator=commander, assigner=commander.incarnation, owner=worker, generation="request-family",
         review_at=RecordedEventTime(order.at.recorded_at("Order") + 60),
         order=order, request=first.id,
     )
@@ -119,7 +119,7 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     awaiting_order = order.reissued(order.at.recorded_at("Order") + 1)
     awaiting_todo = store.create(
         "P2", repository.github, "Review the holder's delivery claim", creator=commander,
-        owner=worker, generation="claim-review", request=awaiting.id,
+        assigner=commander.incarnation, owner=worker, generation="claim-review", request=awaiting.id,
         review_at=RecordedEventTime(awaiting_order.at.recorded_at("Order") + 60), order=awaiting_order,
     )
     awaiting_claim = OrderClaim.for_order(

@@ -27,7 +27,7 @@ from agent_comms.storage_rules import (
     StorageViolation,
     UnitStorage,
 )
-from agent_comms.todos import GoalRef, PendingProblemOrder, PresentCheckout
+from agent_comms.todos import PendingProblemOrder, PresentCheckout
 from agent_comms.order_runs import MechanicalOrderRun
 
 
@@ -103,7 +103,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         owner=worker,
         generation="storage-case",
         review_at=RecordedEventTime(1000),
-        goal=GoalRef("lead", lead.created_at, "storage-case"),
+        request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(
             id="storage-case-order", scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),

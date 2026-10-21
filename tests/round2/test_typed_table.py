@@ -17,6 +17,7 @@ from agent_comms.typed_table import (
     IntegerStorage,
     SqlStorage,
     SqlValue,
+    SQLiteSchemaObject,
     TypedRow,
     TypedTable,
     RowNotFoundError,
@@ -108,9 +109,29 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.select(db)[0].weight is None
 
 
+def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraints():
+    with sqlite3.connect(':memory:') as db:
+        db.execute('PRAGMA foreign_keys=ON')
+        TableParentRow.create(db)
+        TableChildRow.create(db)
+        TableParentRow('p', 3).insert(db)
+        rows = (TableChildRow('first', 'p', True, ('one',), 125.0),
+                TableChildRow('second', 'p', False, ('two',), 250.0))
+        for row in rows:
+            row.insert(db)
+        db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" RENAME COLUMN weight TO retired_weight')
+        TableChildRow.rebuild(db, {'weight': 'retired_weight / 100.0'})
+        assert TableChildRow.select(db, order_by=('key',)) == [
+            replace(row, weight=row.weight / 100) for row in rows]
+        assert not SQLiteSchemaObject.differences(
+            TableChildRow.stored_objects(db), TableChildRow.schema_objects())
+        assert db.execute('PRAGMA foreign_key_check').fetchall() == []
+        with pytest.raises(sqlite3.IntegrityError):
+            replace(rows[0], key='invalid', parent='missing').insert(db)
+
+
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
     from agent_comms.native_pi import NativeContextJournal
-    from agent_comms.typed_table import SQLiteSchemaObject
 
     with sqlite3.connect(':memory:') as db:
         NativeContextJournal.create(db, if_not_exists=True)

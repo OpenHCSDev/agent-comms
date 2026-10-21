@@ -18,7 +18,7 @@ from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile
 from agent_comms.private_registry_guard import PrivateOwnerRenameIntent
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import GoalRef, TodoStore
+from agent_comms.todos import TodoStore
 from test_todos import order
 
 
@@ -45,7 +45,8 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     todo = TodoStore(comms.root).create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Keep declared bus files", creator=owner, assigner=owner.incarnation, owner=owner,
-        generation="declared-files", goal=GoalRef(owner.name, owner.created_at, "goal-1"),
+        generation="declared-files",
+        request=comms.goals.todos.add_request(owner.incarnation, "Keep declared bus files").id,
         review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     assert todo.id == "P1"

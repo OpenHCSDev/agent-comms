@@ -915,6 +915,28 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
+    def rebuild(cls, db: sqlite3.Connection, changed: dict[str, str]) -> None:
+        """Copy writable fields into the declared schema, in the caller's transaction.
+
+        Data conversions supply expressions only for the fields they change.
+        The table owns every other column, its indexes, constraints and triggers.
+        """
+        cls._writable_fields(tuple(changed))
+        fields = cls._writable_fields()
+        selected = ", ".join(
+            f'{changed.get(item.name, cls._column_list((item.name,)))} '
+            f'AS {cls._column_list((item.name,))}' for item in fields
+        )
+        table = _identifier(cls.declared_name)
+        temporary = _identifier(f"rebuild_{cls.declared_name}")
+        db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
+        cls.drop(db)
+        cls.create(db)
+        columns = cls._column_list(tuple(item.name for item in fields))
+        db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
+        db.execute(f"DROP TABLE {temporary}")
+
+    @classmethod
     def stored_columns(cls, db: sqlite3.Connection) -> tuple[str, ...]:
         """The columns the stored table has now, which a carry compares with the declaration."""
         return tuple(name for (name,) in db.execute(

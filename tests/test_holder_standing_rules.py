@@ -33,12 +33,13 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
-    CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
+    CreateProblemGoalAction, ReissuedOrderGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest, RequestDirective
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.carry import CarryChain
@@ -73,13 +74,12 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
         comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
         for name in ('lead', 'worker', 'outsider')
     ))
-    comms.goals.update_goal("lead", SetGoalAction(
-        text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
-    ))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the held work').id
     now = time.time()
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
-            problem=problem, commander="lead", request="request",
+            problem=problem, commander="lead", request=request,
             assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
@@ -208,7 +208,7 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
         held_bus.goals.todos.assign(
             todo.id, expected_revision=todo.revision,
             owner=held_bus.registry.require("outsider"), assigner=CoreWatcherIncarnation.watcher(),
-            generation=todo.held().generation, goal=todo.goal, review_at=todo.review_at,
+            generation=todo.held().generation, request=todo.request.require(), review_at=todo.review_at,
             order=todo.order.checked().reissued(time.time()),
         )
     assert held_bus.goals.todos.get(todo.id) == todo
@@ -305,8 +305,10 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
         Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
                 timestamp=time.time() - 3600), origin=AgentOrigin(),
     )
-    held_bus.goals.update_goal("lead", DirectiveGoalAction(
-        text=directive.body, seq=directive.seq, at=directive.timestamp))
+    store = held_bus.goals.todos
+    selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
+    store.record_directive(selected[0], RequestDirective(
+        directive.seq, directive.timestamp + RequestDirective.window))
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")

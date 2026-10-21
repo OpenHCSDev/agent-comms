@@ -19,8 +19,8 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import InstallDue
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
@@ -41,7 +41,6 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
     CommitDelivery,
     DoneTodoState,
-    GoalRef,
     OpenTodoState,
     FileDeliveryEvidence,
     OperationDelivery,
@@ -149,7 +148,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
         creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
-        goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
+        request=comms.goals.todos.add_request(lead.incarnation, "Prove the installed build").id,
         review_at=RecordedEventTime(1000), order=merged,
     )
     with pytest.raises(DeliveredCommitNotInstalledError):
@@ -257,14 +256,9 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     artifact.write_text(works)
     source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
     with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
-        copied.goals.update_goal(
-            "lead",
-            SetGoalAction(
-                text="Record the copied application proof",
-                goal_id="request",
-                order=RequestGoalOrder(),
-            ),
-        )
+        request = copied.goals.todos.add_request(
+            copied.registry.require("lead").incarnation, "Record the copied application proof",
+        ).id
         cases = (
             ("P1", OperationDelivery(proof_build=installed), None),
             ("P2", OperationDelivery(proof_build=older), ProofBuildMismatchError),
@@ -296,7 +290,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                     order=CreateProblemGoalAction(
                         problem=problem,
                         order=order,
-                        request="request",
+                        request=request,
                         review_at=RecordedEventTime(4102444800),
                         commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,

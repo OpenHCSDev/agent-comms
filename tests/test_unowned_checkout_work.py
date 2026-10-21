@@ -26,8 +26,7 @@ from agent_comms.commander.standing import (
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderReview
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, RequestGoalOrder
+from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import practice_copy
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
@@ -37,7 +36,7 @@ from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
+from agent_comms.todos import PendingProblemOrder, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from order_scope_fixture import FIX_SCOPE
@@ -129,8 +128,8 @@ def checkout_bus(tmp_path: Path) -> Comms:
     for name in ('lead', 'worker', 'idle'):
         c.registry.declare(c.registry.new_thread(
             name, frozenset(), str(home), execution=ExternalThreadExecution))
-    c.goals.update_goal('lead', SetGoalAction(
-        text='Keep changes with their author', order=RequestGoalOrder(), goal_id='request'))
+    request = c.goals.todos.add_request(
+        c.registry.require('lead').incarnation, 'Keep changes with their author').id
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
@@ -144,7 +143,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
             generation='shared-work', review_at=RecordedEventTime(now + 3600),
-            order=order, goal=GoalRef('lead', lead.created_at, 'request'))
+            order=order, request=request)
     # Both current IDs change, as they do when Core hands work out again.
     for problem in ('P1', 'P2'):
         row = c.goals.todos.get(problem)
@@ -152,12 +151,12 @@ def checkout_bus(tmp_path: Path) -> Comms:
             problem, expected_revision=row.revision, owner=worker,
             assigner=lead.incarnation, generation='reissued-work',
             review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
-            goal=GoalRef('lead', lead.created_at, 'request'))
+            request=request)
     c.goals.todos.create(
         'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Keep unrelated work separate', creator=lead, assigner=lead.incarnation, owner=worker,
         generation='other-work', review_at=RecordedEventTime(now + 3600),
-        order=order.reissued(now + 2), goal=GoalRef('lead', lead.created_at, 'request'))
+        order=order.reissued(now + 2), request=request)
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(

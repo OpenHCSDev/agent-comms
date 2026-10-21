@@ -11,15 +11,15 @@ import pytest
 from order_scope_fixture import FIX_SCOPE
 
 from agent_comms.change_report import FileLine
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.carry import CarryChain
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeSessionFiles, PrivateSession
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import GoalRef, PendingProblemOrder, Todo, TodoStore
+from agent_comms.todos import PendingProblemOrder, Todo, TodoStore
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.typed_table import DurableTables, SharedFileTables
 from cutover.carry_declared_schema import carry
@@ -162,8 +162,10 @@ def test_the_schema_carry_runs_after_the_review_timer_carry():
 
 
 def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_chain(tmp_path):
-    lead = Registration(tmp_path / "registry.json").new_thread(
-        "lead", frozenset(), str(tmp_path), created_at=1.0)
+    comms = Comms(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    lead = comms.registry.new_thread("lead", frozenset(), str(tmp_path), created_at=1.0)
+    comms.registry.register(lead)
     order = PendingProblemOrder(
         id="checked-order", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(tmp_path), "true"), edits=("Fix the problem",),
@@ -171,7 +173,9 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
     created = TodoStore(tmp_path).create(
         "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar",
-        creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"), owner=lead, generation="initial",
+        creator=lead, assigner=lead.incarnation,
+        request=TodoStore(tmp_path).add_request(lead.incarnation, "Repair the sidebar").id,
+        owner=lead, generation="initial",
         review_at=RecordedEventTime(1000.0), order=order)
     with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
         db.execute('ALTER TABLE "todo" RENAME COLUMN "review_at" TO "deadline"')

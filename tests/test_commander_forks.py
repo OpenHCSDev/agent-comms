@@ -25,7 +25,7 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -35,7 +35,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tools import CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import (
-    DeclarationDerivation, GoalRef, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
+    DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
     Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
 )
 
@@ -55,7 +55,9 @@ def fork_bus(tmp_path):
             name, frozenset({'comms'}), str(source.checkout),
             model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
     comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the commander workflow', goal_id='request', order=RequestGoalOrder()))
+        text='Repair the commander workflow', goal_id='request'))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the commander workflow')
     core = Repo.of(Path(__file__).parents[1])
     config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
     config.root_path(comms.root).write_text(config.model_dump_json())
@@ -70,7 +72,7 @@ def fork_bus(tmp_path):
     comms.goals.todos.create('P40', source.github, 'Existing parent problem', creator=lead,
         owner=comms.registry.require('retained'), assigner=lead.incarnation, generation='retained',
         review_at=RecordedEventTime(now + 600), order=replace(order, id='retained-order'),
-        goal=GoalRef('lead', lead.created_at, 'request'))
+        request=request.id)
     copied = tmp_path / 'copied-bus'
     StoreBackup.copy_tree(comms.root, copied)
     return Comms(copied), source, order
@@ -277,13 +279,13 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
     issued = store.allocate_problem()
     assert issued == 'P41'
     created = store.create(issued, source.github, 'Create a real problem', creator=lead,
-        assigner=lead.incarnation, owner=comms.registry.require('other'), generation='created', goal=retained.goal,
+        assigner=lead.incarnation, owner=comms.registry.require('other'), generation='created', request=retained.request.require(),
         review_at=retained.review_at, order=order)
     with store.snapshot() as db:
         assert ProblemAllocation.select(db) == []
     # Direct creation must affect allocation without copying its key into the allocator.
     store.create('P120', source.github, 'Exercise numeric ordering', creator=lead,
-        assigner=lead.incarnation, owner=comms.registry.require('worker'), generation='direct', goal=retained.goal,
+        assigner=lead.incarnation, owner=comms.registry.require('worker'), generation='direct', request=retained.request.require(),
         review_at=retained.review_at, order=replace(order, id='direct-order'))
     assert store.allocate_problem() == 'P121'
     with store.snapshot() as db:
@@ -315,7 +317,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
     store.create('P41', source.github, 'Replacing parent problem', creator=lead,
         owner=comms.registry.require('worker'), assigner=lead.incarnation, generation='worker',
         review_at=RecordedEventTime(time.time() + 600), order=replace(order, id='replacing-order'),
-        goal=GoalRef('lead', lead.created_at, 'request'))
+        request=store.get('P40').request.require())
     comms.registry.register_commander_child('fork-one', 'lead', comms.goals)
     actor = CommanderForkCaller('fork-one').identity(comms)
     current = store.get('P40')
