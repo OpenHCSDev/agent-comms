@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from abc import ABC, abstractmethod
+from functools import partial
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -13,7 +15,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import ExitStack, aclosing, contextmanager
+from contextlib import AbstractContextManager, ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -48,6 +50,7 @@ from .routing import DeliveryScope
 from .store_files import SharedLock, StoreLockOwner
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .relationships import PeerRelation
@@ -62,6 +65,24 @@ from agent_comms.wire_log import (
 
 from .publisher import Publisher
 from .wire_watch import WatchSource, WireWatch
+
+
+class HeldBusWrite:
+    """Synchronous publications inherit the bus's maintenance wait, never a retry policy."""
+
+    def write_when_open[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
+        return asyncio.run(comms.bus.when_open(operation))
+
+
+class WatchPass(HeldBusWrite, ABC):
+    """A scheduled pass borrows its wire and enters maintenance before any mutation."""
+
+    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        with opened_wire() as comms:
+            self.write_when_open(comms, partial(self.pass_body, comms))
+
+    @abstractmethod
+    def pass_body(self, comms: Comms) -> None: ...
 
 
 class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):

@@ -35,6 +35,7 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
+from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions
@@ -51,7 +52,7 @@ from .connector_store import (
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
 from .messages import Message, QuestionKind
-from .commander.standing import UnownedWheelSpin
+from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .todos import DirectiveText, ReviewedHeadVerdict
@@ -515,6 +516,15 @@ class Connector:
             comms.registry.require(CALLER.name)
             yield comms
 
+    @contextmanager
+    def service_wire(self) -> Iterator[Comms]:
+        """A service pass selects its explicit root without borrowing a request route.
+
+        Waiting with a client route borrowed would hold up its replacement. The
+        pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
+        """
+        yield Comms.blocking_reads(self.root)
+
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
@@ -548,6 +558,13 @@ class Connector:
     async def log_route(self, request: web.Request, handler: Handler) -> web.StreamResponse:
         """One line per request naming its route template: paths and queries carry one-use secrets
         and OAuth values, and headers carry bearer tokens, so none of them is logged."""
+        match request.match_info.route:
+            case ResourceRoute(resource=AbstractResource(canonical=template)):
+                pass
+            case SystemRoute():
+                template = "unmatched"
+            case _:
+                raise TypeError("Unsupported aiohttp route")
         started = time.monotonic()
         status = web.HTTPInternalServerError.status_code
         try:
@@ -558,18 +575,16 @@ class Connector:
             status = refusal.status
             raise
         finally:
-            # A route renders as its method and path template, never the matched values.
             elapsed = time.monotonic() - started
-            logging.info("%s %s %.3fs", request.match_info.route, status, elapsed)
+            logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
-        heartbeat = CommanderHeartbeat()
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
-                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+                UnownedOrderWatch(), self.service_wire)),
             asyncio.create_task(Coordination.watch_worker(
-                lambda: heartbeat.watch_pass(self.opened_wire))),
+                CommanderHeartbeat(), self.service_wire)),
         )
         try:
             yield
