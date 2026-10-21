@@ -240,6 +240,11 @@ class ThinkingChoice(ABC):
     def wire_value(cls) -> str | None:
         raise NotImplementedError("Abstract thinking choices have no wire value.")
 
+    @classmethod
+    @abstractmethod
+    def require_reported(cls, refusal: Exception) -> type[ThinkingLevel]:
+        """The level a native report named; no override raises ``refusal``."""
+
 
 class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
@@ -251,6 +256,10 @@ class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
     @classmethod
     def wire_value(cls) -> str:
         return cls.declared_name
+
+    @classmethod
+    def require_reported(cls, refusal: Exception) -> type[ThinkingLevel]:
+        return cls
 
 
 class NoThinkingOverride(ThinkingChoice):
@@ -269,6 +278,10 @@ class NoThinkingOverride(ThinkingChoice):
     @classmethod
     def wire_value(cls) -> None:
         return None
+
+    @classmethod
+    def require_reported(cls, refusal: Exception) -> type[ThinkingLevel]:
+        raise refusal
 
 
 class ThinkingLevelValue(FieldRepresentation):

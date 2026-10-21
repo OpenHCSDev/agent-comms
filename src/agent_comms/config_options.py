@@ -397,11 +397,11 @@ class SessionConfigOptions(ConfigOptions):
             self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.thread_model().require_reported()
-        if state.thinking_level.wire_value() is None:
-            raise NativePiUnavailable("Native configuration did not report a thinking level")
+        level = state.thinking_level.require_reported(
+            NativePiUnavailable("Native configuration did not report a thinking level"))
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration, thread, NextTurnConfiguration(
-                model=ChosenModel(model), thinking_level=state.thinking_level,
+                model=ChosenModel(model), thinking_level=level,
             ),
         ))
 

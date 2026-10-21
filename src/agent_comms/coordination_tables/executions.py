@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Annotated, ClassVar
 from dataclasses import dataclass
 from enum import StrEnum
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
-    MAX_REASON_CODE_CHARS,
     require_bounded,
     require_nonempty,
-    require_optional_nonempty,
     validate_execution_id,
 )
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.execution_states import ExecutionState
-from agent_comms.field_codec import projected, SnapshotExclude
+from agent_comms.field_codec import NullMember, SingleFieldValue, SnapshotExclude, SubclassUnion, projected
+from agent_comms.reason_codes import ReasonCode
+from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.typed_table import (
+    IntegerStorage,
+    TextStorage,
     Column,
     ForeignKey,
     Generated,
@@ -35,11 +38,61 @@ class ExecutionOrigin(StrEnum):
     SYSTEM = "system"
 
 
+class PointerExecution(SubclassUnion, TextChoice, affix="Execution"):
+    """The execution an owner's pointer names: its id, or SQL NULL while the owner is idle."""
+
+    pointed: ClassVar[bool]
+
+
+@dataclass(frozen=True, slots=True)
+class PointedExecution(GivenText, PointerExecution):
+    pointed: ClassVar[bool] = True
+    text: str
+
+    def __post_init__(self) -> None:
+        validate_execution_id(self.text)
+
+
+@dataclass(frozen=True, slots=True)
+class NoPointedExecution(AbsentText, PointerExecution):
+    pointed: ClassVar[bool] = False
+
+
+class PointerAttempt(SubclassUnion, affix="Attempt"):
+    """The attempt an owner's pointer names: its ordinal, or SQL NULL while the owner is idle."""
+
+    pointed: ClassVar[bool]
+
+    @abstractmethod
+    def otherwise[Default](self, default: Default) -> int | Default: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PointedAttempt(SingleFieldValue, PointerAttempt):
+    pointed: ClassVar[bool] = True
+    ordinal: int
+
+    def __post_init__(self) -> None:
+        if self.ordinal <= 0:
+            raise ValueError("pointer ordinal must be positive")
+
+    def otherwise[Default](self, default: Default) -> int:
+        return self.ordinal
+
+
+@dataclass(frozen=True, slots=True)
+class NoPointedAttempt(NullMember, PointerAttempt):
+    pointed: ClassVar[bool] = False
+
+    def otherwise[Default](self, default: Default) -> Default:
+        return default
+
+
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(CoordinatorTable, TypedTable):
     @property
     def unresolved(self) -> bool:
-        return self.execution_id is not None
+        return self.execution_id.pointed
 
     def require_idle(self) -> None:
         from agent_comms.coordination_errors import StaleFence
@@ -50,19 +103,15 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
             )
 
     owner_lookup: Annotated[str, Column(primary_key=True)]
-    execution_id: Annotated[str | None, Column()]
-    attempt_ordinal: Annotated[int | None, Column()]
+    execution_id: Annotated[PointerExecution, Column(storage=TextStorage, nullable=True)]
+    attempt_ordinal: Annotated[PointerAttempt, Column(storage=IntegerStorage, nullable=True)]
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
 
     def __post_init__(self) -> None:
         require_nonempty(self.owner_lookup, "owner_lookup")
         require_bounded(self.owner_lookup, "owner_lookup", MAX_IDENTIFIER_CHARS)
-        if (self.execution_id is None) != (self.attempt_ordinal is None):
+        if self.execution_id.pointed != self.attempt_ordinal.pointed:
             raise IntegrityViolationError("pointer execution and ordinal must pair")
-        if self.execution_id is not None:
-            validate_execution_id(self.execution_id)
-            if self.attempt_ordinal is None or self.attempt_ordinal <= 0:
-                raise ValueError("pointer ordinal must be positive")
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
@@ -152,7 +201,9 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
     revision: Annotated[int, Column(check="revision > 0")]
     max_attempts: Annotated[int, Column(check="max_attempts > 0")]
     reason_code: Annotated[
-        str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+        ReasonCode,
+        Column(storage=TextStorage, nullable=True,
+               check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
     created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
@@ -177,7 +228,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.revision <= 0 or self.max_attempts <= 0:
             raise ValueError("revision and max_attempts must be positive")
         self.lifecycle.validate_budget(self.max_attempts)
-        require_optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 

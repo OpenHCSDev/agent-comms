@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
 
+from agent_comms.reason_codes import GivenReasonCode
 from .agent_events import CompactionEvent, NativePhaseChanged
 from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
@@ -91,7 +92,7 @@ class SelectedParticipant(MroDispatch):
         ).value
         self.store.executions.fail_unstarted(
             self.batch.execution_id, expected_revision=snapshot.execution.revision,
-            reason_code="session-acquisition-failed",
+            reason_code=GivenReasonCode("session-acquisition-failed"),
         )
 
     async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:

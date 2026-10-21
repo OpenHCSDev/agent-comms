@@ -4,6 +4,7 @@ from dataclasses import fields, replace
 
 import pytest
 
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
@@ -47,7 +48,7 @@ def test_record_replacement_uses_only_nominal_state():
         owner_lookup="o",
         revision=1,
         max_attempts=3,
-        reason_code=None,
+        reason_code=NoReasonCode(),
         created_at_ms=0,
         updated_at_ms=0,
     )
@@ -120,7 +121,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                 ExecutionRecord(
                     execution_id="e", origin=ExecutionOrigin.WIRE,
                     lifecycle=QueuedExecution(), owner_thread="owner", owner_lookup="p",
-                    revision=1, max_attempts=2, reason_code=None,
+                    revision=1, max_attempts=2, reason_code=NoReasonCode(),
                     created_at_ms=0, updated_at_ms=0,
                 ).insert(db)
                 WakeAssignment(
@@ -131,7 +132,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                 ).insert(db)
                 ResponseObligation(
                     execution_id="e", exact_target="requester", lifecycle=ReviewedResponse(),
-                    reason_code=None, created_at_ms=0, updated_at_ms=0, revision=1,
+                    reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0, revision=1,
                 ).insert(db)
                 ExecutionAssignmentLink("e", "c", 0).insert(db)
             obligation, = store.snapshots.get("e").obligations

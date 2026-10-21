@@ -5,6 +5,7 @@ from itertools import product
 
 import pytest
 
+from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
 from agent_comms.assignment_states import AssignmentState, BoundAssignment
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_errors import IntegrityViolationError
@@ -217,14 +218,14 @@ def test_snapshot_attempt_identity_pointer_and_version(active, pending):
             rejected(active, "status/attempt phase mismatch", attempt=altered)
         else:
             assert replace(active, attempt=altered).is_current
-    for changes in ({"current_execution_id": None}, {"current_attempt_ordinal": None}):
+    for changes in ({"current_execution_id": NoPointedExecution()}, {"current_attempt_ordinal": NoPointedAttempt()}):
         rejected(active, "pointer tuple is incomplete", **changes)
     rejected(active, "pointer is inconsistent", is_current=False)
     rejected(
         active,
         "exact owner pointer",
-        current_execution_id=None,
-        current_attempt_ordinal=None,
+        current_execution_id=NoPointedExecution(),
+        current_attempt_ordinal=NoPointedAttempt(),
         is_current=False,
     )
 
@@ -272,8 +273,8 @@ def terminal_snapshot(active, execution_owner, attempt_owner, response_owner, *,
         assignments=claims,
         obligations=(replace(active.obligations[0], lifecycle=response_owner.load(None, None)),),
         replay=replay,
-        current_execution_id=None,
-        current_attempt_ordinal=None,
+        current_execution_id=NoPointedExecution(),
+        current_attempt_ordinal=NoPointedAttempt(),
         is_current=False,
     )
 

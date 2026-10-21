@@ -19,6 +19,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import ProcessIdentity
@@ -141,9 +142,9 @@ def settle_failed(store):
         snapshot = store.snapshots.get("execution")
         snapshot.attempt.advance(
             store.session, type(snapshot.attempt.lifecycle), backend_done=True,
-            process_dead=True, progress=False, reason_code=None,
+            process_dead=True, progress=False, reason_code=NoReasonCode(),
         )
-        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None, boundary)
+        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), NoReasonCode(), boundary)
 
 
 def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:

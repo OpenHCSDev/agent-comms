@@ -20,11 +20,14 @@ from agent_comms.coordination_tables.attempts import (
     PreviousAttempt,
     ReplayAssessments,
 )
-from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
+from agent_comms.coordination_tables.executions import (
+    ExecutionOrigin, ExecutionRecord, NoPointedAttempt, NoPointedExecution, PointerAttempt, PointerExecution,
+)
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import boundary_decoder, projected, SnapshotName, WireName
+from agent_comms.reason_codes import ReasonCode
 
 if TYPE_CHECKING:
     from .attempt_states import TerminalAttempt
@@ -49,8 +52,8 @@ class RecoverySnapshot:
     ]
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
-    current_execution_id: str | None
-    current_attempt_ordinal: int | None
+    current_execution_id: PointerExecution
+    current_attempt_ordinal: PointerAttempt
     pointer_revision: int
     is_current: bool
     snapshot_version: int = COORDINATION_SNAPSHOT_VERSION
@@ -184,11 +187,11 @@ class RecoverySnapshot:
         execution = self.execution
         execution_id = execution.execution_id
         attempt = self.attempt
-        if (self.current_execution_id is None) != (self.current_attempt_ordinal is None):
+        if self.current_execution_id.pointed != self.current_attempt_ordinal.pointed:
             raise IntegrityViolationError("snapshot pointer tuple is incomplete")
         if self.is_current != (
-            self.current_execution_id == execution_id
-            and self.current_attempt_ordinal == execution.lifecycle.current_attempt_ordinal
+            self.current_execution_id.otherwise(None) == execution_id
+            and self.current_attempt_ordinal.otherwise(None) == execution.lifecycle.current_attempt_ordinal
             and execution.lifecycle.active
             and attempt is not None
             and not attempt.lifecycle.terminal
@@ -226,7 +229,7 @@ class RecoverySnapshot:
         )
 
     def settle(
-        self, session, outcome, reason_code: str | None,
+        self, session, outcome, reason_code: ReasonCode,
         boundary: NativeBoundary | None = None,
     ) -> None:
         from .coordination_tables.assignments import WakeAssignment
@@ -293,8 +296,8 @@ class RecoverySnapshot:
             db,
             where="owner_lookup=?",
             parameters=(execution.owner_lookup,),
-            execution_id=None,
-            attempt_ordinal=None,
+            execution_id=NoPointedExecution(),
+            attempt_ordinal=NoPointedAttempt(),
             pointer_revision=self.pointer_revision + 1,
         )
 
@@ -335,7 +338,7 @@ class RecoverySnapshot:
         CurrentExecutions.update(
             db, where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
             parameters=(execution.owner_lookup, self.pointer_revision, execution.execution_id),
-            execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
+            execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(), pointer_revision=self.pointer_revision + 1,
         )
 
     def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:

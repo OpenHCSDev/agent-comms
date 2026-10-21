@@ -17,6 +17,8 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
+    NoPointedAttempt,
+    NoPointedExecution,
 )
 from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
@@ -120,7 +122,8 @@ class ParticipantStore:
                 db
             )
             CurrentExecutions(
-                owner_lookup=lookup, execution_id=None, attempt_ordinal=None, pointer_revision=0
+                owner_lookup=lookup, execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+                pointer_revision=0,
             ).insert(db)
             return Applied(self.get(lookup))
 

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from agent_comms.reason_codes import GivenReasonCode, NoDetail, NoReasonCode, ReasonCode, RecoveryDetail
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
-from agent_comms.coordination_contracts import (
-    MAX_SANITIZED_DETAIL_CHARS,
-    _bounded_reason,
-)
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -95,7 +92,7 @@ class AttemptStore:
                     db, where="execution_id=? AND exact_target=?",
                     parameters=(request.execution_id, obligation.exact_target),
                     lifecycle=PendingResponse(), revision=obligation.revision + 1,
-                    reason_code=None, updated_at_ms=self.session.now(obligation.updated_at_ms),
+                    reason_code=NoReasonCode(), updated_at_ms=self.session.now(obligation.updated_at_ms),
                 )
         if execution.lifecycle.retry:
             for assignment in snapshot.assignments:
@@ -149,9 +146,8 @@ class AttemptStore:
         backend_done: bool = False,
         process_dead: bool = False,
         progress: bool = False,
-        reason_code: str | None = None,
+        reason_code: ReasonCode = NoReasonCode(),
     ) -> Applied[StartResult]:
-        _bounded_reason(reason_code)
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
         if phase.terminal:
@@ -229,10 +225,10 @@ class AttemptStore:
                     backend_done=True,
                     process_dead=True,
                     progress=False,
-                    reason_code="native_unknown",
+                    reason_code=GivenReasonCode("native_unknown"),
                 )
             self.snapshots.get(fence.execution_id).settle(
-                self.session, UnknownOutcomeAttempt(), "native_unknown", acquired
+                self.session, UnknownOutcomeAttempt(), GivenReasonCode("native_unknown"), acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 
@@ -270,16 +266,11 @@ class AttemptStore:
         *,
         expected_pointer_revision: int,
         kind: type[RecoveryCondition],
-        reason_code: str,
-        sanitized_detail: str | None = None,
+        reason_code: GivenReasonCode,
+        sanitized_detail: RecoveryDetail = NoDetail(),
         elapsed_ms: int = 0,
     ) -> Applied[RecoverySnapshot]:
-        _bounded_reason(reason_code)
-        if (
-            reason_code is None
-            or elapsed_ms < 0
-            or (sanitized_detail is not None and len(sanitized_detail) > MAX_SANITIZED_DETAIL_CHARS)
-        ):
+        if elapsed_ms < 0:
             raise ValueError("invalid recovery audit")
         with self.session.writing() as db:
             snapshot, attempt = self.require_fence(fence)
@@ -303,12 +294,11 @@ class AttemptStore:
         *,
         expected_pointer_revision: int,
         outcome: TerminalAttempt,
-        reason_code: str | None = None,
+        reason_code: ReasonCode = NoReasonCode(),
         failure: TurnFailure | None = None,
     ) -> Applied[RecoverySnapshot]:
         if not isinstance(outcome, TerminalAttempt):
             raise ValueError("settlement requires a terminal attempt outcome")
-        _bounded_reason(reason_code)
         with self.session.settlement() as acquired:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:

@@ -7,16 +7,16 @@ from dataclasses import dataclass
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
-    MAX_REASON_CODE_CHARS,
     require_bounded,
     require_nonempty,
-    require_optional_nonempty,
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.obligation_states import ResponseState
+from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
+    TextStorage,
     Column,
     ForeignKey,
     Generated,
@@ -38,7 +38,9 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
     ]
     lifecycle: Annotated[ResponseState, SnapshotExclude()]
     reason_code: Annotated[
-        str | None, Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+        ReasonCode,
+        Column(storage=TextStorage, nullable=True,
+               check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
     created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
@@ -60,7 +62,6 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         validate_execution_id(self.execution_id)
         require_nonempty(self.exact_target, "exact_target")
         require_bounded(self.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
-        require_optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         if self.revision <= 0:
             raise ValueError("revision must be positive")
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:

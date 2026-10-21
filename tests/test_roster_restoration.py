@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
@@ -152,7 +153,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         assert snapshot.threads[live.name] == live
         assert store.participants.get(RecordedThreadIncarnation("fixture", live.created_at).lookup) == live_before
         assert (
-            store.participants.get(RecordedThreadIncarnation("fixture", missing.created_at).lookup).pointer.execution_id is None
+            store.participants.get(RecordedThreadIncarnation("fixture", missing.created_at).lookup).pointer.execution_id == NoPointedExecution()
         )
         if bus_before is not None:
             assert current.bus.log.path.read_bytes() == bus_before

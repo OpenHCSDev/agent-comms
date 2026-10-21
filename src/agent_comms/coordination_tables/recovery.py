@@ -9,15 +9,14 @@ from enum import StrEnum
 
 from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
-    MAX_REASON_CODE_CHARS,
     MAX_SANITIZED_DETAIL_CHARS,
-    require_bounded,
-    require_nonempty,
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.recovery_states import RecoveryCondition
+from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
 from agent_comms.typed_table import (
+    TextStorage,
     Column,
     ForeignKey,
     Index,
@@ -88,10 +87,14 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
 
     execution_id: Annotated[str, field_codec.SnapshotExclude()]
     kind: Annotated[type[RecoveryCondition], Column(check="kind IN ({recovery_names})")]
-    reason_code: Annotated[str, Column(check="length(reason_code) BETWEEN 1 AND 64")]
+    reason_code: Annotated[
+        GivenReasonCode, Column(storage=TextStorage, check="length(reason_code) BETWEEN 1 AND 64")
+    ]
     sanitized_detail: Annotated[
-        str | None,
+        RecoveryDetail,
         Column(
+            storage=TextStorage,
+            nullable=True,
             check=(
                 "sanitized_detail IS NULL OR length(sanitized_detail)<="
                 f"{MAX_SANITIZED_DETAIL_CHARS}"
@@ -139,8 +142,5 @@ END"""
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        require_nonempty(self.reason_code, "reason_code")
-        require_bounded(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
-        require_bounded(self.sanitized_detail, "sanitized_detail", MAX_SANITIZED_DETAIL_CHARS)
         if self.attempt <= 0 or self.elapsed_ms < 0 or self.observed_at_ms < 0:
             raise ValueError("recovery attempt/timestamps are invalid")

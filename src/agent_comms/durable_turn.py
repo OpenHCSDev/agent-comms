@@ -9,6 +9,7 @@ recovery events from a successful result.
 from contextlib import contextmanager
 from functools import partial
 
+from agent_comms.reason_codes import GivenReasonCode
 from . import pi_events as pi
 from .agent_events import NativePhaseChanged, PromptAccepted
 from .attempt_states import (
@@ -157,12 +158,12 @@ class DurableTurn(MroDispatch):
             expected_pointer_revision=self.pointer_revision,
             backend_done=True,
             process_dead=True,
-            reason_code="native_terminal_failure",
+            reason_code=GivenReasonCode("native_terminal_failure"),
         ).value
         return self.attempts.settle_nonpublication(
             final.fence,
             expected_pointer_revision=final.snapshot.pointer_revision,
             outcome=AttemptFailedAttempt(),
-            reason_code="native_terminal_failure",
+            reason_code=GivenReasonCode("native_terminal_failure"),
             failure=failure,
         ).value

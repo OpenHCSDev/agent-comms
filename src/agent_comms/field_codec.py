@@ -175,7 +175,9 @@ class WireNonNull(FlagDirective, NullPolicy):
 
 
 class DefaultNonNull(NullPolicy):
+    @boundary_decoder
     def rejects_null(self, declared: Field) -> bool:
+        """A dataclass spells a declared ``= None`` default as None; any other default rejects null."""
         return declared.default is not None
 
 
