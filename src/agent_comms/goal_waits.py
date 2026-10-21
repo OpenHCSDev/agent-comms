@@ -35,6 +35,18 @@ if TYPE_CHECKING:
 class GoalWait(ABC):
     """A resolved dependency state; only RecordedGoalWait is persisted."""
 
+    @property
+    @abstractmethod
+    def targets(self) -> tuple[GoalWaitTarget, ...]: ...
+
+    @abstractmethod
+    def visit_group(
+        self, peer: Thread, snapshot: RegistrySnapshot, agents: AgentActivity,
+        pending: list[str],
+    ) -> bool:
+        """Report an independent peer, otherwise enqueue its own wait."""
+        ...
+
     @abstractmethod
     def allows_routed_input(self) -> bool: ...
 
@@ -71,6 +83,16 @@ class GoalWait(ABC):
 
 @dataclass(frozen=True, slots=True)
 class NoGoalWait(GoalWait):
+    @property
+    def targets(self) -> tuple[GoalWaitTarget, ...]:
+        return ()
+
+    def visit_group(
+        self, peer: Thread, snapshot: RegistrySnapshot, agents: AgentActivity,
+        pending: list[str],
+    ) -> bool:
+        return agents.is_live(peer.incarnation, snapshot)
+
     def allows_routed_input(self) -> bool:
         return True
 
@@ -81,7 +103,7 @@ class RecordedGoalWait(GoalWait):
     wait_id: str
     revision: int
     after_seq: int
-    targets: tuple[GoalWaitTarget, ...]
+    targets: tuple[GoalWaitTarget, ...] = field()
     owner: RecordedThreadIncarnation
     # An idle dependency has no turn generation at the moment of declaration.
     target_turn_generations: tuple[int | None, ...]
@@ -107,6 +129,18 @@ class RecordedGoalWait(GoalWait):
             )
         ):
             raise ValueError("A reporting turn requires both its ID and generation.")
+
+    def visit_group(
+        self, peer: Thread, snapshot: RegistrySnapshot, agents: AgentActivity,
+        pending: list[str],
+    ) -> bool:
+        # Only a busy turn that did not report this wait is independent.
+        if agents.is_working(peer.incarnation, snapshot) and not peer.turn_lease.reports(
+            self.report_turn_id, self.report_turn_generation,
+        ):
+            return True
+        pending.append(peer.name)
+        return False
 
     def allows_routed_input(self) -> bool:
         return False
@@ -357,12 +391,12 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
         snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> tuple[str, ...]:
-        """Find waits with no path to a live active turn outside the wait graph.
+        """Find waits closed by dead targets or waits leading back into the group.
 
-        A dependency list wakes on any qualifying reply. One independent
-        target is therefore enough to keep a group runnable, even if another
-        branch contains a cycle. Call this under the wire lock before recording
-        the proposed wait so concurrent standby reports cannot both pass.
+        A live target with no wait of its own is an independent worker even
+        while idle between turns. One independent target keeps the group open,
+        even if another branch cycles. Call under the wire lock before recording
+        a proposed wait so concurrent standby reports cannot both pass.
         """
         pending = [owner]
         seen: set[str] = set()
@@ -375,8 +409,8 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
             goal = thread.goal.active()
             wait = next(iter(cls.current_waits(
                 goal, rows, thread.incarnation.require_recorded(),
-            )), None)
-            dependencies = targets if name == owner else (wait.targets if wait is not None else ())
+            )), NoGoalWait())
+            dependencies = targets if name == owner else wait.targets
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
                 peer = snapshot.threads.get(canonical)
@@ -388,18 +422,7 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
                 peer_goal = peer.goal.active()
                 peer_wait = next(iter(cls.current_waits(
                     peer_goal, rows, peer.incarnation.require_recorded(),
-                )), None)
-                if agents.is_working(target.incarnation, snapshot):
-                    # A persisted wait does not make a *new* live owner turn
-                    # part of the old wait graph. It may send the reply before
-                    # its turn finishes; only the reporting turn belongs here.
-                    current_turn = peer.turn_lease
-                    if (
-                        peer_wait is None
-                        or not current_turn.reports(
-                            peer_wait.report_turn_id, peer_wait.report_turn_generation)
-                    ):
-                        return ()
-                if peer_wait is not None:
-                    pending.append(canonical)
+                )), NoGoalWait())
+                if peer_wait.visit_group(peer, snapshot, agents, pending):
+                    return ()
         return tuple(sorted(seen))
