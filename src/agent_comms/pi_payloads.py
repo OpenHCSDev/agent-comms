@@ -56,6 +56,7 @@ from .pi_vocabulary import (
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
+from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
 
@@ -1388,10 +1389,10 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
         pass
 
     def edit_diff(self, ok):
-        return None
+        return NoToolDiff()
 
     def sent_message(self, ok):
-        return None
+        return NoSentMessage()
 
 
 class MissingToolResult(PiToolResult):
@@ -1411,10 +1412,10 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
         return text[:limit] + ("…" if len(text) > limit else "")
 
     def edit_diff(self, ok):
-        return self.details.edit_diff() if ok else None
+        return self.details.edit_diff() if ok else NoToolDiff()
 
     def sent_message(self, ok):
-        return self.details.sent_message() if ok else None
+        return self.details.sent_message() if ok else NoSentMessage()
 
     def published_goal(self, permission: TurnGoalPermission) -> None:
         self.details.published_goal(permission)
@@ -1437,18 +1438,16 @@ class NativeEditDetails(PiPayload):
         except MalformedRecord:
             # Extension-defined metadata may be opaque. Preserve the original
             # result and output; unsupported formatting grants no diff evidence.
-            return None
+            return NoToolDiff()
         return details.reported_diff()
 
     def reported_diff(self):
-        from .tool_results import ToolDiff
-
         if (patch := self.patch.value_or("")).strip():
             return ToolDiff(patch)
         if (diff := self.diff.value_or("")).strip():
             # This is the external numbered edit format in retained Pi journals.
             return ToolDiff(diff, "numbered")
-        return None
+        return NoToolDiff()
 
 
 @dataclass(frozen=True)
@@ -1469,10 +1468,10 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
         return cls.member_named(value[cls.wire_tag])
 
     def edit_diff(self):
-        return None
+        return NoToolDiff()
 
     def sent_message(self):
-        return None
+        return NoSentMessage()
 
     def published_goal(self, permission: TurnGoalPermission) -> None:
         pass

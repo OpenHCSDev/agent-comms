@@ -7,6 +7,8 @@ from difflib import unified_diff
 from typing import Any, Literal, TYPE_CHECKING
 from urllib.parse import quote
 
+from .field_codec import NullMember
+
 if TYPE_CHECKING:
     from .transcript_events import SentTranscript
 
@@ -24,6 +26,25 @@ class ToolText:
 
 
 @dataclass(frozen=True, slots=True)
+class NoToolDiff(NullMember):
+    """The tool reported no patch."""
+
+    def parts(self) -> tuple[ToolDiff, ...]:
+        return ()
+
+    def patch(self, call):
+        return call
+
+
+@dataclass(frozen=True, slots=True)
+class NoSentMessage(NullMember):
+    """The tool result reports no sent message."""
+
+    def result_parts(self, otherwise: tuple) -> tuple:
+        return otherwise
+
+
+@dataclass(frozen=True, slots=True)
 class ToolDiff:
     """A patch reported by the tool that performed the edit, never inferred later."""
 
@@ -32,10 +53,16 @@ class ToolDiff:
 
     @classmethod
     def from_versions(cls, path: str, before: str, after: str, *,
-                      before_path: str | None = None, after_path: str | None = None) -> ToolDiff | None:
+                      before_path: str | None = None, after_path: str | None = None) -> ToolDiff | NoToolDiff:
         lines = tuple(unified_diff(before.splitlines(keepends=True), after.splitlines(keepends=True),
             fromfile=before_path or path, tofile=after_path or path))
-        return cls(''.join(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n' for line in lines)) if lines else None
+        return cls(''.join(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n' for line in lines)) if lines else NoToolDiff()
+
+    def parts(self) -> tuple[ToolDiff, ...]:
+        return (self,)
+
+    def patch(self, call):
+        return call.patched(self)
 
     @property
     def mime_type(self) -> str:
@@ -52,8 +79,8 @@ class ToolDiff:
         }}
 
 def tool_result_content(
-    tool_call_id: str, output: str, diff: ToolDiff | None = None,
-    sent_message: SentTranscript | None = None,
+    tool_call_id: str, output: str, diff: ToolDiff | NoToolDiff = NoToolDiff(),
+    sent_message: SentTranscript | NoSentMessage = NoSentMessage(),
 ) -> list[dict[str, Any]]:
     """Use ACP's embedded text resource for patches with original hunk positions.
 

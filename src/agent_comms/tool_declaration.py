@@ -9,9 +9,10 @@ from typing import Annotated, ClassVar, Self
 
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord, WireName
+from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
 from .native_tool_call import SelectedToolDenied
 from .recorded_time import EventTime
+from .tool_results import NoToolDiff
 
 
 def one_line(text: str, limit: int) -> str:
@@ -60,13 +61,17 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return FieldCodec.decode_bound(cls, {**selected, **arguments}, call_id=call_id)
 
     @classmethod
-    def record(cls, name: str, arguments: object, *, call_id: str) -> ToolDeclaration | None:
-        """The call decoded once as Core's tool record, or None when Core does not decode it."""
+    def record(cls, name: str, arguments: object, *, call_id: str) -> ToolDeclaration | NoToolRecord:
+        """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
         except (MalformedRecord, SelectedToolDenied):
-            return None
+            return NoToolRecord()
+
+    def recorded_call(self, shown):
+        """The shown call, carrying this record."""
+        return shown.recorded(self)
 
     def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
@@ -79,21 +84,37 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """What the call does in one line, enough to judge it."""
         return f'{self.declared_name} {one_line(self.reads(), 260)}'
 
-    @classmethod
-    def caption(cls, name: str, tool: ToolDeclaration | None) -> str:
-        """A call reads as its label, then what its record names; with no record, its label."""
-        reads = one_line(text := tool.reads(), len(text)) if tool else ''
-        return cls.for_name(name).label + (' ' + reads if reads else '')
+    def call_digest(self, name: str, arguments: object) -> str:
+        """A call in one line: its record's digest."""
+        return self.digest()
 
     @classmethod
-    def call_digest(cls, name: str, tool: ToolDeclaration | None, arguments: object) -> str:
-        """A call in one line: its record's digest; with no record, its name and raw arguments."""
-        return tool.digest() if tool else f'{name} {one_line(json.dumps(arguments), 260)}'
+    def caption(cls, name: str, tool: ToolDeclaration | NoToolRecord) -> str:
+        """A call reads as its label, then what its record names; with no record, its label."""
+        reads = one_line(text := tool.reads(), len(text))
+        return cls.for_name(name).label + (' ' + reads if reads else '')
 
     @classmethod
     def result_diff(cls, result, ok):
         """Opaque metadata cannot invent edit evidence."""
-        return None
+        return NoToolDiff()
+
+
+@dataclass(frozen=True)
+class NoToolRecord(NullMember):
+    """Core did not decode the call into a tool record; its raw arguments stand."""
+
+    def reads(self) -> str:
+        return ''
+
+    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
+        return ()
+
+    def call_digest(self, name: str, arguments: object) -> str:
+        return f'{name} {one_line(json.dumps(arguments), 260)}'
+
+    def recorded_call(self, shown):
+        return shown
 
 
 @dataclass(frozen=True)

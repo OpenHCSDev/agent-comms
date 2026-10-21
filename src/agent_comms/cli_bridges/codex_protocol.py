@@ -39,7 +39,7 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.tool_calls import DecodedToolCall, ToolCall
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import ToolDiff
+from agent_comms.tool_results import NoToolDiff, ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -376,8 +376,7 @@ class ToolItem(Item, ABC):
     @property
     def call(self) -> ToolCall:
         shown = ToolCall(self.id, self.tool_name, self.arguments)
-        tool = ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id)
-        return shown.recorded(tool) if tool else shown
+        return ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id).recorded_call(shown)
 
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded, self.id, timestamp)
@@ -628,20 +627,20 @@ class PatchChange(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
     @abstractmethod
-    def patch(self, path: str, content: str) -> ToolDiff | None: ...
+    def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff: ...
 
 
 class AddedFile(PatchChange):
     wire_tag = 'add'
 
-    def patch(self, path: str, content: str) -> ToolDiff | None:
+    def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
         return ToolDiff.from_versions(path, '', content, before_path='/dev/null')
 
 
 class DeletedFile(PatchChange):
     wire_tag = 'delete'
 
-    def patch(self, path: str, content: str) -> ToolDiff | None:
+    def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
         return ToolDiff.from_versions(path, content, '', after_path='/dev/null')
 
 
@@ -669,7 +668,7 @@ class FileChange(WireModel):
     def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
         call = self.call(call_id)
         diff = self.kind.patch(self.path, self.diff)
-        return (call.patched(diff) if diff else call).finished('', ok, call_id, timestamp)
+        return diff.patch(call).finished('', ok, call_id, timestamp)
 
 
 class FileChangeItem(Item):

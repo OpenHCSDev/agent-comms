@@ -35,7 +35,7 @@ from .pi_vocabulary import (
     UnknownCompactionReason,
 )
 from .tool_declaration import ToolDeclaration
-from .tool_results import ToolDiff
+from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -209,8 +209,8 @@ class ToolProgress(ToolEvent):
 class ToolEnd(ToolEvent):
     ok: bool
     output: str = ""
-    diff: ToolDiff | None = None
-    sent_message: SentTranscript | None = None
+    diff: ToolDiff | NoToolDiff = NoToolDiff()
+    sent_message: SentTranscript | NoSentMessage = NoSentMessage()
 
 
 @dataclass(frozen=True)

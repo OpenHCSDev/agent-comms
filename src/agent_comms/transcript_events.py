@@ -19,7 +19,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .recorded_time import EventTime
 from .routing import MessageRoute, TurnRouting
-from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
+from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 from .ui_model.message_category import (
     AgentCategory,
@@ -350,7 +350,7 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, None)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, tool_declaration.NoToolRecord())
 
     @property
     def kind(self) -> str:
@@ -360,17 +360,17 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
-        if self.before(since) or self.tool is None:
+        if self.before(since):
             return ()
         return self.tool.edit_calls(
             self.tool_call_id, EventTime.capture(self.timestamp), thread, problem)
 
     raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
     tool: Annotated[
-        tool_declaration.ToolDeclaration | None,
+        tool_declaration.ToolDeclaration | tool_declaration.NoToolRecord,
         WireOmitDefault(),
         WireBind({"call_id": "tool_call_id"}),
-    ] = None
+    ] = tool_declaration.NoToolRecord()
 
     @property
     def title(self) -> str:
@@ -379,8 +379,7 @@ class ToolStartTranscript(ToolTranscript):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
-            digest = tool_declaration.ToolDeclaration.call_digest(
-                self.tool_name, self.tool, self.raw_input)
+            digest = self.tool.call_digest(self.tool_name, self.raw_input)
             calls[self.tool_call_id] = OrderCall(
                 self.tool_call_id, self.tool_name, digest, RunningCallState)
 
@@ -392,11 +391,9 @@ class ToolStartTranscript(ToolTranscript):
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
     @staticmethod
-    def parts_for(text, diff=None, sent_message=None):
+    def parts_for(text, diff=NoToolDiff(), sent_message=NoSentMessage()):
         """The result owner selects its contents once, before transport or paint."""
-        if sent_message is not None:
-            return (sent_message,)
-        return ((diff,) if diff is not None else ()) + ((ToolText(text),) if text else ())
+        return sent_message.result_parts(diff.parts() + ((ToolText(text),) if text else ()))
 
     @property
     def result_parts(self):
@@ -417,9 +414,9 @@ class ToolEndTranscript(ToolTranscript):
 
     text: str = ""
     ok: bool = True
-    diff: Annotated[ToolDiff | None, WireOmitDefault()] = None
-    sent_message: Annotated[SentTranscript | None, WireOmitDefault()] = (
-        None
+    diff: Annotated[ToolDiff | NoToolDiff, WireOmitDefault()] = NoToolDiff()
+    sent_message: Annotated[SentTranscript | NoSentMessage, WireOmitDefault()] = (
+        NoSentMessage()
     )
 
 

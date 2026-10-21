@@ -177,7 +177,7 @@ class CliReplacingArguments(CliPathArguments):
         return (
             super()
             .call(call_id)
-            .patched(ToolDiff("".join(patch.text for patch in patches if patch)))
+            .patched(ToolDiff("".join(part.text for patch in patches for part in patch.parts())))
         )
 
 
@@ -211,4 +211,4 @@ class CliWriteArguments(CliPathArguments):
         call = super().call(call_id)
         before = self.path + " (previous content not supplied)"
         diff = ToolDiff.from_versions(self.path, "", self.content, before_path=before)
-        return call.patched(diff) if diff else call
+        return diff.patch(call)
