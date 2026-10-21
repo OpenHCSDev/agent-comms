@@ -45,7 +45,8 @@ class CoordinationSession(CoordinationStore):
             raise ValueError("coordinator clock must return a nonnegative integer millisecond")
         return max(now, floor)
 
-    def _begin_transaction(self, connection: sqlite3.Connection) -> None:
+    @classmethod
+    def _begin_transaction(cls, connection: sqlite3.Connection) -> None:
         """Retire existing rollback-journal readers before changing any state."""
         if connection.in_transaction:
             raise IntegrityViolationError("nested coordinator transaction is not allowed")

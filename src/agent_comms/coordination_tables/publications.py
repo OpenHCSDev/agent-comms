@@ -18,22 +18,13 @@ from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
     TypedTable,
 )
-
-
-def canonical_publication_key(execution_id: str, exact_target: str) -> str:
-    """Return the sole deterministic publication identity for an obligation route."""
-    validate_execution_id(execution_id)
-    require_nonempty(exact_target, "exact_target")
-    require_bounded(exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
-    key = f"publication:v1:{execution_id}:{exact_target}"
-    require_bounded(key, "publication_key", MAX_IDENTIFIER_CHARS)
-    return key
 
 
 @dataclass(frozen=True, slots=True)

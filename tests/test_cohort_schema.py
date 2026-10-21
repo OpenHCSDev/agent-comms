@@ -10,9 +10,8 @@ from threading import Barrier
 
 import pytest
 
-from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.cohort_schema import CohortTable, install_private_cohort_schema
 from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.coordinator import Coordination
 
 ROOT = "a" * 32
@@ -152,17 +151,15 @@ def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
         assert count == 0
 
 
-def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> None:
+def test_schema_is_opt_in_declared_and_idempotent_on_reopen(tmp_path: Path) -> None:
     path = tmp_path / "coordination.sqlite3"
     with Coordination(str(path)) as store:
-        assert store.session.schema_version == COORDINATION_SCHEMA_VERSION
         assert "claim_batch_receipts" not in _tables(store)
         assert "cohort_delivery_receipts" not in _tables(store)
         install_private_cohort_schema(store)
         before = set(_tables(store))
         install_private_cohort_schema(store)
         assert _tables(store) == before
-        assert store.session.schema_version == COORDINATION_SCHEMA_VERSION
     if os.name == "posix":
         assert path.stat().st_mode & 0o077 == 0
     # Windows' st_mode does not attest NTFS ACL protection.
@@ -171,10 +168,7 @@ def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> 
         assert _tables(reopened) == before
         assert reopened.session._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
         assert reopened.session._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-        assert (
-            reopened.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
-            == 2
-        )
+        assert not CohortTable.schema_differs(reopened.session._connection)
 
 
 def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_path: Path) -> None:
@@ -455,22 +449,14 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
         assert member_count == 1
 
 
-@pytest.mark.parametrize("problem", ["partial", "version", "drift"])
-def test_reopen_rejects_partial_unsupported_or_drifted_schema(tmp_path: Path, problem: str) -> None:
+@pytest.mark.parametrize("problem", ["partial", "drift"])
+def test_reopen_rejects_partial_or_drifted_schema(tmp_path: Path, problem: str) -> None:
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         if problem == "partial":
-            store.session._connection.execute("CREATE TABLE cohort_schema_meta (x INTEGER)")
+            store.session._connection.execute("CREATE TABLE claim_batch_members (x INTEGER)")
         else:
             install_private_cohort_schema(store)
-            if problem == "version":
-                store.session._connection.execute("DROP TRIGGER cohort_meta_update_guard")
-                store.session._connection.execute("PRAGMA ignore_check_constraints=ON")
-                try:
-                    store.session._connection.execute("UPDATE cohort_schema_meta SET version=999")
-                finally:
-                    store.session._connection.execute("PRAGMA ignore_check_constraints=OFF")
-            else:
-                store.session._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
+            store.session._connection.execute("DROP INDEX cohort_delivery_receipts_recipient_lookup_wire_seq_idx")
         before = set(_tables(store))
         with pytest.raises(SchemaVersionError):
             install_private_cohort_schema(store)
@@ -488,9 +474,9 @@ def test_two_process_like_connections_serialize_explicit_migration(tmp_path: Pat
         with Coordination(path) as store:
             barrier.wait(timeout=5)
             install_private_cohort_schema(store)
-            return store.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
+            return CohortTable.schema_differs(store.session._connection)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         left = pool.submit(migrate)
         right = pool.submit(migrate)
-        assert (left.result(timeout=10), right.result(timeout=10)) == (2, 2)
+        assert (left.result(timeout=10), right.result(timeout=10)) == (False, False)

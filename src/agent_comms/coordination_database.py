@@ -16,17 +16,10 @@ from typing import Self
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
-    SchemaVersionError,
 )
-from agent_comms.coordination_schema import (
-    COORDINATION_SCHEMA_VERSION,
-    CoordinatorTable,
-    coordinator_schema,
-)
-from agent_comms.coordination_tables.metadata import SchemaMeta
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     SQLiteTableName,
-    SQLiteUserVersion,
     StoreWriter,
 )
 
@@ -126,10 +119,10 @@ class CoordinationStore(StoreWriter):
 
     @classmethod
     def digest(cls, path: Path) -> str:
-        """The store's version, schema and rows as SQLite reads them, whichever of its
-        files hold them."""
+        """The store's schema and rows as SQLite reads them, whichever of its files hold
+        them."""
         with closing(cls.read_snapshot(path)) as db:
-            content = hashlib.sha256(str(db.execute("PRAGMA user_version").fetchone()[0]).encode())
+            content = hashlib.sha256()
             for statement in db.iterdump():
                 content.update(statement.encode())
             return content.hexdigest()
@@ -315,43 +308,27 @@ class CoordinationStore(StoreWriter):
         return info
 
     def _initialize_schema(self) -> None:
-        # Existing immutable metadata needs only a consistent read. Opening an
+        # An installed schema needs only a consistent read. Opening an
         # ordinary reader must never become a writer awaiting other readers'
         # release, especially before the wire -> registry -> SQLite lock order.
         self._connection.execute("BEGIN")
         try:
-            version = self.schema_version
-            if not self._empty_schema(version):
-                SchemaMeta.require_current(self._connection, version)
+            if SQLiteTableName.stored(self._connection):
+                CoordinatorTable.require_schema(self._connection)
                 return
         finally:
             self._connection.execute("ROLLBACK")
 
         # Only installation owns a write transaction. Recheck after taking it:
         # another initializer may have installed the schema since the read.
-        # SQLite's executescript() implicitly commits an existing transaction; execute
-        # complete trigger-aware statements individually under this one lock.
         with self.writing():
-            version = self.schema_version
-            if self._empty_schema(version):
-                statement = ""
-                for line in coordinator_schema().splitlines(keepends=True):
-                    statement += line
-                    if sqlite3.complete_statement(statement):
-                        self._connection.execute(statement)
-                        statement = ""
-                if statement.strip():
-                    raise SchemaVersionError("coordination schema has an incomplete statement")
-                SchemaMeta.current().insert(self._connection)
-                self._connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION}")
+            if SQLiteTableName.stored(self._connection):
+                CoordinatorTable.require_schema(self._connection)
             else:
-                SchemaMeta.require_current(self._connection, version)
+                CoordinatorTable.create_schema(self._connection)
 
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         return StoreWriter.transaction(self, self._connection)
-
-    def _empty_schema(self, version: int) -> bool:
-        return version == 0 and not SQLiteTableName.stored(self._connection)
 
     def _enforce_private_modes(self) -> None:
         if os.name == "nt":
@@ -362,11 +339,6 @@ class CoordinationStore(StoreWriter):
             with suppress(FileNotFoundError):
                 if stat.S_IMODE(candidate.lstat().st_mode) != 0o600:
                     os.chmod(candidate, 0o600, follow_symlinks=False)
-
-    @property
-    def schema_version(self) -> int:
-        (version,) = SQLiteUserVersion.read(self._connection.execute("PRAGMA user_version"))
-        return version.user_version
 
     def close(self) -> None:
         self._connection.close()

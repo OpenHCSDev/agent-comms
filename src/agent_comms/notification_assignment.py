@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .audience_manifest import FrozenRecipient
-from .coordination_schema import COORDINATION_SCHEMA_VERSION
+from .coordination_schema import CoordinatorTable
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
@@ -23,7 +23,7 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
+from .typed_table import BooleanStorage, TypedRow, sql_literal
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
@@ -303,10 +303,7 @@ class NotificationAssignment(NotificationSource):
         from .native_input_record import TriageNativeExecution
         from .native_runtime_input import NativeRuntimeInput
 
-        if SQLiteUserVersion.read(connection.execute("PRAGMA user_version")) != [
-            SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
-        ]:
-            raise ValueError("Channel notification status has an unsupported schema")
+        CoordinatorTable.require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         triage_stage = sql_literal(TriageNativeExecution)
         # The window's assignments and their native-input membership are each

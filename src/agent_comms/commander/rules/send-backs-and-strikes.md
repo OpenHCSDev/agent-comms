@@ -1,6 +1,6 @@
 ---
 name: send-backs-and-strikes
-description: "every send-back, deadline violation under deadlines.md or false claim is a strike at once, in public and plain words, two take the task away; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
+description: "every send-back, false claim or turn ended stalled on nothing is a strike at once; a clock alone never strikes (deadlines.md), in public and plain words, two take the task away; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
 type: hard-rule
 ---
 

@@ -7,15 +7,15 @@ the declared columns and field types without upgrading existing storage.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
+import re
 import sqlite3
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
@@ -33,7 +33,7 @@ from typing import (
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
+from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, WireValue, compile_decoder
 from .locked_store import DurableFile, FileStore, SQLiteFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
@@ -225,7 +225,7 @@ class JsonStorage(SqlStorage):
             is_dataclass(annotation)
             or get_origin(annotation) in (list, tuple, dict, frozenset, Union, types.UnionType)
             or isinstance(annotation, type)
-            and issubclass(annotation, DeclaredFamily)
+            and issubclass(annotation, (DeclaredFamily, WireValue))
         )
 
     @classmethod
@@ -263,20 +263,45 @@ class Column:
         return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
 
 
+_NAME_SEPARATORS = re.compile(r"\W+")
+
+
 @dataclass(frozen=True)
 class Index:
-    columns: tuple[str, ...]
-    unique: bool = False
+    """An index over the row's columns, named by field."""
+
+    terms: tuple[str, ...]
+    unique: bool = field(default=False, kw_only=True)
     where: str | None = None
 
-    def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
+    def term_sql(self, owner: type[TypedTable]) -> str:
+        return owner._column_list(self.terms)
+
+    def name(self, owner: type[TypedTable]) -> str:
+        """Derived from what the index covers, so adding another never renames this one."""
+        parts = [owner.declared_name, self.term_sql(owner)]
+        if self.where:
+            parts += ["where", owner._sql(self.where)]
+        if self.unique:
+            parts.append("unique")
+        return "_".join(_NAME_SEPARATORS.sub("_", part).strip("_").lower() for part in (*parts, "idx"))
+
+    def sql(self, owner: type[TypedTable], *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
-            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
-            f"({owner._column_list(self.columns)})"
+            f"{existence}{_identifier(self.name(owner))} ON {_identifier(owner.declared_name)} "
+            f"({self.term_sql(owner)})"
             + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
+
+
+@dataclass(frozen=True)
+class ExpressionIndex(Index):
+    """An index over SQL expressions of the row's {field} names."""
+
+    def term_sql(self, owner: type[TypedTable]) -> str:
+        return ", ".join(owner._sql(term) for term in self.terms)
 
 
 @dataclass(frozen=True)
@@ -511,13 +536,6 @@ class TableSchema(ABC):
         return {name: sql for row in cls.schema_rows() for name, sql in row.schema_objects().items()}
 
     @classmethod
-    def schema_digest(cls) -> str:
-        """Identity of the actual declarations, including generated family checks."""
-        return hashlib.sha256(
-            json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-
-    @classmethod
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         """The objects this file's kind compares: by default every object the file owns.
 
@@ -549,6 +567,41 @@ class TableSchema(ABC):
         """The writer's answer to a stored schema that differs from the declaration."""
 
 
+class RowMutation(Enum):
+    """SQLite's destructive row events own their immutable-history guards."""
+
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+    def abort_trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        name = f"{row.declared_name}_{self.value.lower()}_abort"
+        return SQLiteSchemaObject(
+            name,
+            f'CREATE TRIGGER "{name}" BEFORE {self.value} ON "{row.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END",
+        )
+
+
+class AppendOnlyTables(TableSchema):
+    """Declared history tables reject UPDATE and DELETE, even from raw SQL."""
+
+    @classmethod
+    def _append_only_triggers(cls) -> dict[str, str]:
+        triggers = (mutation.abort_trigger(row)
+                    for row in cls.schema_rows() for mutation in RowMutation)
+        return {trigger.name: trigger.sql for trigger in triggers}
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return super().declared_schema() | cls._append_only_triggers()
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        super().create_schema(db)
+        for statement in cls._append_only_triggers().values():
+            db.execute(statement)
+
+
 class SharedFileTables(TableSchema):
     """Tables that share a file with others: only their own tables and indexes compare."""
 
@@ -556,21 +609,7 @@ class SharedFileTables(TableSchema):
 
     @classmethod
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return [item for row in cls.schema_rows() for item in row.stored_objects(db)]
-
-
-class PrefixedTables(TableSchema):
-    """Tables named under prefixes in a shared file: a stray object with a prefix also differs."""
-
-    __slots__ = ()
-    name_prefixes: ClassVar[tuple[str, ...]]
-
-    @classmethod
-    def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND ("
-            + " OR ".join("name LIKE ?" for _ in cls.name_prefixes) + ")",
-            tuple(f"{prefix}%" for prefix in cls.name_prefixes)))
+        return TypedTable.objects_of(db, cls.schema_rows())
 
 
 class AllObjectsTables(TableSchema):
@@ -599,9 +638,8 @@ class DerivedTables(TableSchema):
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
         if cls.schema_differs(db):
-            db.execute("BEGIN IMMEDIATE")
-            cls.reset_schema(db)
-            db.execute("COMMIT")
+            with SQLiteFile.write_transaction(db):
+                cls.reset_schema(db)
 
 
 class DurableTables(TableSchema):
@@ -612,6 +650,12 @@ class DurableTables(TableSchema):
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
         cls.require_schema(db)
+
+
+@lru_cache(maxsize=4)
+def _claimed_names(members: tuple[type[TypedTable], ...]) -> frozenset[str]:
+    """Every object name any row declares; keyed by the registry, so a new member refreshes it."""
+    return frozenset(name for row in members for name in row.schema_objects())
 
 
 @dataclass(frozen=True)
@@ -717,9 +761,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
-        for ordinal, index in enumerate(indexes):
-            index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
+        for index in indexes:
+            if index.name(cls) in statements:
+                raise TypeError(f"{cls.__name__} declares two indexes named {index.name(cls)}")
+            statements[index.name(cls)] = index.sql(cls, if_not_exists=if_not_exists)
         statements.update(cls.triggers(if_not_exists=if_not_exists))
         return statements
 
@@ -829,10 +874,25 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def stored_objects(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """This table's stored SQL and every index or trigger attached to it."""
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-            (cls.declared_name,)))
+        return TypedTable.objects_of(db, (cls,))
+
+    @staticmethod
+    def objects_of(db: sqlite3.Connection, rows: Iterable[type[TypedTable]]) -> list[SQLiteSchemaObject]:
+        """The rows' own stored objects, in one catalog read.
+
+        Every object they declare, whichever table a trigger guards, and any object
+        attached to their tables that no row's declaration claims: a stray.
+        """
+        rows = tuple(rows)
+        declared = {name for row in rows for name in row.schema_objects()}
+        tables = tuple(row.declared_name for row in rows)
+        claimed = _claimed_names(TypedTable.members_with(TypedTable))
+        stored = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (name IN ("
+            + ",".join("?" for _ in declared) + ") OR tbl_name IN ("
+            + ",".join("?" for _ in tables) + "))",
+            (*declared, *tables)))
+        return [item for item in stored if item.name in declared or item.name not in claimed]
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:
@@ -960,20 +1020,12 @@ class StoreWriter(DurableFile, SQLiteFile, FileStore):
         """Watch committed row changes, never SQLite reader attachment or retirement."""
         return cls._source_paths(cls.path_in(root))
 
-    def _begin_transaction(self, connection: sqlite3.Connection) -> None:
-        connection.execute("BEGIN IMMEDIATE")
-
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        """The file's write transaction, and a touch of its watch file when rows changed."""
         before = connection.total_changes
-        self._begin_transaction(connection)
-        try:
+        with self.write_transaction(connection):
             yield connection
-            connection.execute("COMMIT")
-        except BaseException:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
         if connection.total_changes != before:
             self._source_paths(self.store.path)[0].write_bytes(b'')
 
@@ -1047,10 +1099,9 @@ class TypedStore(StoreWriter, TableSchema):
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
             if not self.stored_schema(connection):
-                connection.execute("BEGIN IMMEDIATE")
-                if not self.stored_schema(connection):
-                    self.create_schema(connection)
-                connection.execute("COMMIT")
+                with self.write_transaction(connection):
+                    if not self.stored_schema(connection):
+                        self.create_schema(connection)
             # Under the attachment boundary: a derived file is rebuilt, a durable one refused.
             self.reconcile_schema(connection)
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
