@@ -6,15 +6,13 @@ from agent_comms.installer.carry import Carried, Carry
 
 
 class InstallSchedule(Carry):
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return (root / "install-deadline.json",)
+    def backup_files(self) -> tuple[Path, ...]:
+        return (self.root / "install-deadline.json",)
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        paths = tuple(path for path in cls.backup_files(root) if path.exists())
+    def carry(self) -> Carried:
+        paths = tuple(path for path in self.backup_files() if path.exists())
         for path in paths:
-            cls.require_confined(root, path)
-            if apply:
+            self.require_confined(self.root, path)
+            if self.apply:
                 path.unlink()
-        return Carried(len(paths), {}, tuple(path.name for path in paths) if apply else ())
+        return Carried(len(paths), {}, tuple(path.name for path in paths) if self.apply else ())

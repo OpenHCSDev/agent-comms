@@ -196,6 +196,10 @@ class ResourceBackup(ABC):
     @abstractmethod
     def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
 
+    @abstractmethod
+    def spill_directory(self, configured: Path) -> Path:
+        """Carry originals share the snapshot's retention; no snapshot creates nothing."""
+
 
 @dataclass
 class StoreBackup(ResourceBackup):
@@ -204,6 +208,9 @@ class StoreBackup(ResourceBackup):
     route: Path
     path: Path
     kept: ClassVar[int] = 2
+
+    def spill_directory(self, configured: Path) -> Path:
+        return self.path
 
     def files(self) -> dict[str, str]:
         return FieldCodec.decode(dict[str, str],
@@ -332,22 +339,25 @@ class StoreBackup(ResourceBackup):
                 os.close(directory)
         return contents
 
+    def file_original(self, name: str, saved: dict[str, str]) -> bool:
+        """An unchanged selected file keeps its identity as well as its contents."""
+        target = self.root / name
+        if name not in saved:
+            return not target.exists()
+        return target.exists() and self.digest(target) == saved[name]
+
     def original(self) -> bool:
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
-            target = self.root / name
-            if name not in saved:
-                if target.exists():
-                    return False
-            elif not target.exists() or self.digest(target) != saved[name]:
-                return False
-        return True
+        return all(self.file_original(name, saved)
+                   for name in json.loads((self.path / 'selected.json').read_text()))
 
     def restore(self) -> None:
         saved = self.files()
         for name in json.loads((self.path / 'selected.json').read_text()):
+            if self.file_original(name, saved):
+                continue
             target = self.root / name
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
@@ -376,6 +386,9 @@ class StoreBackup(ResourceBackup):
 
 class NoBackup(ResourceBackup):
     """A runtime-only install owns no files, paths or snapshot operations."""
+
+    def spill_directory(self, configured: Path) -> Path:
+        return configured
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
         return ()
