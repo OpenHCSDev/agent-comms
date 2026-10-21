@@ -1840,7 +1840,8 @@ def main() -> int:
     parser.add_argument("--head", required=True)
     args = parser.parse_args()
     result = compare(Path.cwd(), args.base, args.head, args.root)
-    print(json.dumps(FieldCodec.project(result, "report"), indent=2))
+    # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
+    print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges
     # stderr), so what grew goes to stderr last; stdout stays the one JSON report.
     for name, grown in sorted(result.delta.items()):
