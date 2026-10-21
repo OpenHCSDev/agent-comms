@@ -44,7 +44,7 @@ from .field_codec import FieldCodec, MalformedRecord, boundary_decoder, SealExcl
 from .locked_store import DurableFile, SQLiteFile
 from .message_reference import MessageReference
 from .messages import Message
-from .private_path import FileIdentity, FileRevision
+from .private_path import FileIdentity, FileObservation, FileRevision
 from .store_files import ExclusiveLock, LockMode
 from .thread_identity import ThreadIncarnation
 from .typed_table import (
@@ -859,7 +859,7 @@ class Addressed(CheckpointTable, TypedTable):
     @classmethod
     def observed_after(
         cls, bus: WireLog, revision: FileRevision, source: FileRevision,
-        marker_revision: FileRevision, lookup: str, after_seq: int,
+        marker_revision: FileObservation, lookup: str, after_seq: int,
     ) -> tuple[WireMetadata, bool]:
         """Read one recipient's indexed aggregate only at the captured revision.
 

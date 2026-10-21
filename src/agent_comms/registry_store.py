@@ -53,10 +53,14 @@ class CachedRegistry(ABC):
 
 @dataclass(frozen=True)
 class UncachedRegistry(NullMember, CachedRegistry):
-    def revision_at(self, revision, decode):
+    def revision_at(
+        self, revision: FileObservation, decode: Callable[[CachedRegistry], RegistryRevision],
+    ) -> RegistryRevision:
         return decode(self)
 
-    def entry_at(self, revision, name, decode):
+    def entry_at(
+        self, revision: FileRevision, name: str, decode: Callable[[], RegistryEntry],
+    ) -> RegistryEntry:
         return decode()
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
@@ -75,10 +79,14 @@ class RegistryRevision(CachedRegistry):
     document: RegistryDocument
     raw: dict
 
-    def revision_at(self, revision, decode):
+    def revision_at(
+        self, revision: FileObservation, decode: Callable[[CachedRegistry], RegistryRevision],
+    ) -> RegistryRevision:
         return self if self.revision == revision else decode(self)
 
-    def entry_at(self, revision, name, decode):
+    def entry_at(
+        self, revision: FileRevision, name: str, decode: Callable[[], RegistryEntry],
+    ) -> RegistryEntry:
         return self.document.entry(name) if self.revision == revision else decode()
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:

@@ -400,13 +400,14 @@ class InputObservation(ABC):
         self, settled: SettledTick, revision: TickRevision, lookup: str,
     ) -> tuple[WireMetadata, bool]:
         """Read this owner's address aggregate only from the captured index cut."""
-        previous_info, current_info = settled.revision.bus[0], revision.bus[0]
-        if previous_info is None or current_info is None or revision.checkpoint is None:
-            raise RelationViolationError("Wire address index has no stable file revision")
+        unstable = RelationViolationError("Wire address index has no stable file revision")
+        previous_info = settled.revision.bus[0].require(unstable)
+        current_info = revision.bus[0].require(unstable)
+        checkpoint = revision.checkpoint.require(unstable)
         if previous_info.identity != current_info.identity:
             raise RelationViolationError("Wire tail does not extend the settled source")
         return Addressed.observed_after(
-            self.comms.bus.log, revision.checkpoint, current_info,
+            self.comms.bus.log, checkpoint, current_info,
             revision.bus[1], lookup, settled.through_seq,
         )
 
