@@ -135,11 +135,11 @@ class MessageBus[Writes: Publisher]:
         self, name: str, *, acknowledgment: type[WatchAcknowledgment],
         after: InboxStart = FirstUnreadStart(),
     ) -> AsyncIterator[Message]:
-        from .watched import Watched
+        from .watched import FileSource
 
         reader = self._registry.require(name).incarnation
         maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(Watched.observations(self.bus.path, maintenance.state_path)) as changes:
+        async with aclosing(self.bus.watch(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
                 maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
@@ -169,10 +169,10 @@ class MessageBus[Writes: Publisher]:
                 await self.resumed()
 
     async def resumed(self) -> None:
-        from .watched import Watched
+        from .watched import FileSource
 
         maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(Watched.observations(maintenance.state_path)) as changes:
+        async with aclosing(Bus.watch_sources(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
                 if not maintenance.read().turn_pending:
                     return

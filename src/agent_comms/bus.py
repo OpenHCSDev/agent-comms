@@ -28,6 +28,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
+from agent_comms.watched import Watched
 
 
 class PublicRecord(BusRecord):
@@ -49,7 +50,7 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
-class Bus(StoreWriter, DurableFile):
+class Bus(StoreWriter, DurableFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
