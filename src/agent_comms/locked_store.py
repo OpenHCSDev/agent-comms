@@ -328,7 +328,7 @@ class PublishedSQLiteFile(SQLiteFile):
         """Announce a completed mutation or replacement of this owner's store."""
         try:
             cls._source_paths(path)[0].write_bytes(b"")
-        except OSError as error:
+        except Exception as error:
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
