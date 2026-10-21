@@ -17,7 +17,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import base64
 import hashlib
@@ -41,7 +40,7 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
-from .cli_bridges.shared import DeclaredOptions
+from .cli_bridges.shared import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire
@@ -804,7 +803,7 @@ class Connector:
 
 @dataclass(frozen=True, kw_only=True)
 class ConnectorVerb(
-    DeclaredFamily, DeclaredOptions, Command,
+    DeclaredVerb, Command,
     affix="Verb", discovery_package=HostService.__module__,
 ):
     """One connector command: its options are its fields, and its parser comes from them."""
@@ -815,17 +814,8 @@ class ConnectorVerb(
     def apply(self, ctx: ConnectorStore) -> int | str: ...
 
     @classmethod
-    def parse(cls, argv: Sequence[str]) -> Self:
-        parser = argparse.ArgumentParser(
-            prog=cls.program,
-            description=__doc__,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        verbs = parser.add_subparsers(dest="command", required=True)
-        for member in cls.members_with(cls):
-            member.add_parser(verbs)
-        args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_arguments(args)
+    def tool(cls) -> str:
+        return cls.program
 
 
 @dataclass(frozen=True, kw_only=True)
