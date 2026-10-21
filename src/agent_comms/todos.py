@@ -777,9 +777,7 @@ class PresentCheckout(ProgressCheckout):
 
     def edits(self) -> Iterator[float]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
-        changed = (*self.git("diff", "--name-only", "-z", "HEAD").split("\0"),
-                   *self.git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
-        return (path.stat().st_mtime for path in (self.path / name for name in changed if name)
+        return (path.stat().st_mtime for path in WorkBranches(self.path).uncommitted()
                 if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:

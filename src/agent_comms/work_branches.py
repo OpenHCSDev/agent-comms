@@ -184,10 +184,24 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(f"{' '.join(command[:3])} in {self.checkout}: {detail}")
         return result.stdout.decode()
 
+    def uncommitted(self) -> tuple[Path, ...]:
+        """Each tracked file changed since HEAD and each untracked file not ignored.
+
+        A submodule is pinned package data, never a unit's edit, so its git state is not read:
+        one checkout with a broken submodule link must not fail every reader of every unit.
+        """
+        listed = (
+            *self._run("git", "--no-optional-locks", "diff", "--name-only", "-z",
+                       "--ignore-submodules=all", "HEAD").split("\0"),
+            *self._run("git", "--no-optional-locks", "ls-files", "--others",
+                       "--exclude-standard", "-z").split("\0"),
+        )
+        return tuple(self.checkout / name for name in listed if name)
+
     @property
     def local_work(self) -> bool:
         """Uncommitted files or HEAD commits absent from every published remote ref."""
-        return bool(self._run("git", "--no-optional-locks", "status", "--porcelain")) or bool(
+        return bool(self.uncommitted()) or bool(
             self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
         )
 
