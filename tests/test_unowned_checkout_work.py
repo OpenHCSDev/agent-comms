@@ -22,7 +22,7 @@ from agent_comms.commander.standing import (
     UnownedWheelSpin,
     WaitingUnownedWheelSpin,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderReview
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
@@ -166,12 +166,10 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     checkout = original.registry.storage_rule.order_checkout('worker', 'P1')
     with practice_copy(original.root, tmp_path / 'practice') as (root, _measurement):
         c = Comms(root)
-        review = CommanderReview(frozenset())
         with LaunchRoot.from_path(root).selected():
             (checkout / 'work.py').write_text('# not yet published\n')
             assert_retained(c)
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
+            StandingRule.enforce_all(c, 'lead', StandingRule.broken(c, 'lead'))
             git(checkout, 'add', 'work.py')
             git(checkout, 'commit', '-q', '-m', 'Unpushed work')
             assert git(checkout, 'status', '--porcelain') == ''
@@ -184,28 +182,17 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
+            StandingRule.enforce_all(c, 'lead', StandingRule.broken(c, 'lead'))
             config.write(tmp_path / 'copy-home')
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)
             assert available[0].unit == 'idle'
-            assert set(available).isdisjoint(review.violations)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assigned = c.goals.todos.get('P2')
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
-        drain_candidate_catchup(root)
-        history = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
-             '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),
-            env=os.environ.copy(), capture_output=True, text=True, timeout=30, check=True)
-        assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-        assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-        print('PRIVATE HEARTBEAT', history.stdout)
+            StandingRule.enforce_all(c, 'lead', StandingRule.broken(c, 'lead'))
         print('PRIVATE WATCHER: dirty and unpushed retained; clean pushed assigned to', assigned.holder)
     assert original.goals.todos.get('P2') == untouched
     assert original.registry.require('idle').goal == idle_goal

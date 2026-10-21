@@ -175,12 +175,6 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
-    def heartbeat_group(self) -> object:
-        return type(self)
-
-    def heartbeat_line(self, current: Sequence[WaitingUnownedWheelSpin]) -> str:
-        rows = ", ".join(sorted(rule.todo.id for rule in current))
-        return f"{len(current)} unowned rows wait for a new unit: {rows}"
 
 
 @dataclass(frozen=True)

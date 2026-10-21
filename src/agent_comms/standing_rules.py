@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -25,6 +25,9 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
     from agent_comms.message_reference import MessageReference
+    from agent_comms.commander_pings import Ping
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.ui_model.unit_state import UnitState
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import Todo
 
@@ -39,6 +42,14 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
+
+    def unit_states(self) -> tuple[UnitState, ...]:
+        return ()
+
+    def commander_pings(self, todos: Mapping[str, Todo],
+                        states: Mapping[ThreadIncarnation, UnitState]) -> tuple[Ping, ...]:
+        """Only rules that declare a commander decision contribute a ping."""
+        return ()
 
     def rejected_line(self) -> str:
         return f"Not applied (goal changed): {self.line()}"
@@ -57,35 +68,6 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                 logging.info("Skipped stale enforcement: %s", changed)
                 rejected.add(rule)
         return frozenset(rejected)
-
-    def heartbeat_group(self) -> object:
-        """Ordinary violations each own one heartbeat line."""
-        return self
-
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        return self.line()
-
-    @staticmethod
-    def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
-        groups: dict[object, list[StandingRule]] = defaultdict(list)
-        for rule in rules:
-            groups[rule.heartbeat_group()].append(rule)
-        return groups
-
-    @classmethod
-    def heartbeat_changes(cls, previous: Iterable[StandingRule],
-                          current: Iterable[StandingRule]) -> tuple[str, ...]:
-        """Render changed groups through their owning rule, without replaying unchanged ones."""
-        before, after = cls._heartbeat_groups(previous), cls._heartbeat_groups(current)
-        lines = []
-        for group in dict.fromkeys((*after, *before)):
-            old, new = before.get(group, []), after.get(group, [])
-            if frozenset(old) == frozenset(new):
-                continue
-            rule = (new or old)[0]
-            prefix = "RULE" if new else "NO LONGER CURRENT:"
-            lines.append(f"{prefix} {rule.heartbeat_line(new or old)}")
-        return tuple(lines)
 
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
@@ -188,6 +170,16 @@ class ReviewTimerUp(HeldOrderDue):
         return comms.goals.todos.timers_up_for_commander(
             actor, comms.registry, time.time())
 
+    def commander_pings(self, todos, states):
+        from .commander_pings import OrderRevision, ReviewTimerPing
+        from .ui_model.unit_state import Moving
+
+        todo = todos[self.problem]
+        unit = todo.held().owner_identity
+        state = type(states[unit]) if unit in states else Moving
+        return (ReviewTimerPing(unit, state, (OrderRevision.of(todo),),
+                                self.since.recorded_at("A review timer")),)
+
     def line(self) -> str:
         return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
                 f"order {self.order} -> read its diff and judge it")
@@ -284,19 +276,6 @@ class DirectiveUnacted(OrderRefusingStandingRule, DatedStandingRule):
             return ()
         return (f"{message.message_id}: overdue owner directive on request {self.request}; "
                 "reply to the original message or use --answers MESSAGE_ID.",)
-
-    def heartbeat_group(self) -> object:
-        return type(self), self.request
-
-    def heartbeat_line(self, current: Sequence[Self]) -> str:
-        oldest = min(current, key=lambda rule: rule.directive.seq).directive
-        newest = max(current, key=lambda rule: rule.directive.seq).directive
-        return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
-            f"oldest {oldest.seq} due {oldest.due_time}; "
-            f"newest {newest.seq} due {newest.due_time} "
-            "-> order the next step or mark the request done"
-        )
 
 
 @dataclass(frozen=True)

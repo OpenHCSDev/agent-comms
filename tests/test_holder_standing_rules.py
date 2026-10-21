@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
+from source_revision_fixture import SourceRepository
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import FileLine
@@ -20,8 +20,9 @@ from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, SayVerb
-from agent_comms.commander.standing import (
-    Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
+from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.ui_model.unit_state import (
+    AwaitingCommander, Blocked, Detached, UnitState, RetryableUnitBlock, UnresolvedUnitBlock,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
@@ -31,7 +32,7 @@ from agent_comms.goal_generation import GenerationState, ReadyGeneration, Retrya
 from agent_comms.goal_states import ActiveGoal, BlockedGoal
 from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import Message, QuestionKind
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.order_runs import MechanicalOrderRun
@@ -50,12 +51,10 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 @pytest.fixture
 def held_bus(comms, tmp_path):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
-    Repo.git(tmp_path, "init", "-q", "-b", "main")
-    Repo.git(tmp_path, "-c", "user.name=Held-order fixture", "-c", "user.email=held@example.invalid",
-             "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Held-order source")
-    Repo.git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
+    source = SourceRepository.create(tmp_path / "source")
     for name in ("lead", "worker", "outsider"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(tmp_path)))
+        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout),
+            process_identity=ProcessIdentity.capture(os.getpid())))
     comms.goals.update_goal("lead", SetGoalAction(
         text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
     ))
@@ -66,8 +65,8 @@ def held_bus(comms, tmp_path):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-                check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
+                id=f"order-{problem}", owner=FileLine("owner.py", 2), scope=source.scope(), run=MechanicalOrderRun(),
+                check=OrderCheck(str(source.checkout), "printf 1", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
                 first_call_deadline=RecordedEventTime(now + 3600),
@@ -107,8 +106,8 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     store.recover_unreserved_ready(goal.id, generation.number)
     store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
     reserved = store.require_generation(goal.id)
-    assert Blocked.violations(held_bus, "lead") == ()
-    violation, = UnresolvedBlock.violations(held_bus, "lead")
+    violation, = Blocked.violations(held_bus, "lead")
+    assert isinstance(violation.blocks[0], UnresolvedUnitBlock)
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal.require() == goal
@@ -125,22 +124,22 @@ def test_unresolved_block_accepts_ledger_state_independently_of_goal_state(holde
     generation = holder_generation
     goal = Goal("Held work", "goal", published_seq=0)
     expected = not isinstance(generation, RetryableGeneration)
-    assert UnresolvedBlock.accepts(goal, generation) == expected
+    assert UnresolvedUnitBlock.accepts(goal, generation) == expected
     blocked = replace(goal, state=BlockedGoal("Failed turn"))
-    assert UnresolvedBlock.accepts(blocked, generation) == expected
+    assert UnresolvedUnitBlock.accepts(blocked, generation) == expected
 
 
 def test_blocked_accepts_only_real_goal_blocks_with_retryable_generations(holder_generation):
     generation = holder_generation
     goal = Goal("Held work", "goal", published_seq=0)
-    assert not Blocked.accepts(goal, generation)
+    assert not RetryableUnitBlock.accepts(goal, generation)
     blocked = replace(goal, state=BlockedGoal("Failed turn"))
-    assert Blocked.accepts(blocked, generation) == isinstance(generation, RetryableGeneration)
+    assert RetryableUnitBlock.accepts(blocked, generation) == isinstance(generation, RetryableGeneration)
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):
     return comms.bus.publisher.publish_ordinary(
-        Message(sender=sender, target=target, type=InfoKind, body="Not a question", timestamp=timestamp,
+        Message(sender=sender, target=target, type=QuestionKind, body="A decision is needed", timestamp=timestamp,
                 answers=answers), origin=AgentOrigin(),
     )
 
@@ -151,7 +150,7 @@ def test_blocked_holder_republishes_every_order_without_replaying_unknown(held_b
     inputs = InputDispositions(held_bus.root)
     unresolved = inputs.lookup("unresolved-input")
     violation, = Blocked.violations(held_bus, "lead")
-    assert violation.block_record.is_file()
+    assert violation.blocks[0].goal.id == original.id
     print(violation.line())
     previous_orders = {todo.id: todo.order.checked().id
                        for todo in held_bus.goals.todos.held_orders()}
@@ -183,17 +182,17 @@ def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
 
 
 def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(held_bus, tmp_path):
-    owner = tmp_path / "owner.py"
-    owner.write_text("class Owner:\n    pass\n")
+    directory = Path(held_bus.goals.todos.get("P1").order.checked().check.directory)
+    owner = directory / "owner.py"
+    owner.write_text(SourceRepository.main_source)
     now = time.time()
     held_bus.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P3", commander="lead", request="request",
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Repair P3",
         review_at=RecordedEventTime(now + 3600),
         order=PendingProblemOrder(
-            id="order-P3", owner=FileLine(str(owner), 1),
-            scope=FixScope(FixShape(parents=(FileLine(str(owner), 1),), members=())),
-            run=MechanicalOrderRun(), check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
+            id="order-P3", owner=FileLine("owner.py", 2), scope=SourceRepository.scope(),
+            run=MechanicalOrderRun(), check=OrderCheck(str(directory), "printf 1", CountCheckResult(1)),
             edits=("Repair the existing owner",), banned=("No second store",),
             report="Report the result", at=RecordedEventTime(now - 3600),
             first_call_deadline=RecordedEventTime(now + 3600),
@@ -256,15 +255,15 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     question = publish(held_bus, "worker", "lead", now - 901)
     # An unrelated later answer and message text do not answer this reference.
     publish(held_bus, "lead", "worker", now - 800)
-    violation, = UnitAskUnanswered.violations(held_bus, "lead")
-    assert violation.reference == question.reference
+    violation, = AwaitingCommander.violations(held_bus, "lead")
+    assert violation.questions[0].reference == question.reference
     print(violation.line())
     held_bus.messaging.send("lead", "worker", "Responding", answers=(question.reference,))
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert AwaitingCommander.violations(held_bus, "lead") == ()
     another = publish(held_bus, "worker", "lead", now - 950)
     held_bus.messaging.send("lead", "outsider", "Answer in another conversation",
                             answers=(another.reference,))
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert AwaitingCommander.violations(held_bus, "lead") == ()
 
 
 def test_commander_say_answers_an_unanswered_unit_message(held_bus):
@@ -272,22 +271,20 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus):
     ctx = Commander(**CommanderConfig.read_root(held_bus.root).model_dump())
     say = SayVerb(units="worker", body_file="unused", answers=(question.message_id,))
     held_bus.messaging.send("lead", "worker", "Responding", answers=say.answer_references(ctx))
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert AwaitingCommander.violations(held_bus, "lead") == ()
     with pytest.raises(SystemExit, match="unanswered unit messages"):
         SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
 
 
-def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus):
-    blocked_holder(held_bus)
+def test_one_mro_state_owns_simultaneous_conditions(held_bus):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
-    assert detached.unit == "worker" and set(detached.orders) == {"P1", "P2"}
-    family = HolderCannotRun.violations(held_bus, "lead")
-    assert detached in family
-    blocked, = Blocked.violations(held_bus, "lead")
-    assert blocked in family
-    broken = StandingRule.broken(held_bus, "lead")
-    assert all(rule in broken for rule in family)
+    assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
+    blocked_holder(held_bus)
+    family = UnitState.violations(held_bus, "lead")
+    assert len(family) == 1 and type(family[0]) is Blocked
+    assert Detached.violations(held_bus, "lead") == ()
+    assert family[0] in StandingRule.broken(held_bus, "lead")
 
 
 def legacy_decision_table(comms):
@@ -349,22 +346,28 @@ def test_install_discovers_and_records_decision_cutover_once(held_bus):
     assert GoalWorkDecisions not in chain.pending(ledger.applied())
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
+def test_two_restarted_heartbeats_never_repeat_a_committed_ping(held_bus):
+    from agent_comms.commander_pings import LatestCommanderPing
+    from agent_comms.launch_runtime import LaunchRoot
+    from agent_comms.todos import CommanderCursor
+
     blocked_holder(held_bus)
-    question = publish(held_bus, "worker", "lead", time.time() - 901)
-    expected = tuple(rule.line() for rule in (
-        *Blocked.violations(held_bus, "lead"), *UnitAskUnanswered.violations(held_bus, "lead"),
-    ))
-    heartbeat = CommanderHeartbeat()
-    commander = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
-    assert commander.incarnation in heartbeat.reviews
-    assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
-    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
-        heartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )))
-    message = next(message for message in page.messages if message.sender == heartbeat.sender)
-    assert all(line in message.body for line in expected)
-    assert question.reference.message_id in message.body
-    print(message.body)
+    with LaunchRoot.from_path(held_bus.root).selected():
+        first = CommanderHeartbeat()
+        first.pass_body(held_bus, first.observe(held_bus))
+        commander = held_bus.registry.require("lead").incarnation
+        original = LatestCommanderPing.read(held_bus, first.sender, commander)
+        assert original is not None
+        assert len(original.pings) == 1 and original.body.startswith("BLOCKED worker:")
+        assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+        # A missing cursor simulates death after the committed send, before cursor advance.
+        with held_bus.goals.todos.writing() as db:
+            CommanderCursor.delete(db, commander=commander)
+        for _ in range(2):
+            restarted = CommanderHeartbeat()
+            restarted.pass_body(held_bus, restarted.observe(held_bus))
+            assert LatestCommanderPing.read(held_bus, restarted.sender, commander) == original
+        with held_bus.goals.todos.snapshot() as db:
+            cursor, = CommanderCursor.select(db, commander=commander)
+        assert cursor.message == original.reference
+        print(original.body, "RESTART 1: 0 repeated lines; RESTART 2: 0 repeated lines", sep="\n")

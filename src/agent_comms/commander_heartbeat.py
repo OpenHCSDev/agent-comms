@@ -1,58 +1,25 @@
-"""Service-owned commander review: changed standing rules wake through the real inbox."""
-
+"""Core's commander wake delivers only new, typed decisions, at most five lines."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.commander_pings import (
+    CommanderPingMessage, DeliveredPing, LatestCommanderPing, OrderRevision,
+    Ping,
+)
 from agent_comms.message_bus import WatchPass
+from agent_comms.message_reference import MessageReference
 from agent_comms.registration import Registration
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
-from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.todos import CommanderCursor, ListedPullRequest, PullRequests, Todo
+from agent_comms.ui_model.unit_state import Moving, UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
-    from agent_comms.todos import Todo
-
-
-@dataclass
-class CommanderReview:
-    """One commander's handled observations and its next review position."""
-
-    violations: frozenset[StandingRule]
-    turn: int = 0
-
-    def wake(self, comms: Comms, sender: str, commander: Thread,
-             rules: tuple[StandingRule, ...]) -> None:
-        found = frozenset(rules)
-        previous = self.violations
-        if found == previous:
-            return
-        # Mark the observation before any effect; an uncertain publication is not replayed.
-        self.violations = found
-        rejected = StandingRule.enforce_all(
-            comms, commander.name, (rule for rule in rules if rule not in previous)
-        )
-        # A checked rejection has no effects and must not suppress a fresh observation.
-        self.violations = found - rejected
-        lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
-        owed = comms.goals.todos.held_for_commander(commander.incarnation)
-        units = sorted({todo.held().owner for todo in owed})
-        if units:
-            unit = units[self.turn % len(units)]
-            orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
-            lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
-            self.turn += 1
-        lines.extend(StandingRule.heartbeat_changes(
-            previous, tuple(rule for rule in rules if rule not in rejected)
-        ))
-        lines.extend(rule.rejected_line() for rule in rules if rule in rejected)
-        if not found:
-            lines.append("Standing rules clear.")
-        comms.messaging.send(sender, commander.name, "\n".join(lines))
 
 
 @dataclass(frozen=True)
@@ -60,43 +27,67 @@ class CommanderObservation:
     thread: Thread
     merged: tuple[Todo, ...]
     rules: tuple[StandingRule, ...]
+    pings: tuple[Ping, ...]
+    known: tuple[DeliveredPing, ...]
+    cursor: MessageReference | None
+
+    @classmethod
+    def read(cls, comms: Comms, sender: str, thread: Thread) -> CommanderObservation:
+        held = comms.goals.todos.held_for_commander(thread.incarnation)
+        pulls = PullRequests(held)
+        # The PR watch and merge reconciliation consume the same forge read.
+        merged = comms.goals.todos.merged_orders(thread.incarnation, comms.registry, pulls)
+        rules = StandingRule.broken(comms, thread.name)
+        states = {state.unit: state for rule in rules for state in rule.unit_states()}
+        todos = {todo.id: todo for todo in held}
+        previous = LatestCommanderPing.read(comms, sender, thread.incarnation)
+        known = previous.delivered(comms) if previous is not None else ()
+        candidates = [ping for rule in rules for ping in rule.commander_pings(todos, states)]
+        for todo in held:
+            state = type(states[todo.held().owner_identity]) if todo.held().owner_identity in states else Moving
+            candidates.extend(ping for strike in todo.strikes for ping in strike.commander_pings(todo, state))
+            candidates.extend(ping for request in pulls.listed(todo.repo, ListedPullRequest, todo)
+                              for ping in request.commander_pings(todo, state))
+        # Installation removes the open assignment. The last delivered order reference
+        # leads directly to that row, without scanning closed history or mirroring owners.
+        for item in known:
+            for order in item.ping.orders:
+                current = comms.goals.todos.get(order.problem)
+                if current.order.checked().id == order.order:
+                    candidates.extend(current.order.installation_pings(item.ping, current))
+        fresh = tuple(dict.fromkeys(ping for ping in candidates if ping.new_since(known)))
+        urgency = UnitState.worst_first()
+        selected = tuple(sorted(fresh, key=lambda ping: urgency.index(ping.state)))[:5]
+        active = {OrderRevision.of(todo).key for todo in held}
+        relevant = active | {order.key for item in known
+            if any(order.key in active for order in item.ping.orders) for order in item.ping.orders}
+        relevant.update(order.key for ping in fresh if ping not in selected for order in ping.orders)
+        kept = tuple(item for item in known
+                     if any(order.key in relevant for order in item.ping.orders))
+        return cls(thread, merged, rules, selected, kept,
+                   previous.reference if previous is not None else None)
 
 
-@dataclass
 class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ...]]):
     sender = "commander-heartbeat"
-    reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The live request holders whose current incarnation owns commander work."""
-        return tuple(
-            thread
-            for thread in registry.all_threads().values()
-            if thread.process_alive
-            and any(
-                goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal
-            )
-        )
+        return tuple(thread for thread in registry.all_threads().values()
+                     if thread.process_alive and any(
+                         goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal))
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
-        return tuple(
-            CommanderObservation(
-                thread,
-                comms.goals.todos.merged_orders(thread.incarnation, comms.registry),
-                StandingRule.broken(comms, thread.name),
-            )
-            for thread in self.commanders(comms.registry, comms.goals)
-        )
+        return tuple(CommanderObservation.read(comms, self.sender, thread)
+                     for thread in self.commanders(comms.registry, comms.goals))
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
-        """Inactive commanders retire their review after the pass enters the bus."""
         self.register(comms.registry)
-        live = {item.thread.incarnation for item in observed}
-        self.reviews = {
-            owner: review for owner, review in self.reviews.items() if owner in live
-        }
         for item in observed:
             comms.goals.todos.record_merges(item.merged)
-            review = self.reviews.setdefault(item.thread.incarnation, CommanderReview(frozenset()))
-            review.wake(comms, self.sender, item.thread, item.rules)
+            StandingRule.enforce_all(comms, item.thread.name, item.rules)
+            if item.pings:
+                CommanderPingMessage.send(comms, self.sender, item.thread.incarnation,
+                                          item.pings, item.known)
+            elif item.cursor is not None:
+                CommanderCursor(item.thread.incarnation, item.cursor).advance(comms.goals.todos)

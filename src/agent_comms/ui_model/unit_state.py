@@ -180,6 +180,16 @@ class UnitState(UndatedStandingRule, declared_name=None):
     @abstractmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]: ...
 
+    def unit_states(self) -> tuple[UnitState, ...]:
+        return (self,)
+
+    def commander_pings(self, todos, states):
+        from agent_comms.commander_pings import OrderRevision, UnitStatePing
+
+        return (UnitStatePing(self.unit, type(self), tuple(
+            OrderRevision.of(todos[problem]) for problem in self.orders),
+            self.detail(), self.default_action),)
+
     def attention(self) -> bool:
         return False
 
@@ -329,7 +339,7 @@ class UnresolvedUnitBlock(UnitBlock):
 
 
 class RetryableUnitBlock(UnitBlock):
-    action = "Core reissues the known-safe orders"
+    action = "reissue only the known-safe orders"
 
     @staticmethod
     def accepts(goal: Goal, generation: GenerationState) -> bool:

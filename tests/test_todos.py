@@ -245,14 +245,17 @@ def pr_commander(tmp_path, monkeypatch):
     source.git(checkout, "remote", "add", "origin", f"https://github.com/{source.github.to_wire()}.git")
     merged = source.git(checkout, "rev-parse", "HEAD").strip()
     source.git(checkout, "update-ref", f"refs/remotes/origin/{WorkBranches.main}", merged)
+    from agent_comms.todos import GithubPullRequest
+
     common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
-                  base=WorkBranches.main)
+                  base=WorkBranches.main, closed=True, isDraft=False,
+                  mergeStateStatus="CLEAN", checks="SUCCESS", queued=False)
     requests = (
-        (MergedListedPullRequest(number=1, merge=PullRequestCommit(merged),
-                                 merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
-        (MergedListedPullRequest(number=2, merge=PullRequestCommit(merged),
-                                 merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
-        (ClosedListedPullRequest(number=3, **common), "Closed without merging."),
+        (GithubPullRequest(number=1, merge=PullRequestCommit(merged),
+                          merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
+        (GithubPullRequest(number=2, merge=PullRequestCommit(merged),
+                          merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
+        (GithubPullRequest(number=3, merge=None, merged=None, **common), "Closed without merging."),
     )
     binaries = tmp_path / "bin"
     binaries.mkdir()
@@ -425,11 +428,11 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
 
 def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
     from test_holder_standing_rules import blocked_holder
-    from agent_comms.commander.standing import Blocked
+    from agent_comms.ui_model.unit_state import Blocked
     from agent_comms.goal_actions import RetryGoalAction
     from agent_comms.goals import GoalChangedError
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.commander_heartbeat import CommanderReview
+    from agent_comms.standing_rules import StandingRule
 
     caplog.set_level(logging.INFO)
     with LaunchRoot.from_path(held_bus.root).selected():
@@ -440,12 +443,9 @@ def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
         generation = held_bus.goals.open_goal_store().require_generation(recovered.id)
         inputs = InputDispositions(held_bus.root)
         unresolved = inputs.lookup("unresolved-input")
-        review = CommanderReview(frozenset())
         with held_bus.bus.locked():
-            CommanderHeartbeat.register(held_bus.registry)
-            review.wake(held_bus, CommanderHeartbeat.sender,
-                        held_bus.registry.require("lead"), (observed,))
-        assert observed not in review.violations
+            rejected_rules = StandingRule.enforce_all(held_bus, "lead", (observed,))
+        assert observed in rejected_rules
         assert held_bus.registry.require("worker").goal == recovered
         assert tuple(held_bus.goals.todos.get(row.id) for row in rows) == rows
         assert held_bus.goals.open_goal_store().require_generation(recovered.id) == generation
@@ -453,12 +453,13 @@ def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
         rejected = caplog.records[-1].args[0]
         assert isinstance(rejected, GoalChangedError)
         assert rejected.thread.name == "worker"
-        assert rejected.expected == observed.goal.captured
+        assert rejected.expected == observed.blocks[0].goal.captured
 
 
 def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
     from test_holder_standing_rules import blocked_holder
-    from agent_comms.commander.standing import Blocked, UnownedWheelSpin
+    from agent_comms.commander.standing import UnownedWheelSpin
+    from agent_comms.ui_model.unit_state import Blocked
     from agent_comms.standing_rules import StandingRule
 
     with LaunchRoot.from_path(held_bus.root).selected():
@@ -468,13 +469,13 @@ def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
         reassigned = held_bus.goals.update_goal("outsider", UnownedWheelSpin.order_for(
             row, "lead", held_bus.registry.require("lead").incarnation))
         assigned = held_bus.goals.todos.get(row.id)
-        generation = held_bus.goals.open_goal_store().require_generation(observed.goal.id)
+        generation = held_bus.goals.open_goal_store().require_generation(observed.blocks[0].goal.id)
         with held_bus.bus.locked(), pytest.raises(TodoError):
             StandingRule.enforce_all(held_bus, "lead", (observed,))
-        assert held_bus.registry.require("worker").goal == observed.goal
+        assert held_bus.registry.require("worker").goal == observed.blocks[0].goal
         assert held_bus.registry.require("outsider").goal == reassigned
         assert held_bus.goals.todos.get(row.id) == assigned
-        assert held_bus.goals.open_goal_store().require_generation(observed.goal.id) == generation
+        assert held_bus.goals.open_goal_store().require_generation(observed.blocks[0].goal.id) == generation
 
 
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):

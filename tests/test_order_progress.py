@@ -20,21 +20,9 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, EditingProgress, MergedProgress,
     NoCommitProgress, OpenPrProgress, OrderProgress, MergedPullRequest, PresentCheckout, ProgressPoint,
-    PullRequest, PullRequests, PushedProgress, UnmergedPullRequest, UnreadProgress)
+    PullRequest, PullRequests, PushedProgress, UnmergedPullRequest, UnreadProgress,
+    UnmergedListedPullRequest, MergedListedPullRequest)
 
-
-
-class Listed(PullRequests):
-    """GitHub as a test states it: the pull requests of each state."""
-
-    def __init__(self, **listed: tuple[PullRequest, ...]) -> None:
-        super().__init__()
-        self.states = listed
-
-    def read(self, repo, state, order):
-        if isinstance(self.states, Exception):
-            raise self.states
-        return self.states.get(state, ())
 
 
 def git(checkout, *args):
@@ -63,8 +51,13 @@ class HeldSource:
         return DistanceReadings()
 
     def requests(self, state):
-        return {'open': [UnmergedPullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
-                'merged': [MergedPullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
+        requests = (
+            UnmergedPullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0,
+                orders=('order-P1',), status=UnmergedListedPullRequest),
+            MergedPullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40,
+                merged_at=200.0, orders=('order-P1',), status=MergedListedPullRequest),
+        )
+        return [request for request in requests if issubclass(request.status, state)]
 
 
 class EmptySource:
