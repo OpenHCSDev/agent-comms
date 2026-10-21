@@ -40,7 +40,8 @@ from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import (
-    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel, SurroundingChannel,
+    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel,
+    ResolvedThread, SurroundingChannel,
 )
 from .channels import AnyChannel, Channel
 from .check_root import CheckRoot
@@ -1783,14 +1784,22 @@ class NamedThreadCliCommand(ThreadBoundCliCommand, NamedCliCommand):
     def thread_binding(cls, thread: Thread) -> Self:
         return cls(name=thread.name)
 
+    @classmethod
+    def channel_members(cls, resolved: ResolvedChannel) -> tuple[ResolvedThread, ...]:
+        return ()
+
+    @classmethod
+    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
+        return tuple(bound for member in cls.channel_members(resolved)
+                     for bound in cls.thread_bindings(
+                         comms, member.thread, member.status, resolved.channel.name, catalog=catalog))
+
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadLifecycleCliCommand(MultipleTargets, NamedThreadCliCommand):
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
-        return tuple(bound for member in resolved.members
-                     for bound in cls.thread_bindings(
-                         comms, member.thread, member.status, resolved.channel.name, catalog=catalog))
+    def channel_members(cls, resolved: ResolvedChannel) -> tuple[ResolvedThread, ...]:
+        return resolved.members
 
 
 @dataclass(frozen=True, kw_only=True)

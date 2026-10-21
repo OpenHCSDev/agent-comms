@@ -15,16 +15,11 @@ if TYPE_CHECKING:
     from .turn_output import TurnOutput
 
 
-class InputUncertain:
-    input_uncertain = True
-
-
 @dataclass(frozen=True)
 class TurnFailure(DeclaredFamily):
     text: str
     code: ClassVar[str | None] = None
     precedence: ClassVar[int] = 0
-    input_uncertain: ClassVar[bool] = False
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
 
@@ -64,22 +59,22 @@ class InputIdUnavailable(TurnFailure):
     precedence = 100
 
 
-class IdentityUncertain(InputUncertain, TurnFailure):
+class IdentityUncertain(TurnFailure):
     code = FailureReason.IDENTITY_UNCERTAIN
     precedence = 80
 
 
-class AuthorityChanged(InputUncertain, TurnFailure):
+class AuthorityChanged(TurnFailure):
     code = FailureReason.AUTHORITY_CHANGED
     precedence = 70
 
 
-class FollowupUnrecognized(InputUncertain, TurnFailure):
+class FollowupUnrecognized(TurnFailure):
     code = FailureReason.FOLLOWUP_UNRECOGNIZED
     precedence = 60
 
 
-class TerminalFailure(InputUncertain, TurnFailure):
+class TerminalFailure(TurnFailure):
     """Missing terminal evidence, discovered from the same declaration as its verdict."""
 
     default_text: ClassVar[str]
@@ -176,7 +171,7 @@ class QueuedInputMissing(TerminalFailure):
         return transport_ok and session.output.error_message is None and session.inputs.unresolved
 
 
-class ModelStalled(InputUncertain, TurnFailure):
+class ModelStalled(TurnFailure):
     pass
 
 
