@@ -62,8 +62,8 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.build_identity import BuildIdentity, UnrecordedBuildIdentity
-from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.build_identity import BuildIdentity, RecordedBuildIdentity, UnrecordedBuildIdentity
+from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
@@ -72,7 +72,6 @@ from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
 from agent_comms.recorded_time import (
     EventTime,
-    RecordedEventSeconds,
     RecordedEventTime,
     UnrecordedEventTime,
 )
@@ -1062,61 +1061,27 @@ class MergedProgress(FoundProgress):
         return (todo,)
 
 
-class InstallDeadline(DurableFile, DeclaredFamily, affix="InstallDeadline"):
-    """The fleet's next install: one time for the bus and the unit that runs it, set by the
-    commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
-    carries it as its own deadline.
-    Each live ``agent-comms install`` plans the next one a cadence later."""
-
-    filename: ClassVar[str] = "install-deadline.json"
-    cadence: ClassVar[int] = 30 * 60
-
-    @classmethod
-    def read(cls, root: Path) -> InstallDeadline:
-        path = cls.path_in(root)
-        if not path.exists():
-            return UnplannedInstallDeadline()
-        return FieldCodec.decode_document(PlannedInstallDeadline, json.loads(path.read_text()))
-
-    @abstractmethod
-    def overdue(self, now: float) -> tuple[str, ...]:
-        """Why an install of main is due at ``now``, read from the schedule's time alone."""
-
-
-class UnplannedInstallDeadline(InstallDeadline):
-    def overdue(self, now: float) -> tuple[str, ...]:
-        return ("no install is planned on this bus",)
-
-
-@dataclass(frozen=True)
-class PlannedInstallDeadline(InstallDeadline):
-    at: Annotated[RecordedEventTime, RecordedEventSeconds]
-    installer: str
-
-    @classmethod
-    def after(cls, installer: str, now: float) -> PlannedInstallDeadline:
-        """The install a live install plans: the same installer, one cadence on."""
-        return cls(RecordedEventTime(now + cls.cadence), installer)
-
-    def overdue(self, now: float) -> tuple[str, ...]:
-        return (f"due {self.at.clock()}, installer {self.installer}",) * (now >= self.at.at)
-
-    def plan(self, root: Path) -> None:
-        path = self.path_in(root)
-        staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps(FieldCodec.encode_document(self, PlannedInstallDeadline)))
-        staged.replace(path)
-
-
 @dataclass(frozen=True)
 class InstallDue(UndatedStandingRule):
-    """Merged work reaches the bus on the install schedule, not at the end of an order."""
+    """Each configured main not contained in the installed build needs an install."""
 
     why: str
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(map(cls, InstallDeadline.read(comms.root).overdue(time.time())))
+        # Import here: commander configuration uses Comms, which imports todos.
+        from agent_comms.commander.config import CommanderConfig
+
+        config = CommanderConfig.read_root(comms.root)
+        installed = RecordedBuildIdentity.installed()
+        due = []
+        for repo in config.repos:
+            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
+            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
+            if not installed.contains(main, repo.checkout):
+                recorded = installed.for_repository(repo)
+                due.append(cls(f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
+        return tuple(due)
 
     def line(self) -> str:
         return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
