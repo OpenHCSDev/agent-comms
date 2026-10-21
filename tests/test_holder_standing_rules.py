@@ -506,3 +506,17 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+
+
+def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
+    from agent_comms.commander.vibe_check import VibeCheckSender
+
+    VibeCheckSender.register(held_bus.registry)
+    now = time.time()
+    burst = [publish(held_bus, VibeCheckSender.sender, "lead", now - 30 + line) for line in range(4)]
+    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 4
+    publish(held_bus, "lead", VibeCheckSender.sender, now - 20, answers=(burst[0].reference,))
+    assert VibeCheckSender.unanswered(held_bus, "lead", time.time()) == ()
+    later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
+    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus, "lead", time.time())] == [
+        later.message_id]

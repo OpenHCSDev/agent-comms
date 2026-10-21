@@ -214,6 +214,29 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         return tuple(found)
 
 
+@dataclass(frozen=True, slots=True)
+class UnansweredBurst(UnansweredUnitAsks):
+    """A sender whose messages arrive as one burst: an answer to any of its messages covers
+    everything it sent before that answer, so the commander answers a burst once, not once per
+    line. Only what it sent after the newest such answer is still open."""
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        replied: dict[MessageReference, float] = {}
+        sent: list[Message] = []
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    for answered in message.answers:
+                        replied[answered] = max(replied.get(answered, 0.0), message.timestamp)
+                else:
+                    sent.append(message)
+        covered = max((replied[m.reference] for m in sent if m.reference in replied), default=0.0)
+        return tuple(m for m in sent if covered < m.timestamp <= self.before)
+
+
 class PlanRule(UndatedStandingRule, declared_name=None):
     """A rule read from one look at the plans and the commander's orders."""
 
