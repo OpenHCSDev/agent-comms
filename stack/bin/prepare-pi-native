@@ -123,7 +123,7 @@ cp -- "$stock_root/package.json" "$stock/package.json"
 # zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
 # restored below: the running stack must not fork Pi's network layer.
 prepared=$(
-    PI_STOCK_DIR="$stock" "$repo_root/experiments/pi-context-proof/prepare-copied-pi.sh" \
+    PI_STOCK_DIR="$stock" "$repo_root/experiments/pi-context-proof/prepare-copied-pi.sh" "$stock_spec" \
         | sed -n 's/^PI_PACKAGE_DIR=//p'
 )
 scratch_root=${prepared%/node_modules/@earendil-works/pi-coding-agent}

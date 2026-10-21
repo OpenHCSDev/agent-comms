@@ -96,6 +96,8 @@ def test_real_message_record_round_trip(tmp_path, declaration, role):
     assert Bus(bus.path).lookup(stored.seq) == stored
     assert bus.page(stored.seq + 1, 10) == (stored,)
     assert stored.message is stored
+    assert type(stored.publication_snapshot) is Message
+    assert stored.publication_snapshot == message.publication_snapshot
     assert stored.messages() == (stored,)
     assert stored.deliveries() == ((stored,) if issubclass(declaration, Delivered) else ())
     for delivery in stored.deliveries():

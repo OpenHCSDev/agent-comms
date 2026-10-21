@@ -240,12 +240,11 @@ class ChannelManagement:
                     thread.role.require_executable(ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."
                     ))
-                if pinned and (
-                    not view.matches(thread.tags) or not snapshot.status(thread.name).visible
-                ):
-                    raise ValueError(
-                        f"Thread {thread.name!r} is not a member of {view.name}."
-                    )
+                if pinned:
+                    message = f"Thread {thread.name!r} is not a member of {view.name}."
+                    if not view.matches(thread.tags):
+                        raise ValueError(message)
+                    snapshot.status(thread.name).require_visible(message)
                 document.set_thread_pinned(view.name, thread.name, pinned)
 
     def rename_tag(self, name: str, new_name: str) -> None:

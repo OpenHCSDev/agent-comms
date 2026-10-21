@@ -99,7 +99,9 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .threads import NextTurnConfiguration
 from .thread_model import ThreadModel
 from .transcript_events import SentTranscript
-from .todos import (
+from agent_comms.todos import (
+    ClaimOrder,
+    OrderClaim,
     CorrectCheckTodo,
     ServeTodo,
     DeliverTodo,
@@ -132,6 +134,7 @@ from .task_sources import (
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.private_bus_checkpoint import PublicMessages
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -1034,6 +1037,37 @@ class CommsTodoCreateTool(CommsOrderTool):
     order: Annotated[
         CreateProblemGoalAction, *tool_field("Typed problem creation and order")
     ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolRequest):
+    label = "Claim order delivery"
+    description = (
+        "Record the holder's delivery claim and answer its commander. "
+        "Only the holder may claim a pending order; this does not accept its delivery."
+    )
+    problem: Annotated[str, *tool_field("Held problem ID")]
+    pull_request: Annotated[int, *tool_field("Pull request number in the problem's repository")]
+    head: Annotated[str, *tool_field("Claimed head commit")]
+    report: Annotated[str, *tool_field("Delivery report text")]
+
+    def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        generation = todo.held().generation
+        todo.require_assignee(actor, generation)
+        with comms.bus.log.checked_read() as source:
+            original = PublicMessages.require(
+                source.connection, message_id=todo.latest_message.message_id
+            )
+        claim = OrderClaim.for_order(
+            todo, actor, self.pull_request, self.head, self.report,
+            MessageReference(original.seq, original.message_id),
+        )
+        changed = ClaimOrder(
+            todo.revision, actor, generation, claim
+        ).record(comms.goals, todo.id)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)

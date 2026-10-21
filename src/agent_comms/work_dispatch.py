@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 import subprocess
 import time
-from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self
 
@@ -24,6 +23,7 @@ from agent_comms.goal_actions import (
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
+from .repo import Checkout
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
@@ -31,9 +31,10 @@ from .thread_text import SavedSessionFile
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
     from .threads import Thread
-    from .todos import PendingProblemOrder, Todo
+    from .todos import PendingProblemOrder
 
 
 @dataclass(frozen=True)
@@ -75,22 +76,8 @@ class WorkDispatch:
             text=True,
             timeout=60,
         )
-        subprocess.run(
-            (
-                "git",
-                "-C",
-                self.action.order.check.directory,
-                "worktree",
-                "add",
-                "-b",
-                f"auto/{name}",
-                str(checkout),
-                "origin/main",
-            ),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
+        Checkout.add(
+            self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
@@ -141,13 +128,14 @@ class CheckedPhaseTask(PhaseTask):
         if not math.isfinite(self.review_seconds) or self.review_seconds <= 0:
             raise ValueError("A phase task needs a finite positive review interval.")
 
-    def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
-        history = comms.goals.todos.history_for_commander(commander.incarnation)
-        if not phase.ready(history) or phase.ordered(history):
+    def start(
+        self, comms: Comms, commander: Thread, phase: type[PlanPhase], reading: PlanReading
+    ) -> None:
+        if not phase.ready(reading) or phase.ordered(reading):
             return
         # This task's existing row belongs to UnownedWheelSpin. Other phase subtasks
         # neither supply this task's check nor replace its explicit identity.
-        if any(todo.id == self.problem for todo in history):
+        if any(todo.id == self.problem for todo in reading.todos):
             return
         now = time.time()
         order = replace(self.order.reissued(now), serves=phase)
@@ -161,9 +149,3 @@ class CheckedPhaseTask(PhaseTask):
             review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)
-
-    def done(self, todos: Iterable[Todo]) -> bool:
-        return any(
-            todo.id == self.problem and not todo.state.open and todo.order.accepted
-            for todo in todos
-        )

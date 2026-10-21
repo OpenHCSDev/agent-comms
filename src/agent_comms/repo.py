@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -84,3 +86,156 @@ class Repo(BaseModel):
         url = cls.git(checkout, "remote", "get-url", "origin").strip()
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
         return cls(checkout=checkout.resolve(), github=RepositoryName.from_wire("/".join(github)))
+
+
+class CheckoutHoldsWorkError(Exception):
+    """A checkout cannot be retired: it holds changes that removing it would lose."""
+
+    def __init__(self, path: Path, changes: str):
+        super().__init__(f"{path} holds uncommitted work:\n{changes}")
+
+
+@dataclass(frozen=True)
+class PinnedSubmodule:
+    """One pinned submodule of a checkout: its working directory and git's stored repository.
+
+    Git creates the store before it fetches into it, so a clone interrupted by a stopped
+    unit or a timeout leaves a store with no repository, or a working directory whose `.git`
+    points at a store that is gone, and every later update trusts it ("could not get a
+    repository handle"). This is the one place that tells a usable store from a broken one."""
+
+    checkout: Path
+    name: str
+    path: Path
+
+    @property
+    def store(self) -> Path:
+        return Path(
+            Repo.git(
+                self.checkout,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                f"modules/{self.name}",
+            ).strip()
+        )
+
+    def usable(self) -> bool:
+        return (
+            subprocess.run(
+                (
+                    "git",
+                    "--git-dir",
+                    str(self.store),
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "HEAD^{commit}",
+                ),
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
+
+    def broken(self) -> bool:
+        """Anything but a usable store or the empty directory `git worktree add` leaves: a
+        store without a repository, a `.git` pointing at one, a hand-copied directory or a
+        link standing where the clone belongs."""
+        occupied = self.path.is_symlink() or (self.path.is_dir() and any(self.path.iterdir()))
+        return (self.store.exists() or occupied) and not self.usable()
+
+    def clear(self) -> None:
+        """Pinned package data, never a unit's edit: dropped whole so the next update
+        clones it again from its declared source."""
+        if self.path.is_symlink():
+            self.path.unlink()
+        for directory in (self.store, self.path):
+            if directory.exists():
+                shutil.rmtree(directory)
+        self.path.mkdir(parents=True)
+
+
+@dataclass(frozen=True)
+class Checkout:
+    """A working tree of one of our repositories, ready to run.
+
+    Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
+    add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
+    and retired here and nowhere else."""
+
+    path: Path
+
+    @classmethod
+    def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Self:
+        subprocess.run(
+            ("git", "-C", str(repository), "worktree", "add", *options, str(path), revision),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        checkout = cls(Path(path))
+        checkout.prepare()
+        return checkout
+
+    def submodules(self) -> tuple[PinnedSubmodule, ...]:
+        if not (self.path / ".gitmodules").is_file():
+            return ()
+        listed = Repo.git(
+            self.path, "config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$"
+        )
+        return tuple(
+            PinnedSubmodule(
+                self.path, key.removeprefix("submodule.").removesuffix(".path"), self.path / value
+            )
+            for key, value in (line.split(" ", 1) for line in listed.splitlines())
+        )
+
+    def prepare(self) -> None:
+        """Populate the pinned submodules, rebuilding any an interrupted clone left broken.
+        A tree that pins none has nothing to prepare."""
+        modules = self.submodules()
+        if not modules:
+            return
+        for module in modules:
+            if module.broken():
+                module.clear()
+        subprocess.run(
+            (
+                "git",
+                "-C",
+                str(self.path),
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+                "--checkout",
+            ),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300,
+        )
+
+    def held_work(self) -> str:
+        """Changes outside the pinned submodules, which retiring the tree would lose."""
+        return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
+
+    def retire(self) -> None:
+        """Remove this worktree. Git refuses any tree holding submodules without --force,
+        so this owner checks for held work itself and then forces."""
+        held = self.held_work()
+        if held:
+            raise CheckoutHoldsWorkError(self.path, held)
+        common = Path(
+            Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        )
+        Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+class ScratchCheckout(Checkout):
+    """A tree made for one run and discarded with whatever the run left in it."""
+
+    def held_work(self) -> str:
+        return ""

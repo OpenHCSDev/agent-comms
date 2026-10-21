@@ -14,6 +14,7 @@ type: hard-rule
 - No strings for identity, no `Any`, no new environment variables: typed objects derived from the owner. Tristan, 2026-10-19: "we fucking hate strings, especially for identity, it's web dev crayon eating slop"; 2026-10-12: "we shouldn't allow Any".
 - A name gluing a domain type to a mechanism (`StepFieldNavigationDriver`) is a flattened cross product. Tristan, 2026-10-12: "Step already exists. If there's a StepField, is there a PipelineField? and FunctionField? ... So it's all kinds of wrong." Code already in the tree is never precedent.
 - Silent skips, unnamed tuples, fallbacks and broad `except` returning a default hide the missing owner and are blocking: fail loud and restore the owner. "it's garbage, I don't want it there, all it does is cause problems".
+- A bug that needs fixes in several places is the restated fact showing itself: find the copy and delete it, then the fix is one spot. Tristan, 2026-10-21: "literally most bugs are due to slop".
 - Line growth or file size is not slop; only a restated fact is. Scanners find candidates, never a score.
 - Nothing on a hot path scales with history, threads or message rate: "it shuold decode from latest to oldest or jsut decode what it needs so that tis always fast".
 - Structural cleanup in the touched code goes in the current change; a platform gap is fixed at its owner. Tristan, 2026-10-19: "fuck narrow fixes have you not been listening to me?"

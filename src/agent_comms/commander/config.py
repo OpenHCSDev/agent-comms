@@ -9,20 +9,31 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
+
+from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_phases import PlanPhase
 
 from ..comms import Comms
 from ..errors import RelationViolationError
 from ..field_codec import (
-    BoundedText, FieldCodec, NullMember, SingleFieldValue, SubclassUnion, boundary_decoder,
+    BoundedText,
+    FieldCodec,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    boundary_decoder,
 )
 from ..installer.backup import UpgradeRefused
 from ..native_arguments import NativeArguments
 from ..repo import Repo
 from ..thread_text import AbsentText, GivenText, TextChoice
 from ..threads import Thread
+
+if TYPE_CHECKING:
+    from agent_comms.todos import Todo
 
 
 class CommanderRole:
@@ -65,9 +76,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_indictment() -> Path:
         return Path(str(files(__package__) / 'indictment.md'))
 
-    @staticmethod
-    def packaged_spine() -> Path:
-        return Path(str(files(__package__) / 'spine.md'))
 
     @staticmethod
     def packaged_voice() -> Path:
@@ -118,6 +126,10 @@ class CommanderConfig(CommanderRole, BaseModel):
             f'Unknown check repository {name!r}. Configured repositories: {configured}. '
             'Rerun agent-comms install with --repos to configure the checkouts.'
         )
+
+    def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
+        """The plans, read against main of the repository that declares them."""
+        return PlanReading(todos, MainTree.of(self.module_repo(PlanPhase.__module__)))
 
     def module_repo(self, module: str) -> Repo:
         """The configured repository whose checkout holds ``module``; none is an error."""

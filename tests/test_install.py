@@ -16,10 +16,10 @@ from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import declared_files, practice_copy
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.wire_log import WireLog
 
@@ -72,28 +72,34 @@ def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(pr
     assert json.loads(backup.read_text())["root"] == str(first)
 
 
-def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(private_directory):
+def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(private_directory):
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     barrier = MaintenanceBarrier(root / "registry.json")
     barrier.begin(MaintenanceOperator.current())
     witnesses = {str(path.relative_to(root)) for path in barrier.witness_paths if path.exists()}
     assert witnesses
+    # Install 31 died opening a native writer's transient claim that vanished after the
+    # listing: an undeclared file has no owner, so the copy never meets it.
+    (root / "sessions").mkdir(exist_ok=True)
+    (root / "sessions/.pr48-writer-transient").write_text("claim")
     saved = bus_files(root)
-    databases = {name for name in saved if CoordinationStore.is_database(root / name)}
+    files = declared_files(root)
+    declared = {str(path.relative_to(root)) for path in files}
+    databases = {str(path.relative_to(root)) for path, owner in files.items()
+                 if issubclass(owner, SQLiteFile)}
+    assert databases
 
     with practice_copy(root, private_directory / "practice/bus") as (copy, measurement):
-        copied = bus_files(copy)
-        assert copied.keys() == {name for name in saved.keys() - witnesses
-                                 if not (name.endswith("-wal")
-                                         and name.removesuffix("-wal") in databases)}
+        copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
+        assert copied == declared - witnesses
         assert measurement.bytes > 0
         for name in databases:
             query = "SELECT name FROM sqlite_schema ORDER BY name"
             with (closing(sqlite3.connect(root / name)) as original,
                   closing(sqlite3.connect(copy / name)) as practised):
                 assert practised.execute(query).fetchall() == original.execute(query).fetchall()
-        for name in copied.keys() - databases:
+        for name in copied - databases:
             assert (copy / name).read_bytes() == (root / name).read_bytes()
     assert bus_files(root) == saved
 

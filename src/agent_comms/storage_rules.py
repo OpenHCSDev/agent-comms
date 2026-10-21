@@ -136,7 +136,7 @@ class StorageRule(RoomAllocation):
                 if path not in (storage.home, *storage.extra_checkouts):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
                 work = OrderCheckoutWork(path, owner)
-                if work.local_work:
+                if work.read_checkout().holds_work:
                     found.append(work)
         return tuple(found)
 
@@ -477,7 +477,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
 
 def physical_path(value, cwd):
     if '$' in value or '`' in value:
-        raise StorageDenied('StorageRule: use a literal storage destination')
+        raise StorageDenied(f'StorageRule: use a literal storage destination, not {value!r}')
     path = Path(value).expanduser()
     return (path if path.is_absolute() else cwd / path).resolve()
 
