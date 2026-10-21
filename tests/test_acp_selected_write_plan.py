@@ -140,9 +140,9 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             result = await event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert native.provider.posts == 1 and resource.read_bytes() == b"after second pid\n"
-            with Comms(root).bus.log.checked_read() as source:
+            with Comms(root).bus.bus.reading() as source:
                 assert source.claim_operation_used(acknowledgement.operation_id)
-                assert source.claim(str(resource)) == UnclaimedResource()
+                assert source.resource_owner(str(resource)) == UnclaimedResource()
             rows = list((root / "selected-write-plans").glob("*.json"))
             assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
             with Coordination(str(root / "coordination.sqlite3")) as store:

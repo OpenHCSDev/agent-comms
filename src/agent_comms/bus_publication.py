@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Final, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Final, Self
 
 from agent_comms.audience_manifest import FrozenAudience
+from agent_comms.bus_tables import BusRow
 from agent_comms.errors import (
     HumanSendRefusedError,
-    MessageNotificationError,
+    CommittedMessageError,
     RelationViolationError,
 )
 from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     _PRIVATE_WIRE_PREFIX,
     NoResponseAcknowledgement,
+    KeyedResponseAcknowledgement,
     ResponseAcknowledgement,
     _canonical,
     has_private_wire_fields,
@@ -27,13 +31,13 @@ from .delivery_policy import DeliveryPolicy
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
+from agent_comms.typed_table import Column, Generated, sql_literal
 
 if TYPE_CHECKING:
-    from agent_comms.bus import Bus, PrivateRecord, RecordBuilder
+    from agent_comms.bus import Bus, BusReader, RecordBuilder
 
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
-    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -91,6 +95,38 @@ class Delivered(BusRecord, declared_name=None):
         authored = (self.audience.sender_lookup == recipient_lookup
                     and self.message.retains_authored_task)
         return self.messages() if addressed or authored else ()
+
+
+class KeyedPublication(BusRecord, declared_name=None):
+    """One publication key binds one Message's content, not its encoded receipt."""
+
+    acknowledgement: KeyedResponseAcknowledgement
+    publication_key: ClassVar[Generated] = Generated(
+        str, Column(generated=(
+            "json_extract(acknowledgement, "
+            + sql_literal("$." + json.dumps(
+                FieldCodec.field_plan(KeyedResponseAcknowledgement, "publication_key").key,
+                ensure_ascii=False,
+            )) + ")"
+        ), unique=True),
+    )
+
+    @classmethod
+    def publication_sequences(cls, db: sqlite3.Connection, publication_key: str) -> tuple[int, ...]:
+        return tuple(row.seq for row in KeyedPublication.table.select(
+            db, publication_key=publication_key, limit=1,
+        ))
+
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        for original_seq in self.publication_sequences(db, self.acknowledgement.publication_key):
+            header = BusRow.require(db, seq=original_seq)
+            original = header.kind.read_from(db, original_seq)
+            if self.publication_snapshot != original.publication_snapshot:
+                raise RelationViolationError(
+                    "Response publication key has different message content."
+                )
+            return original_seq
+        return super().append_to(db, seq)
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,8 +296,8 @@ class InitialOrigin(ABC):
         """Refuse a sender this origin cannot speak for."""
 
     @abstractmethod
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
-        """Check the sender and message ID against the bus before appending."""
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+        """Check the sender and message ID on the actual append connection."""
 
     @abstractmethod
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
@@ -279,7 +315,7 @@ class AgentOrigin(InitialOrigin):
             RelationViolationError("Initial sender must be a visible registered executable.")
         )
 
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
@@ -305,13 +341,17 @@ class HumanOrigin(InitialOrigin):
         if message.sender != self.sender:
             raise RelationViolationError("Local USER origin differs from registered identity.")
 
-    def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
-        source.require_new_human_message(sender, message_id)
+    def require_source(self, source: BusReader, sender: str, message_id: str) -> None:
+        from .bus_tables import MessageIdentitySource
+
+        with source.observing() as db:
+            if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):
+                raise HumanSendRefusedError("Human message identity was already published.")
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         try:
             return bus.append(build)
-        except MessageNotificationError:
+        except CommittedMessageError:
             raise
         except Exception as error:
             raise HumanSendRefusedError(f"Message was not sent: {error}") from error

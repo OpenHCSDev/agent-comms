@@ -292,8 +292,8 @@ class SQLiteFile(RootFile):
             raise
 
 
-class StoreNotificationError(OSError):
-    """The transaction committed, but its change signal could not be written."""
+class StoreCommittedError(OSError):
+    """COMMIT succeeded; change signalling or connection retirement failed."""
 
 
 class PublishedSQLiteFile(SQLiteFile):
@@ -329,7 +329,7 @@ class PublishedSQLiteFile(SQLiteFile):
         try:
             cls._source_paths(path)[0].write_bytes(b"")
         except OSError as error:
-            raise StoreNotificationError(
+            raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
 

@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import aclosing
+from concurrent.futures import Future
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,6 +16,11 @@ from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message
 from agent_comms.watched import ChangeSignal, FileSource
+from agent_comms.private_path import FileRevision
+from agent_comms.view_unread import (
+    NativeReplyPreparation, ReplyIndex, ReplyIndexUpdate, ReplyRead, ReplyReading,
+    TranscriptReadState,
+)
 
 
 @pytest.fixture
@@ -198,6 +204,29 @@ async def test_native_source_survives_directory_removal_and_recreation(tmp_path)
         await asyncio.wait_for(anext(observations), 1)
         path.write_text("new root")
         await asyncio.wait_for(anext(observations), 1)
+
+
+def test_native_reply_publication_uses_the_index_commit_source(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    state = TranscriptReadState(tmp_path / "read.json")
+    try:
+        database = state._database()
+        before = ReplyIndex(source=str(transcript))
+        revision = FileRevision.capture(transcript).require(ValueError("Missing transcript"))
+        read = ReplyRead(before, revision, 0)
+        prepared = Future()
+        prepared.set_result(ReplyIndexUpdate(before, replace(before, revision=revision), ()))
+        preparation = NativeReplyPreparation({str(transcript): ReplyReading(read, prepared)})
+        with Bus.register_sources(*(FileSource(path) for path in
+                                   state.source_paths(tmp_path))) as changes:
+            assert preparation.finished(state, database, (str(transcript),)) is state._idle
+            assert changes.changed_paths() == frozenset(state.source_paths(tmp_path))
+            # Reader attachment and counts are not committed work.
+            assert ReplyIndex.one(database, source=str(transcript)).revision == revision
+            assert changes.changed_paths() == frozenset()
+    finally:
+        state.close()
 
 
 def test_synchronous_backlog_invalidates_admitted_sources(tmp_path):

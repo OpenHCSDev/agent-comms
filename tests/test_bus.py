@@ -1,4 +1,3 @@
-import multiprocessing
 import os
 import signal
 import sqlite3
@@ -7,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from bus_record_fixture import publication_processes, record_from
 from agent_comms.bus import (
     Bus,
     BusRecord,
@@ -15,67 +14,25 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_publication import Delivered, HumanOrigin
-from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource, KeyedPublication
-from agent_comms.envelope_claim_transitions import ClaimRelease, ReleasedClaims
+from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
+from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource
+from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     HumanSendRefusedError,
-    MessageNotificationError,
+    CommittedMessageError,
     RelationViolationError,
 )
 from agent_comms.messages import (
     ClaimHistoryKind,
-    ClaimMessage,
     InfoKind,
     MembershipChange,
     Message,
     MessageRoleWire,
 )
 from agent_comms.response_acknowledgement import (
-    KeyedResponseAcknowledgement,
     canonical_publication_key,
-    public_envelope_digest,
 )
 from agent_comms.typed_table import TypedTable
-from agent_comms.wake import ControlClassification, resolve_wake_cohort
-
-
-def record_from(declaration, message):
-    capabilities = {}
-    if issubclass(declaration, Delivered):
-        audience = freeze_audience(
-            message,
-            (FrozenRecipient("b" * 32, message.target),),
-            "c" * 64,
-            sender_lookup="a" * 32,
-            sender_name=message.sender,
-        )
-        capabilities.update(
-            audience=audience,
-            decisions=resolve_wake_cohort(
-                message, frozen_audience=audience, control=ControlClassification.ORDINARY
-            ),
-            control=ControlClassification.ORDINARY.value,
-        )
-    if issubclass(declaration, KeyedPublication):
-        capabilities["acknowledgement"] = KeyedResponseAcknowledgement(
-            "d" * 32,
-            "e" * 32,
-            canonical_publication_key("e" * 32, message.target),
-            public_envelope_digest(message.to_wire()),
-        )
-    if issubclass(declaration, ClaimMessage):
-        return declaration.of(
-            message,
-            ReleasedClaims(
-                owner=message.sender,
-                incarnation="1",
-                seq=message.seq,
-                message_id=message.message_id,
-                releases=(ClaimRelease("/owned/resource", "f" * 32),),
-            ),
-        )
-    return declaration.from_message(message, **capabilities)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
@@ -97,6 +54,15 @@ def test_real_message_record_round_trip(tmp_path, declaration, role):
     assert Bus(bus.path).lookup(stored.seq) == stored
     assert bus.page(stored.seq + 1, 10) == (stored,)
     assert stored.message is stored
+    assert stored.publication_snapshot == message.publication_snapshot
+    assert type(stored.publication_snapshot) is Message
+    intent = PublicationIntents(
+        execution_id="e" * 32, exact_target=message.target,
+        message=message.publication_snapshot,
+        publication_key=canonical_publication_key("e" * 32, message.target),
+        expected_message_id=message.message_id,
+    )
+    assert intent.matches_publication(stored)
     assert stored.messages() == (stored,)
     assert stored.deliveries() == ((stored,) if issubclass(declaration, Delivered) else ())
     for delivery in stored.deliveries():
@@ -114,11 +80,44 @@ def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):
     )
     with closing(sqlite3.connect(bus.path)) as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
-    assert bus.append(lambda seq, db: replace(first, seq=seq, body="different")) == first
+    assert bus.append(lambda seq, db: replace(first, seq=seq)) == first
+    # Rebuilding the receipt changes its sequence-bound digest, not the publication content.
+    assert bus.append(lambda seq, db: record_from(
+        KeyedPrivateRecord, replace(first.publication_snapshot, seq=seq),
+    )) == first
+    for build in (
+        lambda seq, db: replace(first, seq=seq, body="different"),
+        lambda seq, db: record_from(
+            KeyedPrivateRecord, replace(first.publication_snapshot, seq=seq, body="different"),
+        ),
+    ):
+        with pytest.raises(RelationViolationError, match="different message content"):
+            bus.append(build)
     with closing(sqlite3.connect(bus.path)) as db:
         assert {table: table.count(db) for table in TypedTable.members_with(BusTables)} == before
         assert db.execute("SELECT seq FROM sqlite_sequence").fetchall() == [(first.seq,)]
     assert bus.lookup(first.seq) == first
+    assert bus.keyed_messages(first.acknowledgement.publication_key) == (first,)
+    assert bus.keyed_messages(canonical_publication_key("f" * 32, "absent")) == ()
+    with bus.reading() as snapshot:
+        assert snapshot.keyed_messages(first.acknowledgement.publication_key) == (first,)
+
+
+def test_publication_key_is_unique_in_sql_even_when_receipts_differ(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    first = bus.append(lambda seq, db: record_from(
+        KeyedPrivateRecord, Message("author", "worker", "first", InfoKind, seq=seq),
+    ))
+    other = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "other", InfoKind, seq=seq),
+    ))
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE constraint"):
+        with bus.writing() as db:
+            KeyedPublication.table.insert_values(
+                db, seq=other.seq,
+                acknowledgement=replace(first.acknowledgement, envelope_digest="f" * 64),
+            )
+    assert bus.keyed_messages(first.acknowledgement.publication_key) == (first,)
 
 
 def test_every_bus_table_rejects_update_and_delete(tmp_path):
@@ -211,9 +210,8 @@ def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     with bus.writing() as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
-    context = multiprocessing.get_context("spawn")
-    reader, writer = context.Pipe(duplex=False)
-    process = context.Process(target=append_until_header, args=(bus.path, writer))
+    reader, writer = publication_processes.Pipe(duplex=False)
+    process = publication_processes.Process(target=append_until_header, args=(bus.path, writer))
     process.start()
     writer.close()
     try:
@@ -263,7 +261,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     bus.path.with_suffix(".changed").mkdir()
     origin = HumanOrigin("author", 1, str(tmp_path))
-    with pytest.raises(MessageNotificationError) as failed:
+    with pytest.raises(CommittedMessageError) as failed:
         origin.append(
             bus,
             lambda seq, db: record_from(
@@ -274,7 +272,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
     assert bus.lookup(1) == failed.value.record
     assert failed.value.record.body == "sent"
     print(
-        "Change notification failure: committed message returned on MessageNotificationError.record"
+        "Change notification failure: committed message returned on CommittedMessageError.record"
     )
 
 

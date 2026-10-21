@@ -1,16 +1,25 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
 import json
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
+from agent_comms.bus import Bus, BusSnapshot, PublicRecord
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.bus_tables import BusRow, MessageIdentitySource
+from agent_comms.errors import HumanSendRefusedError
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.locked_store import RegistryFile
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.message_bus import MessageBus
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
+from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.messaging import Messaging
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.publisher import Publisher
@@ -31,16 +40,36 @@ def channel_bus(root):
 
 
 def pages(messages):
-    before = messages.bus.revision() + 1
     result = []
-    while page := messages.bus.page(before, 2):
-        result.append(tuple(row.seq for row in page))
-        before = page[-1].seq
+    with messages.bus.reading() as reader:
+        before = reader.revision() + 1
+        while page := reader.page(before, 2):
+            result.append(tuple(row.seq for row in page))
+            before = page[-1].seq
     return result
 
 
 def test_message_bus_pages_five_channel_messages_two_at_a_time(tmp_path):
     assert pages(channel_bus(tmp_path)) == [(5, 4), (3, 2), (1,)]
+
+
+@pytest.mark.parametrize("traversal", [OlderTraversal(), OlderTraversal(8), NewerTraversal(3)])
+def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
+    messages = channel_bus(tmp_path)
+    request = MessagePageRequest(
+        ChannelDisplayScope("#history", frozenset({"#history"})),
+        PageBounds(traversal, limit=2),
+    )
+    with messages.bus.reading() as source:
+        before = request.read_opened(source)
+        messages.bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "#history", "later", InfoKind, seq=seq)))
+        retained = request.read_opened(source)
+        assert retained == before
+        assert tuple(row.seq for row in retained.messages) == (4, 5)
+        assert retained.has_older and not retained.has_newer
+    latest = request.read_opened(messages.bus)
+    assert latest != retained
 
 
 def test_archived_database_pages_read_only(tmp_path):
@@ -51,11 +80,15 @@ def test_archived_database_pages_read_only(tmp_path):
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)
     archived.bus.path.chmod(0o400)
-    source.validate()
-    assert source.snapshot_bus_revision == 5
-    assert pages(archived) == [(5, 4), (3, 2), (1,)]
-    with archived.bus.observing() as db:
-        assert db.execute("PRAGMA query_only").fetchone()[0] == 1
+    archive.chmod(0o500)
+    try:
+        source.validate()
+        assert source.snapshot_bus_revision == 5
+        assert pages(archived) == [(5, 4), (3, 2), (1,)]
+        with archived.bus.observing() as db:
+            assert db.execute("PRAGMA query_only").fetchone()[0] == 1
+    finally:
+        archive.chmod(0o700)
     replacement = tmp_path / "replacement.sqlite3"
     live.bus.backup(replacement)
     replacement.replace(archived.bus.path)
@@ -72,6 +105,53 @@ def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_pat
     messages.bus.append(lambda seq, db: replace(original, seq=seq))
     with pytest.raises(MalformedRecord, match="Expected one"):
         messages.bus.lookup_message(original.message_id)
+
+
+def test_origins_check_message_identity_inside_actual_writer_transaction(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    origin = HumanOrigin("author", 1, str(tmp_path))
+    message = Message("author", "#history", "one human send", InfoKind)
+    with messages.bus.writing() as db:
+        source = BusSnapshot(db)
+        origin.require_source(source, message.sender, message.message_id)
+        seq = BusRow.next_seq(db)
+        PublicRecord.from_message(replace(message, seq=seq)).append_to(db, seq)
+        with pytest.raises(HumanSendRefusedError):
+            origin.require_source(source, message.sender, message.message_id)
+        AgentOrigin().require_source(source, message.sender, message.message_id)
+        assert MessageIdentitySource.exists(db, where="{seq}=?", parameters=(seq,))
+        assert not MessageIdentitySource.exists(
+            db, where="{seq}>?", parameters=(seq,), sender=message.sender)
+        assert not MessageIdentitySource.exists(db, sender="absent")
+    assert messages.bus.revision() == 6
+    assert messages.bus.lookup(6).message_id == message.message_id
+
+
+def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    root = messages.bus.path.parent
+    clients = tuple(Messaging(root, Registration(RegistryFile.path_in(root)), messages)
+                    for _ in range(2))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        users = tuple(executor.map(lambda client: client.user_identity(str(root)), clients))
+    assert users[0].incarnation == users[1].incarnation
+    registered = tuple(clients[0].registry.user_thread().existing())
+    assert len(registered) == 1 and registered[0].incarnation == users[0].incarnation
+
+
+def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    with messages.bus.reading() as reader:
+        with reader.observing() as first, reader.observing() as second:
+            assert first is second and first.execute("PRAGMA query_only").fetchone()[0] == 1
+        original = reader.lookup(1)
+        assert reader.lookup_message(original.message_id).reference == original.reference
+        messages.bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "#history", "later", InfoKind, seq=seq)))
+        assert reader.revision() == 5 and messages.bus.revision() == 6
+        assert tuple(row.seq for row in reader.page(7, 2)) == (5, 4)
+    with pytest.raises(sqlite3.ProgrammingError):
+        reader.lookup(1)
 
 
 def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):

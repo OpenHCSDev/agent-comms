@@ -300,7 +300,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
-    from .bus import Bus
+    from .bus import Bus, BusReader
     from .channels import TagChannel
     from .historical_views import DMHistory, HistoryArchive, HistorySource
     from .history_views import HistoryViews
@@ -816,7 +816,7 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         conversation = self.read_key(message.sender, message.target, snapshot)
         return message.seq in seen.for_conversation(conversation)
 
-    def records(self, source: Bus, *, lower=0, upper=None, descending=False, limit=100, kinds=()):
+    def records(self, source: BusReader, *, lower=0, upper=None, descending=False, limit=100, kinds=()):
         predicate, parameters = self.index_predicate
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)

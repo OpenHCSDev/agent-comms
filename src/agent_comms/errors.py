@@ -26,6 +26,14 @@ class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
 
+class UnclaimedError(RelationViolationError):
+    """The requested bus sequence has no committed claim transition."""
+
+    def __init__(self, seq: int) -> None:
+        self.seq = seq
+        super().__init__(f"Bus row {seq} has no committed claim transition")
+
+
 class MessageAcknowledgmentError(RelationViolationError):
     """Core could not confirm every requested message; no partial read is committed."""
 
@@ -53,17 +61,17 @@ class HumanSendError(RelationViolationError):
     """A human send Core did not complete; delivery_failure decodes each member for the sender."""
 
 
-class HumanSendRefusedError(ToolRefusedError, HumanSendError):
+class HumanSendRefusedError(HumanSendError, ToolRefusedError):
     """The send transaction rolled back; the human's message was not sent."""
 
 
-class MessageNotificationError(RuntimeError):
-    """The message committed; only notifying its readers failed."""
+class CommittedMessageError(RuntimeError):
+    """The message was sent; signalling or connection retirement then failed."""
 
     def __init__(self, record: BusRecord) -> None:
         self.record = record
         super().__init__(
-            f"Message {record.seq}/{record.message_id} was sent, but notification failed."
+            f"Message {record.seq}/{record.message_id} was sent, but write completion failed."
         )
 
 
