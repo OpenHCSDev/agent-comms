@@ -25,7 +25,6 @@ import json
 import logging
 import secrets
 import time
-import urllib.request
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -57,7 +56,7 @@ from .coordinator import Coordination
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
 from .tools import (
-    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -335,11 +334,6 @@ class ToolsListResult(McpResult):
 
 
 @dataclass(frozen=True)
-class RoundTripResult:
-    round_trip: str
-
-
-@dataclass(frozen=True)
 class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
@@ -522,6 +516,7 @@ class Connector:
             return tool.invoke(comms, arguments, caller=CALLER)
 
     def application(self) -> web.Application:
+        self.store.read()  # Refuse an unreadable store before binding any port.
         with self.opened_wire() as comms:
             CommanderHeartbeat.register(comms.registry)
         app = web.Application(middlewares=[self.log_route])
@@ -816,32 +811,23 @@ class ServeVerb(ConnectorVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """Explicit qualification for a configured connector: its loopback read agrees with this
-    bus as claude-ai. Which runtime the service runs is HostService.restart_onto's proof."""
+    """The same serving proof required after an install restarts the connector."""
 
     help = "Read the bus through the running connector service and compare"
     root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
     port: int = option("--port", default=PORT, help="The service's loopback port")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        read = ToolCall.of(CommsChannelsTool)
-        call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
-        with ctx.granted("upgrade round trip") as token:
-            request = urllib.request.Request(
-                f"http://{LOOPBACK}:{self.port}/mcp",
-                data=json.dumps(FieldCodec.encode(call)).encode(),
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with urllib.request.urlopen(request, timeout=60) as response:
-                response = FieldCodec.decode(ToolsCallReply, json.load(response))
-        reply = response.result
-        if reply.is_error:
-            return f"The connector round trip failed: {reply.content[0].text}"
-        with client_wire(self.root) as comms:
-            if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
-                return f"The service on port {self.port} reads another bus than {self.root}"
-        print(json.dumps(FieldCodec.encode(
-            RoundTripResult(f"{call.params.name} read alike on port {self.port}"))))
+        from .host_services import ServiceNotServingError
+        from .host_services.connector import ConnectorService
+        from .launch_root import LaunchRoot
+
+        service = ConnectorService(launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port)
+        try:
+            service.serves()
+        except ServiceNotServingError as error:
+            return str(error)
+        print(json.dumps(FieldCodec.encode(service.result)))
         return 0
 
 
