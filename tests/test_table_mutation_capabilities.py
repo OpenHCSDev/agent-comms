@@ -45,6 +45,7 @@ from agent_comms.typed_table import (
     OrdinalTransitions,
     RequiredColumn,
     RequiredUpdateColumns,
+    RowMutation,
     StableReferenceColumns,
     TypedTable,
     ValidatedInserts,
@@ -344,3 +345,33 @@ def test_owner_counter_refuses_skipping_a_generation():
         with pytest.raises(sqlite3.IntegrityError):
             OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=3)
         OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=2)
+
+
+def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
+    path = tmp_path / CoordinationStore.filename
+    with closing(CoordinationStore(path)) as store:
+        connection = store._connection
+        Participants(participant_lookup="owner", display_name="owner", committed=True).insert(
+            connection
+        )
+        before = Participants.select(connection)
+        delete_guard = RowMutation.DELETE.abort_trigger(Participants).name
+        connection.execute(f'DROP TRIGGER "{delete_guard}"')
+        connection.execute(
+            "CREATE TRIGGER previous_guard BEFORE DELETE ON participants "
+            "BEGIN SELECT RAISE(ABORT, 'frozen'); END"
+        )
+        assert CoordinatorTable.schema_differs(connection)
+    with closing(CoordinationStore(path)) as store:
+        connection = store._connection
+        CoordinatorTable.require_installed(connection)
+        assert Participants.select(connection) == before
+        assert connection.total_changes == 0
+        version = connection.execute("PRAGMA schema_version").fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError):
+            Participants.delete(connection)
+    with closing(CoordinationStore(path)) as store:
+        connection = store._connection
+        assert connection.execute("PRAGMA schema_version").fetchone()[0] == version
+        assert connection.total_changes == 0
+        assert Participants.select(connection) == before
