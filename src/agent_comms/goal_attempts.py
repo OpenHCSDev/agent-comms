@@ -121,10 +121,14 @@ class Generation(GoalLedgerTable, TypedTable):
         f"json_extract(lifecycle,'$.kind') IN {GenerationState.sql_choices()}",
     )
 
-    def failure_identity(self) -> GoalAttemptIdentity:
-        self.lifecycle.require_failure()
+    @property
+    def attempt_identity(self) -> GoalAttemptIdentity:
         assert self.attempt_id is not None
         return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
+
+    def failure_identity(self) -> GoalAttemptIdentity:
+        self.lifecycle.require_failure()
+        return self.attempt_identity
 
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)

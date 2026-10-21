@@ -93,8 +93,7 @@ class ReadyGeneration(GenerationState, RetryableGeneration):
 @dataclass(frozen=True)
 class ReservedGeneration(GenerationState):
     def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
-        assert generation.attempt_id is not None
-        return store.read_attempt(generation.attempt_id).stopped_permit()
+        return store.read_attempt(generation.attempt_identity.attempt_id).stopped_permit()
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return phase is not None and phase.may_become(FailedAttempt())
@@ -124,11 +123,11 @@ class BlockedGeneration(GenerationState, RetryableGeneration):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
     ) -> None:
-        assert generation.attempt_id is not None
+        identity = generation.attempt_identity
         store.authorize_retry(
-            generation.goal_id,
-            expected_generation=generation.number,
-            attempt_id=generation.attempt_id,
+            identity.goal_id,
+            expected_generation=identity.generation,
+            attempt_id=identity.attempt_id,
             user_decision_id=decision,
         )
 
