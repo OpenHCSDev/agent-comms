@@ -53,24 +53,14 @@ class CommanderReread(ClaudeTranscriptHook):
     """A reread is due once context grew `every` tokens past the last one."""
 
     every: ClassVar[int] = 100_000
-    window: ClassVar[int] = 1_000_000
-    """Transcript bytes searched from the end for the latest model reply."""
 
     @property
     def mark(self) -> Path:
         return Path(self.transcript_path).with_suffix(".reread.json")
 
-    @property
-    def parts(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".reread")
-
     def context_tokens(self) -> int:
         """The prompt size of the latest model reply; zero before the first one."""
-        with open(self.transcript_path, "rb") as transcript:
-            start = max(0, transcript.seek(0, 2) - self.window)
-            transcript.seek(start)
-            lines = transcript.read().splitlines()[1 if start else 0 :]
-        for line in reversed(lines):
+        for line in reversed(self.tail()):
             if ModelReply.marker in line:
                 return ModelReply.decode(json.loads(line)).message.usage.context
         return 0
