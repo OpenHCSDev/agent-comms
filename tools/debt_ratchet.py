@@ -459,15 +459,21 @@ class TypeErrors(CheckedRevision):
 
 @dataclass(frozen=True)
 class ChangedSource:
-    """One head module and the new-side lines changed by its Git patch."""
+    """One head module, its base revision, and the new-side lines changed by its Git patch.
+    A path missing at the base is empty there, as in every per-file measure."""
 
     path: str
     source: bytes
     lines: frozenset[int]
+    base_source: bytes
 
     @cached_property
     def tree(self) -> ast.Module:
         return ast.parse(self.source, self.path)
+
+    @cached_property
+    def base_tree(self) -> ast.Module:
+        return ast.parse(self.base_source, self.path)
 
     @cached_property
     def tokens(self) -> tuple[tokenize.TokenInfo, ...]:
@@ -485,11 +491,18 @@ class ChangedSource:
                 start = int(span[0])
                 count = int(span[1]) if len(span) == 2 else 1
                 lines.update(range(start, start + count))
-        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
+        listed = git(repo, "ls-tree", "--name-only", base, "--", path).strip()
+        base_source = git(repo, "show", f"{base}:{path}") if listed else b""
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines), base_source)
 
 
 class CleanChangedLines(OccurrenceMeasure):
-    """No occurrence may be written, even when another occurrence is deleted."""
+    """No occurrence may be written, even when another occurrence is deleted.
+
+    An occurrence is identified by its enclosing scope and its source text, so rewriting
+    the rest of a line around an unchanged occurrence writes nothing new, while a different
+    occurrence elsewhere never pays for a new one.
+    """
 
     @staticmethod
     def site_lines(node: ast.AST) -> range:
@@ -502,14 +515,44 @@ class CleanChangedLines(OccurrenceMeasure):
         return {f"{measure.__name__}:{path}": measure.changed_sites(source)
                 for measure in Measure.members_with(CleanChangedLines)}
 
+    @staticmethod
+    def scopes(tree: ast.AST) -> dict[ast.AST, str]:
+        """Each node's enclosing class and function names, dotted; the module is empty."""
+        found: dict[ast.AST, str] = {}
+        pending: list[tuple[ast.AST, str]] = [(tree, "")]
+        while pending:
+            node, scope = pending.pop()
+            found[node] = scope
+            match node:
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
+                    scope = f"{scope}.{name}"
+            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+        return found
+
+    @classmethod
+    def identities(cls, tree: ast.AST, filename: str) -> Counter[tuple[str, str]]:
+        """Every occurrence in the module, keyed by its scope and source text."""
+        scopes = cls.scopes(tree)
+        found: Counter[tuple[str, str]] = Counter()
+        for node in cls.sites(tree, filename):
+            if count := cls.occurrences(node):
+                found[scopes[node], ast.unparse(node)] += count
+        return found
+
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The first changed line of each occurrence written on a changed line."""
+        """The first changed line of each occurrence written on a changed line that the base lacks."""
+        scopes = cls.scopes(source.tree)
+        unwritten = cls.identities(source.tree, source.path)
+        unwritten.subtract(cls.identities(source.base_tree, source.path))
         sites = []
         for node in cls.sites(source.tree, source.path):
             if ((count := cls.occurrences(node))
                     and (touched := source.lines.intersection(cls.site_lines(node)))):
-                sites.extend([min(touched)] * count)
+                identity = scopes[node], ast.unparse(node)
+                written = max(0, min(count, unwritten[identity]))
+                unwritten[identity] -= written
+                sites.extend([min(touched)] * written)
         return sites
 
 
@@ -560,7 +603,7 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        module = ChangedSource(filename, source, frozenset())
+        module = ChangedSource(filename, source, frozenset(), b"")
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
