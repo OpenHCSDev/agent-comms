@@ -102,7 +102,6 @@ from .transcript_events import SentTranscript
 from agent_comms.todos import (
     ClaimOrder,
     OrderClaim,
-    PullRequestLink,
     CorrectCheckTodo,
     ServeTodo,
     DeliverTodo,
@@ -135,6 +134,7 @@ from .task_sources import (
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from agent_comms.private_bus_checkpoint import PublicMessages
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -1052,22 +1052,21 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
     report: Annotated[str, *tool_field("Delivery report text")]
 
     def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        from agent_comms.private_bus_checkpoint import PublicMessages
-
         todo = comms.goals.todos.get(self.problem)
         todo.require_replacement()
         actor = comms.registry.require(caller.name).incarnation
+        generation = todo.held().generation
+        todo.require_assignee(actor, generation)
         with comms.bus.log.checked_read() as source:
             original = PublicMessages.require(
                 source.connection, message_id=todo.messages[-1].message_id
             )
-        message = Message(
-            actor.name, todo.creator, self.report, InfoKind,
-            answers=(MessageReference(original.seq, original.message_id),),
+        claim = OrderClaim.for_order(
+            todo, actor, self.pull_request, self.head, self.report,
+            MessageReference(original.seq, original.message_id),
         )
-        claim = OrderClaim(PullRequestLink(todo.repo, self.pull_request), self.head, message)
         changed = ClaimOrder(
-            todo.revision, actor, todo.held().generation, claim
+            todo.revision, actor, generation, claim
         ).record(comms.goals, todo.id)
         return TodoChanged(changed, changed.strike_count)
 

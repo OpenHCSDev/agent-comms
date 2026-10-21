@@ -32,7 +32,7 @@ from agent_comms.installer.runtime_resolution import (
     RuntimeResolution,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -40,6 +40,9 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
     CommitDelivery,
+    DoneTodoState,
+    GoalRef,
+    OpenTodoState,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
@@ -137,6 +140,63 @@ def proof_build_checkouts(
     current.parent.mkdir(parents=True)
     current.symlink_to(runtime, target_is_directory=True)
     return tuple(checkouts)
+
+
+@pytest.mark.parametrize("run, after_install", (
+    (MechanicalOrderRun(), DoneTodoState),
+    (ApplicationOrderRun("Open the installed application and confirm the retained order is working"),
+     OpenTodoState),
+))
+def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
+    run, after_install, proof_build_checkouts, comms, tmp_path,
+):
+    from agent_comms.launch_runtime import LaunchRuntime
+    from test_todos import order, thread
+
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    checkout = graph.repository.checkout
+    subprocess.run(("git", "merge-base", "--is-ancestor", graph.newer, "HEAD"),
+                   cwd=checkout, check=True)
+    subprocess.run(("git", "merge-base", "--is-ancestor", graph.newer, "origin/main"),
+                   cwd=checkout, check=True)
+    lead = thread("lead", comms.root, 1.0)
+    comms.registry.register(lead)
+    merged = replace(order(checkout), run=run).merged(graph.newer)
+    todo = comms.goals.todos.create(
+        "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
+        creator=lead, owner=lead, generation="fixture-goal",
+        goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
+        review_at=RecordedEventTime(1000), order=merged,
+    )
+    with pytest.raises(DeliveredCommitNotInstalledError):
+        merged.require_installation()
+    observed = run.after_merge(todo, merged)
+    assert observed == todo  # Waiting again does not manufacture a revision.
+    assert observed.state is OpenTodoState
+    assert not observed.order.accepted
+    artifact = tmp_path / "application-proof.txt"
+    works = "Open the installed application and confirm the retained order is working"
+    artifact.write_text(works)
+    with pytest.raises(DeliveredCommitNotInstalledError):
+        ThreadCaller("lead").invoke(CommsProblemCloseTool(
+            problem=todo.id, works=works, artifact=str(artifact),
+        ), comms)
+    assert comms.goals.todos.get(todo.id) == todo
+
+    runtime = LaunchRuntime.installed()
+    resolution = RuntimeResolution.at(runtime.prefix)
+    RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime.prefix)
+    accepted = run.after_merge(todo, merged)
+    assert accepted.state is after_install
+    assert merged.waiting_on_install(todo, {}) == (todo,)
+    ThreadCaller("lead").invoke(CommsProblemCloseTool(
+        problem=todo.id, works=works, artifact=str(artifact),
+    ), comms)
+    closed = comms.goals.todos.get(todo.id)
+    assert closed.state is DoneTodoState
+    assert closed.order.accepted
+    assert FieldCodec.decode(Todo, FieldCodec.encode(closed)) == closed
 
 
 def test_runtime_package_family_owns_installed_commits(proof_build_checkouts):

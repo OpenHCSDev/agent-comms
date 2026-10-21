@@ -652,8 +652,7 @@ class Commander(CommanderContext):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
         in the same revision; this posts the strikes Core recorded."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open:
-            sys.exit(f'Refused: {pid} has no open order')
+        todo.state.require_open(todo)
         todo.order.checked().require_delivery(todo.order.id)
         unit = todo.held().owner
         repo = str(self.repo_directory(todo.order.check.directory))
@@ -754,7 +753,7 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         ThreadCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting commander's name"}
+            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
@@ -947,13 +946,13 @@ class DeliverVerb(OrderVerb):
         )
 
     def run(self, ctx: Commander) -> None:
-        result = ThreadCaller(self.who(ctx)).invoke(
+        ThreadCaller(self.who(ctx)).invoke(
             CommsOrderDeliverTool(
                 problem=self.problem, pull_request=self.pull_request,
                 head=self.head, report=Path(self.report_file).read_text(),
             ), ctx.comms,
         )
-        print(f'{result.todo.id}: {result.todo.order.line}')
+        print(f'{self.problem}: delivery claim recorded')
 
 
 @dataclass(frozen=True, kw_only=True)

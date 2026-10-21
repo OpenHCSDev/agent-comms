@@ -26,7 +26,6 @@ from agent_comms.commander.order import Commander, PullRequestVerb
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
 from agent_comms.goal_actions import SetGoalAction
@@ -226,8 +225,8 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
     assert cells.startswith(f"{__file__}:1 | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
     assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.checked().check)
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
-    assert merged.order.line == "Merged and installed"
-    assert merged.order.waiting_on_install(merged, {}) == ()
+    assert merged.order.line == "Merged, waiting on install"
+    assert merged.order.waiting_on_install(merged, {}) == (merged,)
 
 
 @pytest.fixture
@@ -273,7 +272,9 @@ def pr_commander(tmp_path, monkeypatch):
                      scratch=tmp_path, disk=tmp_path)
 
 
-def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
+def pr_order(ctx, pid, run: OrderRun = ApplicationOrderRun(
+    "Read the actual installed application and retain its working proof",
+)):
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
@@ -304,7 +305,7 @@ def github_body(ctx, number):
     pytest.param(1, ("P1",), (), id="without-body-identity"),
     pytest.param(2, ("P343", "P344"), ("P343", "P344"), id="shared-request"),
 ))
-def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, problems, body_identities):
+def test_recorded_merged_request_observes_all_linked_orders(pr_commander, number, problems, body_identities):
     ctx = pr_commander
     assert tuple(re.findall(r"\bP[1-9][0-9]*\b|Agent-Comms-Order:", github_body(ctx, number))) == body_identities
     originals = tuple(pr_order(ctx, pid) for pid in problems)
@@ -322,7 +323,7 @@ def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, 
     assert tuple(store.get(todo.id) for todo in originals) == linked
     store.record_merges(store.merged_orders(ctx.incarnation, ctx.comms.registry))
     done = tuple(store.get(todo.id) for todo in originals)
-    assert all(todo.state is DoneTodoState for todo in done)
+    assert all(todo.state is original.state for todo, original in zip(done, originals, strict=True))
     assert len({todo.order.sha for todo in done}) == 1
     for todo in done:
         assert todo.order.checked().pull_requests == (link,)
@@ -367,10 +368,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             order=RequestGoalOrder(), goal_id="pr-work"))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-        originals = tuple(
-            adopt_pr(ctx, pr_order(ctx, f"P{index}", run).id, 1)
-            for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(
-                "Read the copied board and confirm the application order remains assigned")), 1))
+        original = adopt_pr(ctx, pr_order(ctx, "P1").id, 1)
         released = pr_order(ctx, "P3")
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
@@ -411,16 +409,14 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                     assert readings, type(watch).__name__
                     print(type(watch).__name__, *readings, sep="\n")
                     observed.extend(readings)
-                mechanical, application = (copied.goals.todos.get(todo.id) for todo in originals)
-                assert mechanical.state is DoneTodoState
-                assert mechanical.order.sha == merged
+                application = copied.goals.todos.get(original.id)
                 assert application.order.sha == merged and not application.order.accepted
                 assert copied.goals.todos.get(released.id).holder is None
                 assert any(line.startswith("gh ") for line in observed)
                 assert any(line.startswith("git ") for line in observed)
                 held = [line for line in observed if line.split()[1] != "free"]
                 assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
-        assert tuple(c.goals.todos.get(todo.id) for todo in originals) == originals
+        assert c.goals.todos.get(original.id) == original
 
 
 def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
@@ -503,71 +499,6 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
         assert isinstance(rejected, GoalChangedError)
         assert rejected.thread.name == selected.name
         assert rejected.expected == selected.goal.captured
-
-
-def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
-    """Local forge fixture, copied SQLite stores, board and real commander close entrypoint."""
-    ctx = pr_commander
-    source = ctx.repos[0]
-    lead = ctx.comms.registry.require(ctx.commander)
-    worker = thread("merge-worker", ctx.root, 2.0)
-    ctx.comms.registry.register(worker)
-    planned = "Read the copied board and confirm its application order remains assigned after merge"
-    link = PullRequestLink(source.github, 1)  # the fixture's locally contained merge
-    originals = tuple(
-        ctx.comms.goals.todos.create(
-            f"P{index}", source.github, "Keep application work held until its run is recorded",
-            creator=lead, owner=worker, generation="merge-run",
-            goal=GoalRef(lead.name, lead.created_at, "merge-run"),
-            review_at=RecordedEventTime(1000),
-            order=replace(order(source.checkout), id=f"merge-order-{index}", run=run,
-                          pull_requests=(link,)))
-        for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
-    copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
-    with practice_copy(ctx.root, copied_path) as (copied, measurement):
-        checked = ctx.model_copy(update={"root": copied, "state": copied / "state"})
-        store = checked.comms.goals.todos
-        store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
-        mechanical, application = tuple(store.get(todo.id) for todo in originals)
-        assert mechanical.state is DoneTodoState
-        assert mechanical.assignment is None
-        assert source.contains(mechanical.order.sha)
-        assert application.state is originals[1].state
-        assert application.assignment == originals[1].assignment
-        assert application.holder == worker.name
-        assert application.order.sha == mechanical.order.sha
-        assert not application.order.accepted
-        assert application.order.line == application.order.checked().run.merged_line
-        board = checked.board_text()
-        assert application.order.line in board
-        assert worker.name in board
-        print("APPLICATION BOARD:", next(line for line in board.splitlines()
-                                          if line.startswith(f"| {application.id}:")))
-        store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
-        assert store.get(application.id) == application  # no heartbeat revision churn
-        assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
-        with pytest.raises(ToolRefusedError) as refused:
-            store.apply(application.id, ChangeTodoState(
-                application.revision, DoneTodoState, checked.incarnation, "merge-run"))
-        print("CLOSE REFUSAL:", refused.value)
-        artifact = copied / "run.txt"
-        artifact.write_text(board)
-        with pytest.raises(ToolRefusedError):
-            checked.close(application.id,
-                          "The source grep passed and the merge commit exists in main.",
-                          str(artifact))
-        assert store.get(application.id) == application
-        works = f"{planned}; the copied store and board both retained {worker.name}."
-        checked.close(application.id, works, str(artifact))
-        installed = store.get(application.id)
-        assert installed.state is DoneTodoState
-        assert installed.assignment is None
-        assert installed.order.accepted
-        assert installed.order.works == works
-        assert installed.order.artifact == str(artifact)
-        assert installed.order.installed(works, str(artifact)) is installed.order
-        assert FieldCodec.decode(Todo, FieldCodec.encode(installed)) == installed
-        assert tuple(ctx.comms.goals.todos.get(todo.id) for todo in originals) == originals
 
 
 @pytest.mark.parametrize("number", (0, -1))

@@ -42,7 +42,12 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.todos import DeliverTodo, FixScope, FixShape, OperationDelivery, PendingProblemOrder, TodoConflict
+from agent_comms.todos import (
+    DeliverTodo, FixScope, FixShape, OperationDelivery, OrderMessage,
+    PendingProblemOrder, TodoConflict,
+)
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import CommsOrderDeliverTool
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
@@ -180,6 +185,26 @@ def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
     assert violation.orders == ("P1",)
     violation.enforce(held_bus, "lead")
     assert held_bus.goals.todos.get("P2") == delivered
+
+
+def test_blocked_holder_reissues_pending_sibling_but_never_the_claimed_order(held_bus):
+    todo = held_bus.goals.todos.get("P2")
+    sent = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo))
+    held_bus.goals.todos.apply("P2", OrderMessage(
+        todo.revision, held_bus.registry.require("lead").incarnation, sent.message.message_id,
+    ))
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P2", pull_request=1, head="a" * 40,
+        report="The source is published for the commander to inspect before accepting delivery.",
+    ), held_bus)
+    claimed = held_bus.goals.todos.get("P2")
+    pending = held_bus.goals.todos.get("P1")
+    blocked_holder(held_bus)
+    violation, = Blocked.violations(held_bus, "lead")
+    assert violation.orders == ("P1",)
+    violation.enforce(held_bus, "lead")
+    assert held_bus.goals.todos.get("P2") == claimed
+    assert held_bus.goals.todos.get("P1").order.id != pending.order.id
 
 
 def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(held_bus, tmp_path):

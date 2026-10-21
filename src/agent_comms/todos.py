@@ -70,6 +70,7 @@ from agent_comms.build_identity import (
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import InfoKind, Message
+from agent_comms.message_reference import MessageReference
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
@@ -1594,7 +1595,9 @@ class FixScope(OrderScope[CheckedDelivery]):
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
                 f"Open the PR with agent-comms-commander order pr {problem} "
-                "--title '<title>' --body-file <file>; Core records its link on this order.")
+                "--title '<title>' --body-file <file>; Core records its link on this order.",
+                "Record the unit's delivery claim in Core before waiting for the commander's "
+                "verdict; a chat report does not change the order.")
 
     def verified_claims(
         self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...],
@@ -1629,14 +1632,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
-
-    def fresh_order(self, at: float, edits: tuple[str, ...]) -> PendingProblemOrder:
-        window = (self.first_call_deadline.recorded_at("A first-call deadline")
-                  - self.at.recorded_at("An order"))
-        return self.copy_as(
-            PendingProblemOrder, id=uuid4().hex[:12], at=RecordedEventTime(at),
-            first_call_deadline=RecordedEventTime(at + window), edits=edits,
-        )
 
     def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
         return (any(self.owner.same_file(location, root) for location in locations)
@@ -1817,7 +1812,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MergedProblemOrder(CheckedProblemOrder):
+class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return (todo,)
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedProblemOrder(AwaitingInstallationProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
 
@@ -1858,6 +1859,14 @@ class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))
+
+    def fresh_order(self, at: float, edits: tuple[str, ...]) -> PendingProblemOrder:
+        window = (self.first_call_deadline.recorded_at("A first-call deadline")
+                  - self.at.recorded_at("An order"))
+        return self.copy_as(
+            PendingProblemOrder, id=uuid4().hex[:12], at=RecordedEventTime(at),
+            first_call_deadline=RecordedEventTime(at + window), edits=edits,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1906,6 +1915,16 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
+    @classmethod
+    def for_order(
+        cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
+        report: str, answer: MessageReference,
+    ) -> OrderClaim:
+        return cls(
+            PullRequestLink(todo.repo, number), head,
+            Message(actor.name, todo.creator, report, InfoKind, answers=(answer,)),
+        )
+
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimedProblemOrder(DeliverableProblemOrder):
@@ -1917,7 +1936,7 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredProblemOrder(CheckedProblemOrder):
+class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
 
@@ -1967,9 +1986,6 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
     def require_checked(self, problem: str) -> None:
         """The delivery passed the order's check, so its result is recorded."""
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        return (todo,)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2826,10 +2842,6 @@ class ClaimOrder(TodoCommand):
         current.require_revision(self.expected_revision)
         current.state.require_open(current)
         current.require_assignee(self.actor, self.generation)
-        if (self.claim.pull_request.repo != current.repo
-                or self.claim.message.sender != self.actor.name
-                or self.claim.message.target != current.creator):
-            raise TodoError("A delivery claim must answer this order's commander and repository.")
         order = current.order.checked().claimed(self.claim)
         return replace(current, order=order, revision=current.revision + 1)
 
