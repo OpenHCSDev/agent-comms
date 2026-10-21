@@ -21,6 +21,7 @@ from .goal_states import (
     ActiveGoal,
     BlockedGoal,
     BlockedState,
+    ChokeholdPause,
     CompletedGoal,
     GoalState,
     OwnerPause,
@@ -421,6 +422,14 @@ class PausedGoalAction(
         return PausedGoal(
             current or (OwnerPause() if ctx.actor is OwnerInvocable else RuntimePause())
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ChokeholdPausedGoalAction(PausedGoalAction):
+    """The heartbeat holds a unit while its commander ignores a vibe check."""
+
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return PausedGoal(ChokeholdPause())
 
 
 @dataclass(frozen=True, kw_only=True)
