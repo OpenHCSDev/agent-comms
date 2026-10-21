@@ -719,8 +719,12 @@ class ExternalField(ABC):
     """A declared field type owns its external value and any sibling context it requires."""
 
     @classmethod
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.decode_external_value(value, record)
+
+    @classmethod
     @abstractmethod
-    def decode_external(cls, value: object, record: Mapping[str, object]) -> object: ...
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object: ...
 
 
 class ExternalNullMember:
@@ -745,7 +749,7 @@ class ExternalNull(ExternalField, MroDispatch):
 
     @handles(object)
     @classmethod
-    def decode_value(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_non_null(cls, value: object, record: Mapping[str, object]) -> object:
         return super().decode_external(value, record)
 
     @classmethod
@@ -766,7 +770,7 @@ class ExternalName(ExternalField, DeclaredFamily):
         )
 
     @classmethod
-    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         return cls.from_external(value)
 
 
@@ -922,7 +926,7 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     @classmethod
-    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         return cls.from_wire(value)
 
     @classmethod

@@ -180,7 +180,7 @@ class PiPayload(ExternalField):
     wire_tag: ClassVar[str | None] = None
 
     @classmethod
-    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict):
             raise MalformedRecord(f"Expected {cls.__name__} object")
         member = cls.wire_member(value)
@@ -277,8 +277,8 @@ class OpenPayload(PiPayload, DeclaredFamily):
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     @classmethod
-    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return super().decode_external(record, record)
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return super().decode_external_value(record, record)
 
     @classmethod
     def wire_member(cls, value):
@@ -1298,7 +1298,7 @@ class ReportedCompaction(PiReported[CompactionData]):
 @dataclass(frozen=True)
 class UnknownData(Opaque, PiResponseData):
     @classmethod
-    def decode_value(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         return FieldCodec.construct(cls, {"payload": FieldCodec.decode(JsonValue, value)})
 
 
@@ -1382,12 +1382,12 @@ class NativeToolDetails(ExternalNull, PiPayload, DeclaredFamily, affix="ToolDeta
     wire_tag = "agentCommsKind"
 
     @classmethod
-    def decode_value(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict) or cls.wire_tag not in value:
             return FieldCodec.construct(OpaqueToolDetails, {
                 "payload": FieldCodec.decode(JsonValue, value),
             })
-        return super().decode_value(value, record)
+        return super().decode_external_value(value, record)
 
     @classmethod
     def wire_member(cls, value):

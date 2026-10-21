@@ -267,9 +267,9 @@ def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them(
 
 def test_external_null_members_and_nullable_names_use_their_declarations():
     from agent_comms.field_codec import ExternalNullMember
-    from agent_comms.pi_payloads import PiModel
+    from agent_comms.pi_payloads import PiModel, PiToolResult
 
-    for family in (PiMessage, PiModel, PiResponseData):
+    for family in (PiMessage, PiModel, PiResponseData, PiToolResult, NativeToolDetails):
         member, = family.members_with(ExternalNullMember)
         assert family.from_wire(None) == member()
 
@@ -288,7 +288,20 @@ def test_external_null_members_and_nullable_names_use_their_declarations():
         FieldCodec.decode(type[PiStopReason], known)
 
 
-def test_response_command_owns_data_normalization_without_redecoding_its_identity():
+@pytest.mark.parametrize("annotation, wire", [
+    (list[PiMessage], [{"role": "future_message", "extra": 1}]),
+    (tuple[PiMessage, ...], [{"role": "future_message", "extra": 1}]),
+    (tuple[PiMessage, int], [{"role": "future_message", "extra": 1}, 7]),
+    (dict[str, PiMessage], {"message": {"role": "future_message", "extra": 1}}),
+    (frozenset[type[PiStopReason]], ["stop", "stop"]),
+])
+def test_external_collections_produce_resolved_members(annotation, wire):
+    resolved = FieldCodec.decode_external(annotation, wire, {})
+    assert FieldCodec.decode_resolved(annotation, resolved) is resolved
+    assert FieldCodec.decode(annotation, FieldCodec.encode(resolved, annotation)) == resolved
+
+
+def test_response_command_owns_data_decoding_without_redecoding_its_identity():
     from agent_comms.pi_commands import PiCommand
     from agent_comms.pi_events import Response
 
@@ -310,6 +323,14 @@ def test_response_command_owns_data_normalization_without_redecoding_its_identit
     assert response.command is ObservedReply
     assert response.data == StateData.from_wire(payload)
     assert seen == [payload]
+
+    class InvalidResolvedReply(PiCommand):
+        @classmethod
+        def decode_response_data(cls, value):
+            return object()
+
+    with pytest.raises(MalformedRecord):
+        Response.from_wire({"type": "response", "command": InvalidResolvedReply.declared_name})
 
 
 @pytest.mark.parametrize("command", [None, False, 1, {}])
