@@ -61,10 +61,10 @@ from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, curr
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
-    """The tags a new thread takes: the ones given, or a fork's parent's."""
+    """Select explicit, inherited or changed tags from an existing set."""
 
-    @abstractmethod
-    def for_new(self) -> frozenset[str]: ...
+    def for_new(self) -> frozenset[str]:
+        return self.for_child(frozenset())
 
     @abstractmethod
     def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
@@ -87,20 +87,23 @@ class GivenTags(TagChoice):
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(str)
 
-    def for_new(self) -> frozenset[str]:
-        return self.tags
-
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return self.tags
 
 
 @dataclass(frozen=True, slots=True)
 class InheritedTags(NullMember, TagChoice):
-    def for_new(self) -> frozenset[str]:
-        return frozenset()
-
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return parent
+
+
+@dataclass(frozen=True, slots=True)
+class ChangedTags(TagChoice):
+    add: frozenset[str]
+    remove: frozenset[str]
+
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
+        return (parent | self.add) - self.remove
 
 
 class ImportDirectory(SubclassUnion, affix="Directory"):

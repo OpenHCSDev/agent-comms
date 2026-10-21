@@ -19,11 +19,12 @@ from .message_bus import MessageBus
 from .messages import InfoKind, Message, MembershipConversationRole
 from .registration import Registration
 from .threads import Thread
+from .thread_management import ChangedTags, GivenTags
 from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .thread_management import ThreadManagement
+    from .thread_management import TagChoice, ThreadManagement
 
 
 @dataclass(frozen=True)
@@ -136,11 +137,6 @@ class ChannelManagement:
     def channels(self) -> Sequence[str]:
         return list(self.bus.channel_declarations())
 
-    def _require_available_new_tags(self, proposed: frozenset[str]) -> None:
-        document = self.catalog.read()
-        for tag in proposed - document.tags:
-            document.require_available_tag_name(tag)
-
     def create_tag(self, name: str) -> Tag:
         tag = Tag(name)
         with self.catalog.editing() as document:
@@ -153,25 +149,24 @@ class ChannelManagement:
         for tag in add | remove:
             Tag.validate(tag)
         with guard_original_root_write(self.root):
-            return self._update_tags(name, add=add, remove=remove)
+            return self._update_tags(name, ChangedTags(add, remove))
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
             Tag.validate(tag)
         with guard_original_root_write(self.root):
-            thread = self.registry.require(name)
-            return self._update_tags(thread.name, add=tags - thread.tags,
-                                            remove=thread.tags - tags)
+            return self._update_tags(name, GivenTags(tags))
 
-    def _update_tags(self, name, *, add, remove) -> Thread:
-        self._require_available_new_tags(add)
-        thread = self.registry.require(name)
+    def _update_tags(self, name: str, choice: TagChoice) -> Thread:
         previous_channels = self.bus.channel_declarations()
-        updated = replace(thread, tags=(thread.tags | add) - remove)
-        self.registry.register(updated, self.registry.status(thread.name))
-        updated = self.registry.require(thread.name)
-        with self.catalog.editing() as document:
-            document.remember_tags(add)
+        with self.registry.store.locked(), self.catalog.editing() as document:
+            thread = self.registry.require(name)
+            updated = replace(thread, tags=choice.for_child(thread.tags))
+            for tag in updated.tags - document.tags:
+                document.require_available_tag_name(tag)
+            self.registry.register(updated, self.registry.status(thread.name))
+            updated = self.registry.require(thread.name)
+            document.remember_tags(updated.tags)
         announcers = thread.role.executor(thread) if thread.tags != updated.tags else ()
         for announcer in announcers:
             channels = {

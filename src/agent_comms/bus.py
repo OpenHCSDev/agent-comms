@@ -140,6 +140,17 @@ class BusReader(RouteCounts, ABC):
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
 
+    def message_history(self) -> Iterator[Message]:
+        """Public bulk export, paged within one committed SQLite snapshot."""
+        with self.reading() as source:
+            after, through = 0, source.revision()
+            while after < through:
+                records = source.since(after, 100)
+                for record in records:
+                    for message in record.messages():
+                        yield Message.from_message(message)
+                after = records[-1].seq
+
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
         with self.observing() as db:

@@ -40,6 +40,22 @@ def setup_wire(path):
     return comms
 
 
+def test_tag_delta_and_replacement_use_the_current_registration(tmp_path):
+    comms = setup_wire(tmp_path)
+    changed = comms.channels.update_tags(
+        "a", add=frozenset({"ui"}), remove=frozenset({"api"}),
+    )
+    assert changed.tags == frozenset({"ui"})
+    replaced = comms.channels.replace_tags("a", frozenset({"fresh"}))
+    assert replaced.tags == frozenset({"fresh"})
+    assert comms.registry.require("a") == replaced
+    assert "fresh" in comms.channels.catalog.read().tags
+    members = {view.channel.name: view.members for view in comms.views.channel_views()}
+    assert "a" in members["#fresh"]
+    assert "a" not in members["#api"]
+    assert "a" not in members["#ui"]
+
+
 def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     comms = setup_wire(tmp_path)
     before = {view.channel.name: view.members for view in comms.views.channel_views()}
