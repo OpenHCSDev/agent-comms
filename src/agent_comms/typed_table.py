@@ -269,7 +269,7 @@ class Index:
 
     terms: tuple[str, ...]
     unique: bool = field(default=False, kw_only=True)
-    where: str | None = field(default=None, kw_only=True)
+    where: str | None = None
 
     def term_sql(self, owner: type[TypedTable]) -> str:
         return owner._column_list(self.terms)

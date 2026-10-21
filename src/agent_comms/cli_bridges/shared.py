@@ -12,7 +12,7 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, closing, contextmanager, nullcontext
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -90,8 +90,26 @@ class BridgeStateTable(DurableTables):
     filename = 'delivery.sqlite3'
 
 
+class BindingRequest(ABC):
+    """What the command line asks of the state directory's one binding."""
+
+    @abstractmethod
+    def bind(self, db: CoordinationStore) -> Binding: ...
+
+
 @dataclass(frozen=True)
-class Binding(BridgeStateTable, TypedTable):
+class StoredBinding(BindingRequest):
+    """No binding given: the directory's own, read without taking the writer."""
+
+    def bind(self, db: CoordinationStore) -> Binding:
+        rows = Binding.select(db)
+        if len(rows) != 1:
+            raise ValueError('Supply one complete Core/CLI binding for this state directory')
+        return rows[0]
+
+
+@dataclass(frozen=True)
+class Binding(BridgeStateTable, TypedTable, BindingRequest):
     root: str
     bus: str = field(metadata={'wire_name': 'bus_thread'})
     thread: str = field(metadata={'wire_name': 'session'})
@@ -103,10 +121,10 @@ class Binding(BridgeStateTable, TypedTable):
             group.add_argument('--' + key.replace('_', '-'))
 
     @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
+    def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
         values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
+        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
     @classmethod
     @contextmanager
@@ -120,26 +138,20 @@ class Binding(BridgeStateTable, TypedTable):
                 BridgeStateTable.reconcile_schema(db)
             yield db
 
-    @classmethod
-    def bind(cls, db: CoordinationStore, requested: Binding | None) -> Binding:
-        # Only a requested binding may write; reading the existing one takes no writer.
-        with nullcontext(db) if requested is None else SQLiteFile.write_transaction(db):
-            rows = cls.select(db)
-            if not rows and requested is not None:
-                requested.insert(db)
-                return requested
-            if len(rows) != 1:
-                raise ValueError('Supply one complete Core/CLI binding for this state directory')
-            current = rows[0]
-            if requested is not None and requested != current:
+    def bind(self, db: CoordinationStore) -> Binding:
+        """The first binding claims the directory; a later one must be the same."""
+        with SQLiteFile.write_transaction(db):
+            if not Binding.select(db):
+                self.insert(db)
+            if StoredBinding().bind(db) != self:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
-            return current
+            return self
 
 
 @dataclass
 class Options:
     operation: Operation
-    binding: Binding | None
+    binding: BindingRequest
     state: Path
 
     @classmethod
@@ -257,7 +269,7 @@ OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
-    def binding(self, arguments: argparse.Namespace) -> Binding | None:
+    def binding(self, arguments: argparse.Namespace) -> BindingRequest:
         return Binding.from_arguments(arguments)
 
     @abstractmethod
@@ -805,7 +817,7 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     os.umask(0o077)
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
-            bridge = bridge_type(options, Binding.bind(db, options.binding), db)
+            bridge = bridge_type(options, options.binding.bind(db), db)
             runner.run(bridge.run())
     except* asyncio.CancelledError:
         pass
