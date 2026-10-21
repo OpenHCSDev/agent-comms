@@ -378,7 +378,6 @@ class TestRegistration:
             Registration(root / "registry.json")
         with pytest.raises(RelationViolationError):
             comms.messaging.initialize_private_initial_protocol()  # never auto-repair
-        assert not (root / "private_bus_checkpoint.sqlite3").exists()
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])

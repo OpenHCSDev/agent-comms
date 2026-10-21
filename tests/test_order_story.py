@@ -73,7 +73,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         for problem in ("P2", "P3"):
             replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder(),
                     strikes=(), verdicts=(), messages=()).insert(db)
-    copied.goals.todos.link(actor, "P2", "worker", saved.order.checked().id)
+    copied.goals.todos.link(actor, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
         copied, {"order_id": "resent-order"}, caller=caller))
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")

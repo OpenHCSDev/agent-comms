@@ -15,7 +15,7 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.thread_status import NoBridgeThreadStatus
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import GivenThreadText, SavedSessionFile
 
 
 @pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
@@ -68,7 +68,8 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
     saved = restored.threads[owner.name]
     assert saved.process_identity == NoProcess() and not saved.turn_record.read().executing
-    assert saved.incarnation == owner.incarnation and saved.session_file == str(session)
+    assert saved.incarnation == owner.incarnation
+    assert saved.session_file == SavedSessionFile(str(session))
 
 
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):

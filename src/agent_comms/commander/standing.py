@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Self
 
+from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import GoalPrecondition, ReissuedOrderGoalAction
 from agent_comms.goals import Goal
@@ -33,6 +34,31 @@ from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
+
+
+@dataclass(frozen=True)
+class InstallDue(UndatedStandingRule):
+    """Each configured main not contained in the installed build needs an install."""
+
+    why: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        config = CommanderConfig.read_root(comms.root)
+        installed = RecordedBuildIdentity.installed()
+        due: list[Self] = []
+        for repo in config.repos:
+            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
+            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
+            if not installed.contains(main, repo.checkout):
+                recorded = installed.for_repository(repo)
+                due.append(cls(
+                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
+        return tuple(due)
+
+    def line(self) -> str:
+        return (f"INSTALL DUE ({self.why}) -> the installer rehearses and installs main with "
+                "agent-comms install and posts the result to the commander")
 
 
 @dataclass(frozen=True)
