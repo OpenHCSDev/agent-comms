@@ -16,13 +16,14 @@ import re
 import sys
 from contextlib import closing
 from dataclasses import dataclass
+from typing import ClassVar
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
 
 import agent_comms
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.declared_family import UnknownFamilyMember
+from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.errors import RelationViolationError
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.typed_table import DerivedTables, SQLiteSchemaObject, TypedRow, TypedTable
@@ -56,21 +57,44 @@ def unnamed(sql: str) -> str:
     return _INDEX_NAME.sub(r"\1\2", sql, count=1)
 
 
+class CatalogKind(DeclaredFamily, affix="Kind"):
+    """What SQLite's catalog calls an entry; each kind owns how the carry treats it."""
+
+    holds_rows: ClassVar[bool] = False
+    named_by_coverage: ClassVar[bool] = False
+
+
+class TableKind(CatalogKind):
+    holds_rows = True
+
+
+class IndexKind(CatalogKind):
+    named_by_coverage = True
+
+
+class TriggerKind(CatalogKind):
+    pass
+
+
+class ViewKind(CatalogKind):
+    pass
+
+
 @dataclass(frozen=True)
 class StoredObject(TypedRow):
     """One catalog entry: SQLite's own type, name and table."""
 
-    type: str
+    type: type[CatalogKind]
     name: str
     tbl_name: str
     sql: str
 
     @property
     def retired(self) -> bool:
-        return self.type == "table" and self.name in RETIRED_TABLES
+        return self.type.holds_rows and self.name in RETIRED_TABLES
 
     def drop(self, db) -> None:
-        db.execute(f'DROP {self.type.upper()} IF EXISTS "{self.name}"')
+        db.execute(f'DROP {self.type.declared_name.upper()} IF EXISTS "{self.name}"')
 
     def row(self, path: Path) -> type[TypedTable]:
         """The declaration of this stored table, refusing one the carry cannot keep."""
@@ -85,7 +109,7 @@ class StoredObject(TypedRow):
         return row
 
     def render(self) -> str:
-        return f"{self.type} {self.name} on {self.tbl_name}: {self.sql}"
+        return f"{self.type.declared_name} {self.name} on {self.tbl_name}: {self.sql}"
 
     @classmethod
     def stored(cls, db) -> tuple[StoredObject, ...]:
@@ -116,10 +140,10 @@ class Carried:
 
     def renamed(self) -> dict[str, str]:
         """Old index name to declared name, matched by what the index covers."""
-        after = {unnamed(item.sql): item.name for item in self.after if item.type == "index"}
+        after = {unnamed(item.sql): item.name for item in self.after if item.type.named_by_coverage}
         names = {item.name for item in self.after}
         return {item.name: after[unnamed(item.sql)] for item in self.before
-                if item.type == "index" and item.name not in names and unnamed(item.sql) in after}
+                if item.type.named_by_coverage and item.name not in names and unnamed(item.sql) in after}
 
     def render(self) -> str:
         before = {(item.name, item.sql) for item in self.before}
@@ -142,14 +166,14 @@ def carry(path: Path) -> Carried:
     with closing(CoordinationStore.writer(path, isolation_level=None)) as db:
         with SQLiteFile.write_transaction(db):
             before = StoredObject.stored(db)
-            tables = [item for item in before if item.type == "table"]
+            tables = [item for item in before if item.type.holds_rows]
             kept = [item for item in tables if not item.retired]
             rows = tuple(item.row(path) for item in kept)
             declared = {name: sql for row in rows for name, sql in row.schema_objects().items()}
             counts = RowCount.of(db, kept)
             retired = RowCount.of(db, [item for item in tables if item.retired])
             for item in before:
-                if item.type != "table" and declared.get(item.name) != item.sql:
+                if not item.type.holds_rows and declared.get(item.name) != item.sql:
                     item.drop(db)
             for item in tables:
                 if item.retired:
