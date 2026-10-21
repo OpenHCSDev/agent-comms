@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bus_record_fixture import prepare_native_comms
-from agent_comms.lifecycle_capability import Executing
+from agent_comms.lifecycle_capability import Complete, Executing
 
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
@@ -144,7 +144,7 @@ def test_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) -> None:
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
+        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).items_with(Complete, True)
 
         second = publish_initial(comms, "sender", "member000", "not yet sealed")
         # The committed prefix can outrun the caller's minimum source watermark.
