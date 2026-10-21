@@ -60,6 +60,24 @@ def test_acquisition_refuses_package_outside_running_runtime(launcher):
         native_package.VerifiedNativePackage.acquire(package)
 
 
+def test_prepared_native_fixture_is_qualified(native_runtime_package):
+    assert native_runtime_package.path == native_package.pinned_location()
+
+
+@pytest.mark.asyncio
+async def test_private_bus_agent_construction_does_not_acquire_native_package(private_comms):
+    from agent_comms.acp import CommsAgent
+
+    trace = PackageTrace(native_package.package_tree_digest.__code__)
+    with trace.active():
+        agent = CommsAgent(private_comms, auto_wake=False)
+        try:
+            assert agent.sessions.config.comms is private_comms
+        finally:
+            await agent.shutdown()
+    assert trace.tree_hash_calls == 0
+
+
 def test_actual_runtime_acquisition_reads_no_content():
     runtime = LaunchRuntime.installed()
     fixture = Path(__file__).with_name("native_package_acquisition_fixture.py")
