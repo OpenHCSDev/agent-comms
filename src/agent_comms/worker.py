@@ -5,7 +5,7 @@ import asyncio
 import os
 import signal
 import sys
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from functools import partial
 
 from .acp import CommsAgent
@@ -41,17 +41,14 @@ async def run_owner(comms: Comms) -> None:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stopped.set)
-        initial: asyncio.Task | None = None
-        try:
+        async with AsyncExitStack() as ownership:
+            ownership.push_async_callback(agent.shutdown)
             await agent.sessions.start_owner(thread.worktree, name)
             if key := ThreadLaunch.take_startup_input():
                 initial = asyncio.create_task(run_startup_input(agent, name, key))
+                ownership.push_async_callback(asyncio.gather, initial, return_exceptions=True)
+                ownership.callback(initial.cancel)
             await stopped.wait()
-        finally:
-            if initial is not None:
-                initial.cancel()
-                await asyncio.gather(initial, return_exceptions=True)
-            await agent.shutdown()
 
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
