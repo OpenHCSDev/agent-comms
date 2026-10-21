@@ -65,13 +65,6 @@ class AnsweredSource(TypedTable, BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class AnsweredBySource(AnsweredSource, ParticipantSource):
-    """An answer bound to its committed sender incarnation, not its route name."""
-
-    indexes = (Index(("original", "lookup", "seq")),)
-
-
-@dataclass(frozen=True)
 class BusRow(TypedTable, BusTables):
     seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
     kind: type[messages.BusRecord]

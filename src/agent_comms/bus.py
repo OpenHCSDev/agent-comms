@@ -23,7 +23,6 @@ from agent_comms.bus_tables import (
     SentSource,
     ReceivedSource,
     AnsweredSource,
-    AnsweredBySource,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
@@ -227,11 +226,6 @@ class BusReader(ABC):
             (lookup, *sender_lookups), after=after, before=before, limit=limit,
             descending=descending,
         )
-
-    def has_reply(self, original: MessageReference, *, sender_lookup: str) -> bool:
-        """Probe the exact original/frozen-author index without loading reply history."""
-        with self.observing() as db:
-            return AnsweredBySource.exists(db, original=original, lookup=sender_lookup)
 
     def replies(self, references: tuple[MessageReference, ...]):
         with self.observing() as db:
