@@ -64,6 +64,7 @@ from agent_comms.field_codec import (
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.build_identity import (
     BuildIdentity,
+    CommitInstallation,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
@@ -1622,10 +1623,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def installation_build(self) -> BuildIdentity:
         return RecordedBuildIdentity.installed()
 
-    def require_installation(self) -> None:
-        self.installation_build.require_installed(
+    def installation(self) -> CommitInstallation:
+        return self.installation_build.installation(
             self.installation_commits, Path(self.check.directory)
         )
+
+    def require_installation(self) -> None:
+        self.installation().require()
 
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         raise TodoError("Only a pending order can be claimed by its holder.")
@@ -1827,7 +1831,6 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
         return self.run.merged_line
 
     def closed_in(self, todo: Todo) -> Todo:
-        self.require_installation()
         return DoneTodoState.closed(todo, self)
 
     def waiting_in(self, todo: Todo) -> Todo:
