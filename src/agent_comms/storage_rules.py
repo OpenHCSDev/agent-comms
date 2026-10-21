@@ -136,7 +136,7 @@ class StorageRule(RoomAllocation):
                 if path not in (storage.home, *storage.extra_checkouts):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
                 work = OrderCheckoutWork(path, owner)
-                if work.local_work:
+                if work.read_checkout().holds_work:
                     found.append(work)
         return tuple(found)
 

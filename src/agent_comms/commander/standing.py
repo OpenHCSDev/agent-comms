@@ -36,6 +36,7 @@ from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnatio
 from agent_comms.threads import Thread
 from agent_comms.todos import Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.work_branches import WorkBranches
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
 
@@ -372,6 +373,29 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
         rows = ", ".join(sorted(rule.todo.id for rule in current))
         return f"{len(current)} unowned rows wait for a new unit: {rows}"
 
+
+@dataclass(frozen=True)
+class CheckoutUnreadable(UndatedStandingRule):
+    """A holder's checkout git cannot open: that unit's state, while every other unit reads on."""
+
+    unit: str
+    checkout: Path
+    error: str = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        storage = comms.registry.storage_rule
+        holders = sorted({todo.held().owner for todo in cls.pending_todos(comms, commander)})
+        return tuple(
+            cls(holder, path, error)
+            for holder in holders
+            for path in storage.checkout_paths(comms.registry.require(holder))
+            for error in WorkBranches(path).read_checkout().errors()
+        )
+
+    def line(self) -> str:
+        return (f"CHECKOUT UNREADABLE: {self.unit} {self.checkout}: {self.error}"
+                " -> order the unit to repair its checkout; its work stays retained")
 
 @dataclass(frozen=True)
 class HeartbeatSilent(DatedStandingRule):

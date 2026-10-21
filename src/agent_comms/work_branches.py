@@ -9,6 +9,7 @@ worktrees. Nothing here is stored.
 from __future__ import annotations
 
 import subprocess
+from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -184,6 +185,15 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(f"{' '.join(command[:3])} in {self.checkout}: {detail}")
         return result.stdout.decode()
 
+    def read_checkout(self) -> CheckoutRead:
+        """Whether git can open this checkout at all; the one probe every reader asks first."""
+        probe = subprocess.run(("git", "--no-optional-locks", "rev-parse", "--git-dir"),
+                               cwd=self.checkout, capture_output=True, timeout=self.timeout)
+        if probe.returncode:
+            detail = probe.stderr.decode(errors="replace").strip() or "git rev-parse failed"
+            return UnreadableCheckoutRead(self.checkout, detail)
+        return ReadableCheckoutRead(self)
+
     def uncommitted(self) -> tuple[Path, ...]:
         """Each tracked file changed since HEAD and each untracked file not ignored.
 
@@ -314,3 +324,54 @@ query($owner: String!, $name: String!, $after: String) {
                     )
                 )
         return tuple(sorted(branches, key=lambda branch: branch.committed_at, reverse=True))
+
+
+class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
+    """What git can say about one unit's checkout.
+
+    An unreadable checkout is that unit's own state, reported by its standing rule;
+    it never fails a pass that reads every other unit.
+    """
+
+    @property
+    @abstractmethod
+    def holds_work(self) -> bool: ...
+
+    @abstractmethod
+    def uncommitted(self) -> tuple[Path, ...]: ...
+
+    @abstractmethod
+    def errors(self) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True)
+class ReadableCheckoutRead(CheckoutRead):
+    branches: WorkBranches
+
+    @property
+    def holds_work(self) -> bool:
+        return self.branches.local_work
+
+    def uncommitted(self) -> tuple[Path, ...]:
+        return self.branches.uncommitted()
+
+    def errors(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class UnreadableCheckoutRead(CheckoutRead):
+    """Git refuses the checkout: whatever it holds stays with its unit until the unit repairs it."""
+
+    checkout: Path
+    error: str
+
+    @property
+    def holds_work(self) -> bool:
+        return True
+
+    def uncommitted(self) -> tuple[Path, ...]:
+        return ()
+
+    def errors(self) -> tuple[str, ...]:
+        return (self.error,)

@@ -780,7 +780,8 @@ class PresentCheckout(ProgressCheckout):
 
     def edits(self) -> Iterator[float]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
-        return (path.stat().st_mtime for path in WorkBranches(self.path).uncommitted()
+        return (path.stat().st_mtime
+                for path in WorkBranches(self.path).read_checkout().uncommitted()
                 if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
