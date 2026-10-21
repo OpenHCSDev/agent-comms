@@ -8,7 +8,6 @@ import json
 import os
 
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -92,7 +91,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
                 async def wait(self):
                     if self.changed is None:
-                        assert comms.registry.require(session).active_turn.executing
+                        assert comms.registry.require(session).executing
                         self.changed = await Coordination.run_worker(change_project_and_send_again)
                     else:
                         native.provider.text = reply(sent[1])
@@ -110,11 +109,11 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
                 native.provider.response_gate = None
             assert gate.changed.changed
             thread = comms.registry.require(session)
-            assert thread.worktree == str(second) and not thread.active_turn.executing
+            assert thread.worktree == str(second) and not thread.executing
             # The turn that changed project recorded its result: this owner's
             # coordination pointer is free, so later messages can start turns.
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-                participant = store.participants.get(RecordedThreadIncarnation("fixture", thread.created_at).lookup)
+                participant = store.participants.get(thread.incarnation.lookup)
                 assert participant.pointer.execution_id is None
             # The second message's turn started in the new project.
             assert str(second) in json.dumps(native.provider.requests[-1])

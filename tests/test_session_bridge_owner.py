@@ -5,12 +5,8 @@ import json
 import os
 import select
 import subprocess
-import sys
-import tomllib
-from collections.abc import Callable
 from contextlib import ExitStack
-from dataclasses import dataclass, replace
-from importlib.metadata import EntryPoint
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,47 +20,6 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, WatchClaim, WatchRecord
-
-
-@dataclass(frozen=True)
-class SourcePrograms:
-    prefix: Path
-    entries: tuple[EntryPoint, ...]
-
-    def script(self, function: Callable[..., object]) -> Path:
-        target = f'{function.__module__}:{function.__name__}'
-        (entry,) = (entry for entry in self.entries if entry.value == target)
-        return self.prefix / 'bin' / entry.name
-
-
-@pytest.fixture
-def source_programs(tmp_path):
-    """Standard console entry targets, using source and the existing interpreter.
-
-    Runtime launches strip PYTHONPATH. These console bootstraps select the checkout
-    explicitly; no application method is patched and no environment is installed.
-    """
-    prefix = tmp_path / 'source-programs'
-    binary = prefix / 'bin'
-    binary.mkdir(parents=True)
-    (binary / 'python').symlink_to(sys.executable)
-    project = Path(__file__).resolve().parents[1]
-    source = str(project / 'src')
-    scripts = tomllib.loads((project / 'pyproject.toml').read_text())['project']['scripts']
-    entries = tuple(EntryPoint(name=name, value=value, group='console_scripts')
-                    for name, value in scripts.items())
-    for entry in entries:
-        program = binary / entry.name
-        program.write_text(
-            f'#!{sys.executable}\n'
-            'import sys\n'
-            f'sys.path.insert(0, {source!r})\n'
-            'from importlib.metadata import EntryPoint\n'
-            f'sys.exit(EntryPoint(name={entry.name!r}, value={entry.value!r}, '
-            f'group={entry.group!r}).load()())\n'
-        )
-        program.chmod(0o700)
-    return SourcePrograms(prefix, entries)
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
