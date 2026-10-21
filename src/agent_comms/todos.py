@@ -1676,6 +1676,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def cited_revision(self) -> SourceRevision:
         return (*map(PullRequestHeadRevision, self.pull_requests), MainRevision())[0]
 
+    def require_references(self) -> None:
+        root, revision = Path(self.check.directory), self.cited_revision
+        self.owner.require_exists(root, revision)
+        self.finding.require_references(root, revision)
+        self.scope.require_references(root, revision)
+
     def require_wording(self) -> None:
         """Check fresh order prose, never reinterpret stored history or shell commands."""
         for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):

@@ -531,10 +531,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def require_sendable(self) -> None:
         """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
-        root, revision = Path(self.order.check.directory), self.order.cited_revision
-        self.order.owner.require_exists(root, revision)
-        self.order.finding.require_references(root, revision)
-        self.order.scope.require_references(root, revision)
+        self.order.require_references()
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:

@@ -8,23 +8,26 @@ file:line text shape, its parsing and its existence check at a branch head.
 from __future__ import annotations
 
 import ast
-import inspect
 import re
 import subprocess
-import textwrap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_comms.errors import ToolRefusedError
+
 from .field_codec import (
-    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
 from .goals import CheckedCommit, GitCommandFailed
 
-
 if TYPE_CHECKING:
+    from .repo import Repo
     from .todos import PullRequestLink
 
 
@@ -144,11 +147,23 @@ class FileLine(WireValue, SourceReference):
             )
 
     @classmethod
-    def class_declaration(cls, declaration: type) -> FileLine:
-        """Derive the class line, not a decorator line or a second class-name roster."""
-        source, start = inspect.getsourcelines(declaration)
-        node = ast.parse(textwrap.dedent("".join(source))).body[0]
-        return cls(inspect.getfile(declaration), start + node.lineno - 1)
+    def class_declaration(
+        cls, declaration: type, repository: Repo, revision: SourceRevision
+    ) -> FileLine:
+        """Resolve a nominal module class in the same Git source its order will cite."""
+        file = repository.module_file(declaration.__module__).as_posix()
+        body = ast.parse('\n'.join(revision.lines(repository.checkout, file)), filename=file).body
+        for name in declaration.__qualname__.split('.'):
+            for node in body:
+                if isinstance(node, ast.ClassDef) and node.name == name:
+                    body = node.body
+                    break
+            else:
+                raise MissingSourceLine(
+                    f'Class {declaration.__qualname__} does not exist in {file} '
+                    'at the cited revision.'
+                )
+        return cls(file, node.lineno)
 
     def require_class(self, repository: Path, revision: SourceRevision) -> None:
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)

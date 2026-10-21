@@ -20,7 +20,7 @@ from uuid import uuid4
 from pydantic import PrivateAttr
 
 from agent_comms.build_identity import ProofBuildMismatchError, RecordedBuildIdentity
-from agent_comms.change_report import FileLine
+from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import BoundedRun, ChildResult
 from agent_comms.commander.config import CommanderConfig
@@ -155,7 +155,9 @@ class LifecycleRun:
             )
             repo = config.module_repo(__name__)
             order = PendingProblemOrder(
-                scope=FixScope(FixShape(parents=(FileLine.class_declaration(Todo),), members=())),
+                scope=FixScope(FixShape(
+                    parents=(FileLine.class_declaration(Todo, repo, MainRevision()),), members=()
+                )),
                 owner=FileLine(str(repo.module_file(__name__)), 1),
                 check=OrderCheck(str(repo.checkout), command, CountCheckResult(0)),
                 edits=(

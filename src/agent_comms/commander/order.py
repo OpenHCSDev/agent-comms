@@ -430,10 +430,7 @@ class Commander(CommanderContext):
         if not new and (missing := [pid for pid in group if pid not in listed]):
             problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
         for label, validate in (
-            ('order.owner', lambda: order.owner.require_exists(
-                Path(check.directory), order.cited_revision)),
-            ('order.finding', lambda: order.finding.require_references(
-                Path(check.directory), order.cited_revision)),
+            ('order.source', order.require_references),
             ('order.check.directory', check.require_directory),
         ):
             try:
