@@ -2,6 +2,29 @@
 
 Audited head: `origin/main` on 2026-10-20 at 17:56 EDT. Scope: all of `src/agent_comms` (431 modules, 4,080 classes), `src/agent_comms_hooks` and `tools`, scanned by AST with Python 3.14, findings checked in the code.
 
+## Correction, 2026-10-21 14:20 UTC: this plan is a deletion plan
+
+The scan below undercounted. It looked only for flag declarations and byte-identical method bodies, found "only 2 groups", and concluded behaviour is already shared well. That set the plan's ceiling at a few hundred lines, and batch 1's first drafts came out net zero in `src` (#2450 +106 -97, #2451 +145 -146, #2447 +56 -51): flags swapped for bases, nothing deleted. Multiple inheritance factors a repeated fact into one owner, so the whole point is deletion. Measured on `main` at `bac74b1a` with Python 3.14 (AST, `src/agent_comms`, 124K lines, 4,471 classes):
+
+| Slop | Size | Owner it moves to |
+|---|---|---|
+| Class-level boolean flags (`x = True` / `x: ClassVar[bool] = False`) | 500 lines, 175 of them `ClassVar[bool]` | one capability class per flag, carrying the reader's branch |
+| Structurally identical method bodies after normalizing names and literals, 3+ copies | 29 groups, 1,518 removable lines | the common base each group's classes share or should share |
+| ...of which hand-written SQL trigger text (`trigger_bodies`, `_retry_trigger_bodies`, `_lifecycle_trigger_bodies`) | about 900 lines in `cohort_schema.py`, `coordination_tables/*`, `coordination_response.py` | table capabilities (`AppendOnly`, `Revisioned`, `Retried`, `LifecycleGuarded`) that derive their triggers from the table's columns, the same owner the virtual bus uses for `AppendOnly` |
+| Methods whose whole body returns a fixed value, under names repeated 3+ times | 443 methods, 1,633 lines (`successors` 50, `violated` 32, `matches` 22, `trigger_bodies` 17, `title` 13) | a class attribute or capability where the value is a per-member fact; deleted where a base already answers it (`Terminal` answers `successors() == ()`) |
+| Lifecycle state machines written once per family | 12 families, 61 `successors` definitions, about 3,500 lines in the `*_states` modules | one `LifecycleState` machinery with capabilities; each family keeps only its members' edges |
+
+Floor for the whole plan: **net -2,500 lines in `src`**. The audit fork raises this per batch once it has measured near-similar bodies (same shape, small differences), which this table does not count.
+
+Rules added to every change:
+- **Every PR states its net `src` lines in its body. A net-positive inheritance PR goes back.** New capability classes are paid for by the copies they delete.
+- **Delete first, rewire after** (Tristan, 2026-10-21: "I don't care if you delete slop and cause an error because we didn't rewire something, we'll just rewire it. There's never an excuse for slop."). A deletion that breaks a caller is fixed by moving the caller onto the owner, never by restoring the copy.
+- **Hunt, don't just execute.** Each unit reports any slop it finds outside its list in #comms with file:line, and the commander assigns it the same tick.
+
+Batch 1 gains two surfaces, run in parallel with 1A to 1C on disjoint files:
+- **1D, table triggers.** Every `trigger_bodies`-style method is deleted; each table inherits the capabilities whose triggers it needs, and `TypedTable` derives the DDL. Stored schema text must stay byte-identical (see the rule below), so each capability renders exactly today's trigger SQL; where two tables' triggers differ only by table and column names, that difference is the capability's input.
+- **1E, the 29 structural duplicate groups** outside triggers, each moved to its common owner.
+
 ## What the scan found
 
 Behaviour is already shared well: only 2 groups of identical method bodies exist across unrelated classes. The slop sits in declarations, where the same fact is written once per class:
@@ -30,7 +53,7 @@ Multiple inheritance earns its place exactly where capabilities overlap without 
 - **Sets come from `members_with`.** No tuple of member names survives.
 - **Stored schema text stays byte-identical.** `TypedTable` checks stored tables by exact SQL text (`typed_table.py:462-472`) and the schema digests hash that text. A field-group mixin may only touch a table if every affected table's `ddl()` output is unchanged; that comparison is the proof for those surfaces. Wire names derive from field names, so renaming nothing keeps every stored record decodable.
 - **External shapes are left alone.** JSON a contract leaves open (the shared ledger), Python AST nodes, `typing` objects and SDK types are not ours to wrap.
-- **Threshold three.** A mixin needs three or more members; two copies stay.
+- **Threshold three.** A mixin needs three or more members; two copies stay, unless both copies are deleted outright.
 - **Codemods, one sweep per axis.** The declaration rewrites are mechanical and go through `libcst` scripts in one commit each, with the reader changes in the same PR.
 
 ## The plan: four batches, each landing as one
