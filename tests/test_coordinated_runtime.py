@@ -18,7 +18,7 @@ from agent_comms.comms import Comms
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -169,7 +169,8 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
         install_native_runtime_schema(store)
         install_native_runtime_schema(store)
         NativeRuntimeTable.require_installed(store.session._connection)
-        store.session._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
+        trigger = next(iter(NativeRuntimeInput.triggers()))
+        store.session._connection.execute(f'DROP TRIGGER "{trigger}"')
         with pytest.raises(PublicationActivationBlocked):
             NativeRuntimeTable.require_installed(store.session._connection)
 
