@@ -801,7 +801,7 @@ class ThreadReading(Observation[ObserveThreads]):
         activity: dict[str, ObservedActivity | DeletedThread] = {}
         names = self.request.names
 
-        def located() -> dict[str, Callable[[], ThreadPresentation | None]]:
+        def located() -> dict[str, Callable[[], ThreadPresentation]]:
             nonlocal activity, names
             readable, _ = previous.revision_inputs()
             watched = names | frozenset(actor for view in readable.values()
@@ -831,11 +831,11 @@ class ThreadReading(Observation[ObserveThreads]):
                           results={name: value for name, value in results.items() if name in changed})
 
     @staticmethod
-    def presented(reads: Mapping[str, Callable[[], ThreadPresentation | None]],
+    def presented(reads: Mapping[str, Callable[[], ThreadPresentation]],
                   results: dict[str, ThreadReadResult]) -> Iterator[ObservationStep]:
         for name, read in reads.items():
             results[name] = UnreadableHistory.outcome(read).answer(
-                lambda shown: ThreadMissing() if shown is None else ThreadPresented(shown),
+                ThreadPresented,
                 ThreadBusy, ThreadUnavailable)
             yield ObservationPending()
 
@@ -989,16 +989,10 @@ class ThreadPresented(ThreadReadResult):
         return ThreadStatusModel.known(name, self.presentation)
 
     def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
-        readable[name] = self.presentation
+        self.presentation.collect_revision_input(name, readable)
 
     def same_status(self, presentation: ThreadPresentation) -> bool:
         return presentation.same_status(self.presentation)
-
-
-@dataclass(frozen=True)
-class ThreadMissing(ThreadReadResult):
-    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
-        return ThreadStatusModel.retired(name)
 
 
 @dataclass(frozen=True)
