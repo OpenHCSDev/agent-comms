@@ -364,7 +364,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"
