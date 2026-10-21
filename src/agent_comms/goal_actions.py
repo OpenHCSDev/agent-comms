@@ -32,6 +32,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.goals import (
     Goal,
     GoalCheckpoint,
+    GoalChangedError,
     GoalDeclaration,
     GoalOrder,
     NoGoal,
@@ -70,21 +71,6 @@ class OwnerControlInvocable:
     pass
 
 
-class GoalPreconditionChanged(ValueError):
-    """An observed goal changed before its checked action could run."""
-
-    def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
-        self.thread = thread
-        self.expected = expected
-        super().__init__()
-
-    def __str__(self) -> str:
-        return (
-            f"{self.thread.name}: observed {self.expected}, now {self.thread.goal.captured}; "
-            "the action was not applied"
-        )
-
-
 @dataclass(frozen=True)
 class GoalPrecondition:
     goal_id: str | None = None
@@ -98,7 +84,7 @@ class GoalPrecondition:
     def check(self, ctx: GoalActionContext) -> None:
         thread, goal = ctx.thread, ctx.thread.goal
         if not self.expected_checkpoint.matches(goal):
-            raise GoalPreconditionChanged(thread, self.expected_checkpoint)
+            raise GoalChangedError(thread, self.expected_checkpoint)
         if self.expected_owner is not None and (
             thread.process_identity != self.expected_owner
             or not ctx.goals.registry.status(thread.name).running

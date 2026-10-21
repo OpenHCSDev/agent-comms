@@ -34,7 +34,12 @@ from agent_comms.message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
+from agent_comms.message_reference import (
+    AfterMessageStart,
+    FirstUnreadStart,
+    InboxStart,
+    MessageReference,
+)
 from agent_comms.messages import Message
 from agent_comms.page_traversal import NewerTraversal
 from agent_comms.read_basis import (
@@ -56,14 +61,13 @@ if TYPE_CHECKING:
     from agent_comms.relationships import PeerRelation
     from agent_comms.threads import Thread
 
+from agent_comms.publisher import Publisher
 from agent_comms.wire_log import (
     FRESH_SNAPSHOT_OPENING,
     CurrentSnapshotOpening,
     WireLog,
     WireSnapshot,
 )
-
-from agent_comms.publisher import Publisher
 from agent_comms.wire_watch import WatchSource, WireWatch
 
 
@@ -367,7 +371,10 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+        from agent_comms.context_segments.awareness import (
+            AwarenessSegment,
+            UnavailableAwarenessSegment,
+        )
         from agent_comms.errors import RelationViolationError
         from agent_comms.peer_relevance import Prioritized
         from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked

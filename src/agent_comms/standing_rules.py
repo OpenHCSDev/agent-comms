@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.goals import GoalChangedError
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
@@ -47,13 +48,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @staticmethod
     def enforce_all(comms: Comms, commander: str,
                     rules: Iterable[StandingRule]) -> frozenset[StandingRule]:
-        from agent_comms.goal_actions import GoalPreconditionChanged
-
         rejected: set[StandingRule] = set()
         for rule in rules:
             try:
                 rule.enforce(comms, commander)
-            except GoalPreconditionChanged as changed:
+            except GoalChangedError as changed:
                 logging.info("Skipped stale enforcement: %s", changed)
                 rejected.add(rule)
         return frozenset(rejected)

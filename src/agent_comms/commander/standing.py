@@ -109,7 +109,9 @@ class BlockedHolder(HolderCannotRun, declared_name=None):
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require())
+        return cls(
+            thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require()
+        )
 
 
 @dataclass(frozen=True)
@@ -284,8 +286,8 @@ class UnownedWheelSpin(UndatedStandingRule):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch(
-                        cls.order_for(todo, commander, assigner), todo.revision, unit)))
+                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
+                        cls.order_for(todo, commander, assigner), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
@@ -336,7 +338,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 
     def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
-        observed = []
+        observed: list[UnownedObservation] = []
         for name in {todo.creator_identity.name for todo in available}:
             commander = comms.registry.require(name)
             mine = (todo for todo in available if todo.creator_identity.name == name)

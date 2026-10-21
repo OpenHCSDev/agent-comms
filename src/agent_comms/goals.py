@@ -257,6 +257,21 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
         return f"goal {self.revision.id}@{self.revision.revision}"
 
 
+class GoalChangedError(ValueError):
+    """An observed goal changed before its checked action could run."""
+
+    def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
+        self.thread = thread
+        self.expected = expected
+        super().__init__()
+
+    def __str__(self) -> str:
+        return (
+            f"{self.thread.name}: observed {self.expected}, now {self.thread.goal.captured}; "
+            "the action was not applied"
+        )
+
+
 class CheckResult(DeclaredFamily, affix="CheckResult"):
     def require(self, result: ChildResult) -> None:
         self.distance(result).require(self)

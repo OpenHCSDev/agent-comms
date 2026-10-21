@@ -424,7 +424,8 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
 def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
     from test_holder_standing_rules import blocked_holder
     from agent_comms.commander.standing import Blocked
-    from agent_comms.goal_actions import GoalPreconditionChanged, RetryGoalAction
+    from agent_comms.goal_actions import RetryGoalAction
+    from agent_comms.goals import GoalChangedError
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.commander_heartbeat import CommanderReview
 
@@ -448,7 +449,7 @@ def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
         assert held_bus.goals.open_goal_store().require_generation(recovered.id) == generation
         assert inputs.lookup("unresolved-input") == unresolved
         rejected = caplog.records[-1].args[0]
-        assert isinstance(rejected, GoalPreconditionChanged)
+        assert isinstance(rejected, GoalChangedError)
         assert rejected.thread.name == "worker"
         assert rejected.expected == observed.goal.captured
 
@@ -476,8 +477,7 @@ def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
 
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
     from agent_comms.commander.standing import ReassignedWheelSpin
-    from agent_comms.goal_actions import GoalPreconditionChanged
-    from agent_comms.goals import NoGoal
+    from agent_comms.goals import GoalChangedError, NoGoal
 
     caplog.set_level(logging.INFO)
     with LaunchRoot.from_path(checkout_bus.root).selected():
@@ -498,7 +498,7 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
         rejected = caplog.records[-1].args[0]
-        assert isinstance(rejected, GoalPreconditionChanged)
+        assert isinstance(rejected, GoalChangedError)
         assert rejected.thread.name == selected.name
         assert rejected.expected == selected.goal.captured
 

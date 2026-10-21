@@ -205,8 +205,12 @@ class Coordination:
     def install_private_runtime(self) -> None:
         """Explicit protocol/owner bootstrap, never invoked by a reader."""
         # Load the canonical declarations before querying their existing family.
-        from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401
-        from . import native_runtime_input  # noqa: F401
+        from agent_comms import (  # noqa: F401
+            cohort_schema,
+            coordination_response,
+            native_prompt_binding,
+            native_runtime_input,
+        )
 
         for schema in PrivateRuntimeSchema.__subclasses__():
             schema.install(self)
