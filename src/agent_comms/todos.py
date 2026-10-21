@@ -1409,6 +1409,13 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def line(self) -> str:
         return "No order"
 
+    def correctable(self) -> DeliverableProblemOrder:
+        """The order a check correction rewrites; only pending and claimed orders take one."""
+        raise ValueError("Only a pending or claimed order takes a check correction.")
+
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        return self.correctable().with_check(correction)
+
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
     )
@@ -1792,12 +1799,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
-
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -1820,8 +1821,6 @@ class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("A delivered order keeps the check its delivery passed.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1858,6 +1857,15 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
+
+    def correctable(self) -> DeliverableProblemOrder:
+        return self
+
+    def with_check(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
 
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
