@@ -14,11 +14,15 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.native_package import VerifiedNativePackage
 from native_backend_fixture import native_backend_fixture, wait_for
+from source_programs import SourcePrograms
 
 
-async def stopped_goal_journey(base: Path, package: VerifiedNativePackage):
+async def stopped_goal_journey(
+    base: Path, package: VerifiedNativePackage, programs: SourcePrograms,
+):
     base.mkdir(mode=0o700)
     async with native_backend_fixture(base, package=package) as fixture:
+        programs.bind(fixture.project)
         fixture.provider.response_gate = asyncio.Event()
         copied = base / "copy"
         shutil.copytree(fixture.root, copied)
