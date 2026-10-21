@@ -139,6 +139,10 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     originals = {relative: (original / relative / BusHistory.filename).read_bytes()
                  for relative in relatives}
     before = {relative: ReadLedger.at(root / relative).read() for relative in relatives}
+    identities = {relative: RecordedBusIdentity.capture(root / relative / BusHistory.filename)
+                  for relative in relatives}
+    modes = {relative: (root / relative / BusHistory.filename).stat().st_mode
+             for relative in relatives}
     dry = BusHistory(root, original, spill, False)
     assert dry.carry().detail == dict(rows=8, continuous=8, round_tripped=8)
     assert all(not Bus.path_in(root / relative).exists() for relative in relatives)
@@ -159,14 +163,13 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     assert (result.detail["read_conversations_before"]
             == result.detail["read_conversations_after"] == 2)
     assert result.detail["read_transcripts_before"] == result.detail["read_transcripts_after"] == 2
-    staged, = spill.iterdir()
+    assert not tuple(spill.iterdir())
     for relative in relatives:
         directory = root / relative
-        source = staged / relative / BusHistory.filename
+        source = directory / BusHistory.filename
         metadata = HistoryMetadata.read(source.parent)
-        assert not (directory / BusHistory.filename).exists()
-        assert not (directory / HistoryMetadata.filename).exists()
-        assert source.stat().st_mode & 0o777 == 0o400
+        assert RecordedBusIdentity.capture(source) == identities[relative]
+        assert source.stat().st_mode == modes[relative]
         assert source.read_bytes() == originals[relative]
         assert (original / relative / BusHistory.filename).read_bytes() == originals[relative]
         bus = Bus(Bus.path_in(directory))
@@ -198,6 +201,15 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     converted, = HistoryArchive(Bus.path_in(root)).sources()
     converted.validate()
     assert converted.root == str(root / archived.relative_to(original))
+    assert request.after_acceptance().changed == 4
+    staged, = spill.iterdir()
+    for relative in relatives:
+        assert not (root / relative / BusHistory.filename).exists()
+        assert not (root / relative / HistoryMetadata.filename).exists()
+        retained = staged / relative / BusHistory.filename
+        assert retained.read_bytes() == originals[relative]
+        assert retained.stat().st_mode & 0o777 == 0o400
+    assert request.after_acceptance().changed == 0
     fresh = tmp_path / "fresh-sqlite"
     fresh.mkdir()
     fresh_bus = Bus.install(Bus.path_in(fresh))

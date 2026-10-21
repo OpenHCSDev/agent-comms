@@ -13,17 +13,17 @@ from agent_comms.todos import ProblemNumber, Todo, TodoStore
 
 
 class ProblemNumbers(Carry):
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        paths = tuple(path for path in SQLiteFile.files(TodoStore.path_in(root)) if path.exists())
+    def backup_files(self) -> tuple[Path, ...]:
+        paths = tuple(path for path in SQLiteFile.files(TodoStore.path_in(self.root))
+                      if path.exists())
         for path in paths:
-            cls.require_confined(root, path)
+            self.require_confined(self.root, path)
         return paths
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
+    def carry(self) -> Carried:
+        root = self.root
         path = TodoStore.path_in(root)
-        cls.require_confined(root, path)
+        self.require_confined(root, path)
         if not path.exists():
             return Carried(0)
         with closing(CoordinationStore.read_snapshot(path)) as db:
@@ -31,7 +31,7 @@ class ProblemNumbers(Carry):
             numbers_missing = ProblemNumber.declared_name not in stored
             index_missing = Todo.unit_index.name(Todo) not in stored
         changed = int(numbers_missing) + int(index_missing)
-        if not changed or not apply:
+        if not changed or not self.apply:
             return Carried(changed)
         with closing(CoordinationStore.writer(path)) as db, SQLiteFile.write_transaction(db):
             if numbers_missing:

@@ -82,6 +82,10 @@ class Carry(ABC):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
+    def after_acceptance(self) -> Carried:
+        """Retire obsolete inputs only after the install's rollback window closes."""
+        return Carried(0)
+
     def before_stop(self) -> Carried:
         """What the running installation needs before its own stop command can read the bus.
         It records nothing in the ledger."""

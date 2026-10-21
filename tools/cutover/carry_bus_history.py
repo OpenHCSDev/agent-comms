@@ -619,7 +619,7 @@ class UnclaimedHistoryLine(HistoryLine[ClaimHistoryRow]):
 
 @dataclass(frozen=True)
 class HistoryInput:
-    """One captured source keeps its marker and original read binding across the move."""
+    """The source and its original read binding survive the rollback window unchanged."""
 
     bus: Bus
     source: Path
@@ -650,14 +650,22 @@ class HistoryInput:
             cls(bus, source, HistoryMetadata.read(root), RecordedBusIdentity.capture(original)),
         )
 
-    def moved(self, root: Path, spill: Path) -> HistoryInput:
-        target = spill / self.source.relative_to(root)
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        Carry.require_confined(spill, target)
-        for source in (self.source, self.source.parent / HistoryMetadata.filename):
+    @staticmethod
+    def moved(root: Path, directory: Path, spill: Path) -> tuple[str, ...]:
+        """Retire each old file after acceptance, never while rollback can need its inode."""
+        rewritten = []
+        for name in (BusHistory.filename, HistoryMetadata.filename):
+            source = directory / name
+            Carry.require_confined(root, source)
+            if not source.exists():
+                continue
+            target = spill / source.relative_to(root)
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            Carry.require_confined(spill, target)
             source.chmod(0o400)
-            shutil.move(source, target.parent / source.name)
-        return replace(self, source=target)
+            shutil.move(source, target)
+            rewritten.append(str(source.relative_to(root)))
+        return tuple(rewritten)
 
 
 class BusHistory(Carry):
@@ -740,17 +748,11 @@ class BusHistory(Carry):
                         line.verify(line.record())
                         count += 1
                 return Carried(0, detail=dict(rows=count, continuous=count, round_tripped=count))
-            spill = self.spill_dir.resolve(strict=True)
-            if spill.is_relative_to(self.root):
-                raise RelationViolationError("History spill must be outside the bus")
-            stage = Path(tempfile.mkdtemp(prefix=f"{self.name()}-", dir=spill))
-            # Every JSONL leaves the desktop before the first SQLite file is created.
-            staged = tuple(source.moved(self.root, stage) for source in inputs)
             results = []
             read_results = []
             bindings = {}
             rewritten: set[str] = set()
-            for source in staged:
+            for source in inputs:
                 result = self.transfer(source.source, source.bus, source.metadata)
                 read = self.rebind_reads(source.bus.path.parent, source.original_identity)
                 results.append(result)
@@ -759,12 +761,7 @@ class BusHistory(Carry):
                 directory = source.bus.path.parent.relative_to(self.root)
                 rewritten.update(
                     str(directory / name)
-                    for name in (
-                        self.filename,
-                        HistoryMetadata.filename,
-                        *result.rewritten,
-                        *read.rewritten,
-                    )
+                    for name in (*result.rewritten, *read.rewritten)
                 )
             catalog_result = HistoryCatalogSource.publish(
                 self.root, self.original_root, catalog, bindings
@@ -780,17 +777,29 @@ class BusHistory(Carry):
                 rewritten=tuple(sorted(rewritten)),
             )
 
+    def after_acceptance(self) -> Carried:
+        spill = self.spill_dir.resolve(strict=True)
+        if spill.is_relative_to(self.root):
+            raise RelationViolationError("History spill must be outside the bus")
+        with _store_lock(HistoryArchive.path_in(self.root)):
+            roots = (self.root, *(Path(source.root) for source in
+                                  HistoryArchive(Bus.path_in(self.root)).sources()))
+            stage = Path(tempfile.mkdtemp(prefix=f"{self.name()}-", dir=spill))
+            rewritten = tuple(name for directory in roots
+                              for name in HistoryInput.moved(self.root, directory, stage))
+            if not rewritten:
+                stage.rmdir()
+        return Carried(len(rewritten), rewritten=rewritten)
+
     @classmethod
     def transfer(cls, source: Path, bus: Bus, metadata: HistoryMetadata) -> Carried:
-        """The staged source stays immutable; interrupted batches resume by original seq.
+        """Read the original without changing it; resume batches by their original seq.
 
-        The installer stages every family source before this path runs. B2 owns the
-        scoped schema/read lifetime; Claimed is written only above the retired floor.
+        The installer holds the old writers stopped through acceptance. B2 owns schema
+        and read lifetime; Claimed is written only above the retired floor.
         """
-        if source.resolve() != source or source.stat().st_mode & 0o222:
-            raise RelationViolationError(
-                "Bus history source must be a physical read-only staged file"
-            )
+        if source.resolve() != source:
+            raise RelationViolationError("Bus history source must be a physical file")
         bus = Bus.install(bus.path)
         with bus.writing() as db:
             if not HistoryOffset.present(db):

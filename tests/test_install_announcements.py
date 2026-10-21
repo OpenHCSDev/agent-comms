@@ -27,7 +27,8 @@ from conftest import declare_test_bus
     CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
-        read=BusReadBack(2, 2, 1), stopped=("worker",), services=("connector",),
+        read=BusReadBack(2, 2, 1), retired_inputs=(),
+        stopped=("worker",), services=("connector",),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),

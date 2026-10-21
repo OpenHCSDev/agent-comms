@@ -213,6 +213,24 @@ class CarriedPass(Extendable):
     files: RehearsalFiles
     read: BusReadBack
 
+    def after_acceptance(
+        self, root: Path, pending: tuple[type[Carry], ...], stack: Stack,
+        tree: TargetTree, original_root: Path, spill_dir: Path,
+    ) -> RetiredPass:
+        """The accepted installation may retire inputs; a failure here never rolls back."""
+        with _store_lock(root / "wire"):
+            retired = tuple(StepRun(member.name(), stack.call_step(
+                member(root, original_root, spill_dir, True), tree, Carry.after_acceptance))
+                for member in pending)
+        return self.extended(RetiredPass, retired_inputs=retired)
+
+
+@dataclass(frozen=True)
+class RetiredPass(CarriedPass):
+    """The accepted pass and the obsolete inputs it subsequently retired."""
+
+    retired_inputs: tuple[StepRun, ...]
+
 
 @dataclass(frozen=True)
 class StoppedOwners:
@@ -235,7 +253,7 @@ class Rehearsal(DeclaredFamily, affix="Rehearsal"):
 
 
 @dataclass(frozen=True)
-class CarriedRehearsal(CarriedPass, Rehearsal):
+class CarriedRehearsal(RetiredPass, Rehearsal):
     copy: PracticeMeasurement
 
 
@@ -262,7 +280,7 @@ class LiveRun(DeclaredFamily, affix="Run"):
 
 
 @dataclass(frozen=True)
-class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
+class CarriedRun(RetiredPass, StoppedOwners, RestartedServices, LiveRun):
     started: tuple[OwnerStart, ...]
     restore_space: RestoreSpace
     backup: BackupReport
@@ -271,6 +289,8 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     def lines(self) -> tuple[str, ...]:
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
+            *(f"Retired {step.carry}: {step.carried.changed} inputs"
+              for step in self.retired_inputs if step.carried.changed),
             *self.stopped_lines(),
             *(line for owner in self.started for line in owner.lines()),
             *self.service_lines(),
@@ -576,7 +596,8 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain
             before = bus_files(copied)
         passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping,
                                 root, Path(spill))
-        return passed.extended(CarriedRehearsal, copy=measurement)
+        accepted = passed.after_acceptance(copied, pending, stack, tree, root, Path(spill))
+        return accepted.extended(CarriedRehearsal, copy=measurement)
 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
@@ -845,8 +866,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
                                 runtime=installed.runtime) from error
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
+    accepted = passed.after_acceptance(
+        root, pending, staged, tree, root, backup.spill_directory(spill_dir))
     started = staged.start(root, running)
     retired_backups = backup.retain(spill_dir)
-    return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
+    return accepted.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
                            restore_space=restore, backup=backup.report(),
                            retired_backups=retired_backups)

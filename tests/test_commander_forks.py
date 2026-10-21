@@ -213,7 +213,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     print(refused.stderr.strip())
 
 
-def test_retained_store_carry_preserves_orders_and_seeds_global_numbers(fork_bus):
+def test_retained_store_carry_preserves_orders_and_seeds_global_numbers(fork_bus, tmp_path):
     from cutover.carry_problem_numbers import ProblemNumbers
 
     comms, source, order = fork_bus
@@ -222,8 +222,8 @@ def test_retained_store_carry_preserves_orders_and_seeds_global_numbers(fork_bus
     with store.writing() as db:
         db.execute(f'DROP TABLE "{ProblemNumber.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
-    assert ProblemNumbers.carry(comms.root, apply=False).changed == 2
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 2
+    assert ProblemNumbers(comms.root, comms.root, tmp_path, False).carry().changed == 2
+    assert ProblemNumbers(comms.root, comms.root, tmp_path, True).carry().changed == 2
     assert store.get('P40') == retained
     assert store.allocate_problem() == 'P41'
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 0
+    assert ProblemNumbers(comms.root, comms.root, tmp_path, True).carry().changed == 0

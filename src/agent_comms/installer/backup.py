@@ -339,22 +339,25 @@ class StoreBackup(ResourceBackup):
                 os.close(directory)
         return contents
 
+    def file_original(self, name: str, saved: dict[str, str]) -> bool:
+        """An unchanged selected file keeps its identity as well as its contents."""
+        target = self.root / name
+        if name not in saved:
+            return not target.exists()
+        return target.exists() and self.digest(target) == saved[name]
+
     def original(self) -> bool:
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
-            target = self.root / name
-            if name not in saved:
-                if target.exists():
-                    return False
-            elif not target.exists() or self.digest(target) != saved[name]:
-                return False
-        return True
+        return all(self.file_original(name, saved)
+                   for name in json.loads((self.path / 'selected.json').read_text()))
 
     def restore(self) -> None:
         saved = self.files()
         for name in json.loads((self.path / 'selected.json').read_text()):
+            if self.file_original(name, saved):
+                continue
             target = self.root / name
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
