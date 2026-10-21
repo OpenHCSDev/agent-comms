@@ -38,6 +38,18 @@ class VerifiedGoalSettlement(MroDispatch):
     goal: Goal
     turn: TurnId
 
+    @classmethod
+    def settle_current(cls, account: TurnGoalAccount) -> None:
+        comms, owner = account.comms, account.owner
+        with comms.registry.store.locked():
+            current = comms.registry.require(account.thread_name)
+            if current.incarnation != owner.incarnation or current.worktree != owner.worktree:
+                return
+            for goal in owner.goal.continued_by(current.goal):
+                store = comms.goals.open_goal_store()
+                generation = store.require_generation(goal.id)
+                generation.lifecycle.verified_turn(store, generation, f"verified-turn:{account.turn.value}")
+
     @property
     def progress_witness(self) -> str:
         return f"native-terminal:{self.turn.value}"
@@ -67,17 +79,6 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
         return f"origin-completed:{self.goal.revision}"
 
 
-@dataclass(frozen=True)
-class FailedGoalOrigin(MroDispatch):
-    comms: Comms
-    thread_name: str
-    goal: Goal
-
-    @handles(ActiveGoal, CompletedGoal)
-    def block(self, state) -> None:
-        self.comms.goals.block_failed_origin(self.thread_name, self.goal)
-
-
 @dataclass(kw_only=True)
 class TurnGoalAccount:
     comms: Comms
@@ -98,10 +99,7 @@ class TurnGoalAccount:
             claim_scope = comms.registry.snapshot().claim_generation(owner.name)
             with _store_lock(comms._wire_lock_path):
                 generation = store.require_generation(goal.id)
-                generation.lifecycle.require_ready()
-                grant = comms.goals.ready_goal_grant_locked(owner, claim_scope, generation)
-                reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
-                return store.claim_launch(reservation)
+                return generation.lifecycle.turn_permit(store, comms.goals, owner, claim_scope, generation)
         except GoalAttemptError as error:
             if autonomous:
                 return NoLaunchPermit()
@@ -159,18 +157,6 @@ class TurnGoalAccount:
         self.unattributed_usage.clear()
         self.pending_origins[self.thread_name] = permit.reservation.goal_id
 
-    def block_active_goal(self, diagnostic: str) -> None:
-        current = self.comms.registry.require(self.thread_name).continuation_goal(self.owner)
-        current.block_after_failed_turn(
-            self.comms.goals, self.thread_name, self.owner.worktree, diagnostic,
-        )
-
-    def require_output(self, text: str) -> None:
-        if not (self.has_productive_tool or text.strip()):
-            self.permit.block(self,
-                "Backend reported success without assistant output "
-                "or tool activity; inspect the session before resuming.")
-
     def settle_launched(self, permit: LaunchPermit, terminal: TurnTerminal) -> None:
         store = self.comms.goals.open_goal_store()
         captured = self.owner.goal.require().require_id(permit.reservation.goal_id)
@@ -179,6 +165,7 @@ class TurnGoalAccount:
 
     def finish(self, terminal: TurnTerminal) -> None:
         """Settle all original grants once from the actual producer terminal event."""
+        terminal.settle_current(self)
         self.permit.settle(self, terminal)
         for goal_id, permit in self.originated.items():
             current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)

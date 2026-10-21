@@ -111,20 +111,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    try:
-                        started_goal = goal.require()
-                    except RelationViolationError as missing:
-                        raise error from missing
                     pending[0].require_dependency_wake(error)
-                    await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
-                        owner.name,
-                        started_goal=started_goal,
-                        expected_worktree=owner.worktree,
-                        diagnostic=(
-                            "Standby wake launch authority unavailable; inspect the UNKNOWN "
-                            "input before explicit Retry. No input was replayed."
-                        ),
-                    ))
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .child_process import ProcessState
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .goal_presentation import GoalExecution, GoalExecutionSource
 
 
 class TurnDeclaration(SubclassUnion, affix=""):
@@ -34,6 +35,9 @@ class TurnDeclaration(SubclassUnion, affix=""):
     phase: TurnPhase
     id: str | None
     started_at: float | None
+
+    @abstractmethod
+    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
 
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
@@ -87,6 +91,9 @@ class NoTurn(NullMember, TurnDeclaration):
     started_at = None
     executing = False
     report_turn = ""
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.generation.lifecycle.idle_execution(source)
 
     def require_active(self) -> ActiveTurn:
         raise RelationViolationError("registry owner has no active turn")
@@ -210,6 +217,12 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
     executing = True
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import RunningExecution
+        if source.owner_alive and source.owner.process_identity.owns_turn(self):
+            return RunningExecution(source.goal.id)
+        return source.generation.lifecycle.idle_execution(source)
 
     @property
     def report_turn(self) -> str:

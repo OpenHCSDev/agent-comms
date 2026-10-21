@@ -202,12 +202,14 @@ class TurnProgress(events.AgentEventConsumer):
                 ok=False,
                 text=("An identified follow-up input was not started; inspect local diagnostics."),
             )
+        if event.ok and not (event.text.strip() or self.goals.has_productive_tool):
+            event = replace(event, ok=False,
+                            text="Backend reported success without assistant output or tool activity.")
         event = self.turn.terminal.reported(event)
         event = event.resolve(self.terminal_error, document, self.original)
         # Retain the resolved outcome before transport publication. If delivery
         # throws, failure handling must not classify or resolve it a second time.
         self.turn.terminal = event
-        await Coordination.run_worker(partial(event.observe_goal, self.goals))
         return event
 
     @handles(events.InputStarted)

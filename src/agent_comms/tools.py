@@ -72,7 +72,7 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, GoalExecution
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .message_bus import HeldBusWrite
@@ -221,7 +221,7 @@ class GoalSet(OwnGoalPublication):
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
-    execution: Annotated[ThreadGoalExecution, WireName("goal_execution")]
+    execution: Annotated[GoalExecution, WireName("goal_execution")]
 
 
 @dataclass(frozen=True)

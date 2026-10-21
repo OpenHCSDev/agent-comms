@@ -17,6 +17,10 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 if TYPE_CHECKING:
     from .goal_attempts import Generation, GoalAttemptStore
+    from .goal_failure_observation import GoalFailureEvidence
+    from .goal_presentation import GoalExecution, GoalExecutionSource
+    from .goal_management import Goals
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,24 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[GenerationState], ...]: ...
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.turn.execution(source)
+
+    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import AttemptUnresolvedExecution
+        return AttemptUnresolvedExecution(source.goal.id)
+
+    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
+        from .goal_failure_observation import NoFailedTurnEvidence
+        return NoFailedTurnEvidence()
+
+    def verified_turn(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+        pass
+
+    def turn_permit(self, store: GoalAttemptStore, goals: Goals, owner: Thread,
+                    claim_scope: int, generation: Generation) -> GoalTurnPermit:
+        return NoLaunchPermit()
 
     def validate_attempt(self, attempt_id: str | None) -> None:
         if not attempt_id:
@@ -64,6 +86,15 @@ class RetryableGeneration:
 @dataclass(frozen=True)
 class ReadyGeneration(GenerationState, RetryableGeneration):
     ready = True
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import RunnableExecution
+        return RunnableExecution(source.goal.id)
+
+    def turn_permit(self, store: GoalAttemptStore, goals: Goals, owner: Thread,
+                    claim_scope: int, generation: Generation) -> GoalTurnPermit:
+        grant = goals.ready_goal_grant_locked(owner, claim_scope, generation)
+        return store.claim_launch(store.reserve(generation.goal_id, generation.number, ready_grant=grant))
 
     def require_ready(self) -> None:
         pass
@@ -110,6 +141,15 @@ class ReservedGeneration(GenerationState):
 class BlockedGeneration(GenerationState, RetryableGeneration):
     failed = True
 
+    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
+        return store.failure_evidence(generation)
+
+    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.evidence.execution(source.goal.id)
+
+    def verified_turn(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+        store.authorize_current_retry(generation.goal_id, witness)
+
     def require_failure(self) -> None:
         return None
 
@@ -135,6 +175,10 @@ class BlockedGeneration(GenerationState, RetryableGeneration):
 @dataclass(frozen=True)
 class CompletedGeneration(GenerationState):
     terminal = True
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import CompletedExecution
+        return CompletedExecution(source.goal.id)
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:

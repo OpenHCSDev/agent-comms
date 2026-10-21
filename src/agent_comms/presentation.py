@@ -40,8 +40,9 @@ from .field_codec import (
     WireInline,
     WireOmitDefault,
 )
-from .goal_presentation import ThreadGoalExecution
+from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
+from .goal_attempts import GoalAttemptStore
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -94,7 +95,7 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms
-    from .goal_waits import RecordedGoalWait
+    from .goal_management import Goals
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
@@ -430,12 +431,13 @@ class ReadThrough(ChannelReadMark):
 class BusPresentation:
     def __init__(
         self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog,
-        agents: AgentActivity,
+        agents: AgentActivity, goals: Goals,
     ):
         self.bus = bus
         self.registry = registry
         self.catalog = catalog
         self.agents = agents
+        self.goals = goals
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
         self._display_indexes: dict[str, BusDisplayIndex] = {}
@@ -463,7 +465,7 @@ class BusPresentation:
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
-                {}, {}, unread={}, channel_unread={}, visibility=visibility,
+                {}, {}, goals=self.goals, unread={}, channel_unread={}, visibility=visibility,
                 read_marker_notice=basis.document.notice,
             )
         return replace(
@@ -610,24 +612,25 @@ class ThreadRecord(CliResult):
     thread: Annotated[Thread, WireInline()]
     status: Annotated[ThreadStatus, ThreadStatusName]
     activity: Annotated[ActivityData, PresenceExclude()]
-    goal_execution: ThreadGoalExecution
+    goal_execution: GoalExecution
     pending: Annotated[InboxCount, WireOmitDefault()] = field(
         default=UncountedInbox(), kw_only=True
     )
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-             waits: dict[str, RecordedGoalWait], threads: Iterable[Thread],
+             goals: Goals, threads: Iterable[Thread],
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
+        waits = goals.waits.read()
         observed = agents.all_activity(
             (thread for thread in threads if snapshot.status(thread.name).active),
             snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name),
             observed.get(thread.name, Activity.absent(thread.name)),
-            GoalWaits.execution(thread.goal, waits, snapshot, agents),
+            goals.snapshot_for(thread, snapshot, waits).execution,
             pending=pending[thread.name],
         ) for thread in threads)
 
@@ -658,18 +661,18 @@ class ThreadView(ThreadRecord):
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        goal_waits: GoalWaits,
+        goals: Goals,
         visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
         threads = tuple(snapshot.visible_threads(visibility, names=names))
         if not threads:
             return ()
         runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
-        waits = goal_waits.read()
+        waits = goals.waits.read()
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name), activities[thread.name],
-            GoalWaits.execution(thread.goal, waits, snapshot, agents), runtime[thread.name],
+            goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
 
@@ -727,12 +730,12 @@ class CoordinationSnapshot:
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
-        unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        goals: Goals, unread: Mapping[str, int], channel_unread: Mapping[str, int],
         visibility: RosterVisibility, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
-            registry, agents, GoalWaits.at(root), visibility,
+            registry, agents, goals, visibility,
         ))
         activities = {name: view.activity for name, view in threads.items()}
         return cls(
@@ -814,8 +817,9 @@ def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 
 
-def goal_wait_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return GoalWaits.source_paths(views.root)
+def goal_execution_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return (*GoalWaits.source_paths(views.root),
+            *GoalAttemptStore.source_paths(views.root / GoalAttemptStore.root_directory))
 
 
 def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
@@ -889,9 +893,9 @@ class WireRevision(ReadState):
             lambda views: (views.transcript_reads.index_path,), StoresView, SidebarView
         ),
     ]
-    goal_waits: Annotated[
+    goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(goal_wait_paths, *STATUS_SOURCE),
+        *revision_source(goal_execution_paths, *STATUS_SOURCE),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
@@ -973,8 +977,8 @@ class WireRevision(ReadState):
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != previous.activity.get(name)}
-        status_names = names if (self.goal_waits, self.expiry_period, self.work_room) != (
-            earlier.goal_waits, earlier.expiry_period, earlier.work_room) else names & activity_changed
+        status_names = names if (self.goal_execution, self.expiry_period, self.work_room) != (
+            earlier.goal_execution, earlier.expiry_period, earlier.work_room) else names & activity_changed
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names

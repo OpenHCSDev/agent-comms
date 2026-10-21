@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from .diagnostics import FailureReason, terminal_failure_reason
 from .goal_failure_observation import FailedTurnObservation
 from .goal_attempts import StaleAttemptError
-from .turn_goal_account import FailedGoalOrigin
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -34,9 +33,6 @@ class TurnTerminal(ABC):
     def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
         return self
 
-    def observe_goal(self, account: TurnGoalAccount) -> None:
-        pass
-
     def reported(self, event: Done) -> Done:
         return event
 
@@ -51,14 +47,15 @@ class TurnTerminal(ABC):
         detail = f"Native turn failed: {type(cause).__name__}: {cause}"
         return (await progress.record_failure(detail)).outcome
 
+    def settle_current(self, account: TurnGoalAccount) -> None:
+        pass
+
     @abstractmethod
     def settle_launched(self, account, permit, store, captured, current) -> None: ...
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
         if not permit.has_verified_progress(store):
             permit.fail_origin(store, goal_id)
-            for goal in current:
-                FailedGoalOrigin(account.comms, account.thread_name, goal).dispatch_sync(goal.state)
 
 
 class FailedGoalTurn(TurnTerminal):
@@ -88,13 +85,9 @@ class FailedGoalTurn(TurnTerminal):
         observation = self.failure_observation(account, permit, captured)
         with suppress(StaleAttemptError):
             permit.reservation.fail(
-                store, "Goal turn ended without verified terminal progress.",
+                store, self.failure_reason.value,
                 observation=observation,
             )
-        current.block_after_failed_turn(
-            account.comms.goals, account.thread_name, account.owner.worktree,
-            "Goal turn ended without verified terminal progress.",
-        )
 
 
 class EndedWithoutResult(FailedGoalTurn):
@@ -104,10 +97,6 @@ class EndedWithoutResult(FailedGoalTurn):
 
     def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
         return terminal
-
-    def settle_launched(self, account, permit, store, captured, current) -> None:
-        account.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
-        super().settle_launched(account, permit, store, captured, current)
 
 
 class OperatorStopped(TurnTerminal):
