@@ -2,8 +2,9 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
 
-from agent_comms.installer.backup import NoBackup, StoreBackup
+from agent_comms.installer.backup import BackupName, NoBackup, StoreBackup
 from agent_comms.installer.carry import CarryChain, CarryLedger
 
 
@@ -55,6 +56,17 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
     assert archived.exists()
 
 
+@pytest.mark.parametrize('root_name', ('ROOT', 'wire%[x]+.{}'))
+def test_backup_name_recognizes_only_its_own_complete_names(tmp_path, root_name):
+    root = tmp_path / root_name
+    name = BackupName.now(root)
+    assert BackupName.read(root, name.value) == name
+    assert BackupName.read(root, BackupName.now(tmp_path / 'other').value) is None
+    for foreign in (name.value + '.restored-123', name.value + '.retired-123',
+                    name.value + '0', name.value[:-1]):
+        assert BackupName.read(root, foreign) is None
+
+
 def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     root = tmp_path / 'ROOT'
     spill_dir = tmp_path / 'spill'
@@ -66,10 +78,12 @@ def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     unrelated = spill_dir / 'unrelated'
     other_root = spill_dir / 'OTHER.upgrade-20260101T000000'
     retired_run = spill_dir / 'ROOT.retired-20260101T000000'
-    for directory in (unrelated, other_root, retired_run):
+    wrong_width = spill_dir / 'ROOT.upgrade-2026011T000000'
+    foreign_directories = (unrelated, other_root, retired_run, wrong_width)
+    for directory in foreign_directories:
         directory.mkdir()
         (directory / 'saved').write_text('untouched')
-    ordinary_file = spill_dir / 'ROOT.upgrade-not-a-directory'
+    ordinary_file = spill_dir / 'ROOT.upgrade-20260101T000009'
     ordinary_file.write_text('untouched')
 
     backup = StoreBackup(root, tmp_path / 'route.json', backups[-1])
@@ -77,7 +91,7 @@ def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     assert not any(path.exists() for path in backups[:2])
     assert all((path / 'saved').read_text() == 'retained store' for path in backups[2:])
     assert all((path / 'saved').read_text() == 'untouched'
-               for path in (unrelated, other_root, retired_run))
+               for path in foreign_directories)
     assert ordinary_file.read_text() == 'untouched'
     assert backup.retain(spill_dir) == ()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -15,7 +16,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from datetime import datetime
+from functools import cache
 from pathlib import Path
+from string import Formatter
 from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
@@ -137,6 +141,36 @@ def transcripts_held(root: Path) -> Iterator[None]:
         holder.communicate()
 
 
+@dataclass(frozen=True, order=True)
+class BackupName:
+    """One fixed-width name declaration owns creation, recognition and ordering."""
+
+    value: str
+    format: ClassVar[str] = (
+        "{root}.upgrade-{created.year:04d}{created.month:02d}{created.day:02d}"
+        "T{created.hour:02d}{created.minute:02d}{created.second:02d}"
+    )
+
+    @classmethod
+    def now(cls, root: Path) -> Self:
+        return cls(cls.format.format(root=root.name, created=datetime.now()))
+
+    @classmethod
+    @cache
+    def pattern(cls, root: Path) -> re.Pattern[str]:
+        parts = []
+        for literal, name, spec, _ in Formatter().parse(cls.format):
+            parts.append(re.escape(literal))
+            if name:
+                parts.append(re.escape(root.name) if name == "root"
+                             else rf"[0-9]{{{int(spec.removesuffix('d'))}}}")
+        return re.compile("".join(parts))
+
+    @classmethod
+    def read(cls, root: Path, name: str) -> Self | None:
+        return cls(name) if cls.pattern(root).fullmatch(name) else None
+
+
 class ResourceBackup(ABC):
     """The installation's rollback and retention behavior, with or without a snapshot."""
 
@@ -184,20 +218,11 @@ class StoreBackup(ResourceBackup):
         if (self.path / 'active-route.json').exists():
             shutil.copy2(self.path / 'active-route.json', self.route)
 
-    @staticmethod
-    def directory_format(root: Path) -> str:
-        """One name declaration for creation and recognition; the root is literal data."""
-        return f'{root.name.replace("%", "%%")}.upgrade-%Y%m%dT%H%M%S'
-
-    @classmethod
-    def directory(cls, spill_dir: Path, root: Path) -> Path:
-        return spill_dir / time.strftime(cls.directory_format(root))
-
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> ResourceBackup:
         if not files:
             return NoBackup()
-        path = cls.directory(spill_dir, root)
+        path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)
         if path.exists():
@@ -215,16 +240,11 @@ class StoreBackup(ResourceBackup):
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
-        name_format = self.directory_format(self.root)
-        backups = []
-        for path in spill_dir.iterdir():
-            try:
-                timestamp = time.strptime(path.name, name_format)
-            except ValueError:
-                continue
-            if time.strftime(name_format, timestamp) == path.name and path.is_dir():
-                backups.append(path)
-        retired = tuple(sorted(backups)[:-self.kept])
+        backups = sorted(
+            name for path in spill_dir.iterdir()
+            if path.is_dir() and (name := BackupName.read(self.root, path.name))
+        )
+        retired = tuple(spill_dir / name.value for name in backups[:-self.kept])
         for path in retired:
             shutil.rmtree(path)
         return retired
