@@ -533,6 +533,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.order.require_wording()
         root, revision = Path(self.order.check.directory), self.order.cited_revision
         self.order.owner.require_exists(root, revision)
+        self.order.finding.require_references(root, revision)
         self.order.scope.require_references(root, revision)
         self.order.check.require_directory()
 

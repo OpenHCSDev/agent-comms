@@ -13,15 +13,15 @@ import re
 import subprocess
 import textwrap
 from abc import ABC, abstractmethod
-from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_comms.errors import ToolRefusedError
 from .field_codec import (
-    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue, boundary_decoder,
+    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
 )
+from .goals import CheckedCommit, GitCommandFailed
 
 
 if TYPE_CHECKING:
@@ -34,49 +34,61 @@ class MissingSourceLine(ToolRefusedError):
 
 @dataclass(frozen=True)
 class SourceRevision(ABC):
-    """One validation call captures each repository's commit once, including fetch errors."""
+    """One validation call captures each repository's successfully fetched commit once."""
 
-    _commits: dict[Path, Future[str]] = field(default_factory=dict, init=False, repr=False, compare=False)
+    _commits: dict[Path, str] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
 
+    @property
     @abstractmethod
-    def lines(self, repository: Path, file: str) -> tuple[str, ...]: ...
+    def reference(self) -> str: ...
 
-    def _lines(self, repository: Path, file: str, reference: str, fetch: str) -> tuple[str, ...]:
-        from .goals import CheckedCommit, GitCommandFailed
+    @property
+    @abstractmethod
+    def fetch_refspec(self) -> str: ...
 
-        try:
-            captured = self._commits[repository]
-        except KeyError:
-            captured = self._commits[repository] = Future()
-            try:
-                CheckedCommit.git(str(repository), 'fetch', 'origin', fetch)
-                captured.set_result(CheckedCommit.git(
-                    str(repository), 'rev-parse', '--verify', f'{reference}^{{commit}}').strip())
-            except GitCommandFailed as error:
-                captured.set_exception(error)
-        commit = captured.result()
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        if repository not in self._commits:
+            CheckedCommit.git(str(repository), 'fetch', 'origin', self.fetch_refspec)
+            self._commits[repository] = CheckedCommit.git(
+                str(repository), 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
+            ).strip()
+        commit = self._commits[repository]
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
         try:
-            return tuple(CheckedCommit.git(str(repository), 'show', f'{commit}:{path}').splitlines())
+            text = CheckedCommit.git(str(repository), 'show', f'{commit}:{path}')
+            return tuple(text.splitlines())
         except GitCommandFailed as error:
             if error.source_path_absent(commit, path):
-                raise MissingSourceLine(f'Source file {file} does not exist at {commit}.') from error
+                raise MissingSourceLine(
+                    f'Source file {file} does not exist at {commit}.'
+                ) from error
             raise
 
 
 class MainRevision(SourceRevision):
-    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
-        return self._lines(repository, file, 'origin/main', 'main')
+    @property
+    def reference(self) -> str:
+        return 'origin/main'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return 'main'
 
 
 @dataclass(frozen=True)
 class PullRequestHeadRevision(SourceRevision):
     link: PullRequestLink
 
-    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
-        reference = f'refs/agent-comms/cited/{self.link.number}'
-        return self._lines(repository, file, reference, f'+pull/{self.link.number}/head:{reference}')
+    @property
+    def reference(self) -> str:
+        return f'refs/agent-comms/cited/{self.link.number}'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return f'+pull/{self.link.number}/head:{self.reference}'
 
 
 class SourceReference(ABC):
@@ -127,7 +139,9 @@ class FileLine(WireValue, SourceReference):
 
     def require_exists(self, repository: Path, revision: SourceRevision) -> None:
         if self.line > len(revision.lines(repository, self.file)):
-            raise MissingSourceLine(f"Source owner {self.to_wire()} does not exist at the cited revision.")
+            raise MissingSourceLine(
+                f"Source owner {self.to_wire()} does not exist at the cited revision."
+            )
 
     @classmethod
     def class_declaration(cls, declaration: type) -> FileLine:
@@ -140,7 +154,9 @@ class FileLine(WireValue, SourceReference):
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
         if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
                    for node in ast.walk(tree)):
-            raise MissingSourceLine(f"scope shape reference {self.to_wire()} must name a class declaration")
+            raise MissingSourceLine(
+                f"scope shape reference {self.to_wire()} must name a class declaration"
+            )
 
     def to_wire(self) -> str:
         return f"{self.file}:{self.line}"

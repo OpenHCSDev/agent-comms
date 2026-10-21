@@ -1,17 +1,18 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
+from test_todos import order as checked_order
 
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import BoundedRun
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.goals import CountCheckResult
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -20,18 +21,15 @@ from agent_comms.todos import (
     GoalRef,
     OrderDelivery,
     RecordedCommitDelivery,
-    PendingProblemOrder,
     Slop,
     DeclarationDerivation,
 )
-from agent_comms.order_runs import MechanicalOrderRun
 
 
 def order(root, identity, command='printf 1', expected=1):
-    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-        check=OrderCheck(str(root), command, CountCheckResult(expected)),
-        edits=('Repair the existing owner',), banned=('No second store',), report='Report the result',
-        at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
+    declaration = checked_order(root)
+    return replace(declaration, id=identity,
+        check=replace(declaration.check, command=command, result=CountCheckResult(expected)))
 
 
 def create(commander, problem, command='printf 1', expected=1, review_at=1000, owner='worker'):

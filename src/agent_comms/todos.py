@@ -33,7 +33,8 @@ from agent_comms.order_runs import OrderRun
 from . import skills
 from .bus_publication import AgentOrigin
 from .change_report import (
-    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision, SourceReference, SourceRevision,
+    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
+    SourceReference, SourceRevision,
 )
 from .channel_targets import CommandTarget
 from .child_process import (
@@ -1388,6 +1389,9 @@ class FamilyDeletion(OrderDeletion):
 
 @dataclass(frozen=True)
 class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
+        """An unlocated finding has no source reference to validate."""
+
     def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
         return False
 
@@ -1406,6 +1410,9 @@ class UnlocatedProblemFinding(ProblemFinding):
 @dataclass(frozen=True)
 class LocatedProblemFinding(ProblemFinding):
     where: FileLine
+
+    def require_references(self, root: Path, revision: SourceRevision) -> None:
+        self.where.require_exists(root, revision)
 
     def on_files(self, locations: tuple[FileLine, ...], root: Path) -> bool:
         return any(self.where.same_file(location, root) for location in locations)

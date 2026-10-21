@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from order_scope_fixture import FIX_SCOPE
+from source_revision_fixture import SourceRepository
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
@@ -63,8 +64,9 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 
 def order(root: Path):
-    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
-        check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
+    source = SourceRepository.create(root / 'cited-source')
+    return PendingProblemOrder(id="checked-order", owner=FIX_SCOPE.shape.parents[0], scope=FIX_SCOPE, run=MechanicalOrderRun(),
+        check=OrderCheck(str(source.checkout), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
 

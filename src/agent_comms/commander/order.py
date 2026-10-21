@@ -399,11 +399,10 @@ class Commander(CommanderContext):
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
-        order = replace(document.order, finding=finding)
-        check = replace(order.check, directory=str(self.repo_directory(order.check.directory)))
-        order = replace(order, check=check)
+        check = replace(document.order.check,
+                        directory=str(self.repo_directory(document.order.check.directory)))
+        order = replace(document.order, finding=finding, check=check)
         edits = order.edits
-        cited_revision = document.order.cited_revision
         body = '\n'.join((document.prose, *edits, order.report))
         # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
         try:
@@ -432,8 +431,13 @@ class Commander(CommanderContext):
             problems.append('problems: fix: omit IDs when creating a new problem')
         if not new and (missing := [pid for pid in group if pid not in listed]):
             problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
-        for label, validate in (('order.owner', lambda: order.owner.require_exists(Path(check.directory), cited_revision)),
-                               ('order.check.directory', check.require_directory)):
+        for label, validate in (
+            ('order.owner', lambda: order.owner.require_exists(
+                Path(check.directory), order.cited_revision)),
+            ('order.finding', lambda: order.finding.require_references(
+                Path(check.directory), order.cited_revision)),
+            ('order.check.directory', check.require_directory),
+        ):
             try:
                 with MalformedRecord.refusing(label):
                     validate()
@@ -466,7 +470,7 @@ class Commander(CommanderContext):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(Path(check.directory), cited_revision)
+                    reference.require_exists(Path(check.directory), order.cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         if any((Path(check.directory) / reference.file).resolve().is_relative_to(
@@ -568,7 +572,6 @@ class Commander(CommanderContext):
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
-        location.require_exists(checkout, document.order.cited_revision)
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
