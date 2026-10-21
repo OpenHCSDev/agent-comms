@@ -72,6 +72,7 @@ from agent_comms.todos import (
     OrderMessage,
     OrderProgress,
     OrderText,
+    OrderWords,
     PendingProblemOrder,
     PullRequestLink,
     RecordPullRequest,
@@ -200,9 +201,10 @@ class OrderFile:
         return f'{self.defect}\n{self.why_stupid}{reason}'
 
     def problems_found(self, clean: bool) -> list[str]:
+        wording: tuple[type[OrderWords], ...] = (*OUTGOING, OrderText)
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
-                    for family in (*OUTGOING, OrderText)
+                    for family in wording
                     if (error := family.refused(text))]
         if len(self.defect.split()) < 8:
             problems.append('defect: fix: describe what fails in at least eight words')

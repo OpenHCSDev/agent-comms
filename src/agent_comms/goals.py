@@ -394,7 +394,8 @@ class OrderCheck:
             result = self.run_at(sha, repository, checkout_base)
         except subprocess.TimeoutExpired:
             return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
-        checked = CheckedCommit(self.command, result.outcome, result.stdout.decode(errors="replace"))
+        checked = CheckedCommit(
+            self.command, result.outcome, result.stdout.decode(errors="replace"))
         checked.store(repository, sha)
         return checked.result
 
