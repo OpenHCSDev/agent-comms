@@ -12,13 +12,15 @@ from typing import ClassVar, Self
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..goals import Goal
+from ..goals import Goal, GoalRevision
 from ..goal_states import BlockedState
 from ..goal_history import GoalHistoryStore
 from ..message_page import MessageReadRequest
 from ..message_reference import MessageReference
 from ..messages import Message
-from ..read_basis import DMDisplayScope
+from ..read_basis import RepliesDisplayScope
+from ..bus_page_index import BusPageIndex
+from ..wire_log import WireSnapshot
 from ..message_bus import WatchPass
 from ..standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
 from agent_comms.storage_rules import OrderCheckoutWork
@@ -57,7 +59,7 @@ class HolderCannotRun(UndatedStandingRule, declared_name=None):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         registry = comms.registry.snapshot()
-        found = []
+        found: list[Self] = []
         members = cls.members_with(cls)
         for owner, todos in cls.holders(comms, commander).items():
             thread = registry.require(owner.name)
@@ -75,7 +77,7 @@ class Detached(HolderCannotRun):
 
     @staticmethod
     def stalled(comms: Comms, thread: Thread) -> bool:
-        return not comms.registry.snapshot().receiving(thread.name)
+        return not comms.registry.status(thread.name).receiving
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
@@ -89,15 +91,15 @@ class Detached(HolderCannotRun):
 @dataclass(frozen=True)
 class Blocked(HolderCannotRun):
     block_record: Path
-    goal_id: str
+    goal: GoalRevision
 
     @staticmethod
     def stalled(comms: Comms, thread: Thread) -> bool:
-        return any(isinstance(goal.state, BlockedState) for goal in thread.goal)
+        return not thread.executing and any(isinstance(goal.state, BlockedState) for goal in thread.goal)
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().id)
+        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().revision_key)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         for problem in self.orders:
@@ -107,7 +109,8 @@ class Blocked(HolderCannotRun):
 
     def line(self) -> str:
         return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
-                f"block record {self.block_record}, goal {self.goal_id} -> Core reissues the orders")
+                f"block record {self.block_record}, goal {self.goal.id}@{self.goal.revision} "
+                "-> Core reissues the orders")
 
 
 @dataclass(frozen=True)
@@ -129,14 +132,14 @@ class RequestStalled(UndatedStandingRule):
 
 @dataclass(frozen=True, slots=True)
 class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
-    scope: DMDisplayScope
+    scope: RepliesDisplayScope
     since: float
     before: float
     empty: ClassVar[tuple[Message, ...]] = ()
 
-    def indexed(self, index, source) -> tuple[Message, ...]:
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
         answered: set[MessageReference] = set()
-        found = []
+        found: list[Message] = []
         with closing(index.recent_offsets(
             self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
         )) as offsets:
@@ -166,7 +169,7 @@ class UnitAskUnanswered(UndatedStandingRule):
         since = min(todo.order.checked().at.recorded_at("A held order")
                     for todos in held.values() for todo in todos)
         request = UnansweredUnitAsks(
-            DMDisplayScope(snapshot.names_for(commander), peers), since, time.time() - cls.seconds,
+            RepliesDisplayScope(snapshot.names_for(commander), peers), since, time.time() - cls.seconds,
         )
         return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
                      for message in comms.bus.log.read_page(request))

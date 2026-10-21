@@ -88,10 +88,5 @@ class CommanderHeartbeat(WatchPass):
         }
         for thread in commanders:
             comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry)
-            if thread.incarnation not in self.reviews:
-                # Retain the baseline before effects; startup also acts on blocked holders.
-                rules = StandingRule.broken(comms, thread.name)
-                self.reviews[thread.incarnation] = CommanderReview(frozenset(rules))
-                StandingRule.enforce_all(comms, thread.name, rules)
-            else:
-                self.reviews[thread.incarnation].wake(comms, self.sender, thread)
+            review = self.reviews.setdefault(thread.incarnation, CommanderReview(frozenset()))
+            review.wake(comms, self.sender, thread)

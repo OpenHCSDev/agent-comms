@@ -82,8 +82,6 @@ from .message_reference import MessageReference
 from .message_page import PageBounds
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
-from .message_page import PageBounds
-from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
 from .page_traversal import NewestCursor, PageCursor

@@ -408,7 +408,8 @@ class NoAttempt(MissingAttempt):
 
 
 @dataclass(frozen=True)
-class GoalHumanDecision(GoalLedgerTable, TypedTable):
+class GoalWorkDecision(GoalLedgerTable, TypedTable, declared_name="goal_human_decision"):
+    """Explicit new-work authority; the persisted SQL identity stays unchanged."""
     goal_id: Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
     decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
@@ -417,7 +418,7 @@ class GoalHumanDecision(GoalLedgerTable, TypedTable):
         try:
             self.insert(conn)
         except sqlite3.IntegrityError as error:
-            raise UnresolvedAttemptError("That human decision was already used.") from error
+            raise UnresolvedAttemptError("That work decision was already used.") from error
 
 
 @dataclass(frozen=True)
@@ -1033,7 +1034,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
                 goal_id, expected_generation, ReservedGeneration(), attempt_id
             ) or not attempt.phase.may_become(FailedAttempt()):
                 raise changed
-            GoalHumanDecision(goal_id, user_decision_id, expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
             attempt.advance(conn, FailedAttempt(), resolution=user_decision_id)
             return goal.advance(
                 conn,
@@ -1068,10 +1069,10 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
     def authorize_ready_recovery(
         self, goal_id: str, *, expected_generation: int, user_decision_id: str
     ) -> Generation:
-        """A human decision rotates lost READY authority after a restart/uncertain write.
+        """An explicit retry or fresh order rotates lost READY authority.
 
-        This is not an automatic retry: integration must present the durable
-        goal and verify the *real* user decision and registry goal identity.
+        Integration must present the durable goal, verify the real retry decision
+        or checked fresh order, and verify registry goal identity.
         If a reservation raced this decision, neither its grant nor its attempt
         is overwritten. Reusing a decision ID cannot mint another grant.
         """
@@ -1084,7 +1085,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
                 raise UnresolvedAttemptError(
                     "Goal is not ready; an attempt may already be unresolved."
                 )
-            GoalHumanDecision(goal_id, user_decision_id, expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
             return current.advance(
                 conn,
                 Generation(
@@ -1127,7 +1128,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
             )
             if not isinstance(attempt.phase, FailedAttempt):
                 raise unrecorded
-            GoalHumanDecision(goal_id, user_decision_id, expected_generation).claim(conn)
+            GoalWorkDecision(goal_id, user_decision_id, expected_generation).claim(conn)
             attempt.advance(conn, ResolvedAttempt(), resolution=user_decision_id)
             return current.advance(
                 conn,

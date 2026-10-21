@@ -7,7 +7,7 @@ import pytest
 from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
-    GoalHumanDecision,
+    GoalWorkDecision,
     UnresolvedAttemptError,
 )
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
@@ -44,7 +44,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
         assert [(row.reservation, row.phase.declared_name, row.resolution) for row in attempts] == [
             (attempt, "resolved", "explicit-retry")
         ]
-        decisions = GoalHumanDecision.select(conn)
+        decisions = GoalWorkDecision.select(conn)
         assert [(row.decision_id, row.generation) for row in decisions] == [("explicit-retry", 1)]
     with pytest.raises(UnresolvedAttemptError):
         reopened.ready_grant("goal", 2)

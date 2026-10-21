@@ -241,13 +241,11 @@ class BusPageIndex(TypedStore, DerivedTables):
         """
         condition, bindings = predicate
         table = BusPageRow.declared_name
-        with closing(BusPageRow.stream(
-            self.connection,
-            where=f'seq IN (SELECT seq FROM "{table}" WHERE timestamp>?) '
-                  f'AND offset<? AND ({condition})',
-            parameters=(since, before_offset, *bindings), order_by=("seq",), descending=True,
-        )) as rows:
-            yield from rows
+        yield from self._offsets(
+            [f'seq IN (SELECT seq FROM "{table}" WHERE timestamp>? AND ({condition}))'],
+            [since, *bindings], lower=None, upper=None, descending=True,
+            before_offset=before_offset,
+        )
 
     def sequence_offsets(
         self, sequences: frozenset[int], *, before_offset: int,
