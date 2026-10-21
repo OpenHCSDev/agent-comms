@@ -977,6 +977,23 @@ def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only(word)
     assert FrozenFieldWrite.count(b'text = "object.__setattr__(x, y, z)"\n', "values.py") == 0
 
 
+def test_a_frozen_write_counts_except_in_its_own_classes_post_init():
+    source = b"""class Snapshot:
+    def __post_init__(self):
+        object.__setattr__(self, "maps", dict(self.maps))
+        object.__setattr__(self.other, "maps", {})
+        def later():
+            object.__setattr__(self, "maps", {})
+    def refresh(self):
+        object.__setattr__(self, "maps", {})
+def __post_init__(self):
+    object.__setattr__(self, "maps", {})
+"""
+    # Only the first write builds the instance; another object, a nested scope, another
+    # method and a module-level function of the same name all still count.
+    assert FrozenFieldWrite.count(source, "values.py") == 4
+
+
 def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
     original = 'key = "admission_generation"\n# clean wording\n'
     base = repo.commit({"words.py": original})
@@ -1013,6 +1030,7 @@ def test_string_identity_reads_declared_names_compared_kinds_and_named_access():
     source = b"""after = "carry_hunts"
 step = "CarryStep"
 table = "pkg.route_table"
+loaded = sys.modules["pkg.route_table"]
 if kind == "release": pass
 if mode in {"fast", "slow"}: pass
 match shape:
@@ -1057,6 +1075,24 @@ Bound = TypeVar("Bound", bound="Claimed")
     ]
 
 
+def test_a_module_name_counts_only_where_a_string_selects_a_module():
+    source = b"""migrate = numbers and "route_table" in stored
+path = "pkg.route_table"
+spec = importlib.util.find_spec("pkg.route_table")
+cached = sys.modules.get("pkg.route_table")
+present = "pkg.route_table" in sys.modules
+skills = files("pkg.route_table") / "skills"
+command = (interpreter, "-m", "pkg.route_table", root)
+"""
+    assert string_identity_readings(source) == [
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+    ]
+
+
 def test_string_identity_exempts_prose_interpolation_enum_bodies_class_options_and_entry_guard():
     source = b'''"""carry_hunts is described here."""
 import enum
@@ -1086,7 +1122,7 @@ def test_string_identity_measures_spellings_outside_root_and_skips_declared_test
         (repo.path / name).write_text(source)
     base = repo.commit({"kept.py": "value = 1\n"})
     for name in ("tools/step.py", "tests/test_step.py"):
-        (repo.path / name).write_text('after = "carry_other"\n')
+        (repo.path / name).write_text('after = sys.modules["carry_other"]\n')
     head = repo.commit({})
     status, report = repo.compare(base, head)
     assert status == 1

@@ -13,6 +13,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from agent_comms.private_path import PrivateDirectoryRole
+
 LOADER_SHA = "a1393de916487a2c47107ac7239f3139dcdb938705f88ba1ea5a954b3c8bb483"
 
 
@@ -146,6 +148,10 @@ def materialize(source: Path, target: Path) -> None:
     subprocess.run(
         ["cp", "-aL", "--no-preserve=links", "--reflink=auto", str(source), str(target)], check=True
     )
+    # Git checkouts inherit umask; copied directories own private build permissions,
+    # never the execute bits of the checkout that happened to supply their bytes.
+    for directory in (target, *target.rglob("*/")):
+        directory.chmod(PrivateDirectoryRole.permissions)
 
 
 def main(package: Path, dependency_package: Path | None = None) -> None:

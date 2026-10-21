@@ -159,7 +159,7 @@ class BlockedGeneration(Failed, GenerationState):
         super().resume_status(generation, goal, ctx)
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
-        return store.failure_evidence(generation)
+        return generation.failure_evidence(store)
 
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.evidence.execution(source.goal.id)

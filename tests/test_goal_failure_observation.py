@@ -9,7 +9,12 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
-from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
+from agent_comms.goal_attempts import (
+    AttemptRecord,
+    GoalAttemptStore,
+    StaleAttemptError,
+    UnresolvedAttemptError,
+)
 from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
@@ -58,7 +63,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
             observation.reservation.fail(current, "duplicate", observation=observation)
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
-        assert current.failure_evidence(current.require_generation(owner.goal.id)) == observation.evidence
+        assert current.require_generation(owner.goal.id).failure_evidence(current) == observation.evidence
     assert store.path.read_bytes() == before
     assert len(rows(store, "failed_turn_evidence")) == 1
     encoded = json.dumps(rows(store, "failed_turn_evidence"))
@@ -81,7 +86,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     assert rejected is None
     observation.reservation.fail(store, "failed anyway", observation=rejected)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert store.failure_evidence(store.require_generation("goal")) == NoFailedTurnEvidence()
+    assert store.require_generation("goal").failure_evidence(store) == NoFailedTurnEvidence()
 
 
 @pytest.mark.parametrize("binding", ["token", "evidence_identity"])
@@ -95,7 +100,7 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
     observation.reservation.fail(store, "failed", observation=forged)
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert store.failure_evidence(store.require_generation("goal")) == NoFailedTurnEvidence()
+    assert store.require_generation("goal").failure_evidence(store) == NoFailedTurnEvidence()
 
 
 def test_unclaimed_attempt_failure_has_no_backend_incident(bound):

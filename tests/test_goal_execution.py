@@ -5,20 +5,27 @@ from contextlib import AsyncExitStack, asynccontextmanager, closing
 from dataclasses import replace
 
 import pytest
+from cutover.carry_goal_execution import FAILED_BACKEND_REASON, BackendGoalBlocks
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
-    BlockedGoalAction, PausedGoalAction, RetryGoalAction, SetGoalAction,
+    BlockedGoalAction,
+    PausedGoalAction,
+    RetryGoalAction,
+    SetGoalAction,
 )
 from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_presentation import AttemptFailedExecution, RunnableExecution, RunningExecution
+from agent_comms.goal_presentation import (
+    AttemptFailedExecution,
+    RunnableExecution,
+    RunningExecution,
+)
 from agent_comms.goal_states import ActiveGoal, BlockedGoal
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_terminal import OwnerStop
-from cutover.carry_goal_execution import BackendGoalBlocks, FAILED_BACKEND_REASON
 from test_goal_answers import copied_goal_bus
 
 
@@ -45,7 +52,6 @@ async def turn_on(comms, *, original_owner_input=False):
     )
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await turn.acquire(resources, permits)
-        turn.open_stream(resources, permits)
         yield turn
 
 
