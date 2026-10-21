@@ -12,7 +12,7 @@ from agent_comms.response_acknowledgement import (
 )
 
 from .audience_manifest import FrozenRecipient, freeze_audience
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .coordination_tables.responses import ResponseObligation
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class ResponseConversation:
     responder: FrozenRecipient
     obligation: ResponseObligation
-    sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
 
     @classmethod
     def source_references(cls, snapshot, obligation: ResponseObligation) -> tuple[MessageReference, ...]:

@@ -13,7 +13,7 @@ from typing import Annotated, Callable, ClassVar
 
 
 from .agent_backend import RuntimeLocation
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
@@ -25,7 +25,6 @@ from .field_codec import FieldCodec, projected, ContentExclude, WireName
 from .historical_views import HistorySource
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .messages import Message
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
@@ -459,8 +458,8 @@ class TranscriptSourceWindow:
     """One transcript read and its same-cut conversation source windows."""
 
     read: TranscriptRead
-    sources: tuple[CommittedDelivery, ...]
-    sent_sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    sent_sources: tuple[Delivered, ...]
 
 
 class Transcripts:

@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook, HookRecord
+from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 
 
 @dataclass(frozen=True)
@@ -154,11 +154,8 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
 
 
 @dataclass(frozen=True)
-class ToolUseReminder(ContextCadence, ABC):
+class ToolUseReminder(ContextCadence, ClaudeToolHook, ABC):
     """A reminder checked after every tool call; each direct subclass is one reminder."""
-
-    tool_name: str
-    tool_input: dict
 
     def read_paths(self) -> frozenset[str]:
         return ToolInput.called(self.tool_name, self.tool_input).read_paths()

@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PauseSource(DeclaredFamily, affix="Pause"):
+    lifts_on_compliance: ClassVar[bool] = False
+
     def instruction(self) -> str | None:
         return None
 
@@ -45,6 +47,20 @@ class ModelPause(PauseSource):
 
 class RuntimePause(PauseSource):
     pass
+
+
+class ChokeholdPause(PauseSource):
+    """The heartbeat held this unit because its commander ignored a vibe check; Core resumes
+    it when the commander complies, and nothing else may."""
+
+    lifts_on_compliance = True
+
+    def instruction(self) -> str:
+        return (
+            "Your commander ignored the heartbeat's vibe check, so the heartbeat paused every"
+            " unit under it until it complies. Do not resume or continue this goal; Core resumes"
+            " it when the commander answers."
+        )
 
 
 @dataclass(frozen=True)
@@ -111,6 +127,11 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     @property
     def pause_source(self) -> PauseSource | None:
         return None
+
+    @property
+    def lifts_on_compliance(self) -> bool:
+        """Held by the heartbeat until the commander complies."""
+        return False
 
     @property
     def protected(self) -> bool:
@@ -192,6 +213,10 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     @property
     def pause_source(self) -> PauseSource:
         return self.source
+
+    @property
+    def lifts_on_compliance(self) -> bool:
+        return self.source.lifts_on_compliance
 
     @property
     def protected(self) -> bool:

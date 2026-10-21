@@ -412,13 +412,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                     (output / "timings.json").write_text(json.dumps(rows, indent=2) + "\n")
                     print(json.dumps(row), flush=True)
                     if name == "comms_send" and status == "200" and not row["isError"]:
-                        from agent_comms.wire_record import WireRecord
-
-                        saved = [
-                            message
-                            for line in comms.bus.log.path.read_text().splitlines()
-                            for message in WireRecord.public_from_wire(json.loads(line)).messages()
-                        ]
+                        saved = comms.bus.bus.message_history()
                         assert any(message.body == args["body"] for message in saved)
             finally:
                 service.terminate()
