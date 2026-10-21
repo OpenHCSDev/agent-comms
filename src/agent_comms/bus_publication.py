@@ -72,10 +72,14 @@ class Delivered(BusRecord, declared_name=None):
     control: str
 
     def projections(self):
-        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
+        from .bus_tables import AnsweredBySource, DirectReplySource, ReceivedSource, SentSource
 
         yield from super().projections()
         yield SentSource(self.audience.sender_lookup, self.seq)
+        for original in self.answers:
+            yield AnsweredBySource(
+                original=original, lookup=self.audience.sender_lookup, seq=self.seq,
+            )
         for recipient in self.audience.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
             if self.direct_for(recipient.recipient_lookup):

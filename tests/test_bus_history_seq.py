@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, BusSnapshot, PublicRecord
+from bus_record_fixture import record_from
+from agent_comms.bus import Bus, BusSnapshot, PrivateRecord, PublicRecord
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.bus_tables import BusRow, MessageIdentitySource
 from agent_comms.errors import HumanSendRefusedError
@@ -152,6 +153,27 @@ def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
         assert tuple(row.seq for row in reader.page(7, 2)) == (5, 4)
     with pytest.raises(sqlite3.ProgrammingError):
         reader.lookup(1)
+
+
+def test_reply_existence_uses_exact_reference_and_frozen_author(tmp_path):
+    messages = channel_bus(tmp_path)
+    original = messages.bus.lookup(1).reference
+    other = messages.bus.lookup(2).reference
+    messages.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "#history", "unattested answer", InfoKind,
+                seq=seq, answers=(original,))))
+    assert not messages.bus.has_reply(original, sender_lookup="a" * 32)
+    with messages.bus.reading() as source:
+        assert not source.has_reply(original, sender_lookup="a" * 32)
+        messages.bus.append(lambda seq, db: record_from(
+            PrivateRecord, Message("renamed-author", "worker", "frozen answer", InfoKind,
+                                   seq=seq, answers=(original,))))
+        assert not source.has_reply(original, sender_lookup="a" * 32)
+    assert messages.bus.has_reply(original, sender_lookup="a" * 32)
+    assert not messages.bus.has_reply(original, sender_lookup="b" * 32)
+    assert not messages.bus.has_reply(other, sender_lookup="a" * 32)
+    changed_identity = replace(original, message_id="0" * len(original.message_id))
+    assert not messages.bus.has_reply(changed_identity, sender_lookup="a" * 32)
 
 
 def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):
