@@ -2702,6 +2702,50 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
+class DroppedVerdict(ToolCallVerdict):
+    """The unit discarded the edit: no branch, remote branch or worktree of its repository holds it.
+
+    Git answers this at judge time; the commander supplies only the edit Core recorded.
+    """
+    path: str
+    added: tuple[str, ...]
+    line = "Dropped: on no branch, remote branch or worktree"
+
+    def prepare(self, goals, current):
+        lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
+        if not lines:
+            raise TodoError("An edit that adds no line cannot be shown dropped; judge it ok or back.")
+        checkout = Path(current.order.checked().check.directory)
+        if (holder := self.live_holder(checkout, lines)) is not None:
+            raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
+        return self
+
+    def live_holder(self, checkout: Path, lines: tuple[str, ...]) -> str | None:
+        """The first place still holding every added line: the file on disk, then any ref or worktree HEAD."""
+        target = Path(self.path)
+        if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
+            return str(target)
+        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes")
+        heads = [entry.removeprefix("HEAD ") for entry in self.git(checkout, "worktree", "list", "--porcelain")
+                 if entry.startswith("HEAD ")]
+        commits = sorted({*refs, *heads})
+        patterns = [arg for line in lines for arg in ("-e", line)]
+        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns, *commits,
+                         "--", f":(glob)**/{target.name}", allowed=(0, 1))
+        return found[0].split(":", 1)[0] if found else None
+
+    @staticmethod
+    def git(checkout: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> list[str]:
+        ran = subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True, timeout=120)
+        if ran.returncode not in allowed:
+            raise TodoError(ran.stderr.strip() or f"git {args[0]} failed in {checkout}.")
+        return ran.stdout.splitlines()
+
+    def judged(self, current: Todo) -> Todo:
+        return current
+
+
+@dataclass(frozen=True)
 class SendBackVerdict(ToolCallVerdict, CitedStrike):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason

@@ -34,6 +34,7 @@ from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
     Derivation,
+    DroppedVerdict,
     PeerAcceptedVerdict,
     SendBackVerdict,
     Slop,
@@ -181,7 +182,7 @@ class VerdictVerb(JudgeVerb):
     ]
 
     @abstractmethod
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> ToolCallVerdict: ...
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict: ...
 
     @abstractmethod
     def check_edits(self, edits: list[Edit]) -> None: ...
@@ -209,11 +210,11 @@ class VerdictVerb(JudgeVerb):
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():
-            self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
+            self.operation(ctx, todo, edits[i]).prepare(ctx.comms.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
             result = ctx.call(CommsVerdictTool(problem=todo.id,
-                              operation=self.operation(ctx, current[todo.id], i)))
+                              operation=self.operation(ctx, current[todo.id], edits[i])))
             current[todo.id] = result.todo
         left = len(Edit.unjudged(ctx.comms, ctx.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
@@ -240,12 +241,12 @@ class OkVerb(VerdictVerb):
         ),
     ] = ""
 
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> AcceptedVerdict:
         actor = ctx.incarnation
         if self.peer:
-            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
+            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit.id,
                                        quote=self.serves, peer=self.peer)
-        return AcceptedVerdict(todo.revision, actor, todo.held(), edit_id, quote=self.serves)
+        return AcceptedVerdict(todo.revision, actor, todo.held(), edit.id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
@@ -270,10 +271,25 @@ class SupersededVerb(VerdictVerb):
         ),
     ]
 
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SupersededVerdict:
         return SupersededVerdict(todo.revision,
                                  ctx.incarnation,
-                                 todo.held(), edit_id, replacement=self.by, reason=self.why)
+                                 todo.held(), edit.id, replacement=self.by, reason=self.why)
+
+    def check_edits(self, edits: list[Edit]) -> None:
+        pass
+
+    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
+        pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class DroppedVerb(VerdictVerb):
+    help = "the unit discarded these edits; Core settles them only if git holds them on no ref"
+
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> DroppedVerdict:
+        return DroppedVerdict(todo.revision, ctx.incarnation, todo.held(), edit.id, path=edit.path,
+                              added=tuple(line for hunk in edit.hunks for line in hunk.new_text.splitlines()))
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
@@ -317,9 +333,9 @@ class BackVerb(VerdictVerb):
         return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
                                            at=self.at, derive=self.derive, by=self.by))
 
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
+    def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, ctx.incarnation,
-                               todo.held(), edit_id,
+                               todo.held(), edit.id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
                                evidence=(FileLine.from_wire(self.at),))
 
