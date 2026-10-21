@@ -19,7 +19,7 @@ from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     ImmutableRows,
     IncrementingColumn,
     Index,
@@ -49,7 +49,6 @@ class ConnectivityFacet(
     IncrementingColumn,
     MonotoneColumns,
     ExecutionReference,
-    FrozenColumns,
     NoDelete,
     CoordinatorTable,
     TypedTable,
@@ -58,9 +57,7 @@ class ConnectivityFacet(
 
     column_orders = (NonDecreasing(('observed_at_ms',)),)
 
-    immutable_columns = ('execution_id',)
-
-    execution_id: Annotated[str, field_codec.SnapshotExclude(), Column(primary_key=True)]
+    execution_id: Annotated[str, field_codec.SnapshotExclude(), FrozenColumn(primary_key=True)]
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity
     revision: Annotated[int, Column(check="revision>0")]

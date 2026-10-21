@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -35,7 +36,7 @@ from agent_comms.typed_table import (
     Column,
     ColumnGuard,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     Generated,
     GuardedAfterWrites,
     GuardedColumns,
@@ -113,12 +114,11 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(
-    IncrementingColumn, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable
+    IncrementingColumn, GuardedInserts, NoDelete, CoordinatorTable, TypedTable
 ):
     revision_column = "pointer_revision"
     insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations
         WHERE owner_lookup = NEW.owner_lookup)"""
-    immutable_columns = ('owner_lookup',)
 
     @property
     def unresolved(self) -> bool:
@@ -132,7 +132,7 @@ class CurrentExecutions(
                 "selected owner has an unresolved execution; new claims remain pending"
             )
 
-    owner_lookup: Annotated[str, Column(primary_key=True)]
+    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
     execution_id: Annotated[PointerExecution, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[PointerAttempt, Column(storage=IntegerStorage, nullable=True)]
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
@@ -193,16 +193,12 @@ class ExecutionRecord(
     IncrementingColumn,
     MonotoneColumns,
     GuardedColumns,
-    FrozenColumns,
     NoDelete,
     CoordinatorTable,
     TypedTable,
     declared_name="executions",
 ):
     column_orders = (NonDecreasing(("updated_at_ms",)),)
-    immutable_columns = (
-        "execution_id", "origin", "owner_lookup", "owner_thread", "max_attempts", "created_at_ms",
-    )
     column_guards = (
         ColumnGuard(("lifecycle",), """(json_extract(NEW.lifecycle, '$.kind')
         IN ({optional_attempt_execution_names}) AND json_extract(NEW.lifecycle, '$.ordinal')
@@ -247,7 +243,7 @@ class ExecutionRecord(
 
     execution_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check=(
                 "\n"
@@ -257,18 +253,18 @@ class ExecutionRecord(
             ),
         ),
     ]
-    origin: ExecutionOrigin
+    origin: Annotated[ExecutionOrigin, FrozenColumn()]
     lifecycle: Annotated[ExecutionState, SnapshotExclude()]
-    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
-    owner_lookup: str
+    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_lookup: Annotated[str, FrozenColumn()]
     revision: Annotated[int, Column(check="revision > 0")]
-    max_attempts: Annotated[int, Column(check="max_attempts > 0")]
+    max_attempts: Annotated[int, FrozenColumn(check="max_attempts > 0")]
     reason_code: Annotated[
         ReasonCode,
         Column(storage=TextStorage, nullable=True,
                check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
-    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="status")
@@ -463,7 +459,6 @@ class ReplayAssessments(
     AccumulatingBits,
     ExecutionReference,
     RetryPartition,
-    FrozenColumns,
     NoDelete,
     CoordinatorTable,
     TypedTable,
@@ -473,20 +468,21 @@ class ReplayAssessments(
         NonIncreasing(("replay_safe",)),
     )
     accumulating_columns = ("facts",)
-    immutable_columns = ("execution_id",)
 
     @property
     def allows_retry(self) -> bool:
         return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
 
-    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
     facts: Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
     replay_safe: Annotated[bool, Column()]
     side_effects_possible: Annotated[bool, Column()]
     revision: Annotated[int, Column(check="revision > 0")]
 
     @classmethod
-    def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
+    def accumulate(
+        cls, db: sqlite3.Connection, execution_id: str, observed: ReplayFact
+    ) -> None:
         """Join original observations under the caller's existing attempt fence.
 
         Missing replay evidence cannot establish safety. Only an existing
@@ -520,14 +516,14 @@ class ReplayAssessments(
         )
 
     @classmethod
-    def authorize_if_unobserved(cls, db, execution_id: str) -> None:
+    def authorize_if_unobserved(cls, db: sqlite3.Connection, execution_id: str) -> None:
         """Record provider-failure proof only while no output fact exists."""
         before = cls.one(db, execution_id=execution_id)
         if before is None:
             cls(execution_id, ReplayFact.NONE, True, False, 1).record(db, None)
 
     @classmethod
-    def revoke(cls, db, execution_id: str) -> None:
+    def revoke(cls, db: sqlite3.Connection, execution_id: str) -> None:
         """A nonretryable failure consumes any earlier provider-failure proof."""
         before = cls.one(db, execution_id=execution_id)
         if before is not None and before.replay_safe:
@@ -543,7 +539,7 @@ class ReplayAssessments(
         if accumulated != after:
             raise IdentityConflict("replay facts cannot be erased")
 
-    def record(self, db, before: ReplayAssessments | None) -> bool:
+    def record(self, db: sqlite3.Connection, before: ReplayAssessments | None) -> bool:
         """Persist monotonic replay evidence inside the checked transaction."""
 
         if before is not None:
@@ -567,7 +563,6 @@ class ReplayAssessments(
         validate_execution_id(self.execution_id)
         if self.revision <= 0:
             raise ValueError("replay revision must be positive")
-        object.__setattr__(self, "facts", ReplayFact(self.facts))
         if int(self.facts) < 0 or int(self.facts) & ~APPROVED_REPLAY_FACT_MASK:
             raise ValueError("unrecognized replay fact bits")
         if self.facts != ReplayFact.NONE and self.replay_safe:

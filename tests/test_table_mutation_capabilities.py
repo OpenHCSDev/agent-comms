@@ -1,4 +1,5 @@
 """Raw SQLite mutations exercise the declaration-derived capability family."""
+import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
@@ -7,38 +8,70 @@ import pytest
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.execution_states import (
-    ActiveExecution, CompletedExecution, DeferredExecution, ExecutionState, PendingExecution,
-)
+from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    ExecutionState,
+    PendingExecution,
+)
 from agent_comms.lifecycle import LifecycleState
 from agent_comms.typed_table import (
-    AccumulatingBits, Column, ColumnGuard, FinalizedColumn, FinalizedLifecycle, FirstValueState,
-    FrozenColumns, Generated, GuardedAfterWrites, GuardedColumns, GuardedInserts, GuardedRelatedInserts,
-    GuardedUpdateMembership, InitialOneWayColumn,
-    ImmutableRows, IncrementingColumn, LifecycleChanges,
-    LifecycleTransitions, MonotoneColumns, NonDecreasing, NonDecreasingWhenPresent,
-    NonIncreasing, OrdinalTransitions, RequiredColumn, RequiredUpdateColumns, StableReferenceColumns, TypedTable,
-    ValidatedInserts, WriteOnceColumns,
+    AccumulatingBits,
+    Column,
+    ColumnGuard,
+    FinalizedColumn,
+    FinalizedLifecycle,
+    FirstValueState,
+    FrozenColumn,
+    Generated,
+    GuardedAfterWrites,
+    GuardedColumns,
+    GuardedInserts,
+    GuardedRelatedInserts,
+    GuardedUpdateMembership,
+    ImmutableRows,
+    IncrementingColumn,
+    InitialOneWayColumn,
+    LifecycleChanges,
+    LifecycleTransitions,
+    MonotoneColumns,
+    NonDecreasing,
+    NonDecreasingWhenPresent,
+    NonIncreasing,
+    OrdinalTransitions,
+    RequiredColumn,
+    RequiredUpdateColumns,
+    StableReferenceColumns,
+    TypedTable,
+    ValidatedInserts,
+    WriteOnceColumns,
 )
-import sqlite3
 
 
 @dataclass(frozen=True)
-class OrderedRow(IncrementingColumn, FrozenColumns, MonotoneColumns, AccumulatingBits, TypedTable):
-    identity: Annotated[int, Column(primary_key=True)]
+class OrderedRow(IncrementingColumn, MonotoneColumns, AccumulatingBits, TypedTable):
+    identity: Annotated[int, FrozenColumn(primary_key=True)]
     revision: int
     rising: int
     falling: int
     bits: int
     optional: int | None
-    immutable_columns = ("identity",)
     accumulating_columns = ("bits",)
     column_orders = (
         NonDecreasing(("rising",)), NonIncreasing(("falling",)),
         NonDecreasingWhenPresent(("optional",)),
+    )
+
+
+@dataclass(frozen=True)
+class ComputedRow(OrderedRow):
+    offset: int = 0
+    parity: ClassVar[Generated] = Generated(
+        int, FrozenColumn(generated="(rising + offset) % 2")
     )
 
 
@@ -156,7 +189,7 @@ class ReferencedRow(WriteOnceColumns, FirstValueState, RequiredColumn, TypedTabl
 @pytest.fixture
 def db():
     with closing(CoordinationStore.writer(":memory:", isolation_level=None)) as connection:
-        for row in (OrderedRow, SealedRow, FrozenRow, GuardedRow, PhasedRow, ChangingRow,
+        for row in (OrderedRow, ComputedRow, SealedRow, FrozenRow, GuardedRow, PhasedRow, ChangingRow,
                     ReferencedRow, InsertCheckedRow, RelatedGuardRow, AfterWriteRow, ValidatedRow,
                     OrdinalRow, ProofRow, PointerRow):
             row.create(connection)
@@ -179,6 +212,16 @@ def test_ordered_columns_accept_progress_and_optional_retirement(db):
     OrderedRow(1, 1, 10, 10, 1, 10).insert(db)
     OrderedRow.update(db, where="identity=1", revision=2, rising=11, falling=9, bits=3, optional=None)
     assert OrderedRow.select(db) == [OrderedRow(1, 2, 11, 9, 3, None)]
+
+
+def test_frozen_fields_include_inherited_and_generated_columns(db):
+    original = ComputedRow(1, 1, 10, 10, 1, 10)
+    original.insert(db)
+    for changes in ({"identity": 2}, {"rising": 11}, {"offset": 1}):
+        with pytest.raises(sqlite3.IntegrityError):
+            ComputedRow.update(db, where="identity=1", **({"revision": 2} | changes))
+    ComputedRow.update(db, where="identity=1", revision=2, rising=12, offset=2)
+    assert ComputedRow.select(db) == [ComputedRow(1, 2, 12, 10, 1, 10, 2)]
 
 
 def test_one_way_column_consumes_the_declared_transition(db):

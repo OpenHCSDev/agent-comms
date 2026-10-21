@@ -13,7 +13,7 @@ from agent_comms.typed_table import (
     ColumnGuard,
     CounterAdvance,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     GuardedColumns,
     ImmutableRows,
     MonotoneColumns,
@@ -69,14 +69,12 @@ class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(
-    CounterAdvance, NoDelete, FrozenColumns, ParticipantIdentity, CoordinatorTable, TypedTable
+    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorTable, TypedTable
 ):
 
     counter_column = 'generation'
 
-    immutable_columns = ('owner_lookup',)
-
-    owner_lookup: Annotated[str, Column(primary_key=True)]
+    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
     owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
 

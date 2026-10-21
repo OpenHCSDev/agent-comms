@@ -288,6 +288,9 @@ class Column(FieldDirective):
             return column
         return cls()
 
+    def immutable_fields(self, field: _Field) -> tuple[_Field, ...]:
+        return ()
+
     @property
     def writable(self) -> bool:
         return self.generated is None
@@ -295,6 +298,13 @@ class Column(FieldDirective):
     @property
     def generated_sql(self) -> str:
         return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
+
+
+class FrozenColumn(Column):
+    """Immutability is declared with the field's other SQL constraints."""
+
+    def immutable_fields(self, field: _Field) -> tuple[_Field, ...]:
+        return (field,)
 
 
 _NAME_SEPARATORS = re.compile(r"\W+")
@@ -740,11 +750,18 @@ class GuardedColumns(MutationCapability):
 
 
 class FrozenColumns(MutationCapability):
-    immutable_columns: ClassVar[tuple[str, ...]]
+    @classmethod
+    def immutable_columns(cls, row: type[TypedTable]) -> tuple[_Field, ...]:
+        return tuple(
+            immutable for field in row._columns()
+            for immutable in field.column.immutable_fields(field)
+        )
 
     @classmethod
     def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
-        columns = row._fields_named(row.immutable_columns)
+        columns = cls.immutable_columns(row)
+        if not columns:
+            return ()
         condition = " OR ".join(
             f'NEW."{column.wire_name}" IS NOT OLD."{column.wire_name}"' for column in columns)
         return (RowMutation.UPDATE.abort_trigger(
@@ -1163,7 +1180,9 @@ class SQLiteUserVersion(TypedRow):
     user_version: int
 
 
-class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"):
+class TypedTable(
+    FrozenColumns, TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"
+):
     """The row declaration owns its table; no separate table/schema registry.
 
     Fields declare SQL capabilities with ``Annotated[T, Column(...)]``. Composite keys derive

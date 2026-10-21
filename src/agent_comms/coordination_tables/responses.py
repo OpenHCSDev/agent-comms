@@ -19,7 +19,7 @@ from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
     Column,
     ColumnGuard,
-    FrozenColumns,
+    FrozenColumn,
     Generated,
     GuardedColumns,
     GuardedInserts,
@@ -44,7 +44,6 @@ class ResponseObligation(
     ExecutionReference,
     RetryPartition,
     GuardedUpdateMembership,
-    FrozenColumns,
     GuardedColumns,
     GuardedInserts,
     NoDelete,
@@ -55,7 +54,6 @@ class ResponseObligation(
     """One original reply-route obligation within an execution."""
 
     column_orders = (NonDecreasing(("updated_at_ms",)),)
-    immutable_columns = ("execution_id", "exact_target", "created_at_ms")
     update_membership_condition = """(json_extract(NEW.lifecycle, '$.kind')
         IN ({required_intent_response_names})) AND ((NOT EXISTS (SELECT 1 FROM publication_intents
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target))
@@ -87,9 +85,9 @@ class ResponseObligation(
     def response_record(records, exact_target):
         return next((row for row in records if row.exact_target == exact_target), None)
 
-    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
     exact_target: Annotated[
-        str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
+        str, FrozenColumn(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
     ]
     lifecycle: Annotated[ResponseState, SnapshotExclude()]
     reason_code: Annotated[
@@ -97,7 +95,7 @@ class ResponseObligation(
         Column(storage=TextStorage, nullable=True,
                check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
-    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
     revision: Annotated[int, Column(check="revision > 0")]
 

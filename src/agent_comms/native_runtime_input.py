@@ -41,7 +41,7 @@ from .typed_table import (
     Column,
     DurableTables,
     FinalizedColumn,
-    FrozenColumns,
+    FrozenColumn,
     IntegerStorage,
     MonotoneColumns,
     NoDelete,
@@ -93,17 +93,12 @@ class NativeRuntimeInput(
     WriteOnceColumns,
     FinalizedColumn,
     RequiredUpdateColumns,
-    FrozenColumns,
     NoDelete,
     NativeInputRecord,
     NativeInputContext,
     NativeRuntimeTable,
     TypedTable,
 ):
-    immutable_columns = (
-        "input_id", "stage", "execution_id", "attempt_ordinal", "owner_lookup", "owner_thread",
-        "owner_generation", "owner_token_digest",
-    )
     write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
     finalized_column = 'session_entry_id'
     required_update_columns = ('sent_owner_claimed_generation',)
@@ -240,20 +235,24 @@ class NativeRuntimeInput(
 
     input_id: Annotated[
         str,
-        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
+        FrozenColumn(
+            primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
+        ),
     ]
     stage: Annotated[
-        type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))
+        type[NativeInputExecution], FrozenColumn(check=NativeInputExecution.sql_constraint("stage"))
     ]
     execution_id: Annotated[
         NativeColumn,
-        Column(references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True),
+        FrozenColumn(
+            references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True
+        ),
     ]
-    attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
-    owner_lookup: Annotated[str, Column(references=(Participants, "participant_lookup"))]
-    owner_thread: str
-    owner_generation: Annotated[int, Column(check="owner_generation>0")]
-    owner_token_digest: Annotated[str, Column(check="length(owner_token_digest)=64")]
+    attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
+    owner_lookup: Annotated[str, FrozenColumn(references=(Participants, "participant_lookup"))]
+    owner_thread: Annotated[str, FrozenColumn()]
+    owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
+    owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
         WireName("sent_owner_admission_generation"),
@@ -331,17 +330,12 @@ class NativeRuntimeInput(
 class CurrentNativeCursor(
     MonotoneColumns,
     StableReferenceColumns,
-    FrozenColumns,
     NoDelete,
     NativeInputContext,
     NativeRuntimeTable,
     TypedTable,
 ):
     column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
-    immutable_columns = (
-        "wire_root_id", "recipient_lookup", "owner_thread", "owner_generation",
-        "owner_claimed_generation",
-    )
     reference_column = 'injected_seq'
     stable_reference_columns = ('input_id',)
 
@@ -351,20 +345,20 @@ class CurrentNativeCursor(
 
     wire_root_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'",
         ),
     ]
     recipient_lookup: Annotated[
-        str, Column(primary_key=True, references=(Participants, "participant_lookup"))
+        str, FrozenColumn(primary_key=True, references=(Participants, "participant_lookup"))
     ]
-    owner_thread: Annotated[str, Column(check="owner_thread<>''")]
-    owner_generation: Annotated[int, Column(primary_key=True, check="owner_generation>0")]
+    owner_thread: Annotated[str, FrozenColumn(check="owner_thread<>''")]
+    owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
         WireName("owner_admission_generation"),
-        Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
+        FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 
     @property

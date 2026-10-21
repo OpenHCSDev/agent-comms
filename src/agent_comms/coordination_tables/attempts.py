@@ -25,7 +25,7 @@ from agent_comms.typed_table import (
     CounterDependent,
     FinalizedLifecycle,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     Generated,
     GuardedInserts,
     IncrementingColumn,
@@ -92,7 +92,6 @@ class AttemptRecord(
     MonotoneColumns,
     OwnerRecord,
     GuardedInserts,
-    FrozenColumns,
     NoDelete,
     CoordinatorTable,
     TypedTable,
@@ -129,10 +128,6 @@ class AttemptRecord(
         AND a.attempt_ordinal = NEW.attempt_ordinal - 1 AND a.phase IN ({retry_attempt_phases})
         AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation > a.owner_generation
         AND NEW.owner_token_digest != a.owner_token_digest))"""
-    immutable_columns = (
-        "execution_id", "attempt_ordinal", "owner_lookup", "owner_thread", "owner_generation",
-        "owner_token_digest", "created_at_ms",
-    )
 
     def require_attempt(self) -> AttemptRecord:
         return self
@@ -181,15 +176,15 @@ class AttemptRecord(
             self.owner_token_digest,
         )
 
-    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
-    attempt_ordinal: Annotated[int, Column(primary_key=True, check="attempt_ordinal > 0")]
-    owner_lookup: str
-    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
-    owner_generation: Annotated[int, Column(check="owner_generation > 0")]
+    execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
+    attempt_ordinal: Annotated[int, FrozenColumn(primary_key=True, check="attempt_ordinal > 0")]
+    owner_lookup: Annotated[str, FrozenColumn()]
+    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_generation: Annotated[int, FrozenColumn(check="owner_generation > 0")]
     owner_token_digest: Annotated[
         str,
         SnapshotExclude(),
-        Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
+        FrozenColumn(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
     ]
     lifecycle: Annotated[AttemptState, SnapshotExclude()]
     revision: Annotated[int, Column(check="revision > 0")]
@@ -199,7 +194,7 @@ class AttemptRecord(
         Column(storage=TextStorage, nullable=True,
                check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
-    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="phase")

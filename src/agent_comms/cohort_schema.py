@@ -20,7 +20,7 @@ from .typed_table import (
     ColumnGuard,
     DurableTables,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     GuardedColumns,
     GuardedInserts,
     GuardedRelatedInserts,
@@ -57,7 +57,6 @@ class AwarenessTable(SharedFileTables, DurableTables):
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(
     InitialOneWayColumn,
-    FrozenColumns,
     GuardedColumns,
     NoDelete,
     CohortTable,
@@ -67,11 +66,6 @@ class ClaimBatchAcknowledgements(
     transition_column = "sealed"
     transition_from = 0
     transition_to = 1
-    immutable_columns = (
-        "wire_root_id", "wire_seq", "message_id", "exact_target", "envelope_digest",
-        "audience_digest", "decisions_digest", "member_count", "claim_count", "manifest_codec",
-        "resolver_version", "policy_version", "accepted_at_ms",
-    )
     column_guards = (
         ColumnGuard(('sealed',), """(((SELECT COUNT(*) FROM cohort_delivery_receipts d
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq)
@@ -100,7 +94,7 @@ class ClaimBatchAcknowledgements(
 
     wire_root_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check=(
                 "\n"
@@ -109,20 +103,20 @@ class ClaimBatchAcknowledgements(
             ),
         ),
     ]
-    wire_seq: Annotated[int, Column(primary_key=True, check="wire_seq > 0")]
-    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
-    exact_target: Annotated[str, Column(check="length(exact_target) BETWEEN 1 AND 256")]
-    envelope_digest: Annotated[str, Column(check="length(envelope_digest) = 64")]
-    audience_digest: Annotated[str, Column(check="length(audience_digest) = 64")]
-    decisions_digest: Annotated[str, Column(check="length(decisions_digest) = 64")]
-    member_count: Annotated[int, Column(check="member_count BETWEEN 0 AND 4096")]
-    claim_count: Annotated[int, Column(check="claim_count BETWEEN 0 AND member_count")]
-    manifest_codec: Annotated[str, Column(check="length(manifest_codec) BETWEEN 1 AND 256")]
+    wire_seq: Annotated[int, FrozenColumn(primary_key=True, check="wire_seq > 0")]
+    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    exact_target: Annotated[str, FrozenColumn(check="length(exact_target) BETWEEN 1 AND 256")]
+    envelope_digest: Annotated[str, FrozenColumn(check="length(envelope_digest) = 64")]
+    audience_digest: Annotated[str, FrozenColumn(check="length(audience_digest) = 64")]
+    decisions_digest: Annotated[str, FrozenColumn(check="length(decisions_digest) = 64")]
+    member_count: Annotated[int, FrozenColumn(check="member_count BETWEEN 0 AND 4096")]
+    claim_count: Annotated[int, FrozenColumn(check="claim_count BETWEEN 0 AND member_count")]
+    manifest_codec: Annotated[str, FrozenColumn(check="length(manifest_codec) BETWEEN 1 AND 256")]
     resolver_version: Annotated[
-        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(resolver_version) BETWEEN 1 AND 256")
     ]
-    policy_version: Annotated[str, Column(check="length(policy_version) BETWEEN 1 AND 256")]
-    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    policy_version: Annotated[str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")]
+    accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
     without_rowid = True
 
@@ -247,7 +241,9 @@ class CohortDeliveries(
         )
 
 @dataclass(frozen=True, kw_only=True)
-class AwarenessClaimGenerations(OwnerRecord, GuardedInserts, ImmutableRows, AwarenessTable, TypedTable):
+class AwarenessClaimGenerations(
+    OwnerRecord, GuardedInserts, ImmutableRows, AwarenessTable, TypedTable
+):
 
     insert_condition = """(NOT EXISTS (SELECT 1 FROM claim_batch_members m
         JOIN wake_claims c ON c.assignment_id=m.claim_id JOIN claim_batch_receipts r

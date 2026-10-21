@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
+from typing import Annotated, ClassVar
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.coordination_contracts import (
@@ -17,13 +17,13 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import projected, SnapshotExclude, WireName
+from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
     FirstValueState,
     ForeignKey,
-    FrozenColumns,
+    FrozenColumn,
     Generated,
     GuardedInserts,
     ImmutableRows,
@@ -42,7 +42,19 @@ from agent_comms.wake_policy import MessageAudience
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, LifecycleTransitions, LifecycleChanges, IncrementingColumn, MonotoneColumns, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="wake_claims"):
+class WakeAssignment(
+    WriteOnceColumns,
+    FirstValueState,
+    RequiredColumn,
+    LifecycleTransitions,
+    LifecycleChanges,
+    IncrementingColumn,
+    MonotoneColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="wake_claims",
+):
     write_once_columns = ('triage_verdict', 'execution_id', 'exact_target')
     initial_value_column = 'execution_id'
     initial_value_state = EngagedAssignment
@@ -50,8 +62,6 @@ class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, Lifecycl
     required_column = 'execution_id'
 
     column_orders = (NonDecreasing(('updated_at_ms',)),)
-
-    immutable_columns = ('assignment_id', 'recipient_lookup', 'wire_seq', 'message_id', 'recipient', 'audience', 'resolver_version', 'policy_version', 'accepted_at_ms', 'wake_mode')
 
     @property
     def recipient_identity(self):
@@ -131,22 +141,22 @@ class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, Lifecycl
     assignment_id: Annotated[
         str,
         WireName("claim_id"),
-        Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        FrozenColumn(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
     ]
-    recipient: Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
-    recipient_lookup: str
-    wire_seq: Annotated[int, Column(check="wire_seq > 0")]
-    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
-    audience: MessageAudience
+    recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
+    recipient_lookup: Annotated[str, FrozenColumn()]
+    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
+    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
-    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
     revision: Annotated[int, Column(check="revision > 0")] = 1
     resolver_version: Annotated[
-        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(resolver_version) BETWEEN 1 AND 256")
     ] = RESOLVER_VERSION
     policy_version: Annotated[
-        str, Column(check="length(policy_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")
     ] = POLICY_VERSION
 
     @projected(view="snapshot", name="disposition")
@@ -204,7 +214,7 @@ class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, Lifecycl
     )
     wake_mode: ClassVar[Generated] = Generated(
         str,
-        Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
+        FrozenColumn(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
     )
     triage_verdict: ClassVar[Generated] = Generated(
         str,
@@ -264,13 +274,17 @@ class WakeAssignment(WriteOnceColumns, FirstValueState, RequiredColumn, Lifecycl
         )
 
 @dataclass(frozen=True, slots=True)
-class ExecutionAssignmentLink(GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="execution_claims"):
+class ExecutionAssignmentLink(
+    GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="execution_claims"
+):
 
-    insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id AND e.status IN
-        ({unstarted_execution_names})) OR NEW.ordinal != (SELECT count(*) FROM execution_claims WHERE execution_id =
-        NEW.execution_id)) OR (NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id =
-        e.execution_id WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id AND
-        c.exact_target IS NOT NULL AND c.recipient_lookup = e.owner_lookup ))"""
+    insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e
+        WHERE e.execution_id = NEW.execution_id AND e.status IN ({unstarted_execution_names}))
+        OR NEW.ordinal != (SELECT count(*) FROM execution_claims
+        WHERE execution_id = NEW.execution_id)) OR (NOT EXISTS (
+        SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id = e.execution_id
+        WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id
+        AND c.exact_target IS NOT NULL AND c.recipient_lookup = e.owner_lookup ))"""
 
     execution_id: Annotated[str, Column(primary_key=True)]
     assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]

@@ -85,23 +85,6 @@ def _expected_assignments(
     return tuple(result)
 
 
-def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignment) -> bool:
-    return current.lifecycle.mode == expected.lifecycle.mode and all(
-        getattr(current, field) == getattr(expected, field)
-        for field in (
-            "assignment_id",
-            "recipient",
-            "recipient_lookup",
-            "wire_seq",
-            "message_id",
-            "audience",
-            "resolver_version",
-            "policy_version",
-            "accepted_at_ms",
-        )
-    )
-
-
 def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
@@ -169,8 +152,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         if db_row is None:
             raise IdentityConflict("sealed cohort claim is missing")
         actual = db_row
-        if not _immutable_assignment_matches(actual, accepted):
-            raise IdentityConflict("sealed cohort claim immutable facts conflict")
+        accepted.require_same_acceptance(actual)
         current.append(actual)
     # A singleton claim for an explicitly no-wake observer cannot be accepted
     # as a K member or hidden by a valid sealed N acknowledgement.
