@@ -444,3 +444,7 @@ class TurnDigest:
     def before(self, at: float) -> bool:
         """The turn's last recorded event precedes ``at``; an empty turn is never before."""
         return bool(self.events) and self.events[-1].before(at)
+
+    def starts_before(self, at: float) -> bool:
+        """The turn's first recorded event precedes ``at``; an empty turn never starts before."""
+        return bool(self.events) and self.events[0].before(at)

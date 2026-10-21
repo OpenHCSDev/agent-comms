@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
+from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript
 from .thread_execution import ConversationPreparation
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 class ThreadTurns(ToolResult):
     thread: ThreadIncarnation
     turns: tuple[TurnDigest, ...]
+    older: TurnBound
 
 
 @dataclass(frozen=True)
@@ -34,8 +36,19 @@ class UnjudgedEdits(ToolResult):
     edits: tuple[EditCall, ...]
 
 
-class TurnBound(ABC):
+class TurnBound(DeclaredFamily):
     """Which of a unit's turns, read newest first, a reader returns."""
+
+    def skips(self, turn: TurnDigest) -> bool:
+        return False
+
+    def page_count(self, turns: tuple[TurnDigest, ...]) -> int:
+        return len(turns)
+
+    def older(self, turns: tuple[TurnDigest, ...]) -> TurnBound:
+        if not turns:
+            return self
+        return TurnsBefore(at=turns[-1].events[0].timestamp, count=self.page_count(turns))
 
     @abstractmethod
     def includes(self, turn: TurnDigest) -> bool:
@@ -49,6 +62,8 @@ class TurnBound(ABC):
         """The bounded turns of a newest-first stream, reading no further than the bound needs."""
         taken: list[TurnDigest] = []
         for turn in turns:
+            if self.skips(turn):
+                continue
             if not self.includes(turn):
                 break
             taken.append(turn)
@@ -70,6 +85,17 @@ class LastTurns(TurnBound):
 
     def full(self, taken: int) -> bool:
         return taken >= self.count
+
+    def page_count(self, turns: tuple[TurnDigest, ...]) -> int:
+        return self.count
+
+
+@dataclass(frozen=True)
+class TurnsBefore(LastTurns):
+    at: float = field(kw_only=True)
+
+    def skips(self, turn: TurnDigest) -> bool:
+        return not turn.starts_before(self.at)
 
 
 @dataclass(frozen=True)
@@ -114,7 +140,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
     """Read this unit's own records, never its inherited conversation display."""
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
-        return ThreadTurns(self.thread.incarnation, turns)
+        return ThreadTurns(self.thread.incarnation, turns, self.bound.older(turns))
 
 
 @dataclass(frozen=True)
