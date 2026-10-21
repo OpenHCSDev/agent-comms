@@ -1115,7 +1115,7 @@ def test_string_identity_measures_spellings_outside_root_and_skips_declared_test
         (repo.path / name).write_text(source)
     base = repo.commit({"kept.py": "value = 1\n"})
     for name in ("tools/step.py", "tests/test_step.py"):
-        (repo.path / name).write_text('after = "carry_other"\n')
+        (repo.path / name).write_text('after = sys.modules["carry_other"]\n')
     head = repo.commit({})
     status, report = repo.compare(base, head)
     assert status == 1
