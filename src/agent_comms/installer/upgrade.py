@@ -866,9 +866,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
                                 runtime=installed.runtime) from error
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
-    accepted = passed.after_acceptance(
-        root, pending, staged, tree, root, backup.spill_directory(spill_dir))
-    started = staged.start(root, running)
+    try:
+        accepted = passed.after_acceptance(
+            root, pending, staged, tree, root, backup.spill_directory(spill_dir))
+    finally:
+        # Retirement cannot roll back the accepted runtime or strand its stopped owners.
+        started = staged.start(root, running)
     retired_backups = backup.retain(spill_dir)
     return accepted.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
                            restore_space=restore, backup=backup.report(),
