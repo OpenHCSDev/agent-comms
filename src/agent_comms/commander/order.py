@@ -861,6 +861,7 @@ class DoneVerb(OrderVerb):
         ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
 
 
+@dataclass(frozen=True)
 class PullRequestSelection(DeclaredFamily, affix="PullRequestSelection"):
     @abstractmethod
     def run(self, ctx: Commander, todo: Todo, source: Repo,
@@ -882,9 +883,12 @@ class ExistingPullRequestSelection(PullRequestSelection):
     number: int
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "number", int(self.number))
-        if self.number <= 0:
+        if FieldCodec.decode(int, self.number) <= 0:
             raise ValueError("--existing needs a positive pull request number.")
+
+    @classmethod
+    def from_text(cls, text: str) -> Self:
+        return cls(int(text))
 
     def run(self, ctx: Commander, todo: Todo, source: Repo,
             title: str, body_file: str) -> str:
@@ -903,7 +907,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
     title: str = option("--title", default="")
     body_file: str = option("--body-file", default="")
     existing: PullRequestSelection = option(
-        "--existing", type=ExistingPullRequestSelection,
+        "--existing", type=ExistingPullRequestSelection.from_text, normalize=FieldCodec.encode,
         default_factory=NewPullRequestSelection, parser_default_factory=NewPullRequestSelection,
         choices=None, metavar="N")
 

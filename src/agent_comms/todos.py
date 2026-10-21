@@ -1665,6 +1665,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
                           store: TodoStore, actor: ThreadIncarnation) -> str:
         """Create once; record the returned identity on this order, not in its prose."""
+        todo.require_actor(actor, todo.held().generation)
         created = subprocess.run(
             ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
             input=body,
@@ -2686,7 +2687,7 @@ class OrderMessage(TodoOperation):
 
 
 @dataclass(frozen=True)
-class RecordPullRequest(TodoOperation):
+class RecordPullRequest(TodoCommand):
     actor: ThreadIncarnation
     link: PullRequestLink
     generation: str | None = None
