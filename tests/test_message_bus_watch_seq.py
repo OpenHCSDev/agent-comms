@@ -10,7 +10,7 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
-from test_wake_candidate_index import append_reply
+from bus_record_fixture import append_reply
 
 
 @pytest.mark.asyncio
