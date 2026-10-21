@@ -81,6 +81,7 @@ class SystemdUserService(HostService, declared_name=None):
     pid: int
     unit: ClassVar[str]
     readiness: ClassVar[str] = "[Service]\nType=notify\nNotifyAccess=main\n"
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
 
     @classmethod
     def ready(cls) -> None:
@@ -89,7 +90,7 @@ class SystemdUserService(HostService, declared_name=None):
         Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
         for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
         """
-        address = os.environ["NOTIFY_SOCKET"]
+        address = os.environ[cls.notify_variable]
         target = "\0" + address[1:] if address.startswith("@") else address
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
             notify.connect(target)

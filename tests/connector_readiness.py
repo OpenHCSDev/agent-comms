@@ -9,7 +9,7 @@ import subprocess
 import time
 from collections.abc import Mapping
 
-from agent_comms.host_services import ServiceNotServingError
+from agent_comms.host_services import ServiceNotServingError, SystemdUserService
 
 
 class ConnectorReadiness:
@@ -22,7 +22,7 @@ class ConnectorReadiness:
         self.socket.bind("\0" + self.name)
 
     def environment(self, base: Mapping[str, str]) -> dict[str, str]:
-        return {**base, "NOTIFY_SOCKET": "@" + self.name}
+        return {**base, SystemdUserService.notify_variable: "@" + self.name}
 
     def wait(self, process: subprocess.Popen, port: int, timeout: float = 20) -> None:
         """Return once the connector reported ready and its port accepts; fail on early exit."""
