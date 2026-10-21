@@ -51,6 +51,10 @@ from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
 
+class RowNotFoundError(MalformedRecord):
+    """A required lookup found no row; malformed or duplicate rows remain corrupt."""
+
+
 def _identifier(name: str) -> str:
     if not name or not name.isascii() or not name.replace("_", "a").isalnum():
         raise ValueError(f"Invalid SQL identifier: {name!r}")
@@ -990,7 +994,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         """The one row a reference names; a missing row is corruption."""
         rows = cls._keyed(db, key)
         if not rows:
-            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
+            raise RowNotFoundError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return rows[0]
 
     @classmethod
