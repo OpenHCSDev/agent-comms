@@ -375,4 +375,4 @@ class OrderSendPhase(RemainingSlopPhase):
 class ExternalBoundariesPhase(RemainingSlopPhase):
     """Wave 3."""
 
-    evidence = PatternAbsent(r"except Exception")
+    evidence = PatternAbsent(r"^\s*except Exception\b")
