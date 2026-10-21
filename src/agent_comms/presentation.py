@@ -818,8 +818,10 @@ def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def goal_execution_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return (*GoalWaits.source_paths(views.root),
-            *GoalAttemptStore.source_paths(views.root / GoalAttemptStore.root_directory))
+    return (
+        *GoalWaits.source_paths(views.root),
+        GoalAttemptStore.path_in(views.root / GoalAttemptStore.root_directory),
+    )
 
 
 def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
