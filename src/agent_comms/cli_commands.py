@@ -1827,7 +1827,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        if thread.turn_record.executing:
+        if thread.executing:
             return ()
         return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
 
