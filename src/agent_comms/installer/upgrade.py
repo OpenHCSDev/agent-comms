@@ -49,6 +49,7 @@ from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 from agent_comms.installer import publication, step_worker
@@ -494,10 +495,6 @@ class TargetTree:
     scratch: Path
     revision: str
 
-    @staticmethod
-    def prepare(path: Path) -> None:
-        run("git", "-C", path, "submodule", "update", "--init", "--recursive", "--checkout")
-
     @property
     def path(self) -> Path:
         return self.scratch / f"tree-{self.revision[:12]}"
@@ -507,8 +504,7 @@ class TargetTree:
         return self.path / "src", self.path / STEPS.parent
 
     def add(self) -> None:
-        run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", self.path, self.revision)
-        self.prepare(self.path)
+        Checkout.add(self.repo, self.path, self.revision, "--detach", "-q")
 
     def close(self) -> None:
         subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
@@ -739,7 +735,7 @@ class FreshInstall(Install[FreshRehearsal]):
 
     def live(self, rehearsal: FreshRehearsal) -> CreatedRun:
         run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
-        TargetTree.prepare(self.checkout)
+        Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
@@ -797,7 +793,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         raise
     try:
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-        TargetTree.prepare(checkout)
+        Checkout(checkout).prepare()
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
         passed.files.require_rehearsal(rehearsal_files)
@@ -818,7 +814,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         os.environ[HOLDER_NONCE] = restored_hold.nonce
         if run("git", "-C", checkout, "rev-parse", "HEAD").strip() != current:
             run("git", "-C", checkout, "reset", "-q", "--keep", current)
-            TargetTree.prepare(checkout)
+            Checkout(checkout).prepare()
         # Republish only when current moved: the outgoing runtime may predate this publisher.
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
             installed.publish()

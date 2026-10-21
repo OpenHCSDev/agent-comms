@@ -376,9 +376,10 @@ class Message(Addressed, BusCapability):
     ] = ()
 
     def projections(self):
-        from .bus_tables import AnsweredSource
+        from .bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
             yield AnsweredSource(original, self.seq)
 

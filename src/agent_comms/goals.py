@@ -30,6 +30,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
+from .repo import Checkout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
@@ -380,7 +381,7 @@ class OrderCheck:
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
-            CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
+            Checkout.add(repository, tree, sha, "--detach")
             try:
                 run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
                                      timeout=self.timeout)
@@ -394,12 +395,20 @@ class OrderCheck:
         return checked.result
 
 
-class GitCommandFailed(ValueError):
-    """The actual Git result, so its caller can recognize a command's absent state."""
+class GitCommandFailed(RuntimeError):
+    """A Git operation failure, not malformed order data to aggregate and continue past."""
 
-    def __init__(self, run: subprocess.CompletedProcess[str]):
+    def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
         self.run = run
-        super().__init__(run.stderr.strip() or f"git failed with exit {run.returncode}")
+        detail = run.stderr.strip() or f"git failed with exit {run.returncode}"
+        super().__init__(f"Git in {repository}: {detail}")
+
+    def source_path_absent(self, sha: str, file: str) -> bool:
+        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
+        return self.run.returncode == 128 and self.run.stderr in (
+            f"fatal: path '{file}' does not exist in '{sha}'\n",
+            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
+        )
 
     def no_check_ran_on(self, sha: str) -> bool:
         """Git's absent-note reply, not a corrupt repository or an invalid revision."""
@@ -430,7 +439,7 @@ class CheckedCommit:
         run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
                              timeout=60, env=os.environ | {"LC_ALL": "C"})
         if run.returncode:
-            raise GitCommandFailed(run)
+            raise GitCommandFailed(repository, run)
         return run.stdout
 
     @classmethod

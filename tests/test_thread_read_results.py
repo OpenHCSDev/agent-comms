@@ -2,8 +2,9 @@
 from itertools import product
 
 from agent_comms.presentation import WireRevision
+from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
-    NotObserved, ObserveThreads, ThreadBusy, ThreadMissing, ThreadPresented, ThreadUnavailable, ThreadsObserved,
+    NotObserved, ObserveThreads, ThreadBusy, ThreadPresented, ThreadUnavailable, ThreadsObserved,
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
@@ -11,7 +12,8 @@ from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 
 def answers():
     return (ThreadPresented(ThreadStatusModel.pending('saved').presentation),
-            ThreadUnavailable(UnreadableHistory.capture(ValueError('broken'))), ThreadBusy(), ThreadMissing())
+            ThreadUnavailable(UnreadableHistory.capture(ValueError('broken'))), ThreadBusy(),
+            ThreadPresented(NoThreadPresentation()))
 
 
 def observed(results):
@@ -37,8 +39,10 @@ def test_status_projection_and_busy_retains_the_canonical_row():
     failure = answers()[1]
     status.observed(observed({'saved': failure}))
     assert 'broken' in status.open('saved').lines[0]
-    status.observed(observed({'saved': ThreadMissing()}))
-    assert status.open('saved').presentation == ThreadStatusModel.retired('saved').presentation
+    status.observed(observed({'saved': ThreadPresented(NoThreadPresentation())}))
+    shown = status.open('saved').presentation
+    assert isinstance(shown, NoThreadPresentation)
+    assert shown.same_status(ThreadStatusModel.retired('saved').presentation)
 
 
 def test_changed_interest_retains_one_results_mapping_and_starts_empty():

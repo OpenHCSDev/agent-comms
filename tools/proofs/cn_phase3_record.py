@@ -14,7 +14,8 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from agent_comms.change_report import FileLine
+from agent_comms.change_report import FileLine, MainRevision
+from agent_comms.repo import Repo
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
@@ -93,20 +94,23 @@ def setup() -> None:
 
 def create_order(problem: str = "P1") -> None:
     now = time.time()
+    repo = Repo.of(CHECKOUT)
     cli(
         "record-lead",
         CommsTodoCreateTool(
             owner="record-worker",
             order=CreateProblemGoalAction(
                 problem=problem,
-                repo="OpenHCSDev/agent-comms",
+                repo=repo.github,
                 text="Show the real verdict and strike records without a second source",
                 request="record-request",
                 commander="record-lead",
                 review_at=RecordedEventTime(now + 3600),
                 order=PendingProblemOrder(
                     id=f"record-order-{problem}",
-                    scope=FixScope(FixShape(parents=(FileLine.class_declaration(PendingProblemOrder),), members=())),
+                    scope=FixScope(FixShape(parents=(
+                        FileLine.class_declaration(PendingProblemOrder, repo, MainRevision()),
+                    ), members=())),
                     owner=FileLine(str(CHECKOUT / "src/agent_comms/todos.py"), 69),
                     check=OrderCheck(str(CHECKOUT), "printf 1", CountCheckResult(1)),
                     edits=(

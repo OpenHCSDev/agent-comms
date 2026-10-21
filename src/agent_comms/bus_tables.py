@@ -12,7 +12,7 @@ from typing import Annotated, get_type_hints
 from agent_comms import messages
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, SharedFileTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, Index, SharedFileTables, TypedTable
 from agent_comms.message_reference import MessageReference
 
 
@@ -40,6 +40,18 @@ class ReceivedSource(ParticipantSource):
 
 class DirectReplySource(ReceivedSource):
     """The record's declared reply policy starts a separate direct turn."""
+
+
+@dataclass(frozen=True)
+class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
+    """A record's existing reference, searchable without recomputing its content hash."""
+
+    sender: str
+    indexes = (
+        Index(("seq",), unique=True),
+        Index(("message_id",)),
+        Index(("sender", "message_id")),
+    )
 
 
 @dataclass(frozen=True)
@@ -111,13 +123,11 @@ class BusCapability(BusTables):
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
     def rows(self) -> tuple[TypedTable, ...]:
-        """One row per capability table, each cut from this record's own encoding by the
-        table's declared keys. The table reuses the record's fields, so a key the encoding
-        omits for its default decodes to the same default."""
-        encoded = FieldCodec.encode_fields(self)
+        """Project declared Python fields without flattening their wire representations."""
         return tuple(
-            FieldCodec.decode_record(table, {
-                key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
+            FieldCodec.construct(table, {
+                item.name: getattr(self, item.name) for item in fields(table)
+            })
             for table in self.tables())
 
     def projections(self):
