@@ -41,7 +41,7 @@ class InstallRun:
         TargetTree(checkout, scratch, target).add()
         # Paths resolve here: the install child runs in the target tree, not the caller's cwd.
         return cls(replace(command, checkout=checkout, project=command.project.resolve(),
-                           repos=tuple(repo.resolve() for repo in command.repos)),
+                           repos=command.repos.resolved()),
                    root, scratch, target)
 
     def launch(self, output: TextIO) -> int:
