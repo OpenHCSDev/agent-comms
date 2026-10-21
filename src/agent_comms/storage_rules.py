@@ -477,7 +477,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
 
 def physical_path(value, cwd):
     if '$' in value or '`' in value:
-        raise StorageDenied('StorageRule: use a literal storage destination')
+        raise StorageDenied(f'StorageRule: use a literal storage destination, not {value!r}')
     path = Path(value).expanduser()
     return (path if path.is_absolute() else cwd / path).resolve()
 
