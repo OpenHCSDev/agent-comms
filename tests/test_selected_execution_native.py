@@ -238,13 +238,12 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert assignment.wire_seq == initial.message.seq
-            cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+            state = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
                 owner_name="beta", source_reads=source_reads
             )
-            assert cursor is not None
-            assert cursor.injected_seq == initial.message.seq
-            assert cursor.covered_seq >= cursor.injected_seq
-            assert cursor.input_id == outcome.input_id
+            assert state.injected_seq == initial.message.seq
+            assert state.covered_seq >= state.injected_seq
+            assert state.proves_input(outcome.input_id)
             proofs = read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
