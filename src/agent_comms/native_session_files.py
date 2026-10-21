@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import RelationViolationError
-from .locked_store import DurableFile, PatternFile
+from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 
 
 class SessionFiles:
@@ -131,6 +131,13 @@ class NativeSessionFiles(SessionFiles):
             *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
             self.writer_lock,
         )
+
+
+class NativeInputProof(DurableFile, SQLiteFile, PatternFile):
+    """One thread's native-session proof, retained and copied with its bus."""
+
+    __slots__ = ()
+    filename = "input-proofs/{lookup}/{name}.sqlite"
 
 
 class SavedSessionFile(PatternFile):
