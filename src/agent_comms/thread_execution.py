@@ -85,6 +85,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
+    def require_assigning(cls, status: ThreadStatus) -> None:
+        """Ordinary commander commands do not have a fork's closing-report lifetime."""
+
+    @classmethod
     def restart_candidates(cls, thread: Thread, status):
         return ()
 

@@ -3160,7 +3160,14 @@ class TodoStore(DurableStore):
             UnitAssignment.require(db, unit, assigner)
 
     def take_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
+        from .registration import Registration
+
+        registry = Registration(RegistryFile.path_in(self.root))
         with self.writing() as db:
+            thread = registry.require(assigner.name)
+            if thread.incarnation != assigner:
+                raise TodoError(f"Assigner {assigner.name} changed before reserving {unit.name}.")
+            thread.execution.require_assigning(registry.status(thread.name))
             UnitAssignment.require(db, unit, assigner)
             UnitAssignment(unit, assigner, order).upsert(db)
 
@@ -3168,8 +3175,11 @@ class TodoStore(DurableStore):
         with self.writing() as db:
             UnitAssignment.delete(db, unit=unit, assigner=assigner, order=order)
 
-    def release_assigner(self, assigner: ThreadIncarnation) -> None:
+    def retire_assigner(self, registry: Registration, assigner: ThreadIncarnation) -> None:
         with self.writing() as db:
+            if registry.require(assigner.name).incarnation != assigner:
+                raise TodoError(f"Assigner {assigner.name} changed before retirement.")
+            registry.unregister(assigner.name)
             UnitAssignment.delete(db, assigner=assigner)
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:

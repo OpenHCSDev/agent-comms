@@ -15,6 +15,7 @@ from .errors import RelationViolationError
 from .thread_execution import ExternalThreadExecution
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .thread_text import ForkedParent
+from .store_files import _store_lock
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 
@@ -170,32 +171,45 @@ class CommanderForkExecution(ExternalThreadExecution):
     def registered_status(cls, thread, requested: ThreadStatus) -> ThreadStatus:
         return requested
 
+    @classmethod
+    def require_assigning(cls, status: ThreadStatus) -> None:
+        status.require_active()
+
 
 @dataclass(frozen=True)
 class CommanderForkCaller(ThreadCaller):
     """The first verb declares this child; its closing report ends its assignments."""
 
     def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
+        from .goal_actions import SetGoalAction
+        from .goals import RequestGoalOrder
+
         registry = comms.registry
-        with registry.store.editing() as edit:
-            parent = edit.document.require(commander)
-            name = edit.document.canonical_name(self.name)
-            if name != self.name:
-                raise RelationViolationError(f"Commander fork {self.name!r} is an alias.")
-            existing = edit.document.threads.get(name)
-            if existing is not None:
-                if (existing.execution is not CommanderForkExecution
-                        or not existing.parent.named(parent.name)):
-                    raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
-                if not edit.document.status(name).receiving:
-                    raise RelationViolationError(f"Commander fork {name!r} has retired; use a new name.")
-            else:
+        # Registration and the fork's own request use the existing wire transaction.
+        # Never copy the parent's Goal ID into a second thread.
+        with _store_lock(comms.root / 'wire'):
+            with registry.store.editing() as edit:
+                parent = edit.document.require(commander)
+                name = edit.document.canonical_name(self.name)
+                if name != self.name:
+                    raise RelationViolationError(f"Commander fork {self.name!r} is an alias.")
+                existing = edit.document.threads.get(name)
+                if existing is not None:
+                    if (existing.execution is not CommanderForkExecution
+                            or not existing.parent.named(parent.name)):
+                        raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
+                    if not edit.document.status(name).receiving:
+                        raise RelationViolationError(f"Commander fork {name!r} has retired; use a new name.")
+                    return self
+                request = ('\n'.join(goal.text for goal in parent.goal.active())
+                           or f'Coordinate assigned work for {parent.name}.')
                 thread = registry.new_thread(name, parent.tags, parent.worktree,
                     parent=ForkedParent(parent.name), model=parent.model,
                     thinking_level=parent.thinking_level, service_tier=parent.service_tier,
-                    goal=parent.goal, execution=CommanderForkExecution)
+                    execution=CommanderForkExecution)
                 registry._commit_registration(edit, edit.document.prepare_registration(
                     thread, RunningThreadStatus(), new_owner=False))
+            comms.goals.update_goal(name, SetGoalAction(text=request, order=RequestGoalOrder()))
         return self
 
     def assigned(self, comms: Comms, unit: str, order: str) -> None:
@@ -204,5 +218,4 @@ class CommanderForkCaller(ThreadCaller):
     def reported(self, comms: Comms, target: str) -> None:
         if target == '#comms':
             identity = comms.registry.require(self.name).incarnation
-            comms.registry.unregister(self.name)
-            comms.goals.todos.release_assigner(identity)
+            comms.goals.todos.retire_assigner(comms.registry, identity)
