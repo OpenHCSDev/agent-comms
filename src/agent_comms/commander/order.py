@@ -16,47 +16,46 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 from __future__ import annotations
 
 import argparse
-import asyncio
 import dataclasses
 import re
 import subprocess
 import sys
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
-from agent_comms.child_process import BoundedRun
 from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.commander.config import CommanderConfig, CommanderRole
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
+    Argument,
     FieldCodec,
     MalformedRecord,
+    Normalize,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
-    Argument,
-    Normalize,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_tool_call import SelectedToolDenied
-from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HuntDue
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -73,6 +72,8 @@ from agent_comms.todos import (
     OrderedHunt,
     OrderMessage,
     OrderProgress,
+    OrderText,
+    OrderWords,
     PendingProblemOrder,
     PullRequestLink,
     RecordPullRequest,
@@ -86,13 +87,13 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
-    CommsOrderDoneTool,
     CommsOrderDeliverTool,
+    CommsOrderDoneTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -100,8 +101,6 @@ from agent_comms.tools import (
     CommsTodoListTool,
     TodoList,
 )
-from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -201,9 +200,11 @@ class OrderFile:
         return f'{self.defect}\n{self.why_stupid}{reason}'
 
     def problems_found(self, clean: bool) -> list[str]:
+        wording: tuple[type[OrderWords], ...] = (*OUTGOING, OrderText)
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
-                    for error in DirectiveText.refused(text)]
+                    for family in wording
+                    if (error := family.refused(text))]
         if len(self.defect.split()) < 8:
             problems.append('defect: fix: describe what fails in at least eight words')
         if not self.why_stupid.strip():
@@ -234,9 +235,11 @@ class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
     _comms: Comms = PrivateAttr()
+    _caller: ThreadCaller = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+        self._caller = ThreadCaller(self.commander)
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -266,7 +269,15 @@ class CommanderContext(CommanderConfig):
         return published.message.message_id
 
     def call(self, tool):
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
+        return self._caller.invoke(tool, self.comms)
+
+    def commanding(self, caller: ThreadCaller) -> Self:
+        bound = self.model_copy(update={'commander': caller.name})
+        bound._caller = caller
+        return bound
+
+    def retire(self) -> None:
+        self._caller.retire(self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -412,15 +423,14 @@ class Commander(CommanderContext):
         reading = self.plan_reading(self.comms.goals.todos.history_for_commander(self.incarnation))
         problems.extend(order.phase.order_refusals(reading, document.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder)
-        busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
-                     for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
+        busy = tuple(todo for todo in held if todo.holder == unit and todo.id not in group)
         if busy:
             snapshot = self.comms.registry.snapshot()
             occupied = {todo.holder for todo in held} | {self.commander} | self.parked
             idle = sorted(thread.name for thread in snapshot.threads.values()
                           if thread.name not in occupied and thread.role.executor(thread)
                           and snapshot.status(thread.name).active)
-            problems.append(f'{unit} already holds plan orders '
+            problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
@@ -438,16 +448,12 @@ class Commander(CommanderContext):
                     validate()
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
-        # An order's check must fail now (or it proves nothing), and every absolute
-        # path:line it cites must exist.
+        # Send and correction ask the check's owner the same question on clean main.
         try:
             with MalformedRecord.refusing('order.check'):
                 order.require_writable()
                 if Path(check.directory).is_dir():
-                    ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
-                                                    cwd=check.directory, timeout=90))
-                    problems += check.result.distance(ran).unproven(check.command, 0)
+                    check.require_acceptance(self.worktrees)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         references = list(dict.fromkeys((
@@ -529,24 +535,14 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Core replaces a wrong check of an open order. The new check must already pass on main, so a
-        correction fixes the commander's check and never passes undelivered work: done still runs it on
-        the --sha it is given."""
+        """Replace a wrong check using the same rule as send; done still checks the delivered SHA."""
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        def git(*args: str) -> str:
-            return subprocess.run(['git', '-C', check.directory, *args],
-                                  capture_output=True, text=True).stdout.strip()
-        head = git('rev-parse', 'HEAD')
-        if head != git('rev-parse', 'origin/main') or git('status', '--porcelain', '-uno'):
-            sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
-                     'the corrected check runs on main')
-        check.result.require(asyncio.run(BoundedRun.run(
-            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
+        check.require_acceptance(self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
@@ -567,8 +563,7 @@ class Commander(CommanderContext):
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
+        pid = self.comms.goals.todos.allocate_problem()
         self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
@@ -748,10 +743,10 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
-        ThreadCaller | NoThreadCaller,
+        CommanderForkCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting thread's name"}
+            flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
@@ -759,6 +754,8 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         return self.fork.acting_name(ctx.commander)
 
     def apply(self, ctx: Commander) -> None:
+        self.require_commander(ctx.comms.registry.require(ctx.commander))
+        ctx = ctx.commanding(self.fork.commanding(ctx.comms, ctx.commander))
         self.gate(ctx)
         self.run(ctx)
 
@@ -790,27 +787,22 @@ class DirectiveVerb(CommanderVerb):
     ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        thread = ctx.comms.registry.require(self.who(ctx))
-        answerable = (*(message for goal in thread.goal.active()
-                        for message in goal.order.directive_messages(ctx.comms.goals)),
-                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
-        originals = tuple(message for message in answerable if message.message_id in self.answers)
+        originals = tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                          if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
             sys.exit('REFUSED: --answers must name original directives on this request '
                      'or unanswered unit messages to this commander.')
         return tuple(message.reference for message in originals)
 
     def gate(self, ctx: Commander) -> None:
-        answers = self.answer_references(ctx)
-        thread = ctx.comms.registry.require(self.who(ctx))
-        overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
-        if overdue and not answers:
-            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
-            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        self.answer_references(ctx)
+        owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
+                     if rule.message.message_id not in self.answers)
+        if owed:
+            lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
+                     'that must wait is sent now: "waiting on X, owner Y".')
         super().gate(ctx)
 
 
@@ -1056,7 +1048,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
-    help = "replace an open order's wrong check with one passing on main; keeps its review timer and strikes"
+    help = "replace an open order's wrong check using send's rule; keeps its review timer and strikes"
     pid: Annotated[str, Argument(flags=("pid",))]
     check: Annotated[
         str,
@@ -1103,6 +1095,15 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(OrderVerb):
+    help = "stop a commander fork without discarding its open orders"
+
+    def run(self, ctx: Commander) -> None:
+        ctx.retire()
+        print(f'{ctx.commander} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

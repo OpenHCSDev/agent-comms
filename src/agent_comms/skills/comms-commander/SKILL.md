@@ -10,7 +10,7 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Launch a unit when every unit is busy.
+5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/coordination.md).
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
 
@@ -60,7 +60,7 @@ Each order has: the defect in one plain sentence; the outcome the owner will see
 `scope` is required. Fix scope names at least one parent class declaration and every related member class declaration as file:line references, not class-name strings. The example's parent reference assumes that line declares the owning class. Classification-only orders use `"scope": {"kind": "triage"}`: no source edits or commit deliveries. Their commander records the returned findings with `comms_order_done`, `"delivery": {"kind": "report", "report": "the findings"}` and `"claims": []`; that completes the triage row without fictitious installation evidence.
 
 The declaration supplies the ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}`. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
-- **A wrong check is corrected, not worked around.** `order check PID --check "repo :: cmd -> N" --why "..."` replaces a check that cannot pass on correct work; the new one must already pass on main. The order keeps its id, timer, holder and strikes, and no strike is recorded. Never record an op for a commit or close without the check.
+- **A wrong check is corrected, not worked around.** `order check PID --check "repo :: cmd -> N" --why "..."` replaces a check that cannot pass on correct work; send and correction both require the check to differ from its expected result in a fresh checkout of origin/main. Done still requires it to pass at the delivered commit. The order keeps its id, timer, holder and strikes, and no strike is recorded. Never record an op for a commit or close without the check.
 - **A roast says why the slop is stupid, to the unit that wrote it.** `judge back` needs `--roast` (12+ words with "because": the fact it restates and what already answers it) and `--fix` (owner and replacing shape); it goes to the unit and #comms.
 - **Hate jargon.** One list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts; Core answers any commanded unit message using it with a correction on its open orders.
 
@@ -77,7 +77,7 @@ Pick the next unit. Read its actual state, not its message: worktree, `git log -
 - **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
 - **Stuck:** no tool call for 3 minutes while holding an order. Order it.
 - **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. Send the next concrete step the same tick, with a strike (rules/send-backs-and-strikes.md).
-- **Idle:** give it the top unowned board row.
+- **Idle:** give it the top unowned plan step if your load has room to review it; otherwise leave it stopped.
 - **Adding slop:** send it back with the result it violates.
 
 One line per unit touched, then the next unit.
@@ -94,7 +94,7 @@ rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md
 
 ## Forks, strikes and the record
 
-- **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. A fork commands with the same tools and posts its verdicts and open items before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing. `capacity` does not yet count forks (commander-native plan, phase 7).
+- **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. Fork reviews to parallelize them: each fork takes a slice of the unjudged edits or open PRs and records every judgment in Core with `judge ok`, `judge back` or `judge superseded` before it ends. A review that exists only as prose clears nothing, and the load keeps rising. Its #comms post (`order say '#comms' FILE --fork NAME`) announces what it recorded and its open items, so closing it loses nothing. `capacity` does not yet count forks (commander-native plan, phase 7).
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
 - **Strikes** (rules/send-backs-and-strikes.md owns when): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM --sha` only after reading the diff that meets the order.

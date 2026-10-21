@@ -1884,6 +1884,13 @@ def main() -> int:
     args = parser.parse_args()
     result = compare(Path.cwd(), args.base, args.head, args.root)
     print(json.dumps(FieldCodec.project(result, "report"), indent=2))
+    # The failing step's last lines become check annotations (.github/run-step.sh), so what
+    # grew is printed last, where a reader without the job log can see it.
+    for name, grown in sorted(result.delta.items()):
+        if grown > 0:
+            print(f"grew {name} +{grown}")
+    for identity, lines in sorted(result.introduced_lines.items()):
+        print(f"introduced {identity} at lines {lines}")
     return int(result.failed)
 
 
