@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
@@ -12,16 +11,10 @@ from typing import ClassVar
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
-from ..recorded_time import RecordedEventTime
-from ..standing_rules import (
-    DatedStandingRule,
-    ReasonedStandingRule,
-    StandingRule,
-    UndatedStandingRule,
-)
-from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
+from ..standing_rules import ReasonedStandingRule, UndatedStandingRule
+from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, StallStrike, Todo
+from ..todos import Todo
 from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
 from .config import CommanderConfig
@@ -66,11 +59,12 @@ class RequestStalled(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class WheelSpin(StandingRule, declared_name=None):
-    """Core hands stalled or unowned work to an idle unit without a commander turn,
-    restarting the original completion window at the handoff's issue time."""
+class UnownedWheelSpin(UndatedStandingRule):
+    """A unit holds no next order while the board has unowned rows; Core hands the row to it
+    without a commander turn, restarting the row's review window at the handoff."""
 
     todo: Todo
+    dispatch: WorkDispatch
 
     recent: ClassVar[int] = 10 * 60
 
@@ -91,68 +85,13 @@ class WheelSpin(StandingRule, declared_name=None):
         return OrderGoalAction(
             problem=todo.id, expected_revision=todo.revision,
             order=todo.order.reissued(now), request=todo.goal.request(),
-            deadline=todo.reissued_deadline(now), commander=commander, assigner=assigner,
+            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
             traced=todo.order.owner)
 
-    @abstractmethod
-    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]: ...
-
     def enforce(self, comms: Comms, commander: str) -> None:
-        for dispatch in self.dispatches(comms, commander):
-            unit = dispatch.start(comms)
-            comms.messaging.send(commander, unit.name,
-                f"{self.line()}\n{dispatch.action.order.instructions(self.todo)}")
-
-
-@dataclass(frozen=True)
-class FlatWheelSpin(WheelSpin, DatedStandingRule):
-    """Two distance readings with no fall while the unit kept working."""
-
-    since: float
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[FlatWheelSpin, ...]:
-        presence = comms.registry.snapshot()
-        held = tuple(todo for todo in cls.todos(comms, commander)
-                     if todo.pending and presence.receiving(todo.holder))
-        pulls = PullRequests(held)
-        storage = comms.registry.storage_rule
-        trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
-                  for todo in held)
-        flat = ((todo, trend.since) for todo, trend in trends if isinstance(trend, FlatTrend))
-        return tuple(cls(todo, since) for todo, since in flat
-                     if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
-                                       TurnsSince(since)).read().turns)
-
-    def began(self) -> float:
-        return self.since
-
-    def line(self) -> str:
-        return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
-                " to done did not fall across two readings -> Core strikes the holder before"
-                " looking for an idle unit")
-
-    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
-        actor = StallWatcherIncarnation.watcher()
-        todo = StallStrike.make(self.todo, actor, RecordedEventTime(time.time())).record(
-            comms.goals, self.todo.id)
-        idle = self.idle(comms, commander)
-        if not idle:
-            since = time.strftime("%H:%M", time.localtime(self.since))
-            comms.messaging.send(commander, "#comms",
-                f"STALL with no idle unit: {todo.holder} on {todo.id}, distance not falling"
-                f" since {since}; struck, still held")
-            return
-        for unit in idle[:1]:
-            yield ReusedWorkDispatch(self.order_for(
-                todo, commander, actor), todo.revision, unit)
-
-
-@dataclass(frozen=True)
-class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
-    """A unit holds no next order while the board has unowned rows."""
-
-    dispatch: WorkDispatch
+        unit = self.dispatch.start(comms)
+        comms.messaging.send(commander, unit.name,
+            f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     @property
     def unit(self) -> str:
@@ -198,24 +137,20 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
 
-    def dispatches(self, comms: Comms, commander: str) -> Iterable[WorkDispatch]:
-        return (self.dispatch,)
-
     @classmethod
-    def after_stall(cls, comms: Comms) -> None:
-        """Assign eligible work; refused replacements preserve the observed row."""
-        available = comms.goals.todos.reassignable(comms.registry)
+    def after_release(cls, comms: Comms) -> None:
+        """Hand work Core released to idle units; refused replacements preserve the row."""
+        available = comms.goals.todos.reassignable()
         for commander in {todo.creator_identity.name for todo in available}:
             mine = (todo for todo in available if todo.creator_identity.name == commander)
-            for rule in cls.paired(comms, commander, mine, StallWatcherIncarnation.watcher()):
+            for rule in cls.paired(comms, commander, mine, CoreWatcherIncarnation.watcher()):
                 rule.enforce(comms, commander)
 
     @classmethod
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """The worker borrows the root for this pass, never while the timer is idle."""
         with opened_wire() as comms:
-            comms.goals.todos.advance_objective_failures(comms.goals)
-            cls.after_stall(comms)
+            cls.after_release(comms)
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

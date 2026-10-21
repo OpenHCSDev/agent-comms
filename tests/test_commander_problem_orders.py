@@ -66,7 +66,7 @@ def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
 
 
 def problem(script, body):
-    script.problem(body, 'worker', RecordedEventTime.from_clock('23:59'), f'{__file__}:1')
+    script.problem(body, 'worker', f'{__file__}:1')
 
 
 @pytest.mark.parametrize('printed, refused', [

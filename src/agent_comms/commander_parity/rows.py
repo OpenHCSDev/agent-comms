@@ -28,7 +28,7 @@ from agent_comms.commander_parity.verdicts import VerdictComparison
 
 class CreateProblemParityRow(ParityRow):
     number = 1
-    capability = "Create a problem with owner, order and deadline"
+    capability = "Create a problem with owner, order and review timer"
     current = "`order.py problem`; `problems.json`"
     native = "`CommsTodoCreateTool`"
     phases = (OneOrderOwnerPhase,)
@@ -67,7 +67,7 @@ class InstalledEvidenceParityRow(ParityRow):
 
 class BoardParityRow(ParityRow):
     number = 5
-    capability = "Board, overdue, silent, spinning"
+    capability = "Board, review timers up, silent, spinning"
     current = "`order.py board`, `overdue`; `fleet-board.md`"
     native = "`CommsTodoListTool` and the fleet tool, derived"
     phases = (OneOrderOwnerPhase,)
@@ -263,7 +263,7 @@ class MeasuredLoadParityRow(ParityRow):
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
     native = (
-        "`commander.capacity.Load.of` reports orders, overdue, edits and forks; "
+        "`commander.capacity.Load.of` reports orders, review timers up, edits and forks; "
         "self-report comparison unverified"
     )
     phases = (ControlPlanePhase,)
@@ -310,11 +310,11 @@ class UnitTimeParityRow(ParityRow):
 
 class OrderProgressParityRow(ParityRow):
     number = 33
-    capability = "Order progress beside its deadline; the unit never sees a due time"
+    capability = "Order progress beside its review timer; the unit never sees it"
     current = "`order.py board`, `overdue`, `due`, `send`; `rotate.py`"
     native = (
-        "Derived `OrderProgress`; merged work draws no strike; first commit 10 min, "
-        "later progress 15 min STALL; units see no due time"
+        "Derived `OrderProgress`; uncommitted edits count as work; no clock strikes or "
+        "releases; the commander's review timer is hidden from units"
     )
     phases = (OneOrderOwnerPhase, ControlPlanePhase)
 

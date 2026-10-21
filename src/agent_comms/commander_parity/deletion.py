@@ -252,7 +252,7 @@ class NativeDeletionPath(DeletionPath):
                     request=document.order.request(
                         run.commander.comms.registry.require(run.commander.commander), ("P1",)
                     ),
-                    deadline=RecordedEventTime(time.time()).at_clock(run.due),
+                    review_at=RecordedEventTime(time.time() + 3600),
                     commander=run.commander.commander,
                 ),
             )

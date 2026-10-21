@@ -1,4 +1,5 @@
-"""An order's progress is read from its unit's checkout and PRs beside its deadline; merged work draws no strike."""
+"""An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
+The commander's review timer comes back every window until delivery, and the unit never sees it."""
 import json
 import os
 import subprocess
@@ -15,6 +16,7 @@ from agent_comms.goals import RequestGoalOrder
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, EditingProgress, MergedProgress,
@@ -83,45 +85,24 @@ class EmptySource:
 MOVED = time.strftime('%H:%M:%S', time.localtime(1000.0))
 
 
-@pytest.mark.parametrize('member, line, stalls_at, untouched_at', [
-    (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed', 1900, None),
-    (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR', 1900, None),
-    (OpenPrProgress, 'PR #7 open at bbbbbbbbb', 1900, 1300),
-    (MergedProgress, 'merged as ccccccccc, waiting on install', None, None),
+@pytest.mark.parametrize('member, line', [
+    (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed'),
+    (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR'),
+    (OpenPrProgress, 'PR #7 open at bbbbbbbbb'),
+    (MergedProgress, 'merged as ccccccccc, waiting on install'),
 ])
-def test_each_found_member_says_from_its_class_whether_it_stalls_and_is_untouched(
-        member, line, stalls_at, untouched_at):
+def test_each_found_member_says_its_line_from_its_class(member, line):
     (progress,) = member.found(HeldSource())
     assert tuple(member.found(EmptySource())) == ()
     assert progress.line == line
-    for now in (1300, 1301, 1900, 1901, 10 ** 9):
-        assert progress.stalled(100.0, now) is (stalls_at is not None and now >= stalls_at)
-        assert progress.untouched(now) is (untouched_at is not None and now > untouched_at)
 
 
-@pytest.mark.parametrize('progress, line, stalls_at', [
-    (NoCommitProgress(), 'no commit since the order', 700),
-    (UnreadProgress('gh failed'), 'progress unread: gh failed', None),
+@pytest.mark.parametrize('progress, line', [
+    (NoCommitProgress(), 'no commit since the order'),
+    (UnreadProgress('gh failed'), 'progress unread: gh failed'),
 ])
-def test_unfound_progress_says_from_its_class_whether_it_stalls(progress, line, stalls_at):
+def test_unfound_progress_says_its_line_from_its_class(progress, line):
     assert progress.line == line
-    for now in (700, 701, 10 ** 9):
-        assert progress.stalled(100.0, now) is (stalls_at is not None and now >= stalls_at)
-        assert not progress.untouched(now)
-
-
-@pytest.mark.parametrize('progress, now, stalled', [
-    (NoCommitProgress(), 100 + 599, False),
-    (NoCommitProgress(), 100 + 600, True),
-    (CommittedProgress('a' * 9, at=1000.0), 1000 + 899, False),
-    (PushedProgress('a' * 9, at=1000.0), 1000 + 901, True),
-    (OpenPrProgress(7, 'a' * 9, at=1000.0), 1000 + 901, True),
-    (MergedProgress('d' * 9), 10 ** 9, False),
-])
-def test_work_that_stops_moving_stalls(progress, now, stalled):
-    assert progress.stalled(100.0, now) is stalled
-
-
 
 
 def unit_checkout(path):
@@ -158,8 +139,8 @@ def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(tmp_path, 
     edited(worktree, name, 100.0 + 500)
     progress = OrderProgress.from_source(EditingSource(worktree))
     assert progress == EditingProgress(at=600.0)
-    assert not progress.stalled(100.0, 100 + 600)
-    assert progress.stalled(100.0, 600 + 900)
+    edit = time.strftime('%H:%M:%S', time.localtime(600.0))
+    assert progress.line == f'uncommitted edits at {edit}, no commit'
 
 
 def test_a_deleted_file_is_no_edit_time(tmp_path):
@@ -186,22 +167,33 @@ def held(tmp_path):
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
 
 
-def reassigned(comms):
-    return tuple(todo.id for todo in comms.goals.todos.reassignable(comms.registry))
-
-
-def test_the_stall_watcher_takes_only_work_that_stopped_moving(held):
+def test_no_clock_takes_a_held_order(held):
+    """20:07:17 and 20:24:57: Core struck P358's holder for ten minutes without a commit and
+    gave the order away. Nothing reads the clock to strike or release work now."""
     comms, worktree = held
-    assert reassigned(comms) == ('P1',)
+    assert comms.goals.todos.reassignable() == ()
     edited(worktree, 'owner.py', time.time())
-    assert reassigned(comms) == ()
-
-
-def test_the_stall_watcher_never_takes_work_from_a_stopped_holder(held):
-    comms, _ = held
     comms.registry.unregister('worker')
-    assert not comms.registry.snapshot().receiving('worker')
-    assert reassigned(comms) == ()
+    assert comms.goals.todos.reassignable() == ()
+
+
+def test_the_review_timer_comes_back_every_window_until_delivery(held):
+    comms, _ = held
+    todo = comms.goals.todos.get('P1')
+    first, window = 1000.0, todo.review_window
+    assert window == first - todo.order.checked().at.recorded_at('An order')
+    assert todo.timer_up(first - 1) == ()
+    assert todo.timer_up(first) == (RecordedEventTime(first),)
+    assert todo.timer_up(first + window - 1) == (RecordedEventTime(first),)
+    assert todo.timer_up(first + 2 * window + 1) == (RecordedEventTime(first + 2 * window),)
+    assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
+
+
+def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
+    up = ReviewTimerUp('P1', 'worker', 'order-P1', RecordedEventTime(1000.0))
+    clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
+    assert up.line() == f'TIMER UP: worker P1 at {clock}, order order-P1 -> read its diff and judge it'
+    assert up.began() == 1000.0
 
 
 def test_a_cited_line_that_does_not_exist_is_a_refusal(tmp_path):
