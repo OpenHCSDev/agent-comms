@@ -1578,10 +1578,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                         pulls: PullRequests) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
         source = ProgressSource.of(todo, storage, pulls)
-        return tuple(DoneTodoState.closed(todo, merged)
+        return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
 
@@ -1653,10 +1653,29 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class MergedProblemOrder(CheckedProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
-    line: ClassVar[str] = "Merged and installed"
+
+    @property
+    def line(self) -> str:
+        return self.run.merged_line
+
+    def closed_in(self, todo: Todo) -> Todo:
+        return DoneTodoState.closed(todo, self)
+
+    def waiting_in(self, todo: Todo) -> Todo:
+        return replace(todo, order=self, revision=todo.revision + 1)
+
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+        return ()
 
     def require_close(self) -> None:
-        pass
+        self.run.require_merge_close()
+
+    def require_installation(self) -> None:
+        """The observed merge is already in the installed checkout."""
+
+    def installed(self, works: str, artifact: str) -> ProblemOrder:
+        self.run.require_closing(works)
+        return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1722,7 +1741,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             raise ValueError("The order already records a different delivery.")
         return self
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         commits = self.delivery.merged_commits(repo)
         return (tuple(self.merged(commit) for commit in commits)
                 or super().observed_merges(repo, source))
@@ -1750,7 +1769,8 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstalledProblemOrder(DeliveredProblemOrder):
+class InstalledEvidence(CheckedProblemOrder, declared_name=None):
+    """Recorded application evidence, shared by delivered and merge-observed orders."""
     works: str
     artifact: str
     line: ClassVar[str] = "Installed"
@@ -1769,10 +1789,7 @@ class InstalledProblemOrder(DeliveredProblemOrder):
             raise ValueError("The order already records different installed evidence.")
         return self
 
-    def merged(self, sha: str) -> ProblemOrder:
-        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
-
-    def require_close(self):
+    def require_close(self) -> None:
         pass
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
@@ -1780,8 +1797,14 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
-    """An installed merge retains the application's existing evidence, without a wrapper."""
+class InstalledProblemOrder(InstalledEvidence, DeliveredProblemOrder):
+    def merged(self, sha: str) -> MergedProblemOrder:
+        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledMergedProblemOrder(InstalledEvidence, MergedProblemOrder):
+    """The installed merge and the recorded run share the same evidence behavior."""
 
 
 @dataclass(frozen=True)

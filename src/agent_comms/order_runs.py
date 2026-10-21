@@ -5,18 +5,35 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 
+if TYPE_CHECKING:
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.todos import MergedProblemOrder, Todo
+
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
-    mechanical: ClassVar[bool] = False
+
+    def require_assignment(self, unit: ThreadIncarnation, fired: tuple[Todo, ...],
+                           strike_limit: int) -> None:
+        """Mechanical work remains assignable after application work was taken away."""
 
     def require_artifact(self, path: str) -> None:
         pass
+
+    @property
+    def merged_line(self) -> str:
+        return "Merged and installed"
+
+    @abstractmethod
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
+
+    @abstractmethod
+    def require_merge_close(self) -> None: ...
 
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
@@ -28,7 +45,11 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
-    mechanical: ClassVar[bool] = True
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
+        return merged.closed_in(todo)
+
+    def require_merge_close(self) -> None:
+        pass
 
     def instructions(self) -> tuple[str, ...]:
         return ()
@@ -39,6 +60,25 @@ class MechanicalOrderRun(OrderRun):
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
+    def require_assignment(self, unit: ThreadIncarnation, fired: tuple[Todo, ...],
+                           strike_limit: int) -> None:
+        if fired:
+            raise ToolRefusedError(
+                f"Refused: {unit.name} has {strike_limit} strikes on "
+                f"{[todo.id for todo in fired]}. "
+                f"Reassign them; only a mechanical run reaches {unit.name}.")
+
+    @property
+    def merged_line(self) -> str:
+        return f"{super().merged_line}, waiting on the run"
+
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
+        return merged.waiting_in(todo)
+
+    def require_merge_close(self) -> None:
+        raise ToolRefusedError(
+            "A merge never closes an application order; order close --works records the run.")
+
     def require_artifact(self, path: str) -> None:
         if not Path(path).is_file():
             raise ToolRefusedError('This order needs --seen FILE showing its requested run.')
