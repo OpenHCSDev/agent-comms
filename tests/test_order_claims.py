@@ -1,12 +1,17 @@
 """A holder claims through the real command/tool boundary on a copied bus."""
 from contextlib import chdir
+from dataclasses import replace
+import json
+import shlex
+import time
 
 import pytest
 
-from agent_comms.commander.order import main
+from agent_comms.commander.order import OrderFile, main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import ProblemGoalOrder
+from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimedProblemOrder,
     DeliveredProblemOrder,
@@ -25,6 +30,7 @@ from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture
     held_commander,
     pr_commander,
 )
+from test_todos import order, thread
 
 
 def test_claim_verdict_family_on_retained_copy(held_commander):
@@ -88,28 +94,72 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert not delivered.pending
 
 
-def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
-    ctx = held_commander
-    comms = ctx.comms
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
+def claimed_by_worker(ctx) -> Todo:
+    ctx.comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
+        goal_id=ctx.comms.goals.todos.get("P1").held().generation,
     ))
-    repo = ctx.repos[0]
-    sha = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
-    repo.git(repo.checkout, "push", "--force", "origin", f"{sha}:refs/heads/main")
-    repo.git(repo.checkout, "fetch", "origin")
+    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     report = ctx.root / "report.txt"
     report.write_text("The source change is published; inspect its actual diff before accepting it.")
     main(["deliver", "P1", "--fork", "worker", "--pr", "1", "--sha", sha,
           "--report-file", str(report)], ctx)
-    claimed = comms.goals.todos.get("P1")
+    claimed = ctx.comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)
+    return claimed
+
+
+def corrected_order_file(ctx) -> str:
+    marker = ctx.root / "duplicated-decision"
+    marker.touch()
+    now = time.time()
+    document = OrderFile(
+        replace(order(ctx.repos[0]), id="corrected-order",
+                check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
+                at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
+        "The claimed change keeps the duplicated decision the order told the unit to delete",
+        "This is stupid because the commander's order named the wrong member to delete",
+        unplanned_reason="This isolated workflow verifies claimed order correction rather than advancing a plan.",
+        problems=("P1",),
+    )
+    path = ctx.root / "corrected-order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    return str(path)
+
+
+def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    main(["send", "worker", corrected_order_file(ctx), "--clean"], ctx)
+    corrected = ctx.comms.goals.todos.get("P1")
+    assert isinstance(corrected.order, PendingProblemOrder)
+    assert corrected.order.id != claimed.order.id
+    assert claimed.order in corrected.prior_orders
+    assert corrected.holder == "worker"
+    assert corrected.strike_count == claimed.strike_count
+
+
+def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander):
+    ctx = held_commander
+    ctx.comms.registry.register(thread("other", ctx.root, 3.0))
+    claimed = claimed_by_worker(ctx)
+    with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
+        main(["send", "other", corrected_order_file(ctx), "--clean", "--reassign",
+              "the claimant reported the delivery, so moving it would discard that claim"], ctx)
+    assert ctx.comms.goals.todos.get("P1") == claimed
+
+
+def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    repo = ctx.repos[0]
+    sha = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
+    repo.git(repo.checkout, "push", "--force", "origin", f"{sha}:refs/heads/main")
+    repo.git(repo.checkout, "fetch", "origin")
 
     main(["check", "P1", "--check", f"{repo.checkout} :: printf 0 -> 0",
           "--why", "the recorded check also counted lines the order never asked to remove"], ctx)
-    corrected = comms.goals.todos.get("P1")
+    corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, ClaimedProblemOrder)
     assert corrected.order.check.command == "printf 0"
     assert corrected.order.check_corrections[-1].previous == claimed.order.check
