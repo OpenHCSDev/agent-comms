@@ -362,6 +362,13 @@ class GitCommandFailed(ValueError):
         self.run = run
         super().__init__(run.stderr.strip() or f"git failed with exit {run.returncode}")
 
+    def source_path_absent(self, sha: str, file: str) -> bool:
+        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
+        return self.run.returncode == 128 and self.run.stderr in (
+            f"fatal: path '{file}' does not exist in '{sha}'\n",
+            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
+        )
+
     def no_check_ran_on(self, sha: str) -> bool:
         """Git's absent-note reply, not a corrupt repository or an invalid revision."""
         return self.run.returncode == 1 and self.run.stderr in (

@@ -32,7 +32,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
-from ..change_report import FileLine, NoSourceReference
+from ..change_report import FileLine, MainRevision, NoSourceReference
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions
 from ..comms import Comms
@@ -403,6 +403,7 @@ class Commander(CommanderContext):
         check = replace(order.check, directory=str(self.repo_directory(order.check.directory)))
         order = replace(order, check=check)
         edits = order.edits
+        cited_revision = document.order.cited_revision
         body = '\n'.join((document.prose, *edits, order.report))
         # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
         try:
@@ -431,7 +432,7 @@ class Commander(CommanderContext):
             problems.append('problems: fix: omit IDs when creating a new problem')
         if not new and (missing := [pid for pid in group if pid not in listed]):
             problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
-        for label, validate in (('order.owner', lambda: order.owner.require_exists(Path(check.directory))),
+        for label, validate in (('order.owner', lambda: order.owner.require_exists(Path(check.directory), cited_revision)),
                                ('order.check.directory', check.require_directory)):
             try:
                 with MalformedRecord.refusing(label):
@@ -465,7 +466,7 @@ class Commander(CommanderContext):
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(Path(check.directory))
+                    reference.require_exists(Path(check.directory), cited_revision)
             except MalformedRecord as error:
                 problems.append(f'{error}; fix: cite an existing source line')
         if any((Path(check.directory) / reference.file).resolve().is_relative_to(
@@ -567,7 +568,7 @@ class Commander(CommanderContext):
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
-        location.require_exists(checkout)
+        location.require_exists(checkout, document.order.cited_revision)
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
@@ -697,7 +698,7 @@ class Commander(CommanderContext):
         """Record the commander's source read, whether or not it became an order."""
         ref = FileLine.from_wire(where)
         directory = Path.cwd()
-        ref.require_exists(directory)
+        ref.require_exists(directory, MainRevision())
         if len(why.split()) < 10:
             sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
         ref = FileLine(str((directory / ref.file).resolve()), ref.line)
