@@ -29,8 +29,11 @@ from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
 if TYPE_CHECKING:
+    from acp.agent.connection import AgentSideConnection
+
     from .acp import CommsAgent
     from .routing import MessageRoute
+    from .runtime import RuntimeServer, SocketClient
 
 
 class AcpEventConsumer(MroDispatch):
@@ -38,7 +41,7 @@ class AcpEventConsumer(MroDispatch):
         self,
         agent: CommsAgent,
         session_id: str,
-        client: Any,
+        client: AgentSideConnection | RuntimeServer | SocketClient,
         turn_id: str | None = None,
         route: MessageRoute | None = None,
     ) -> None:

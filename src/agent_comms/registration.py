@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
@@ -14,7 +15,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot, UserThreadLookup
+from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
@@ -28,7 +29,6 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -194,17 +194,18 @@ class Registration:
         for effect in effects:
             effect.check(projection)
 
-    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
-        with self.store.editing() as edit:
-            result = edit.document.restore_stopped(source, names)
-            edit.commit()
-            return result
+    @staticmethod
+    def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
+        Concatenate[Registration, P], R]:
+        def change(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
+            with self.store.editing() as edit:
+                result = operation(edit.document, *args, **kwargs)
+                edit.commit()
+                return result
+        return change
 
-    def rename(self, name: str, new_name: str) -> tuple[str, str]:
-        with self.store.editing() as edit:
-            result = edit.document.rename(name, new_name)
-            edit.commit()
-            return result
+    restore_stopped = changing(RegistryDocument.restore_stopped)
+    rename = changing(RegistryDocument.rename)
 
     def fence_idle_owners(
         self, selected: Sequence[tuple[Thread, int]]
@@ -220,62 +221,16 @@ class Registration:
             edit.commit()
             return fenced
 
-    def unregister(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.unregister(name)
-            edit.commit()
-            return result
-
-    def archive(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.archive(name)
-            edit.commit()
-            return result
-
-    def begin_delete(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.begin_delete(name)
-            edit.commit()
-            return result
-
-    def archive_originals(self, originals: Sequence[Thread]) -> None:
-        with self.store.editing() as edit:
-            edit.document.archive_originals(originals)
-            edit.commit()
-
-    def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
-        with self.store.editing() as edit:
-            edit.document.begin_delete_originals(originals)
-            edit.commit()
-
-    def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
-        with self.store.editing() as edit:
-            detached = edit.document.remove_originals(originals)
-            edit.commit()
-            return detached
-
-    def change_tag(self, originals: Sequence[Thread], tag: str, replacement: str | None) -> None:
-        with self.store.editing() as edit:
-            edit.document.change_tag(originals, tag, replacement)
-            edit.commit()
-
-    def remove(self, name: str) -> tuple[str, ...]:
-        with self.store.editing() as edit:
-            result = edit.document.remove(name)
-            edit.commit()
-            return result
-
-    def heartbeat(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.heartbeat(name)
-            edit.commit()
-            return result
-
-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
-        with self.store.editing() as edit:
-            result = edit.document.release_turn(lease)
-            edit.commit()
-            return result
+    unregister = changing(RegistryDocument.unregister)
+    archive = changing(RegistryDocument.archive)
+    begin_delete = changing(RegistryDocument.begin_delete)
+    archive_originals = changing(RegistryDocument.archive_originals)
+    begin_delete_originals = changing(RegistryDocument.begin_delete_originals)
+    remove_originals = changing(RegistryDocument.remove_originals)
+    change_tag = changing(RegistryDocument.change_tag)
+    remove = changing(RegistryDocument.remove)
+    heartbeat = changing(RegistryDocument.heartbeat)
+    release_turn = changing(RegistryDocument.release_turn)
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
@@ -337,9 +292,19 @@ class Registration:
             edit.commit()
             return result
 
-    def canonical_name(self, name: str) -> str:
-        with self.store.reading() as document:
-            return document.canonical_name(name)
+    @staticmethod
+    def reading[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
+        Concatenate[Registration, P], R]:
+        def read(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
+            with self.store.reading() as document:
+                return operation(document, *args, **kwargs)
+        return read
+
+    canonical_name = reading(RegistryDocument.canonical_name)
+    last_seen = reading(RegistryDocument.seen_at)
+    require = reading(RegistryDocument.require)
+    status = reading(RegistryDocument.status)
+    user_thread = reading(RegistryDocument.user_thread)
 
     def goal_history(
         self, name: str, *, goal_id: str | None = None
@@ -352,18 +317,6 @@ class Registration:
             return GoalHistoryStore(self.store.path).history(
                 thread.created_at, thread.goal, goal_id=goal_id
             )
-
-    def last_seen(self, name: str) -> float:
-        with self.store.reading() as document:
-            return document.seen_at(name)
-
-    def require(self, name: str) -> Thread:
-        with self.store.reading() as document:
-            return document.require(name)
-
-    def status(self, name: str) -> ThreadStatus:
-        with self.store.reading() as document:
-            return document.status(name)
 
     def session_thread(
         self, project_path: Path, preferred: str | None = None,
@@ -384,11 +337,6 @@ class Registration:
             return ProjectThreadSelection.from_threads(tuple(
                 member for thread in located for member in thread.role.acp_thread(thread)
             ))
-
-    def user_thread(self) -> UserThreadLookup[Thread]:
-        """The human answer from this stored revision, without copying its roster."""
-        with self.store.reading() as document:
-            return document.user_thread()
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
