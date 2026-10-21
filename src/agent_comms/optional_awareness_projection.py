@@ -194,10 +194,10 @@ class OptionalAwarenessProjection:
         _require_no_private_owner_rename(self.index.root)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
-        root_id = self.index.bus.activation.root_id
+        with _store_lock(self.registry.store.path, blocking=False):
+            root_id = self.registry.store.private_guard_unlocked().namespace
         lookup = assignment.recipient_lookup
         page = self.index.page(
-            root_id=root_id,
             recipient_lookup=lookup,
             after_seq=self.after_seq,
             required_through_seq=self.through_seq,

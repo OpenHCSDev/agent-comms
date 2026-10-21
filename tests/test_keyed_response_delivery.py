@@ -62,7 +62,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
 
         candidates = WakeCandidateIndex(case.bus.bus)
         page = candidates.page(
-            root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
+            recipient_lookup=lookup, after_seq=0,
             required_through_seq=response.seq,
         )
         assert [entry.source_seq for entry in page.entries] == [response.seq]

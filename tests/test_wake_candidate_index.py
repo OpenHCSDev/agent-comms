@@ -66,7 +66,7 @@ def test_three_committed_messages_are_candidates_by_their_bus_sequences(bus, own
     messages = tuple(append_reply(bus, peer, owner, str(n)) for n in range(3))
     index = WakeCandidateIndex(bus)
     assert index.through_seq == messages[-1].seq
-    page = index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
+    page = index.page(recipient_lookup=owner.lookup,
                       after_seq=0, required_through_seq=messages[-1].seq)
     assert tuple(row.source_seq for row in page.entries) == tuple(row.seq for row in messages)
     assert tuple(row.message_id for row in page.entries) == tuple(row.message_id for row in messages)
@@ -77,7 +77,7 @@ def test_new_reader_observes_same_committed_candidates_without_catchup(bus, owne
     first = append_reply(bus, peer, owner)
     index = WakeCandidateIndex(bus)
     last = append_reply(bus, peer, owner)
-    query = dict(root_id="a" * 32, recipient_lookup=owner.lookup,
+    query = dict(recipient_lookup=owner.lookup,
                  after_seq=0, required_through_seq=last.seq)
     assert index.page(**query) == WakeCandidateIndex(bus).page(**query)
     assert tuple(row.source_seq for row in index.page(**query).entries) == (first.seq, last.seq)
@@ -90,7 +90,7 @@ def test_committed_prefix_includes_non_candidate_suffix_without_another_writer(b
         Message("external", "owner", "public", InfoKind, seq=seq))) for _ in range(3))
     index = WakeCandidateIndex(bus)
     assert index.through_seq == public[-1].seq
-    page = index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
+    page = index.page(recipient_lookup=owner.lookup,
                       after_seq=0, required_through_seq=public[-1].seq)
     assert page.through_seq == public[-1].seq
     assert tuple(row.source_seq for row in page.entries) == (first.seq,)
@@ -98,7 +98,7 @@ def test_committed_prefix_includes_non_candidate_suffix_without_another_writer(b
 
 def test_candidate_page_uses_bounded_recipient_keyset(bus, owner, peer):
     messages = tuple(append_reply(bus, peer, owner) for _ in range(3))
-    query = dict(root_id="a" * 32, recipient_lookup=owner.lookup,
+    query = dict(recipient_lookup=owner.lookup,
                  required_through_seq=messages[-1].seq, limit=2)
     index = WakeCandidateIndex(bus)
     first = index.page(after_seq=0, **query)

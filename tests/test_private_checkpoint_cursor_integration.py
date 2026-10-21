@@ -5,6 +5,8 @@ Provider-free native fake only: a source prefix record is not an ACK or input pe
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from conftest import publish_initial
 import os
 from pathlib import Path
@@ -36,7 +38,7 @@ def tmp_path(private_directory):
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')),
@@ -44,7 +46,7 @@ def _root(tmp_path: Path):
     ]
     for person in people:
         comms.registry.declare(person)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     first = publish_initial(comms, "sender", "#team", "selected one")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)

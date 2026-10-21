@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
@@ -51,7 +53,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
@@ -59,7 +61,7 @@ def _root(
     ]
     for person in people:
         comms.registry.declare(person)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = publish_initial(comms, "sender", target, body)

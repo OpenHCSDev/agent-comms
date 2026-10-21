@@ -3,6 +3,8 @@
 from multiprocessing.context import ForkServerContext
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.bus import Bus
+from agent_comms.comms import Comms
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.messages import ClaimMessage
@@ -14,6 +16,13 @@ from agent_comms.wake import ControlClassification, resolve_wake_cohort
 
 publication_processes = ForkServerContext()
 publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(".")[0]])
+
+
+def prepare_native_comms(comms: Comms) -> Comms:
+    """Install the bus and original native guard before any coordinator is opened."""
+    Bus.install(Bus.path_in(comms.root))
+    comms.registry.prepare_native_root()
+    return comms
 
 
 def record_from(declaration, message):

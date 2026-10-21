@@ -58,7 +58,6 @@ from .message_bus import MessageBus
 from .threads import Thread
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
-from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
 
@@ -190,19 +189,21 @@ class Goals:
             sequence for row in unknown.values()
             for sequence in row.bus_sequences_through(after_seq)
         })
-        request = ConversationSourceWindowRequest(
-            sequences=sequences, limit=len(sequences), ascending=True,
-        )
-        earlier = request.capture_many(self.bus.log, lookup, (request,))[0] if sequences else ()
-        # Keep older UNKNOWN inputs, but look for new replies only after this
-        # dependency's recorded wait. Capture checks both participant identities.
-        replies = {
-            InputDispositions.bus_key(original.message, thread): original.message
-            for original in chain(
-                earlier, self.bus.log.addressed_sources(lookup, after_seq=after_seq)
+        with self.bus.bus.reading() as source:
+            earlier = source.conversation(
+                lookup, sequences=sequences, limit=len(sequences), descending=False,
+            ) if sequences else ()
+            # Retain older UNKNOWN inputs and inspect new frozen-recipient replies
+            # from one cut. Do not truncate the eligible dependency suffix.
+            fresh = source.received(
+                lookup, after=after_seq, limit=source.revision(), descending=False,
+                sender_lookups=tuple(target.incarnation.lookup for target in targets),
             )
-            if original.direct_for(lookup) and any(target.sent(original) for target in targets)
-        }
+            replies = {
+                InputDispositions.bus_key(original.message, thread): original.message
+                for original in chain(earlier, fresh)
+                if original.direct_for(lookup) and any(target.sent(original) for target in targets)
+            }
         document = dispositions.read(tuple(replies))
         for key, message in replies.items():
             row = document.lookup(key)
@@ -386,12 +387,9 @@ class Goals:
         wait = self.waits.for_goal(goal, self.waits.read())
         if not wait.owner_matches(current.incarnation.require_recorded()):
             return False
-        with self.bus.log.checked_read() as source:
-            original = source.delivery(reference.seq)
-            if original.message.reference != reference:
-                raise ValueError("Dependency reply source reference changed.")
-            if not wait.matches(original, current.incarnation.require_recorded()):
-                return False
+        original, = self.bus.bus.deliveries_for_references((reference,))
+        if not wait.matches(original, current.incarnation.require_recorded()):
+            return False
         return wait.consume_reply(self.waits, goal.id)
 
     def update_goal[Result: GoalDeclaration](

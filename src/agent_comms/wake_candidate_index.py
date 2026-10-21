@@ -62,11 +62,11 @@ class WakeCandidateIndex:
         return self.bus.revision()
 
     def page(
-        self, *, root_id: str, recipient_lookup: str, after_seq: int,
+        self, *, recipient_lookup: str, after_seq: int,
         required_through_seq: int, limit: int = 32,
     ) -> CandidatePage:
         request = CandidateQuery.capture(
-            root_id=root_id, recipient_lookup=recipient_lookup, after_seq=after_seq,
+            recipient_lookup=recipient_lookup, after_seq=after_seq,
             required_through_seq=required_through_seq, limit=limit)
         try:
             with self.bus.reading() as source:

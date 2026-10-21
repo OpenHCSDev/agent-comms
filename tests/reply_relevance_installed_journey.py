@@ -1,4 +1,6 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+
+from bus_record_fixture import prepare_native_comms
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
@@ -61,14 +63,14 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = Comms(stage / 'w')
+    service = prepare_native_comms(Comms(stage / 'w'))
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
         env=environment,
     )
     assert Path(fork.session_file).is_relative_to(stage)
-    root_id = service.messaging.initialize_private_initial_protocol()
+    root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),

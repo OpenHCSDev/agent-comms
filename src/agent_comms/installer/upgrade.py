@@ -751,6 +751,7 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         bus = Bus.install(Bus.path_in(self.root))
+        Comms(self.root).registry.prepare_native_root()
         CarryLedger(self.root).start(self.chain)
         self.staged.publish()
         route = route_new_bus(ActiveRoute(

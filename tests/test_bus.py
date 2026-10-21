@@ -246,8 +246,7 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
 
 
-def test_bulk_history_keeps_one_snapshot_across_pages(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_bulk_history_keeps_one_snapshot_across_pages(bus):
     assert tuple(bus.message_history()) == ()
     originals = tuple(Message.from_message(bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", f"message {seq}", InfoKind, seq=seq),

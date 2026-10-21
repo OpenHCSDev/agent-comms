@@ -93,6 +93,7 @@ class CheckRoot:
             messages = tuple(reversed(scope.records(
                 source, descending=True, limit=self.max_records)))
         Bus.install(Bus.path_in(copied.root), history=messages)
+        copied.registry.prepare_native_root()
         copied.channels.catalog.replace(catalog)
         declarations = {}
         for name in names:
