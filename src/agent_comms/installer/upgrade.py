@@ -21,6 +21,7 @@ start and result through the bus's ordinary publisher.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import shutil
@@ -33,19 +34,19 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from dataclasses import dataclass, field, fields, replace
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.bus import Bus
+from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
 from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
@@ -54,6 +55,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -67,7 +69,13 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryLedger
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -212,6 +220,24 @@ class CarriedPass(Extendable):
     files: RehearsalFiles
     read: BusReadBack
 
+    def after_acceptance(
+        self, root: Path, pending: tuple[type[Carry], ...], stack: Stack,
+        tree: TargetTree, original_root: Path, spill_dir: Path,
+    ) -> RetiredPass:
+        """The accepted installation may retire inputs; a failure here never rolls back."""
+        with _store_lock(root / "wire"):
+            retired = tuple(StepRun(member.name(), stack.call_step(
+                member(root, original_root, spill_dir, True), tree, Carry.after_acceptance))
+                for member in pending)
+        return self.extended(RetiredPass, retired_inputs=retired)
+
+
+@dataclass(frozen=True)
+class RetiredPass(CarriedPass):
+    """The accepted pass and the obsolete inputs it subsequently retired."""
+
+    retired_inputs: tuple[StepRun, ...]
+
 
 @dataclass(frozen=True)
 class StoppedOwners:
@@ -234,7 +260,7 @@ class Rehearsal(DeclaredFamily, affix="Rehearsal"):
 
 
 @dataclass(frozen=True)
-class CarriedRehearsal(CarriedPass, Rehearsal):
+class CarriedRehearsal(RetiredPass, Rehearsal):
     copy: PracticeMeasurement
 
 
@@ -261,7 +287,7 @@ class LiveRun(DeclaredFamily, affix="Run"):
 
 
 @dataclass(frozen=True)
-class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
+class CarriedRun(RetiredPass, StoppedOwners, RestartedServices, LiveRun):
     started: tuple[OwnerStart, ...]
     restore_space: RestoreSpace
     backup: BackupReport
@@ -270,6 +296,8 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     def lines(self) -> tuple[str, ...]:
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
+            *(f"Retired {step.carry}: {step.carried.changed} inputs"
+              for step in self.retired_inputs if step.carried.changed),
             *self.stopped_lines(),
             *(line for owner in self.started for line in owner.lines()),
             *self.service_lines(),
@@ -442,20 +470,22 @@ class Stack:
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
-    def call_step(self, step: type[Carry], root: Path, tree: TargetTree,
-                  method: str, **arguments: bool) -> str:
-        """Run the step in the target tree with this stack's interpreter."""
-        output = run(self.python, "-m", step_worker.__name__, step.name(), method, root,
-                     json.dumps(arguments), cwd=tree.path,
+    def call_step[Result](self, step: Carry, tree: TargetTree,
+                          operation: Callable[[Carry], Result]) -> Result:
+        """Encode the declared run once; the selected method owns its result shape."""
+        output = run(self.python, "-m", step_worker.__name__, step.name(), operation.__name__,
+                     json.dumps(FieldCodec.encode(step)), cwd=tree.path,
                      env=self.environment(*tree.source_paths()))
-        return output.strip().splitlines()[-1]
+        annotation = inspect.signature(operation, eval_str=True).return_annotation
+        return cast(Result, FieldCodec.decode(
+            annotation, FieldCodec.parse(output.strip().splitlines()[-1]),
+        ))
 
     def backup_files(self, root: Path, pending: tuple[type[Carry], ...],
-                     tree: TargetTree) -> tuple[Path, ...]:
+                     tree: TargetTree, spill_dir: Path) -> tuple[Path, ...]:
         return tuple(sorted({
-            path for step in pending for path in FieldCodec.decode(
-                tuple[Annotated[Path, PathText], ...], FieldCodec.parse(self.call_step(
-                    step, root, tree, Carry.backup_files.__name__)))
+            path for member in pending for path in self.call_step(
+                member(root, root, spill_dir, False), tree, Carry.backup_files)
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -516,42 +546,40 @@ class TargetTree:
             ScratchCheckout(self.path).retire()
 
 
-def carry(step: type[Carry], root: Path, stack: Stack, tree: TargetTree, *flags: str) -> Carried:
-    """Run one step with the target's src and ``stack``'s Python: the target's staged
-    stack, never the installed one."""
-    operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
-    output = stack.call_step(step, root, tree, operation, apply=True)
-    return FieldCodec.decode(Carried, FieldCodec.parse(output))
-
-
 def before_stop(
-    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree
+    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree,
+    original_root: Path, spill_dir: Path,
 ) -> tuple[StepRun, ...]:
     """What the running installation needs before its own stop command reads the bus."""
     with _store_lock(root / "wire"):
-        return tuple(StepRun(step.name(), carry(step, root, stack, tree, "--before-stop", "--apply"))
-                     for step in pending)
+        return tuple(StepRun(member.name(), stack.call_step(
+            member(root, original_root, spill_dir, True), tree, Carry.before_stop))
+            for member in pending)
 
 
 def carry_all(
-    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree
+    root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree,
+    original_root: Path, spill_dir: Path,
 ) -> tuple[StepRun, ...]:
     results = []
-    for step in pending:
+    for member in pending:
+        step = member(root, original_root, spill_dir, True)
         with _store_lock(root / "wire"):
             results.append(StepRun(step.name(), CarryLedger(root).apply(
-                step.name(), lambda: carry(step, root, stack, tree, "--apply"))))
+                step.name(), partial(stack.call_step, step, tree, Carry.carry))))
     return tuple(results)
 
 
 def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain: CarryChain,
-             installer: InstallerChoice) -> CarriedRehearsal:
+             installer: InstallerChoice, spill_dir: Path) -> CarriedRehearsal:
     """The live run on a practice copy, up to stopping owners: the outgoing runtime answers
     the same owner probe the live run asks it before the stop."""
     parent = installer.scratch(StorageRule.load(root))
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    spill_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
+        tempfile.TemporaryDirectory(dir=spill_dir, prefix="practice-carry-") as spill,
         practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
@@ -560,28 +588,33 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain
         stack = replace(stack, home=home)
         stack.prepare_native()
         pending = chain.pending(CarryLedger(copied).applied())
-        for path in stack.backup_files(root, pending, tree):
+        for path in stack.backup_files(root, pending, tree, spill_dir):
             destination = copied / path.relative_to(root)
             if path.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
-        stopping = before_stop(copied, pending, stack, tree)
+        measurement = PracticeMeasurement.of(
+            copied, measurement.seconds, StorageRule.load(root).floor_gib * 2**30)
+        stopping = before_stop(copied, pending, stack, tree, root, Path(spill))
         installed.running_owners(copied)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied):
             before = bus_files(copied)
-        passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
-        return passed.extended(CarriedRehearsal, copy=measurement)
+        passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping,
+                                root, Path(spill))
+        accepted = passed.after_acceptance(copied, pending, stack, tree, root, Path(spill))
+        return accepted.extended(CarriedRehearsal, copy=measurement)
 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
                    staged: Stack, reader: Stack, tree: TargetTree,
-                   stopping: tuple[StepRun, ...]) -> CarriedPass:
+                   stopping: tuple[StepRun, ...], original_root: Path,
+                   spill_dir: Path) -> CarriedPass:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
-    steps = (*stopping, *carry_all(root, pending, staged, tree))
+    steps = (*stopping, *carry_all(root, pending, staged, tree, original_root, spill_dir))
     # A missing converter must fail, not create an empty replacement history.
     # Existing-file changes belong to carries and their backup/rewrite records.
     with Bus(Bus.path_in(root)).observing() as db:
@@ -704,7 +737,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 class ChangedInstall(Install[CarriedRehearsal]):
     def rehearsal(self) -> CarriedRehearsal:
         return rehearse(self.root, self.staged, self.installed, self.tree, self.chain,
-                        self.installer)
+                        self.installer, self.spill_dir)
 
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
@@ -750,8 +783,8 @@ class FreshInstall(Install[FreshRehearsal]):
         Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        bus = Bus.install(Bus.path_in(self.root))
         Comms(self.root).registry.prepare_native_root()
+        bus = Bus.install(Bus.path_in(self.root))
         CarryLedger(self.root).start(self.chain)
         self.staged.publish()
         route = route_new_bus(ActiveRoute(
@@ -781,14 +814,14 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     expected = frozenset((*rehearsal_files.names, CarryLedger.filename)) | frozenset(
-        str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
+        str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree, spill_dir))
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore = RestoreSpace.measure(max(
         rehearsal_files.restore_bytes,
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
-    stopping = before_stop(root, pending, staged, tree)
+    stopping = before_stop(root, pending, staged, tree, root, spill_dir)
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
@@ -808,7 +841,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Checkout(checkout).prepare()
         staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
+        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping,
+                                root, backup.spill_directory(spill_dir))
         passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
@@ -840,8 +874,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
                                 runtime=installed.runtime) from error
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
-    started = staged.start(root, running)
+    try:
+        accepted = passed.after_acceptance(
+            root, pending, staged, tree, root, backup.spill_directory(spill_dir))
+    finally:
+        # Retirement cannot roll back the accepted runtime or strand its stopped owners.
+        started = staged.start(root, running)
     retired_backups = backup.retain(spill_dir)
-    return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
+    return accepted.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
                            restore_space=restore, backup=backup.report(),
                            retired_backups=retired_backups)

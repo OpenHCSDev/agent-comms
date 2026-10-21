@@ -16,6 +16,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed

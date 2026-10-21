@@ -25,17 +25,17 @@ class GoalWorkDecisions(Carry):
     def ledger_path(root: Path) -> Path:
         return GoalAttemptStore.path_in(root / GoalAttemptStore.root_directory)
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        paths = tuple(path for path in SQLiteFile.files(cls.ledger_path(root)) if path.exists())
+    def backup_files(self) -> tuple[Path, ...]:
+        root = self.root
+        paths = tuple(path for path in SQLiteFile.files(self.ledger_path(root)) if path.exists())
         for path in paths:
-            cls.require_confined(root, path)
+            self.require_confined(root, path)
         return paths
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        path = cls.ledger_path(root)
-        cls.require_confined(root, path)
+    def carry(self) -> Carried:
+        root, apply = self.root, self.apply
+        path = self.ledger_path(root)
+        self.require_confined(root, path)
         if not path.exists():
             return Carried(0)
         with closing(GoalAttemptStore.database(path)) as db:

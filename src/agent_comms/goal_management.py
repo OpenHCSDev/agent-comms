@@ -7,7 +7,6 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +27,6 @@ from .goal_waits import (
     GoalInputReview,
     GoalWait,
     GoalWaits,
-    NoGoalWait,
     RecordedGoalWait,
     StandbyReview,
 )
@@ -38,6 +36,7 @@ from .registration import Registration
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .message_reference import MessageReference
+    from .messages import Message
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
 from .goal_presentation import (
@@ -58,6 +57,7 @@ from .message_bus import MessageBus
 from .threads import Thread
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
+from .bus_tables import DirectReplySource
 
 _LOG = logging.getLogger(__name__)
 
@@ -189,21 +189,27 @@ class Goals:
             sequence for row in unknown.values()
             for sequence in row.bus_sequences_through(after_seq)
         })
+        senders = tuple(target.incarnation.lookup for target in targets)
+        replies: dict[str, Message] = {}
         with self.bus.bus.reading() as source:
-            earlier = source.conversation(
+            # Preserve older UNKNOWN rows; new inputs begin at this wait's own cursor.
+            # Both selections use the same frozen recipient and sender projections.
+            page = source.received(
                 lookup, sequences=sequences, limit=len(sequences), descending=False,
+                sender_lookups=senders, source=DirectReplySource,
             ) if sequences else ()
-            # Retain older UNKNOWN inputs and inspect new frozen-recipient replies
-            # from one cut. Do not truncate the eligible dependency suffix.
-            fresh = source.received(
-                lookup, after=after_seq, limit=source.revision(), descending=False,
-                sender_lookups=tuple(target.incarnation.lookup for target in targets),
-            )
-            replies = {
-                InputDispositions.bus_key(original.message, thread): original.message
-                for original in chain(earlier, fresh)
-                if original.direct_for(lookup) and any(target.sent(original) for target in targets)
-            }
+            while True:
+                replies.update({
+                    InputDispositions.bus_key(original.message, thread): original.message
+                    for record in page for original in record.deliveries()
+                })
+                page = source.received(
+                    lookup, after=after_seq, limit=100, descending=False,
+                    sender_lookups=senders, source=DirectReplySource,
+                )
+                if not page:
+                    break
+                after_seq = page[-1].seq
         document = dispositions.read(tuple(replies))
         for key, message in replies.items():
             row = document.lookup(key)

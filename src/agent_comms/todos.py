@@ -2675,7 +2675,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
         message = goals.bus.bus.lookup_message(self.peer)
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
-                 current.holder not in {mention.name for mention in message.mentions})):
+                 current.holder not in {mention.thread for mention in message.mentions})):
             raise ValueError("--peer must name another sender's message to this unit.")
         self.require_quote(message.body)
         return self

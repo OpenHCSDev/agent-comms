@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import itertools
 import multiprocessing
-import os
 import signal
 import sys
 import time
@@ -36,7 +35,6 @@ from acp import RequestError
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -242,8 +240,6 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         """Run a stored read: its value, a read deferred to retry, or unreadable with its cause."""
         try:
             return ReadValue(read())
-        except RouteIndexRebuilding as error:
-            return ReadPreparing(error)
         except cls.DEFERRED_READS as error:
             return ReadDeferred(error)
         except cls.UNREADABLE_READS as error:
@@ -284,10 +280,6 @@ class StoredRead[T](ABC):
     def raised(self) -> T:
         """The value, or the failure raised again for a caller that answers it itself."""
 
-    def continued(self) -> Self:
-        """This outcome, for a reader that runs the next unit of a bounded preparation."""
-        return self
-
 
 @dataclass(frozen=True)
 class ReadValue[T](StoredRead[T]):
@@ -312,14 +304,6 @@ class ReadDeferred[T](StoredRead[T]):
         return deferred(self.error)
 
     def raised(self) -> T:
-        raise self.error
-
-
-@dataclass(frozen=True)
-class ReadPreparing[T](ReadDeferred[T]):
-    """A bounded route index unit finished and runnable work remains."""
-
-    def continued(self) -> Self:
         raise self.error
 
 
@@ -647,7 +631,7 @@ class ObserveSidebar(InterestRequest):
         visibility = RosterVisibility(self.show_stopped, self.show_archived)
         return UnreadableHistory.outcome(lambda: SidebarObserved(
             revision, self, snapshot := read(subject, visibility), SidebarModel.derive(snapshot),
-        )).continued().answer(  # The sidebar runs the next bounded preparation unit itself.
+        )).answer(
             lambda observed: observed, lambda error: SidebarPreparing(revision, self, error),
             lambda error: SidebarUnreadable(revision, self, error))
 
@@ -697,13 +681,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         key = SidebarSent(revision.expiry_period, type(self.stage), revision)
         if not self.sent.changed_since(key):
             return
-        try:
-            result = self.stage.read(self.request, comms, revision)
-        except RouteIndexRebuilding as error:
-            yield from SidebarPreparing(revision, self.request, error).finish_read(self, key)
-            yield ObservationPending()
-            return
-        yield from result.finish_read(self, key)
+        yield from self.stage.read(self.request, comms, revision).finish_read(self, key)
 
     def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
         self.sent = result.send_state(key)

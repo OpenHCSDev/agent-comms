@@ -65,6 +65,10 @@ class HumanSendRefusedError(ToolRefusedError, HumanSendError):
     """The send transaction rolled back; the human's message was not sent."""
 
 
+class HumanInitialUnknownError(HumanSendError):
+    """A private USER initial may be committed; inspect its ID, never retry."""
+
+
 class CommittedMessageError(RuntimeError):
     """The message was sent; signalling or connection retirement then failed."""
 

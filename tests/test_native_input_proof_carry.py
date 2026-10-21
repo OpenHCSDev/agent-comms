@@ -80,9 +80,10 @@ def test_move_keeps_inode_rows_and_all_sqlite_companions(tmp_path, mode):
     if mode == 'WAL':
         assert len(before) == 3
     transcript = files.session.read_bytes()
-    assert NativeInputProofs.carry(root,apply=False).changed == 1
+    assert NativeInputProofs(root, root, tmp_path / 'spill', False).carry().changed == 1
     assert all(path.exists() for path in before)
-    moved = NativeInputProofs.carry(root,apply=True)
+    move = NativeInputProofs(root, root, tmp_path / 'spill', True)
+    moved = move.carry()
     assert moved.detail['proofs'] == 1
     assert files.input_proof.stat().st_ino == before[legacy]
     assert not any(path.exists() for path in before)
@@ -90,13 +91,13 @@ def test_move_keeps_inode_rows_and_all_sqlite_companions(tmp_path, mode):
     with NativeContextJournal.open_evidence(files) as db:
         rows = NativeContextJournal.select(db)
         assert len(rows)==1 and rows[0].session_id==files.session_id
-    assert NativeInputProofs.carry(root,apply=True).changed == 0
+    assert move.carry().changed == 0
 
 
 def test_scope_and_rename_follow_native_identity_not_filename(tmp_path):
     root=tmp_path/'copy'
     files,legacy=source(root)
-    NativeInputProofs.carry(root,apply=True)
+    NativeInputProofs(root, root, tmp_path / 'spill', True).carry()
     with files.session.open('rb') as transcript:
         transcript.readline()
         start=transcript.tell()
@@ -119,7 +120,7 @@ def test_unknown_or_ambiguous_owner_refuses_before_any_move(tmp_path, owners):
     files,legacy=source(root,owners=owners)
     before=legacy.read_bytes()
     with pytest.raises(RelationViolationError,match='no unique recorded owner'):
-        NativeInputProofs.carry(root,apply=True)
+        NativeInputProofs(root, root, tmp_path / 'spill', True).carry()
     assert legacy.read_bytes()==before and not files.input_proof.exists()
 
 
@@ -130,7 +131,7 @@ def test_collision_never_overwrites_either_proof(tmp_path):
     files.input_proof.write_bytes(b'other proof')
     before=legacy.read_bytes()
     with pytest.raises(RelationViolationError,match='already exists'):
-        NativeInputProofs.carry(root,apply=True)
+        NativeInputProofs(root, root, tmp_path / 'spill', True).carry()
     assert legacy.read_bytes()==before and files.input_proof.read_bytes()==b'other proof'
 
 
@@ -145,7 +146,7 @@ def test_copy_alias_never_changes_the_original(tmp_path,redirect):
     selected.symlink_to(original)
     digest=hashlib.sha256(original.read_bytes()).digest()
     with pytest.raises(RelationViolationError,match='unconfined'):
-        NativeInputProofs.carry(root,apply=True)
+        NativeInputProofs(root, root, tmp_path / 'spill', True).carry()
     assert hashlib.sha256(original.read_bytes()).digest()==digest
     assert not files.input_proof.exists()
 
@@ -156,7 +157,7 @@ def test_unrecognized_companion_is_preserved_and_refused(tmp_path):
     staged=legacy.with_name(legacy.name+'.initializing-123')
     staged.write_bytes(b'unresolved publication')
     with pytest.raises(RelationViolationError,match='unrecognized companions'):
-        NativeInputProofs.carry(root,apply=True)
+        NativeInputProofs(root, root, tmp_path / 'spill', True).carry()
     assert staged.read_bytes()==b'unresolved publication' and legacy.exists()
     assert not files.input_proof.exists()
 

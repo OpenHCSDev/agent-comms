@@ -4,15 +4,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
-from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.locked_store import RegistryFile
-from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
+from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.notification_assignment import (
     AnsweredResponse, AssignmentActivity, NotificationAssignment, UnansweredResponse,
 )
@@ -22,10 +21,9 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.registration import Registration
 from agent_comms.proven_source_coverage import SourcePrefix
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import FullWake, MessageAudience
-from bus_record_fixture import record_from
+from bus_record_fixture import append_reply, record_from
 
 
 @pytest.fixture
@@ -36,21 +34,6 @@ def owner():
 @pytest.fixture
 def peer():
     return RecordedThreadIncarnation("peer", 1001.0)
-
-
-def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole(), answers=()):
-    def build(seq, db):
-        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq, role=role,
-                          answers=answers)
-        audience = freeze_audience(
-            message, (FrozenRecipient(recipient.lookup, recipient.name),), "c" * 64,
-            sender_lookup=sender.lookup, sender_name=sender.name)
-        return PrivateRecord.from_message(
-            message, audience=audience,
-            decisions=resolve_wake_cohort(
-                message, frozen_audience=audience, control=ControlClassification.ORDINARY),
-            control=ControlClassification.ORDINARY.value)
-    return bus.append(build)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))

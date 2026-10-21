@@ -25,6 +25,7 @@ from agent_comms.commander.standing import (
     WaitingUnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderReview
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
@@ -96,6 +97,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     root = tmp_path / 'seed'
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
+    Bus.install(Bus.path_in(root))
     c = Comms(root)
     Bus.install(Bus.path_in(c.root))
     for name in ('lead', 'worker', 'idle'):

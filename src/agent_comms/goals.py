@@ -53,7 +53,6 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .todos import Todo
     from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -508,7 +507,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         pass
 
     def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """Only a thread holding owner requests records a claude-ai directive."""
+        """Only a thread holding owner requests records an owner directive."""
         return goal
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
@@ -551,24 +550,21 @@ class RequestDirective:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
     def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
+        return goals.bus.bus.lookup(self.seq)
 
     def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
         if self.deadline >= now:
             return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
+        with goals.bus.bus.reading() as source:
+            original = source.lookup(self.seq).reference
             replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
+        return not any(reply.sender == owner.name for reply in replies)
 
 
 @dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each claude-ai directive the commander
+    request stays open until no order serving it is open. Each owner directive the commander
     receives is recorded on it when it arrives."""
 
     directives: tuple[RequestDirective, ...] = ()

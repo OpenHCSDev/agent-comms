@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.bus import Bus
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
