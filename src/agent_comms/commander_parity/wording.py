@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable, Iterable
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
 from functools import partial
 from itertools import islice
@@ -206,7 +206,7 @@ class UnitWordingComparison:
         if not cases:
             return UnverifiedParity("No actual live unit message contains wording to correct.")
         original, unit = cases[0]
-        with LifecycleRun.open(extra_threads=(unit,)) as opened:
+        with LifecycleRun.open(extra_threads=(unit,)) as opened, redirect_stdout(io.StringIO()):
             run = replace(opened, worker=unit)
             before = run.create()
             request = CommsCorrectWordingTool(
