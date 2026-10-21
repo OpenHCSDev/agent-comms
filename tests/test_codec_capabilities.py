@@ -15,10 +15,10 @@ from agent_comms.field_codec import (
     AcceptsNull,
     BoundedText,
     EnvelopeSequence,
-    Id128Text,
     ExternalJsonShape,
     FieldCodec,
     FieldRepresentation,
+    Id128Text,
     MalformedRecord,
 )
 from agent_comms.native_startup import NativeStartupPolicy
@@ -40,6 +40,7 @@ from agent_comms.pi_payloads import (
     UnknownData,
     UnknownPayload,
 )
+from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase
 from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
@@ -107,6 +108,7 @@ def test_opaque_retains_the_record_while_known_content_projects_declared_fields(
     (PiDiagnostic, {"type": "future_diagnostic", "extra": [1]}),
     (PiMessage, {"role": "future_message", "extra": [1]}),
     (PiDelta, {"type": "future_delta", "extra": [1]}),
+    (PiEvent, {"type": "future_notice", "extra": [1]}),
 ])
 def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
     unknown, = family.members_with(UnknownPayload)
@@ -117,11 +119,10 @@ def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
     assert unknown.from_wire(wire) == decoded
 
 
-def test_opaque_event_entry_and_tool_data_keep_the_original_external_shape():
+def test_opaque_entry_and_tool_data_keep_the_original_external_shape():
     from agent_comms.native_entries import NativeEntry
 
     for family, wire in (
-        (PiEvent, {"type": "future_notice", "extra": [1]}),
         (NativeEntry, {"type": "future_entry", "timestamp": "2026-10-21T00:00:00Z", "extra": [1]}),
         (NativeToolDetails, {"extra": [1]}),
         (UnknownData, [1, {"extra": True}]),
@@ -158,6 +159,83 @@ async def test_delta_siblings_share_progress_and_inherit_default_emission():
         assert member().retry_progress
     phase = ModelWaitPhase(detail="retained")
     assert phase.model_progress() is phase
+
+
+def test_external_fields_use_their_declared_type_not_their_parent_or_field_name():
+    from agent_comms.pi_payloads import (
+        AbsentMessage,
+        MissingToolResult,
+        NoToolDetails,
+        PiModel,
+        PiPayload,
+        PiToolResult,
+        UnreportedModel,
+    )
+    from agent_comms.pi_vocabulary import (
+        CompactionReason,
+        OverflowCompactionReason,
+        PiStopReason,
+        StopStopReason,
+    )
+
+    @dataclass(frozen=True)
+    class RenamedFields(PiPayload):
+        notice: PiMessage
+        ending: type[PiStopReason]
+        cause: type[CompactionReason]
+        result: PiToolResult
+        extra: NativeToolDetails
+        selected: PiModel
+        history: tuple[PiMessage, ...]
+        optional: PiMessage | None
+
+    decoded = RenamedFields.from_wire({
+        "notice": None, "ending": "stop", "cause": "overflow", "result": None,
+        "extra": None, "selected": None, "history": [{"role": "user", "content": "hi"}],
+        "optional": None,
+    })
+    assert decoded.notice == AbsentMessage()
+    assert decoded.ending is StopStopReason
+    assert decoded.cause is OverflowCompactionReason
+    assert decoded.result == MissingToolResult()
+    assert decoded.extra == NoToolDetails()
+    assert decoded.selected == UnreportedModel()
+    assert decoded.history[0].text == "hi"
+    assert decoded.optional is None
+
+
+@pytest.mark.parametrize("family, spelling", [(PiStopReason, "stop"), (CompactionReason, "overflow")])
+def test_external_name_families_derive_one_default_without_accepting_invalid_values(family, spelling):
+    from agent_comms.field_codec import DefaultExternalName
+    known = family.member_named(spelling)
+    fallback, = family.members_with(DefaultExternalName)
+    assert family.from_external(spelling) is known
+    for value in (None, "future_value"):
+        assert family.from_external(value) is known.from_external(value) is fallback
+    for value in (True, 5, object()):
+        with pytest.raises(MalformedRecord):
+            family.from_external(value)
+
+
+@pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
+def test_measured_totals_share_one_declared_integer_policy(value):
+    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+
+    totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
+              PiContextUsage.from_wire({"tokens": value}).tokens)
+    assert [FieldCodec.encode(total) for total in totals] == ([2, 2] if value == 2 else [None, None])
+
+
+@pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
+def test_exact_response_capability_covers_sdk_and_durable_commands(command):
+    from agent_comms import pi_durable_backend  # Registers the actual host command family.
+    from agent_comms.pi_events import Response
+
+    wire = {"id": "proof", "type": "response", "command": command,
+            "success": False, "error": "failed"}
+    assert Response.from_wire(wire).error.value_or("") == "failed"
+    with pytest.raises(MalformedRecord):
+        Response.from_wire({**wire, "extra": True})
 
 
 def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them():

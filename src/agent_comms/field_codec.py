@@ -37,7 +37,7 @@ from uuid import uuid4
 
 from typing_extensions import TypeAliasType
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
@@ -712,6 +712,37 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
+type ExternalNormalizer = Callable[[object, Mapping[str, object]], object]
+
+
+class ExternalField(ABC):
+    """A declared field type owns its external value and any sibling context it requires."""
+
+    @classmethod
+    @abstractmethod
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object: ...
+
+
+class DefaultExternalName:
+    """The family member selected when an external name is absent or unrecognized."""
+
+
+class ExternalName(ExternalField, DeclaredFamily):
+    @classmethod
+    def from_external(cls, value: object) -> object:
+        if value is not None:
+            try:
+                return cls.member_named(FieldCodec.decode(str, value))
+            except UnknownFamilyMember:
+                pass
+        member, = cast(type[DeclaredFamily], cls._family_root).members_with(DefaultExternalName)
+        return member
+
+    @classmethod
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return FieldCodec.encode(cls.from_external(value))
+
+
 class FieldRepresentation(MroDispatch, ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
@@ -891,7 +922,7 @@ class RecordMember(WireValue):
         return FieldCodec.encode_record(self)
 
 
-class InlineRecord(ExternalJsonShape, WireValue):
+class InlineRecord(WireValue, ExternalJsonShape):
     """A typed field represented by its declared object's sibling wire fields."""
 
     field_plan = InlineFieldPlan
@@ -1166,7 +1197,7 @@ def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
 
 
-class FieldCodec(Sealed):
+class FieldCodec(MroDispatch, Sealed):
     """Family tags use their declared ``family_discriminator`` (default ``kind``); aliases
     use Annotated fields carrying WireName and the other typed directives.
 
@@ -1180,6 +1211,22 @@ class FieldCodec(Sealed):
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
+
+    @classmethod
+    def normalize_external(
+        cls, annotation: object, value: object, record: Mapping[str, object],
+    ) -> object:
+        return compile_decoder(annotation).normalize_external(value, record)
+
+    @classmethod
+    def external_normalizers(cls, target: type) -> Iterator[ExternalNormalizer]:
+        for name in cls.handler_names_for(target):
+            yield getattr(cls, name)(target)
+
+    @handles(ExternalField)
+    @classmethod
+    def external_normalizer(cls, target: type[ExternalField]) -> ExternalNormalizer:
+        return target.normalize_external
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -1634,6 +1681,17 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def encode(self, value: T) -> object: ...
 
+    def normalize_external(self, data: object, record: Mapping[str, object]) -> object:
+        for normalize in self.external_normalizers(data):
+            return normalize(data, record)
+        return data
+
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return ()
+
+    def external_union_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return self.external_normalizers(data)
+
     def accepts_value(self, value: object) -> bool:
         """Select an in-process union case using its compiled declaration."""
         return isinstance(value, self.target)
@@ -1687,6 +1745,12 @@ class ValueDecoder[T](ABC):
 
 class _ContextDecoder[T](ValueDecoder[T]):
     """A standalone decode starts with one empty binding context."""
+
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return FieldCodec.external_normalizers(cast(type, self.target))
+
+    def external_union_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return self.external_normalizers(data) if isinstance(data, dict) else ()
 
     def decode(self, data: object) -> T:
         return self.decode_bound(data, {})
@@ -1782,6 +1846,9 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
 
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return FieldCodec.external_normalizers(self.representation)
+
     @property
     def uses_representation(self) -> bool:
         return True
@@ -1873,6 +1940,9 @@ class _TypeDecoder(_ScalarDecoder):
     ) -> ValueDecoder[object]:
         return cls(target, cast(type, args[0]))
 
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return FieldCodec.external_normalizers(self.bound)
+
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, type) and issubclass(value, self.bound)
 
@@ -1934,6 +2004,12 @@ class UnionDecoder[T](_ContextDecoder[T]):
         alternatives = tuple(compile_decoder(Annotated[item, representation]) for item in args)
         return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
 
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        if data is None:
+            return
+        for alternative in self.alternatives:
+            yield from alternative.external_union_normalizers(data)
+
     @property
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
@@ -1985,6 +2061,13 @@ class _ArrayDecoder(ValueDecoder[Any]):
     ) -> ValueDecoder[object]:
         return _ScalarDecoder(cls.container)
 
+    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+        return (self.normalize_items,) if isinstance(data, list) else ()
+
+    def normalize_items(self, data: object, record: Mapping[str, object]) -> object:
+        return [self.items[0].normalize_external(value, record)
+                for value in cast(list[object], data)]
+
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, self.container)
 
@@ -2034,6 +2117,10 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 
 class _FixedTupleDecoder(_TupleDecoder):
+    def normalize_items(self, data: object, record: Mapping[str, object]) -> object:
+        return [plan.normalize_external(value, record)
+                for plan, value in zip(self.items, cast(list[object], data), strict=True)]
+
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
 

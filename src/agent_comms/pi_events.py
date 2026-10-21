@@ -5,13 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import agent_events as events
-from .acp_failure import UnrecordedFailureSource
 from . import turn_phase as phases
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .acp_failure import UnrecordedFailureSource
 from .field_codec import FieldCodec, WireName, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
@@ -25,10 +23,10 @@ from .pi_payloads import (
     MissingToolResult,
     NoDelta,
     Opaque,
+    OpenPayload,
     PiDelta,
     PiMessage,
     PiOmitted,
-    PiPayload,
     PiRequestId,
     PiResponseData,
     PiToolResult,
@@ -37,6 +35,7 @@ from .pi_payloads import (
     ReportedCompaction,
     ReportedFlag,
     ReportedText,
+    UnknownPayload,
     UnreportedUsage,
 )
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
@@ -77,10 +76,8 @@ class PiTurnPhase:
 
 
 @dataclass(frozen=True)
-class PiEvent(PiTurnPhase, PiPayload, DeclaredFamily):
+class PiEvent(PiTurnPhase, OpenPayload, affix=""):
     """One declaration-owned record received by the Pi RPC channel."""
-
-    wire_tag = "type"
 
     def __init_subclass__(
         cls, *, starts: type[phases.TurnPhase] | None = None,
@@ -107,29 +104,6 @@ class PiEvent(PiTurnPhase, PiPayload, DeclaredFamily):
     def wire_kind(cls) -> str:
         """The Pi ``type`` this member converts."""
         return cls.declared_name
-
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "message" and target is PiMessage and value is None:
-            return {"kind": AbsentMessage.declared_name}
-        if key == "reason" and target == type[CompactionReason]:
-            return FieldCodec.encode(CompactionReason.from_external(value))
-        if target is PiToolResult:
-            return PiToolResult.normalize_wire(value)
-        if target is ProviderRetryOutcome:
-            return ProviderRetryOutcome.normalize_wire(record)
-        return super().normalize_field(target, key, value, record)
-
-    @classmethod
-    def wire_member(cls, wire):
-        try:
-            return cls.member_named(wire.get("type")).wire_case(wire)
-        except UnknownFamilyMember:
-            return UnknownPiEvent
-
-    @classmethod
-    def wire_case(cls, wire):
-        return cls
 
     def convert(self):
         return ()
@@ -193,7 +167,7 @@ class IgnoredDurableEvent(Opaque, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class UnknownPiEvent(Opaque, NativePiEvent, DurablePiEvent):
+class UnknownPiEvent(UnknownPayload, NativePiEvent, DurablePiEvent):
     """Ignore unrecognized events; they do not prove permission to start input."""
 
     @classmethod
@@ -783,26 +757,6 @@ class Response(NativePiEvent, DurablePiEvent):
             "success": FieldCodec.encode(self.success),
             "error": FieldCodec.encode(self.error),
         }
-
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        owner = PiCommand.response_owner(record.get("command"))
-        if key == "command":
-            if owner.strict_response:
-                success = record.get("success")
-                payload = "data" if success is True else "error" if success is False else None
-                if (payload is None
-                    or set(record) != {"id", "type", "command", "success", payload}
-                    or payload == "error" and not isinstance(record[payload], str)):
-                    raise ValueError("Unexpected selected response envelope")
-            return FieldCodec.encode(owner)
-        if key == "data":
-            return (
-                {"kind": MissingData.declared_name}
-                if value is None
-                else owner.response_payload.normalize_wire(value)
-            )
-        return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         owner = session.native.reader.correlate(self)

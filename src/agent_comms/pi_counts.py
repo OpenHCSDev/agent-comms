@@ -44,6 +44,15 @@ class PiCountWire(AcceptsNull):
         return {"anyOf": [FieldCodec.value_schema(int), UnreportedCount.schema()]}
 
 
+class TotalCountWire(PiCountWire):
+    """A measured total is unreported unless Pi supplied an integer."""
+
+    @classmethod
+    @boundary_decoder
+    def decode(cls, value: object) -> PiCount:
+        return super().decode(value) if type(value) is int else UnreportedCount()
+
+
 class NonnegativeCountWire(PiCountWire):
     """Message and component counts may explicitly report zero."""
 
@@ -153,3 +162,4 @@ class ReportedCount(PiCount):
 
 
 NonnegativePiCount = Annotated[PiCount, NonnegativeCountWire]
+TotalPiCount = Annotated[PiCount, TotalCountWire]
