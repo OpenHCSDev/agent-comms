@@ -535,13 +535,9 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Replace a wrong check of a pending or claimed order using the same rule as send; the
-        order family owns which orders take one. done still checks the delivered SHA."""
+        """Replace a wrong check of a pending or claimed order using the same rule as send; Core
+        refuses any other order (ProblemOrder.correctable). done still checks the delivered SHA."""
         todo = self.comms.goals.todos.get(pid)
-        try:
-            todo.order.correctable()
-        except ValueError as refused:
-            sys.exit(f'Refused: {pid}: {refused}')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
