@@ -10,9 +10,14 @@ from inspect import get_annotations
 from typing import Annotated, get_type_hints
 
 from agent_comms import messages
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.envelope_claim_transitions import (
+    ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim, UnclaimedResource,
+)
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, Index, SharedFileTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index, SharedFileTables, TypedTable
 from agent_comms.message_reference import MessageReference
 
 
@@ -80,6 +85,93 @@ class BusRow(TypedTable, BusTables):
         ).fetchone()[0])
 
 
+@dataclass(frozen=True)
+class ClaimOperations(TypedTable, BusProjectionTables):
+    """An acquisition's consumed operation refers to its original claim row."""
+
+    operation_id: Annotated[str, Column(primary_key=True)]
+    seq: int
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(("seq",), messages.Claimed.table, ("seq",)),)
+
+    @classmethod
+    def used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
+        return cls.exists(db, where="{operation_id} = ?", parameters=(operation_id,))
+
+
+@dataclass(frozen=True)
+class HeldResources(TypedTable, BusProjectionTables):
+    """Current membership references the canonical transition, never a copy."""
+
+    resource: Annotated[str, Column(primary_key=True)]
+    claim_seq: int
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(("claim_seq",), messages.Claimed.table, ("seq",)),)
+
+    @classmethod
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
+        originals = messages.Claimed.table.select(
+            db, where=f'{{seq}}=(SELECT claim_seq FROM "{cls.declared_name}" WHERE resource=?)',
+            parameters=(resource,),
+        )
+        return next((row.claim_transition.claimed(resource) for row in originals), UnclaimedResource())
+
+    @classmethod
+    def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:
+        return cls._project(db, cls.select(db), BusRow.last_seq(db))
+
+    @classmethod
+    def claims_for(
+        cls, db: sqlite3.Connection, resources: tuple[str, ...], through: int,
+    ) -> ClaimProjection:
+        marks = ",".join("?" for _ in resources)
+        return cls._project(db, cls.select(
+            db, where=f'{{resource}} IN ({marks})', parameters=resources,
+        ), through)
+
+    @classmethod
+    def _project(
+        cls, db: sqlite3.Connection, current: list[HeldResources], through: int,
+    ) -> ClaimProjection:
+        claim_table = messages.Claimed.table
+        last_seq = FieldCodec.decode(int, db.execute(claim_table._sql(
+            f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{claim_table.declared_name}" WHERE {{seq}} <= ?'
+        ), (through,)).fetchone()[0])
+        sequences = tuple({row.claim_seq for row in current})
+        marks = ",".join("?" for _ in sequences)
+        transitions = {row.seq: row.claim_transition for row in claim_table.select(
+            db, where=f'{{seq}} IN ({marks})', parameters=sequences,
+        )}
+        return ClaimProjection(last_seq, {
+            row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current
+        })
+
+    @classmethod
+    def project(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
+        """Validate before the original is inserted; the caller retains the writer."""
+        try:
+            transition.require_new_operation(lambda operation: ClaimOperations.used(db, operation))
+            return transition.project(cls.claims_for(db, transition.resources, transition.seq - 1))
+        except (ClaimTransitionError, IdentityConflict) as error:
+            raise RelationViolationError("Committed claim transition is inconsistent.") from error
+
+    @classmethod
+    def apply(
+        cls, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
+    ) -> None:
+        removed = transition.resources + transition.expired
+        marks = ",".join("?" for _ in removed)
+        cls.delete(db, where=f'{{resource}} IN ({marks})', parameters=removed)
+        for owner in projected.values():
+            cls(owner.resource, owner.seq).insert(db)
+        for operation_id in transition.operation_ids:
+            ClaimOperations(operation_id, transition.seq).insert(db)
+
+
 class _CapabilityTable:
     """A class's table is derived once, after its dataclass decorator has run."""
 
@@ -133,14 +225,17 @@ class BusCapability(BusTables):
     def projections(self):
         return iter(())
 
+    def project_into(self, db: sqlite3.Connection) -> None:
+        for row in self.projections():
+            row.insert(db)
+
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""
         BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
         stored = replace(self, seq=seq)
         for row in stored.rows():
             row.insert(db)
-        for row in stored.projections():
-            row.insert(db)
+        stored.project_into(db)
         return stored.seq
 
 

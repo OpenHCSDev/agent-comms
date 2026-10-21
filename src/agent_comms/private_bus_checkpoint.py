@@ -29,16 +29,7 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar,
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict
 from .coordination_tables.publications import PublicationIntents
-from .envelope_claim_transitions import (
-    ClaimOwner,
-    ClaimProjection,
-    ClaimTransition,
-    ClaimTransitionError,
-    ResourceClaim,
-    UnclaimedResource,
-)
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder, SealExclude
 from .locked_store import DurableFile, SQLiteFile
@@ -50,8 +41,6 @@ from .thread_identity import ThreadIncarnation
 from .typed_table import (
     Column,
     DerivedTables,
-    ForeignKey,
-    Generated,
     Index,
     SharedFileTables,
     SqlValue,
@@ -62,7 +51,6 @@ from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .registry_document import RegistrySnapshot
     from .retained_task_facts import ExactTaskFact
     from .wire_log import WireLog, WireSnapshot
 
@@ -340,31 +328,6 @@ class CheckedRead:
             )
         PublicMessages.require_unused(self.connection, sender, message_id)
 
-    def claim(self, resource: str) -> ResourceClaim:
-        """Look up the current claim for a resource in the checked index."""
-        self.require_open_prefix()
-        return ResourceClaims.owner_for(self.connection, resource)
-
-    def claims_for(self, resources: tuple[str, ...]) -> ClaimProjection:
-        """Read only the requested current holders from the checked index."""
-        self.require_open_prefix()
-        return ResourceClaims.claims_for(self.connection, resources)
-
-    def claim_operation_used(self, operation_id: str) -> bool:
-        self.require_open_prefix()
-        return ClaimCommits.operation_used(self.connection, operation_id)
-
-    def prepare_claim[Change: ClaimTransition](
-        self, transition: Change, registry: RegistrySnapshot,
-    ) -> Change:
-        self.require_open_prefix()
-        return ClaimCommits.prepare(self.connection, transition, registry)
-
-    def claim_projection(self) -> ClaimProjection:
-        """Explicit current-claim inspection; no historical bus rows are decoded."""
-        self.require_open_prefix()
-        return ResourceClaims.all_claims(self.connection)
-
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
         """Copy selected row bytes without keeping the lock or database open to decode them.
 
@@ -608,111 +571,6 @@ class CheckpointTable(DerivedTables):
 @dataclass(frozen=True)
 class ResponseKeys(CheckpointTable, TypedTable):
     key: Annotated[str, Column(primary_key=True)]
-
-
-@dataclass(frozen=True)
-class ClaimCommits(CheckpointTable, TypedTable):
-    """Original claim facts, including operation IDs consumed before release.
-
-    Generated columns belong to the typed transition, not another authored
-    encoding. One authorized envelope may acquire several normalized resources.
-    """
-
-    transition: ClaimTransition
-    seq: ClassVar[Generated] = Generated(
-        int,
-        Column(unique=True, generated="json_extract(transition,'$.seq')", nullable=True),
-    )
-    operation_id: ClassVar[Generated] = Generated(
-        str,
-        Column(
-            unique=True,
-            generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')",
-            nullable=True,
-        ),
-    )
-
-    @classmethod
-    def latest_sequence(cls, db: sqlite3.Connection) -> int:
-        original = cls.one(db, where=f'"seq"=(SELECT MAX("seq") FROM "{cls.declared_name}")')
-        return original.transition.seq if original is not None else 0
-
-    @classmethod
-    def operation_used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
-        return cls.one(db, operation_id=operation_id) is not None
-
-    @classmethod
-    def prepare[Change: ClaimTransition](
-        cls, db: sqlite3.Connection, transition: Change, registry: RegistrySnapshot,
-    ) -> Change:
-        previous = ResourceClaims.all_claims(db)
-        projected = transition.apply(previous, registry)
-        transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
-        return replace(transition, expired=tuple(
-            resource for resource in previous
-            if resource not in projected and resource not in transition.resources
-        ))
-
-    def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
-        """Apply this original in the caller's existing prefix transaction."""
-        try:
-            projected = self.transition.project(
-                ResourceClaims.claims_for(db, self.transition.resources)
-            )
-            self.transition.require_new_operation(
-                lambda operation: self.operation_used(db, operation)
-            )
-        except (ClaimTransitionError, IdentityConflict) as error:
-            raise RelationViolationError("Committed claim transition is inconsistent.") from error
-        inserted = super().insert(db)
-        removed = self.transition.resources + self.transition.expired
-        marks = ",".join("?" for _ in removed)
-        ResourceClaims.delete(db, where=f'"resource" IN ({marks})', parameters=removed)
-        for owner in projected.values():
-            ResourceClaims(owner.resource, owner.seq).insert(db)
-        return inserted
-
-
-@dataclass(frozen=True)
-class ResourceClaims(CheckpointTable, TypedTable):
-    """Current membership references its original typed acquisition, never a copy."""
-
-    resource: Annotated[str, Column(primary_key=True)]
-    claim_seq: int
-
-    @classmethod
-    def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("claim_seq",), ClaimCommits, ("seq",),
-                           deferred=True, on_delete="CASCADE"),)
-
-    @classmethod
-    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
-        originals = ClaimCommits.select(
-            db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
-            parameters=(resource,),
-        )
-        return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
-
-    @classmethod
-    def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:
-        return cls._project(db, cls.select(db))
-
-    @classmethod
-    def claims_for(cls, db: sqlite3.Connection, resources: tuple[str, ...]) -> ClaimProjection:
-        marks = ",".join("?" for _ in resources)
-        current = cls.select(db, where=f'"resource" IN ({marks})', parameters=resources)
-        return cls._project(db, current)
-
-    @classmethod
-    def _project(cls, db: sqlite3.Connection, current: list[ResourceClaims]) -> ClaimProjection:
-        owners = {}
-        if current:
-            sequences = tuple(sorted({row.claim_seq for row in current}))
-            marks = ",".join("?" for _ in sequences)
-            originals = ClaimCommits.select(db, where=f'"seq" IN ({marks})', parameters=sequences)
-            transitions = {row.transition.seq: row.transition for row in originals}
-            owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
-        return ClaimProjection(ClaimCommits.latest_sequence(db), owners)
 
 
 @dataclass(frozen=True, kw_only=True)
