@@ -96,7 +96,6 @@ from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
-from .lifecycle_capability import LifecycleCapability, Successful
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
@@ -239,8 +238,9 @@ class TargetAction:
                 'bound_count': len(self.bound)}
 
 
-class TargetOutcome(LifecycleCapability):
+class TargetOutcome:
     """One attempted selection member; failure never claims absence of effects."""
+    successful: ClassVar[bool] = False
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
@@ -250,10 +250,11 @@ class TargetOutcome(LifecycleCapability):
 
 
 @dataclass(frozen=True)
-class TargetCompleted(Successful, TargetOutcome):
+class TargetCompleted(TargetOutcome):
     target: str
     command: CliCommand
     result: Annotated[CliResult, WireForm]
+    successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
@@ -274,12 +275,8 @@ class TargetBatchResult(CliResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     @property
-    def completed_count(self) -> int:
-        return sum(outcome.success_count() for outcome in self.outcomes)
-
-    @property
     def successful(self) -> bool:
-        return self.completed_count == len(self.outcomes)
+        return all(outcome.successful for outcome in self.outcomes)
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(name for outcome in self.outcomes
@@ -725,7 +722,9 @@ class MultipleTargets:
     """Commands accepting a batch own its decoding and execution permission."""
 
     @classmethod
-    def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
+    def selected_targets(
+        cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]
+    ) -> TargetSelection:
         return TargetSelection.decode(raw, multiple=True)
 
     @classmethod
@@ -2170,11 +2169,8 @@ class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliC
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadTagsCliCommand(CliCommand, declared_name="thread-tags"):
+class ThreadTagsCliCommand(NamedCliCommand, declared_name="thread-tags"):
     help = "Edit thread tags"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
     tags: Annotated[
         frozenset[str],
         Normalize(_tags),

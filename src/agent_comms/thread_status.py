@@ -45,7 +45,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
-    receiving: ClassVar[bool]
+    receiving: ClassVar[bool] = False
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
@@ -118,6 +118,7 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     """Shared semantics of running and idle owners; not a second state family."""
 
     active = True
+    receiving = True
 
     def require_active(self) -> None:
         pass
@@ -148,19 +149,17 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
     running = True
-    receiving = True
 
     def require_running(self) -> None:
         pass
 
 
 class IdleThreadStatus(ActiveThreadPresence):
-    receiving = True
+    pass
 
 
 class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
-    receiving = False
 
     def require_stopped(self) -> None:
         pass
@@ -204,8 +203,6 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
 
 
 class ArchivedThreadStatus(ThreadStatus):
-    receiving = False
-
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived
 
@@ -217,8 +214,6 @@ class ArchivedThreadStatus(ThreadStatus):
 
 
 class DeletingThreadStatus(ThreadStatus):
-    receiving = False
-
     def in_view(self, visibility: RosterVisibility) -> bool:
         return False
 

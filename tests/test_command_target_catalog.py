@@ -48,7 +48,7 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)
     result = ArchiveCliCommand.execute_target(
         comms, ArchiveCliCommand.selected_targets(names), {}, confirmed=True)
-    assert result.completed_count == 2 and result.exit_code() == 0
+    assert len(result.outcomes) == 2 and result.exit_code() == 0
     assert tuple(outcome.target for outcome in result.outcomes) == names
     assert all(comms.registry.status(name) == ArchivedThreadStatus() for name in names)
 

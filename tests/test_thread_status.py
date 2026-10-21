@@ -85,7 +85,11 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
             assert replace(individual, read_identity=None) == visible[0].presentation
         else:
             from agent_comms.registry_document import RosterVisibility
-            assert (individual is not None) == expected.in_view(RosterVisibility(archived=True))
+            if expected.in_view(RosterVisibility(archived=True)):
+                assert individual.require("owner") is individual
+            else:
+                with pytest.raises(UnregisteredThreadError):
+                    individual.require("owner")
         with pytest.raises(UnregisteredThreadError):
             comms.views.thread_presentations(("missing",)).require("missing")
         if isinstance(status, CliInboxPresence):
