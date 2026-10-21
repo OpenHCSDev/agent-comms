@@ -1,6 +1,7 @@
 """Row 13 runs the shared copied lifecycle, then reads its original Todo facts."""
 
 from dataclasses import replace
+from time import time
 
 from agent_comms.commander.order import OrderFile
 from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
@@ -36,7 +37,8 @@ class StoryCase(LifecycleCase):
             evidence=(created.order.checked().owner,),
         )
         run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
-        document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
+        document = OrderFile.read(run.document.read_text())
+        document = replace(document, problems=(created.id,), order=document.order.reissued(time()))
         run.commander.send(
             run.worker,
             document,
@@ -87,9 +89,9 @@ class StoryCase(LifecycleCase):
             ("replacement delivered to worker", any(
                 message.message_id == current.latest_message.message_id
                 for message in inbox.messages)),
-            ("replacement is worker's current order", any(
-                todo.id == current.id and todo.order.checked().id == current.order.checked().id
-                for todo in assigned)),
+            ("replacement is worker's current order", current.order.checked().id != rows[0].order.checked().id
+             and any(todo.id == current.id and todo.order.checked().id == current.order.checked().id
+                     for todo in assigned)),
             ("two actual order reads", len(orders) == 2),
             ("one actual fleet read", len(fleets) == 1),
             ("record unchanged by reads", rows[-2] == rows[-1]),
