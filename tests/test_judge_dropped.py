@@ -8,10 +8,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.todos import DroppedVerdict, TodoError
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
-from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture family
-    held_commander,
-    pr_commander,
-)
+pytest_plugins = ("test_held_problem_orders",)
 
 LIVE = "LIVE_MARKER_LINE = 'kept on the checkout head'"
 DROPPED = "DROPPED_MARKER_LINE = 'only on the discarded formatter branch'"

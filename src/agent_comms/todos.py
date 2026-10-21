@@ -2711,7 +2711,7 @@ class DroppedVerdict(ToolCallVerdict):
     added: tuple[str, ...]
     line = "Dropped: on no branch, remote branch or worktree"
 
-    def prepare(self, goals, current):
+    def prepare(self, goals: Goals, current: Todo) -> Self:
         lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
         if not lines:
             raise TodoError(
