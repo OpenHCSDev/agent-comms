@@ -20,6 +20,8 @@ import pytest
 from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 
+from connector_readiness import ConnectorReadiness
+
 from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
@@ -89,20 +91,17 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    environment = {**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
+    readiness = ConnectorReadiness(tmp_path)
+    environment = readiness.environment({**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
-                                       *site.getsitepackages()))}
+                                       *site.getsitepackages()))})
     command = "from agent_comms.connector import main; raise SystemExit(main())"
     before = comms.bus.log.latest_sequence()
     service = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
         env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
-        started = ""
-        while "Running on" not in started:
-            line = service.stdout.readline()
-            assert line, started
-            started += line
+        readiness.wait(service, port)
         if not registered:
             comms.registry.unregister("claude-ai")
             comms.registry.archive("claude-ai")

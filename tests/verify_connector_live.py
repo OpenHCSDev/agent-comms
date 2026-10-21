@@ -7,35 +7,19 @@ from __future__ import annotations
 
 import json
 import os
-import select
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
-import time
 from pathlib import Path
 
+from connector_readiness import ConnectorReadiness
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.wake_candidate_index import WakeCandidateIndex, OutdatedCheckpoint
-
-
-def wait_started(service, log):
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        ready, _, _ = select.select([service.stdout], [], [], max(0, deadline - time.monotonic()))
-        if not ready:
-            break
-        line = service.stdout.readline()
-        log.append(line)
-        if "Running on" in line:
-            return
-        if not line:
-            break
-    raise RuntimeError("Connector failed to start: " + "".join(log))
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -117,7 +101,8 @@ def main(scratch: Path):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        environment = {**os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1"}
+        readiness = ConnectorReadiness(base)
+        environment = readiness.environment({**os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1"})
         # Keep installed entrypoint and interpreter, changing only the source
         # path selected by the caller. Never publish or restart the live service.
         entrypoint = shutil.which("agent-comms-connector")
@@ -126,9 +111,8 @@ def main(scratch: Path):
         service = subprocess.Popen([
             entrypoint, "serve", "--root", str(root), "--port", str(port),
         ], env=environment, stdout=subprocess.PIPE, stderr=errors, text=True)
-        server_log = []
         try:
-            wait_started(service, server_log)
+            readiness.wait(service, port)
             print(f"source={Path(sys.modules['agent_comms.comms'].__file__).parent}")
             print("entrypoint=agent-comms-connector serve --root <scratch> --port <loopback-port>")
             with store.granted("scratch curl proof") as token:
@@ -182,9 +166,9 @@ def main(scratch: Path):
                 print("invalid tool arguments: " + status)
         finally:
             service.terminate()
-            tail, _ = service.communicate(timeout=15)
-            server_log.append(tail)
+            service.communicate(timeout=15)
             errors.close()
+            readiness.close()
             print("connector stopped; HTTP handler tracebacks=" + str(error_path.read_text().count("Error handling request")))
         maintenance_proof(comms)
 

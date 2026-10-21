@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 import os
-import selectors
 import socket
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
+from connector_readiness import ConnectorReadiness
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.host_services import HostService, ServiceNotServingError
 from agent_comms.host_services.connector import SystemdConnectorService
@@ -40,7 +39,8 @@ def connector_service(comms, tmp_path, monkeypatch):
         port = reserved.getsockname()[1]
     children: list[subprocess.Popen] = []
     project = Path(__file__).resolve().parents[1]
-    environment = {**os.environ, "PYTHONPATH": str(project / "src")}
+    readiness = ConnectorReadiness(tmp_path)
+    environment = readiness.environment({**os.environ, "PYTHONPATH": str(project / "src")})
     command = (
         sys.executable, "-u", str(Path(sys.executable).parent / "agent-comms-connector"),
         "serve", "--root", str(copied), "--port", str(port),
@@ -51,24 +51,8 @@ def connector_service(comms, tmp_path, monkeypatch):
             command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         )
         children.append(process)
-        assert process.stdout is not None
-        output = bytearray()
-        deadline = time.monotonic() + 15
-        with selectors.DefaultSelector() as ready:
-            ready.register(process.stdout, selectors.EVENT_READ)
-            while time.monotonic() < deadline:
-                if not ready.select(max(0, deadline - time.monotonic())):
-                    break
-                chunk = os.read(process.stdout.fileno(), 65536)
-                if not chunk:
-                    process.wait(timeout=5)
-                    raise ServiceNotServingError(
-                        f"Connector exited before binding: {output.decode(errors='replace')}"
-                    )
-                output.extend(chunk)
-                if b"Running on " in output:
-                    return process
-        raise ServiceNotServingError(f"Connector did not bind: {output.decode(errors='replace')}")
+        readiness.wait(process, port)
+        return process
 
     class ManagedConnector(SystemdConnectorService, declared_name=None):
         @classmethod
@@ -91,9 +75,10 @@ def connector_service(comms, tmp_path, monkeypatch):
         for process in children:
             if process.poll() is None:
                 process.terminate()
-                process.wait(timeout=5)
+                assert process.wait(timeout=5) == 0  # SIGTERM stops the server cleanly.
             assert process.stdout is not None
             process.stdout.close()
+        readiness.close()
 
 
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
@@ -102,6 +87,22 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
     assert str(Path(sys.executable)) in result
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
+
+
+def test_systemd_restart_declares_readiness_before_restarting(comms, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(subprocess, "run", lambda command, check: commands.append(command))
+    service = SystemdConnectorService(
+        1, launch=LaunchRoot.from_path(comms.root), store=ConnectorStore.owned(),
+    )
+    service.restart()
+    assert "Type=notify" in service.readiness_file.read_text()
+    assert service.readiness_file.parent.name == f"{SystemdConnectorService.unit}.d"
+    assert commands == [
+        ("systemctl", "--user", "daemon-reload"),
+        ("systemctl", "--user", "restart", SystemdConnectorService.unit),
+    ]
 
 
 def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service):
