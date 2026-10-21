@@ -37,11 +37,6 @@ from agent_comms.response_acknowledgement import (
 from agent_comms.typed_table import SQLiteTableName, TypedTable
 
 
-@pytest.fixture
-def bus(tmp_path):
-    return Bus.install(Bus.path_in(tmp_path))
-
-
 def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):
     bus = Bus(Bus.path_in(tmp_path / "not-installed"))
     assert not bus.path.parent.exists()

@@ -319,6 +319,13 @@ def comms(root: Path) -> Comms:
 
 
 @pytest.fixture
+def bus(tmp_path):
+    """A freshly installed bus, shared by the record and recipient test families."""
+    from agent_comms.bus import Bus
+    return Bus.install(Bus.path_in(tmp_path))
+
+
+@pytest.fixture
 def thread_registration(tmp_path_factory):
     from agent_comms.registration import Registration
     return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
