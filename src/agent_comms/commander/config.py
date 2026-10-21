@@ -102,6 +102,13 @@ class CommanderConfig(CommanderRole, BaseModel):
         return next((repo.checkout for repo in self.repos
                      if repo.github.named(name)), Path(name)).resolve()
 
+    def module_repo(self, module: str) -> Repo:
+        """The configured repository whose checkout holds ``module``; none is an error."""
+        for repo in self.repos:
+            if (repo.checkout / repo.module_file(module)).is_file():
+                return repo
+        raise ValueError(f'No configured repository holds {module}')
+
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
         self.require_commander(Comms(self.root).registry.require(self.commander))

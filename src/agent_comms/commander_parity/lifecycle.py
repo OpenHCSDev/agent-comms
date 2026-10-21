@@ -150,11 +150,10 @@ class LifecycleRun:
                     f"print(len(json.loads(Path({str(decisions)!r}).read_text())))",
                 )
             )
+            repo = config.module_repo(__name__)
             order = PendingProblemOrder(
-                owner=FileLine(str(Path(__file__).resolve()), 1),
-                check=OrderCheck(
-                    str(Path(__file__).resolve().parents[3]), command, CountCheckResult(0)
-                ),
+                owner=FileLine(str(repo.module_file(__name__)), 1),
+                check=OrderCheck(str(repo.checkout), command, CountCheckResult(0)),
                 edits=(
                     "Remove the copied workflow decision and verify its native order completes.",
                 ),
@@ -187,7 +186,8 @@ class LifecycleRun:
 
     @staticmethod
     def python_environment() -> dict[str, str]:
-        return {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+        """The child runs this interpreter, which already imports this package."""
+        return dict(os.environ)
 
     @classmethod
     def invoke(cls, program: str, *arguments: str) -> ChildResult:
@@ -202,7 +202,8 @@ class LifecycleRun:
 
     def create(self) -> Todo:
         self.commander.problem(
-            str(self.document), self.worker, f"{Path(__file__).resolve()}:1"
+            str(self.document), self.worker,
+            f"{self.commander.module_repo(__name__).module_file(__name__)}:1",
         )
         rows = tuple(self.commander.comms.goals.todos.for_commander(self.commander.incarnation))
         if len(rows) != 1:

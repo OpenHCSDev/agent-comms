@@ -9,7 +9,9 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import ClassVar
 
+from agent_comms.change_report import FileLine
 from agent_comms.child_process import ChildOutcome, ChildResult, ExitedOutcome
 from agent_comms.commander.order import OrderFile
 from agent_comms.commander_parity import ParityComparison
@@ -72,6 +74,7 @@ class DeliveryComparison(ParityComparison):
 @dataclass(frozen=True)
 class DeliveryRepository:
     path: Path
+    owner: ClassVar[FileLine] = FileLine("owned.txt", 1)
 
     def git(self, *arguments: str) -> str:
         return subprocess.check_output(
@@ -100,7 +103,9 @@ class DeliveryRepository:
         url = "https://github.com/parity-local/delivery.git"
         repo.git("config", f"url.{remote}.insteadOf", url)
         repo.git("remote", "add", "origin", url)
-        repo.git("commit", "-q", "--allow-empty", "-m", "copied delivery base")
+        (path / repo.owner.file).write_text("The copied order owns this line.\n")
+        repo.git("add", repo.owner.file)
+        repo.git("commit", "-q", "-m", "copied delivery base")
         repo.git("push", "-q", "origin", "main")
         repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         return repo
@@ -138,7 +143,8 @@ class DeliveredCommitCase:
         document = replace(
             document,
             order=replace(
-                document.order, check=replace(document.order.check, directory=str(repository.path))
+                document.order, owner=repository.owner,
+                check=replace(document.order.check, directory=str(repository.path)),
             ),
         )
         run.document.write_text(json.dumps(FieldCodec.encode(document)))
@@ -148,7 +154,7 @@ class DeliveredCommitCase:
             for todo in run.commander.comms.goals.todos.for_commander(run.commander.incarnation)
         }
         run.commander.problem(
-            str(run.document), run.worker, f"{Path(__file__).resolve()}:1"
+            str(run.document), run.worker, repository.owner.to_wire()
         )
         (created,) = (
             todo
