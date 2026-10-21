@@ -48,6 +48,9 @@ class UpgradeRefused(CoordinationError):
     def __str__(self) -> str:
         return f"{self.prefix} {super().__str__()}"
 
+    def lines(self) -> tuple[str, ...]:
+        return (f"Install failed: {self}",)
+
     @classmethod
     def public_message(cls, output: str) -> str:
         for line in reversed(output.splitlines()):
