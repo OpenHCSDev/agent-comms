@@ -7,12 +7,14 @@ import os
 import secrets
 import shutil
 import json
+import logging
 import time
 from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.active_route import active_route_path
@@ -176,6 +178,36 @@ async def test_a_request_without_an_approved_token_is_refused(client, store):
         assert refused.status == 401
         assert "oauth-protected-resource" in refused.headers["WWW-Authenticate"]
     assert (await client.get("/.well-known/oauth-authorization-server")).status == 200
+
+
+async def test_a_refused_call_answers_its_own_request_id(client, store):
+    """A client waits forever on a call whose refusal carries a null id."""
+    token = await approved_token(client, store)
+    call = {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "comms_channels", "arguments": {}, "undeclared": {}}}
+    refused = await (await client.post(
+        "/mcp", json=call, headers={"Authorization": f"Bearer {token}"})).json()
+    assert refused["id"] == 7
+    assert "undeclared" in refused["error"]["message"]
+
+
+async def test_request_log_names_the_route_and_never_its_values(client, store, root, caplog):
+    """Served as run_app serves it, with aiohttp's raw access log off."""
+    runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
+                           access_log=None)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    try:
+        with caplog.at_level(logging.INFO):
+            async with ClientSession() as session:
+                await session.get(f"http://127.0.0.1:{runner.addresses[0][1]}/authorize",
+                                  params={"state": "one-use-value"})
+    finally:
+        await runner.cleanup()
+    lines = [record.getMessage() for record in caplog.records]
+    assert any("/authorize" in line and " 400 " in line for line in lines), lines
+    assert all("one-use-value" not in line for line in lines), lines
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
