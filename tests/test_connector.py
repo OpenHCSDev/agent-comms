@@ -414,10 +414,10 @@ async def test_connector_lists_every_tool(client, store, comms):
     token = await approved_token(client, comms)
     headers = {"Authorization": f"Bearer {token}"}
     listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
-    family = ToolRequest.members_with(ToolRequest)
-    assert [tool["name"] for tool in listed] == [tool.declared_name for tool in family]
+    family = Connector.exposed()
+    assert [tool["name"] for tool in listed] == list(family)
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
-        issubclass(tool, ReadTool) for tool in family]
+        issubclass(tool, ReadTool) for tool in family.values()]
     # Every write tool says, from the one write marker, that claude-ai may act on its authorization.
     writes = [tool["description"] for tool in listed if not tool["annotations"]["readOnlyHint"]]
     assert writes and all(description.endswith(ToolRequest.bus_effect) for description in writes)
