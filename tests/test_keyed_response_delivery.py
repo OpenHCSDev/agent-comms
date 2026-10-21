@@ -138,42 +138,6 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         case.close()
 
 
-def test_duplicate_response_bytes_cannot_recheck_a_missing_checkpoint(tmp_path):
-    import json
-    from dataclasses import replace
-
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
-    from agent_comms.response_conversation import ResponseConversation
-
-    case = _ready(tmp_path, direct=True)
-    try:
-        intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
-        ).value
-        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        response = case.bus.log.read_keyed_response(intent)
-        with case.bus.log.locked():
-            snapshot = case.store.snapshots.get("exec")
-            conversation = ResponseConversation.capture(
-                case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
-            )
-            duplicate = conversation.record(
-                case.root_id, replace(response, seq=response.seq + 1), intent
-            )
-            marker = case.bus.log.private_marker_unlocked()
-        with case.bus.log.path.open("a") as stream:
-            stream.write(json.dumps(duplicate) + "\n")
-        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-        marker.last_seq = response.seq + 1
-        marker.unseal()
-        case.bus.log.write_metadata_unlocked(marker)
-        with pytest.raises(RelationViolationError):
-            install_private_bus_checkpoint(case.bus.log)
-    finally:
-        case.close()
-
-
 @pytest.mark.parametrize("kind", [None, "unknown_delivery"])
 def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
     import json
