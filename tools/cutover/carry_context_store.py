@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import tempfile
 from abc import abstractmethod
-from contextlib import ExitStack, closing
-from dataclasses import dataclass, field, replace
+from collections.abc import Iterator
+from contextlib import ExitStack, closing, contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, BinaryIO, ClassVar, Literal
 
 from agent_comms.context_store import (
     AbsentContext,
@@ -18,17 +20,13 @@ from agent_comms.context_store import (
     ContextStoreInfo,
     RecordedContextState,
 )
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
-from agent_comms.private_bus_checkpoint import (
-    _SEED,
-    CheckedPrefix,
-    WritableCheckpoint,
-    _chain,
-    _connect,
-    _directory_sync,
-)
+from agent_comms.field_codec import FieldCodec, Id128Text, WireName
+from agent_comms.installer.carry import Carried, Carry
+from agent_comms.locked_store import DurableFile, SQLiteFile
+from agent_comms.private_path import FileRevision, PrivateFileRole
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_context import (
     ContextEntryManifest,
@@ -38,10 +36,97 @@ from agent_comms.turn_context import (
     SegmentManifest,
 )
 from agent_comms.typed_table import Column, Index, TypedTable
-from agent_comms.wire_log import WireLog
-from agent_comms.wire_record import WireRecord
 
-from agent_comms.installer.carry import Carried, Carry
+from .carry_bus_history import BusHistory, HistoryMetadata
+
+
+@dataclass(frozen=True)
+class ContextMarker(HistoryMetadata):
+    """Only the original root and sequence boundary participate in this conversion."""
+
+    root_id: Annotated[str, WireName("wire_root_id")]
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        Id128Text.from_text(self.root_id)
+
+
+class ContextCheckpoint(DurableFile, SQLiteFile):
+    """The retired file's location and read-only snapshot, not a runtime index."""
+
+    filename = "private_bus_checkpoint.sqlite3"
+
+    @classmethod
+    @contextmanager
+    def opening(cls, root: Path) -> Iterator[sqlite3.Connection]:
+        path = cls.path_in(root)
+        Carry.require_confined(root, path)
+        PrivateFileRole.require(path.lstat())
+        with closing(CoordinationStore.read_snapshot(path)) as db:
+            yield db
+
+
+@dataclass(frozen=True)
+class ContextPrefix(TypedTable, declared_name="prefix_certificate"):
+    """Read only the old certificate fields needed to prove the complete input."""
+
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
+    version: Literal[2]
+    root_id: str
+    offset: int
+    through_seq: int
+    digest: str
+    tail: str
+
+    seed: ClassVar[bytes] = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
+    tail_bytes: ClassVar[int] = 4096
+    max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
+
+    @classmethod
+    def read_prefix(cls, db: sqlite3.Connection) -> ContextPrefix:
+        row = cls.one(db, singleton=1)
+        if row is None:
+            raise RelationViolationError("Historical context checkpoint has no prefix certificate")
+        return row
+
+    def require_source(self, marker: ContextMarker, stream: BinaryIO) -> None:
+        if (
+            self.root_id != marker.root_id
+            or self.through_seq != marker.last_seq
+            or self.offset != os.fstat(stream.fileno()).st_size
+        ):
+            raise RelationViolationError("Historical context checkpoint is not the complete bus")
+        stream.seek(max(0, self.offset - self.tail_bytes))
+        if hashlib.sha256(stream.read(min(self.tail_bytes, self.offset))).hexdigest() != self.tail:
+            raise RelationViolationError("Historical context checkpoint prefix tail changed")
+
+    def rows(self, stream: BinaryIO) -> Iterator[ContextLine]:
+        stream.seek(0)
+        digest = self.seed
+        while (offset := stream.tell()) < self.offset:
+            raw = stream.readline(min(self.max_row_bytes + 1, self.offset - offset))
+            if len(raw) > self.max_row_bytes or not raw.endswith(b"\n"):
+                raise RelationViolationError(
+                    "Historical context bus has an incomplete/oversized row"
+                )
+            digest = hashlib.sha256(digest + len(raw).to_bytes(8, "big") + raw).digest()
+            yield ContextLine(offset, raw)
+        if digest.hex() != self.digest:
+            raise RelationViolationError("Historical context bus differs from its proved prefix")
+
+
+@dataclass(frozen=True)
+class ContextLine:
+    offset: int
+    raw: bytes
+
+    def move(self, move: ContextMove, output: BinaryIO) -> None:
+        value = FieldCodec.decode(dict[str, object], FieldCodec.parse(self.raw))
+        if FieldCodec.record_key(ContextEnvelope, "observation") in value:
+            FieldCodec.decode(ContextEnvelope, value).observation.move(move, self.offset)
+        else:
+            # Opaque retained messages and sealed claims keep every original byte.
+            output.write(self.raw)
 
 
 # This old declaration exists only at this one-time format boundary: its table marks a bus
@@ -95,12 +180,15 @@ class ContextMove:
     was resolved earlier in the same scan; each is kept by its offset or reference
     and never read back from the log or the store."""
 
-    def __init__(self, context_db: sqlite3.Connection, store: ContextStore) -> None:
-        self.context_db, self.store = context_db, store
-        self.source = ContextStoreInfo.source_in(context_db).initialized(context_db).source
+    def __init__(self, store: ContextStore) -> None:
+        self.store = store
+        with store.writing() as db:
+            ContextStoreInfo.source_in(db).initialized(db)
         self.entries: dict[ContextEntryReference, SegmentManifest] = {}
         self.requests: dict[int, RecordedContextManifest] = {}
-        self.values: dict[int, tuple[tuple[SegmentManifest, tuple[ContextEntryReference, ...]], ...]] = {}
+        self.values: dict[
+            int, tuple[tuple[SegmentManifest, tuple[ContextEntryReference, ...]], ...]
+        ] = {}
         self.priors: dict[ThreadIncarnation, RecordedContextState] = {}
         self.count = 0
 
@@ -108,7 +196,8 @@ class ContextMove:
         # The first value of a journal identity wins, as insert_if_absent keeps it.
         if entry.reference not in self.entries:
             self.entries[entry.reference] = entry.manifest
-            ContextEntry.capture(entry).insert_if_absent(self.context_db)
+            with self.store.writing() as db:
+                ContextEntry.capture(entry).insert_if_absent(db)
 
     def original(self, reference: ContextEntryReference) -> SegmentManifest:
         if reference not in self.entries:
@@ -148,10 +237,10 @@ class ContextMove:
             for header, references in values
         )
         self.priors[record.thread] = self.store.record_after(
-            self.context_db,
-            self.source,
             self.priors.get(record.thread, AbsentContext()),
-            ContextManifest(record.thread, record.turn, segments, record.counter, record.request_id),
+            ContextManifest(
+                record.thread, record.turn, segments, record.counter, record.request_id
+            ),
         )
         self.count += 1
 
@@ -162,9 +251,9 @@ class ContextManifests(Carry):
     def backup_files(self) -> tuple[Path, ...]:
         root = self.root
         return (
-            root / "bus.jsonl",
-            root / "bus_meta.json",
-            root / "private_bus_checkpoint.sqlite3",
+            root / BusHistory.filename,
+            root / ContextMarker.filename,
+            ContextCheckpoint.path_in(root),
             ContextStore.path_in(root),
             *self.derived_files(root),
         )
@@ -183,10 +272,11 @@ class ContextManifests(Carry):
 
     def carry(self) -> Carried:
         root = self.root
-        path = root / "private_bus_checkpoint.sqlite3"
+        path = ContextCheckpoint.path_in(root)
+        self.require_confined(root, path)
         if not path.exists():
             return Carried(0)
-        with closing(_connect(path, readonly=True)) as db:
+        with ContextCheckpoint.opening(root) as db:
             if not RecordedContextManifestSources.present(db):
                 return Carried(0)
             count = RecordedContextManifestSources.count(db)
@@ -198,14 +288,15 @@ class ContextManifests(Carry):
     def _rewrite(cls, root: Path) -> Carried:
         """Convert the selected stopped root under Carry's existing wire lock.
 
-        The old index proves the bus bytes before they move; it is never copied.
-        The rewritten bus gets a fresh index derived from its own rows, so no old
-        table, offset or seal survives the conversion. Practice runs select an
-        already copied root through the normal Carry entrypoint.
+        Prove the old format without importing its deleted runtime. Retain message
+        bytes, move context observations into their existing store, and retire the
+        obsolete index. The later BusHistory carry owns the new bus's indexes; no
+        intermediate private checkpoint is rebuilt.
         """
-        log = WireLog(root / "bus.jsonl")
-        index_path = WritableCheckpoint.path_in(log.path.parent)
-        required = log.path.stat().st_size + index_path.stat().st_size + cls.staging_reserve_bytes
+        source = root / BusHistory.filename
+        cls.require_confined(root, source)
+        index_path = ContextCheckpoint.path_in(root)
+        required = source.stat().st_size + index_path.stat().st_size + cls.staging_reserve_bytes
         filesystem = os.statvfs(root)
         available = filesystem.f_bavail * filesystem.f_frsize
         if required > available:
@@ -215,12 +306,13 @@ class ContextManifests(Carry):
             )
         if ContextStore.path_in(root).exists():
             raise RelationViolationError("Context conversion needs an absent destination store")
-        marker = log.private_marker_unlocked()
-        with closing(_connect(index_path, readonly=True)) as source_db:
-            witness = CheckedPrefix.read_witness(source_db)
+        marker = ContextMarker.read(root)
+        with ContextCheckpoint.opening(root) as source_db:
+            witness = ContextPrefix.read_prefix(source_db)
         with ExitStack() as lifetime:
-            stream = lifetime.enter_context(log.path.open("rb"))
-            witness.require_source(marker, os.fstat(stream.fileno()), stream)
+            stream = lifetime.enter_context(source.open("rb"))
+            revision = FileRevision.from_file(stream)
+            witness.require_source(marker, stream)
             stage = Path(
                 lifetime.enter_context(
                     tempfile.TemporaryDirectory(prefix=".move-context-", dir=root)
@@ -229,23 +321,18 @@ class ContextManifests(Carry):
             # Failed preparation must not leave a partial destination store.
             # Carry's installer backup owns recovery once publication starts.
             store = ContextStore(stage)
-            output_path = stage / "bus.jsonl"
-            digest = _SEED
-            with store.writing() as context_db, output_path.open("w+b") as output:
+            output_path = stage / BusHistory.filename
+            with output_path.open("w+b") as output:
                 os.chmod(output_path, 0o600)
-                move = ContextMove(context_db, store)
-                stream.seek(0)
-                for offset, raw in WireRecord.rows(stream, end=witness.offset):
-                    digest = _chain(digest, raw)
-                    value = FieldCodec.decode(dict[str, object], FieldCodec.parse(raw))
-                    if FieldCodec.record_key(ContextEnvelope, "observation") in value:
-                        FieldCodec.decode(ContextEnvelope, value).observation.move(move, offset)
-                    else:
-                        # Keep every original message byte, including its kind label.
-                        output.write(raw)
-                if digest.hex() != witness.digest:
+                move = ContextMove(store)
+                for line in witness.rows(stream):
+                    line.move(move, output)
+                if (
+                    FileRevision.from_file(stream) != revision
+                    or FileRevision.capture(source) != revision
+                ):
                     raise RelationViolationError(
-                        "Context conversion did not preserve the complete proved prefix"
+                        "Historical context source changed during conversion"
                     )
                 output.flush()
                 os.fsync(output.fileno())
@@ -253,18 +340,21 @@ class ContextManifests(Carry):
             derived = cls.derived_files(root)
             for path in derived:
                 path.unlink()
-            index_path.unlink()
-            os.replace(output_path, log.path)
+            for path in ContextCheckpoint.files(index_path):
+                path.unlink(missing_ok=True)
+            os.replace(output_path, source)
             os.replace(store.path, ContextStore.path_in(root))
-            _directory_sync(log.path)
-            CheckedPrefix._install(log, marker)
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
             return Carried(
                 move.count + 1,
                 {"bus_bytes": size, "requests": move.count},
                 (
-                    "bus.jsonl",
-                    "bus_meta.json",
-                    "private_bus_checkpoint.sqlite3",
+                    BusHistory.filename,
+                    *(path.name for path in ContextCheckpoint.files(index_path)),
                     store.filename,
                     *(path.name for path in derived),
                 ),
