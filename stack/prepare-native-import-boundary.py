@@ -143,9 +143,7 @@ def materialize(source: Path, target: Path) -> None:
                     raise ValueError("MCP copy contains special file")
                 if size > 512 * 1024 * 1024:
                     raise ValueError("MCP copy byte limit exceeded")
-    subprocess.run(
-        ["cp", "-aL", "--no-preserve=links", "--reflink=auto", str(source), str(target)], check=True
-    )
+    shutil.copytree(source, target, symlinks=False)
 
 
 def main(package: Path, dependency_package: Path | None = None) -> None:
