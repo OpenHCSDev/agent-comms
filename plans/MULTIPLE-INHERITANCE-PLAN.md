@@ -73,4 +73,6 @@ No migrations, no carry steps and no extra install rehearsals: nothing stored ch
 
 ## Done means
 
+Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
+
 One capability class or mixin owns each fact; every member that has it inherits it; every reader that branched on it now asks the owner; the replaced flags, rosters, string keys and repeated field lines are deleted with no alias left; stored schemas and records are unchanged; and the actual workflows (installs, order lifecycles, delivery, the CLI) still work. The census then confirms the drop.
