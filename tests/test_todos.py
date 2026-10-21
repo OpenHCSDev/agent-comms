@@ -267,9 +267,19 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
+    from agent_comms.plan_phases import PlanPhase
+
     config = configured_repository(Comms(tmp_path), source)
+    declared = source.module_file(PlanPhase.__module__)
+    plans = config.module_repo(PlanPhase.__module__)
+    target = source.checkout / declared
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes((plans.checkout / plans.module_file(PlanPhase.__module__)).read_bytes())
+    source.git(source.checkout, 'add', str(declared))
+    source.git(source.checkout, 'commit', '-qm', 'Declare the fixture plan owners')
+    source.git(source.checkout, 'push', 'origin', 'main')
     return Commander(commander=lead.name, root=tmp_path, state=tmp_path / "state",
-                     repos=config.repos, worktrees=source.checkout.parent,
+                     repos=(source,), worktrees=source.checkout.parent,
                      scratch=tmp_path, disk=tmp_path)
 
 

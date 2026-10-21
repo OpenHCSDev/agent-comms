@@ -15,6 +15,7 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot, RunnableExecution
 from agent_comms.goals import GitCommandFailed
@@ -68,7 +69,8 @@ class UnitObservation:
     @cached_property
     def due_questions(self) -> tuple[Message, ...]:
         return tuple(
-            message for message in self.questions
+            message
+            for message in self.questions
             if message.timestamp <= self.now - AwaitingCommander.seconds
         )
 
@@ -99,7 +101,7 @@ class UnitObservation:
         )
 
     def require_read(self) -> None:
-        self.questions
+        _ = self.questions
         if self.todos:
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 PresentCheckout(path).require_read()
@@ -143,8 +145,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def asks(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
-        from agent_comms.commander.standing import UnansweredUnitAsks
-
         return UnansweredUnitAsks.for_orders(
             comms,
             commander,

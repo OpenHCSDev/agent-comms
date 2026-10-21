@@ -29,6 +29,7 @@ from agent_comms.storage_rules import (
 )
 from agent_comms.todos import GoalRef, PendingProblemOrder, PresentCheckout
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.ui_model.unit_state import UnitState
 
 
 @pytest.mark.parametrize(
@@ -129,7 +130,8 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, UnitStorage.read.__func__.__code__, monitoring.events.PY_RETURN
         )
-        found = StorageViolation.broken(comms, "lead")
+        found = StorageViolation.broken(
+            comms, "lead", observed=UnitState.current(comms, "lead"))
     finally:
         monitoring.free_tool_id(monitoring.PROFILER_ID)
     assert {type(violation) for violation in found} == expected

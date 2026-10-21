@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.standing import AnswersTo, PlanStalled, SenderMessages, UnansweredBurst
+from agent_comms.commander.questions import SenderMessages, UnansweredBurst
+from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import (
