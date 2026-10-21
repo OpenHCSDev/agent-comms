@@ -18,6 +18,7 @@ from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
 
 
+from .agent_event_updates import AcpEventConsumer
 from .command import Command
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
@@ -220,7 +221,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.subscribe(self.thread, client=ctx.client)
-        await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
+        await agent.turns.publish_turn_state(AcpEventConsumer(agent, ctx.session_id, ctx.client))
         await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
         metadata = await agent.sessions.metadata(ctx.name)
         await ctx.send(
