@@ -36,6 +36,7 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.change_report import (
     FileLine,
     MainRevision,
@@ -55,6 +56,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -767,7 +769,8 @@ class PresentCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = {f"refs/heads/{branch}"
                  for branch, paths in WorkBranches(self.path).worktrees().items()
-                 if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
+                 if any(storage.owns_checkout(owner, checkout, checkout)
+                        for checkout in (Path(path).resolve() for path in paths))}
         return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
@@ -1404,14 +1407,16 @@ class NoSuccessor(NullMember, Successor):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
+class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
-
-    pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
         return "No order"
+
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        """Only pending and claimed orders take a check correction (DeliverableProblemOrder)."""
+        raise ValueError("Only a pending or claimed order takes a check correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1475,7 +1480,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         raise ValueError("This problem already has an order; drop it before linking another.")
 
     def folded(self, into: str, why: str) -> ProblemOrder:
-        if self.pending:
+        if self.items_with(Pending, self):
             raise ValueError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
@@ -1796,12 +1801,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
-
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -1860,6 +1859,12 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
 
+    def corrected(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
+
     def require_delivery(self, order_id: str) -> None:
         if self.id != order_id:
             raise ValueError("The order changed; refresh its state before delivering it.")
@@ -1877,7 +1882,7 @@ class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PendingProblemOrder(DeliverableProblemOrder):
+class PendingProblemOrder(Pending, DeliverableProblemOrder):
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
@@ -1889,7 +1894,6 @@ class PendingProblemOrder(DeliverableProblemOrder):
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         return self.copy_as(ClaimedProblemOrder, claim=claim)
 
-    pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1950,7 +1954,6 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
-    pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
@@ -1980,9 +1983,6 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def closing_artifact(self) -> str:
         return self.delivery.closing_artifact()
-
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
@@ -2097,7 +2097,6 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     previous: Assignment
     why: str
     superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
     def require_close(self) -> None:
@@ -2637,7 +2636,6 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 @dataclass(frozen=True)
 class ReviewedHeadVerdict(QuotedVerdict):
     """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
-    context: ClassVar[str] = "agent-comms/review"
     head: str
 
     def __post_init__(self) -> None:
@@ -2657,14 +2655,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
             raise TodoError("The verdict actor must be the connector reviewer recording it.")
         current = goals.todos.get(problem)
         recorded = self.prepare(goals, current).record(goals, problem)
-        posted = subprocess.run(
-            ("gh", "api", "--method", "POST", f"repos/{recorded.repo.to_wire()}/statuses/{self.head}",
-             "-f", "state=success", "-f", f"context={self.context}",
-             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
-            capture_output=True, text=True, timeout=60,
-        )
-        if posted.returncode:
-            raise TodoError(posted.stderr.strip() or f"Review status on {self.head} failed.")
+        AcceptedHeadReview().post(recorded.repo, self.head, reviewer.name, problem)
         return recorded
 
 
@@ -2855,6 +2846,7 @@ class CorrectCheckTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
         _text(self.reason, "Check correction reason", 2000)
         self.check.require_writable()
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
@@ -3118,7 +3110,7 @@ class Todo(TypedTable):
 
     @property
     def pending(self):
-        return self.order.pending
+        return bool(self.order.items_with(Pending, self))
 
     def story(self) -> ProblemStory:
         implied = frozenset(strike for verdict in self.verdicts

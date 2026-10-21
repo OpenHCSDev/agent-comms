@@ -271,7 +271,7 @@ class FullTick:
                 await observation.effects.turns.goals.schedule_goal(session_id)
                 current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
                 if (
-                    current.turn_record.executing
+                    current.executing
                     or observation.turn_live(session_id)
                 ):
                     return UnsettledTick()

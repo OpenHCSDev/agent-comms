@@ -240,4 +240,4 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
         copied = Comms(copy).registry.require("owner")
         assert copied.turn_lease.identity == lease.identity
-        assert copied.turn_record.read().executing
+        assert copied.executing

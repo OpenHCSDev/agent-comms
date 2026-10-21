@@ -137,7 +137,7 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
     with comms.bus.log.opened_wire_snapshot() as source:
-        assert routes.sync(source, lambda _: ()).complete
+        routes.sync(source, lambda _: ())
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == []
 

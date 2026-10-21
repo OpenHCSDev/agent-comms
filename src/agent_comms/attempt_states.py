@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Failed, Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
@@ -24,11 +25,13 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     def permits_retry(self) -> bool:
         return False
 
-    terminal: ClassVar[bool] = False
+    def accepts_active_execution(self) -> bool:
+        """Only a live attempt can support the execution's current pointer."""
+        return False
+
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
@@ -74,10 +77,6 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
 
     @classmethod
     @abstractmethod
-    def successors(cls) -> tuple[type[AttemptState], ...]: ...
-
-    @classmethod
-    @abstractmethod
     def load(cls, lease: int | None, done: bool, dead: bool) -> AttemptState: ...
 
 
@@ -91,12 +90,15 @@ class LiveAttempt(AttemptState):
         if type(self.lease_expires_at_ms) is not int or self.lease_expires_at_ms < 0:
             raise IntegrityViolationError("active attempt requires a lease")
 
+    def accepts_active_execution(self) -> bool:
+        return True
+
     @classmethod
     def load(cls, lease, done, dead):
         return cls(lease, done, dead)
 
 
-class TerminalAttempt(AttemptState):
+class TerminalAttempt(Terminal, AttemptState):
     @property
     def replay_contribution(self) -> ReplayFact:
         from .coordination_tables.attempts import ReplayFact
@@ -110,7 +112,6 @@ class TerminalAttempt(AttemptState):
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
 
-    terminal = True
     preserve_check = False
 
     @property
@@ -283,25 +284,15 @@ class SucceededAttempt(TerminalAttempt):
 
     succeeded = True
 
-    @classmethod
-    def successors(cls):
-        return ()
 
-
-class UnsuccessfulTerminal(TerminalAttempt):
+class UnsuccessfulTerminal(Failed, TerminalAttempt):
     """A terminal attempt that did not succeed, irrespective of retry authority."""
-
-    failed = True
 
     def disposition(self, snapshot, attempt):
         from .execution_states import FailedExecution
         from .obligation_states import FailedResponse
 
         return FailedExecution(attempt.attempt_ordinal), FailedResponse()
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 class RetryPredecessor:
