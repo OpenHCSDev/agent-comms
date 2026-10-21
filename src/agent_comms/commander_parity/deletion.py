@@ -254,6 +254,7 @@ class NativeDeletionPath(DeletionPath):
                     ),
                     review_at=RecordedEventTime(time.time() + 3600),
                     commander=run.commander.commander,
+                    assigner=run.commander.actor_identity,
                 ),
             )
         )

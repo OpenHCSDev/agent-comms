@@ -35,7 +35,6 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
-from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
@@ -215,6 +214,42 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         return tuple(found)
 
 
+@dataclass(frozen=True, slots=True)
+class SenderMessages(UnansweredUnitAsks):
+    """Everything the other side sent the commander in the window, answered or not."""
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            return tuple(row.message for row in self.indexed_records(source, offsets)
+                         if row.message.sender not in self.scope.first_names
+                         and row.message.timestamp <= self.before)
+
+
+@dataclass(frozen=True, slots=True)
+class UnansweredBurst(UnansweredUnitAsks):
+    """A sender whose messages arrive as one burst: an answer to any of its messages covers
+    everything it sent before that answer, so the commander answers a burst once, not once per
+    line. Only what it sent after the newest such answer is still open."""
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        replied: dict[MessageReference, float] = {}
+        sent: list[Message] = []
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    for answered in message.answers:
+                        replied[answered] = max(replied.get(answered, 0.0), message.timestamp)
+                else:
+                    sent.append(message)
+        covered = max((replied[m.reference] for m in sent if m.reference in replied), default=0.0)
+        return tuple(m for m in sent if covered < m.timestamp <= self.before)
+
+
 class PlanRule(UndatedStandingRule, declared_name=None):
     """A rule read from one look at the plans and the commander's orders."""
 
@@ -353,11 +388,11 @@ class UnownedWheelSpin(UndatedStandingRule):
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
                      if not todo.holder_state.current_assignments())
-        return cls.paired(comms, commander, rows, actor)
+        return cls.paired(comms, commander, rows)
 
     @classmethod
-    def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
-               assigner: ThreadIncarnation) -> tuple[UnownedWheelSpin, ...]:
+    def paired(cls, comms: Comms, commander: str,
+               todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
         """Both the heartbeat and automatic watcher preserve work before any dispatch."""
         rows = tuple(todo for todo in todos if todo.pending)
         retained = tuple(CheckoutHeldWheelSpin(todo, work)
@@ -371,7 +406,7 @@ class UnownedWheelSpin(UndatedStandingRule):
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        ReissuedOrderGoalAction.for_todo(todo, commander, assigner), unit)))
+                        ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
@@ -428,9 +463,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
             mine = (todo for todo in available if todo.creator_identity.name == name)
             observed.extend(
                 UnownedObservation(commander, rule)
-                for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, CoreWatcherIncarnation.watcher()
-                )
+                for rule in UnownedWheelSpin.paired(comms, name, mine)
             )
         return tuple(observed)
 
