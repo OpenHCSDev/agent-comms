@@ -178,6 +178,17 @@ async def test_a_request_without_an_approved_token_is_refused(client, store):
     assert (await client.get("/.well-known/oauth-authorization-server")).status == 200
 
 
+async def test_a_refused_call_answers_its_own_request_id(client, store):
+    """A client waits forever on a call whose refusal carries a null id."""
+    token = await approved_token(client, store)
+    call = {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+            "params": {"name": "comms_channels", "arguments": {}, "undeclared": {}}}
+    refused = await (await client.post(
+        "/mcp", json=call, headers={"Authorization": f"Bearer {token}"})).json()
+    assert refused["id"] == 7
+    assert "undeclared" in refused["error"]["message"]
+
+
 async def test_registration_accepts_only_the_claude_callback(client):
     refused = await client.post(
         "/register", json={"redirect_uris": ["https://elsewhere.example/cb"]}

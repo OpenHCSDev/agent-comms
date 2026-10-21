@@ -253,8 +253,18 @@ class InvalidMcpRequest:
 
 @dataclass(frozen=True)
 class McpErrorReply(McpEnvelope):
+    """A refusal answers the request it refuses: JSON-RPC allows a null id only when the
+    request's own id cannot be read, and a client never matches a null id to its call."""
+
     error: InvalidMcpRequest
-    id: None = None
+    id: int | str | None = None
+
+    @classmethod
+    def refusing(cls, data: object, error: Exception) -> Self:
+        match data:
+            case {"id": int() | str() as request_id}:
+                return cls(InvalidMcpRequest(str(error)), request_id)
+        return cls(InvalidMcpRequest(str(error)))
 
 
 @dataclass(frozen=True)
@@ -341,6 +351,10 @@ class McpMessage(DeclaredFamily, affix="Message"):
     def received(cls, data: object) -> Self:
         return FieldCodec.decode(cls, data)
 
+    @property
+    def log_name(self) -> str:
+        return str(type(self).declared_name)
+
     @abstractmethod
     async def answer(self, connector: Connector) -> web.Response: ...
 
@@ -406,6 +420,10 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
 class ToolsCallMessage(McpMessage, declared_name="tools/call"):
     id: int | str
     params: ToolCall
+
+    @property
+    def log_name(self) -> str:
+        return f"{super().log_name} {self.params.name}"
 
     async def answer(self, connector: Connector) -> web.Response:
         return web.json_response(
@@ -626,12 +644,19 @@ class Connector:
                 }
             )
         try:
-            message = McpMessage.received(await request.json())
-        except (MalformedRecord, json.JSONDecodeError) as error:
-            return web.json_response(
-                FieldCodec.encode(McpErrorReply(InvalidMcpRequest(str(error))))
-            )
-        return await message.answer(self)
+            data = await request.json()
+        except json.JSONDecodeError as error:
+            logging.warning("MCP request is not JSON: %s", error)
+            return web.json_response(FieldCodec.encode(McpErrorReply.refusing(None, error)))
+        try:
+            message = McpMessage.received(data)
+        except MalformedRecord as error:
+            logging.warning("MCP request refused: %s", error)
+            return web.json_response(FieldCodec.encode(McpErrorReply.refusing(data, error)))
+        started = time.monotonic()
+        response = await message.answer(self)
+        logging.info("MCP %s answered in %.3fs", message.log_name, time.monotonic() - started)
+        return response
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -672,7 +697,10 @@ class ServeVerb(ConnectorVerb):
             app = connector.application()
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
-        web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
+        # One line per request; the format names no header, so no bearer token is logged.
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+        web.run_app(app, host=LOOPBACK, port=self.port,
+                    access_log_format='"%r" %s %b %Tfs')
         return 0
 
 
