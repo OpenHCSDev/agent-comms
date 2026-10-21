@@ -96,7 +96,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                 assert [m.body for m in read_history(comms, "#all")] == [
                     "headless native route"
                 ]
-                assert not comms.registry.require("headless").active_turn.executing
+                assert not comms.registry.require("headless").executing
             finally:
                 await client.shutdown()
         assert not comms.registry.require("headless").process_alive

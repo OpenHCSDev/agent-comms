@@ -467,7 +467,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         if restart_after_reply:
             # Continue the same real owner/ACP/native journey from saved state.
             await until(
-                lambda: all(not comms.registry.require(name).active_turn.executing for name in projects),
+                lambda: all(not comms.registry.require(name).executing for name in projects),
                 "Both native turns released before guarded restart",
             )
             before = comms.registry.snapshot()
