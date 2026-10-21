@@ -161,6 +161,26 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     assert transferred.status.without_work() is transferred.status
 
 
+@pytest.mark.parametrize("status,listed,rename", [
+    (RunningThreadStatus(), True, True),
+    (IdleThreadStatus(), True, False),
+    (ConnectedThreadStatus(), True, True),
+    (NoBridgeThreadStatus(), True, True),
+    (StoppedThreadStatus(), False, False),
+    (ArchivedThreadStatus(), False, False),
+    (DeletingThreadStatus(), False, False),
+])
+def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
+    from agent_comms.registry_document import RosterVisibility
+
+    assert status.in_view(RosterVisibility(stopped=False)) == listed
+    if rename:
+        status.require_self_rename()
+    else:
+        with pytest.raises(RelationViolationError, match="Only a running thread"):
+            status.require_self_rename()
+
+
 def test_roster_and_controls_keep_archived_threads_dormant():
     from agent_comms.tools import CommsStartTool, ToolRequest
     from agent_comms.thread_execution import OwnerLifecycleControl

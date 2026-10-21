@@ -1769,8 +1769,8 @@ class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
         return (cls.thread_binding(thread),) if cls.available_for_thread(thread, status) else ()
 
     @classmethod
-    @abstractmethod
-    def thread_binding(cls, thread: Thread) -> Self: ...
+    def thread_binding(cls, thread: Thread) -> Self:
+        return cls(name=thread.name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1778,10 +1778,6 @@ class ThreadLifecycleCliCommand(MultipleTargets, ThreadBoundCliCommand):
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
-
-    @classmethod
-    def thread_binding(cls, thread):
-        return cls(name=thread.name)
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
@@ -1866,10 +1862,6 @@ class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, ThreadBoundCliComm
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
-
-    @classmethod
-    def thread_binding(cls, thread):
-        return cls(name=thread.name)
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)
