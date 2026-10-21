@@ -81,14 +81,12 @@ class RecordedBuildIdentity(BuildIdentity):
         )
 
     def for_repository(self, repository: Repo) -> RepositoryCommit:
-        recorded = next(
-            (record for record in self.commits if record.repository == repository.github), None
-        )
-        if recorded is None:
+        try:
+            return next(record for record in self.commits if record.repository == repository.github)
+        except StopIteration as error:
             raise UninstalledRepositoryError(
                 f"Repository {repository.github.to_wire()} at {repository.checkout} is not in installed {self}."
-            )
-        return recorded
+            ) from error
 
     def contains(self, commit: str, directory: Path) -> bool:
         """Prove ancestry against this checkout's installed repository, not its current head."""

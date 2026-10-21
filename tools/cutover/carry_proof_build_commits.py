@@ -11,7 +11,7 @@ from contextlib import closing, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.build_identity import RecordedBuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import BuildIdentity, RecordedBuildIdentity, UnrecordedBuildIdentity
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
@@ -44,9 +44,7 @@ class ProofBuildCommits(Carry):
         cleared = unchanged = 0
         table = Todo.declared_name
         identity = Todo._column_list(("id",))
-        kinds = tuple(
-            member.declared_name for member in OrderDelivery.members_with(CheckedDelivery)
-        )
+        kinds = OrderDelivery.members_with(CheckedDelivery)
         placeholders = ",".join("?" for _ in kinds)
         unrecorded = json.dumps(FieldCodec.encode(UnrecordedBuildIdentity()))
         connection = (
@@ -68,7 +66,13 @@ class ProofBuildCommits(Carry):
                                 f'FROM "{table}" AS todo, json_tree(todo.{column}) AS entry '
                                 f"WHERE entry.key='proof_build' "
                                 f"AND json_extract(todo.{column}, entry.path || '.kind') IN ({placeholders})",
-                                (RecordedBuildIdentity.declared_name, *kinds),
+                                (
+                                    FieldCodec.encode(RecordedBuildIdentity, type[BuildIdentity]),
+                                    *(
+                                        FieldCodec.encode(member, type[OrderDelivery])
+                                        for member in kinds
+                                    ),
+                                ),
                             )
                         )
                     )
