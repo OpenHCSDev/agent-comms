@@ -40,6 +40,8 @@ from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSi
 from agent_comms.work_branches import WorkBranches
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_phases import PlanPhase
 
 
 @dataclass(frozen=True)
@@ -71,13 +73,6 @@ class InstallDue(UndatedStandingRule):
 class HolderCannotRun(UndatedStandingRule, declared_name=None):
     unit: str
     orders: tuple[str, ...]
-
-    @staticmethod
-    def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in StandingRule.pending_todos(comms, commander):
-            held.setdefault(todo.held().owner_identity, []).append(todo)
-        return held
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
@@ -227,16 +222,45 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
 
 
 @dataclass(frozen=True)
+class PlanIdle(UndatedStandingRule):
+    """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
+
+    phase: type[PlanPhase]
+    reading: PlanReading = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading = CommanderConfig.read_root(comms.root).plan_reading(
+            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        )
+        return tuple(
+            cls(phase, reading)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(reading) and not phase.ordered(reading)
+        )
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.phase.task.start(comms, comms.registry.require(commander), self.phase, self.reading)
+
+    def line(self) -> str:
+        return (
+            f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
+            f" ({self.phase.plan.document}), no open order; done when"
+            f" {self.phase.evidence.describe()} -> {self.phase.task.instruction}"
+        )
+
+
+@dataclass(frozen=True)
 class UnitAskUnanswered(UndatedStandingRule):
     unit: str
     reference: MessageReference
     sent_at: float
-    seconds: ClassVar[int] = 15 * 60
+    seconds: ClassVar[int] = 5 * 60
 
     @staticmethod
     def asks(comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
         """Holders' messages to the commander, sent by ``before``, that no commander reply answers."""
-        held = HolderCannotRun.holders(comms, commander)
+        held = StandingRule.holders(comms, commander)
         if not held:
             return ()
         snapshot = comms.registry.snapshot()
