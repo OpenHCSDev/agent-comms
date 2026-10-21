@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import time
 from abc import abstractmethod
-from collections.abc import Iterator
 from dataclasses import dataclass
 from math import isfinite
 
@@ -51,10 +50,6 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
 
-    def timestamps(self) -> Iterator[float]:
-        """Yield only a recorded instant; an unrecorded fact supplies no timestamp."""
-        return iter(())
-
     def chronology(self) -> tuple[int, float]:
         """Undated facts sort after recorded events, without inventing a timestamp."""
         return (1, 0.0)
@@ -95,9 +90,6 @@ class RecordedEventTime(EventTime):
     def __post_init__(self):
         if type(self.at) not in (int, float) or not isfinite(self.at):
             raise ValueError("A recorded event time must be a finite Unix timestamp.")
-
-    def timestamps(self) -> Iterator[float]:
-        return iter((self.at,))
 
     def chronology(self) -> tuple[int, float]:
         return (0, self.at)
