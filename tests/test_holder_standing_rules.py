@@ -395,14 +395,16 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 
+    # The idle outsider takes it: the worker already holds P1 and P2, and the allocation
+    # policy refuses a third order to a holder while a running unit holds none.
     # Problem creates the first order through Commander.send, including its message link.
-    cli('problem', str(order_file), '--to', 'worker', '--where', 'owner.py:2')
+    cli('problem', str(order_file), '--to', 'outsider', '--where', 'owner.py:2')
     first = held_bus.goals.todos.get('P3')
     assert first.messages
     document = replace(document, problems=('P3',),
                        order=replace(document.order, id='replacement-deletion'))
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
-    cli('send', 'worker', str(order_file), '--clean')
+    cli('send', 'outsider', str(order_file), '--clean')
     sent = held_bus.goals.todos.get('P3')
     assert sent.order.check == check
     corrected = 'grep -c "^obsolete" owner.py'
