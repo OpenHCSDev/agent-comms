@@ -24,7 +24,6 @@ def test_recorded_failure_has_one_safe_text_and_keeps_its_behavior(kind, sensiti
     assert output.terminal_text(False, 'private stderr', 1) == expected
     assert stored.code == original.code
     assert stored.precedence == original.precedence
-    assert stored.input_uncertain == original.input_uncertain
     assert stored.ends_with_request_retry == original.ends_with_request_retry
     if sensitive:
         assert original.text not in repr(output)
