@@ -1,4 +1,5 @@
 """Per-input native socket and call identities, shared by declared tool policies."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,9 @@ class ToolConnectionOutcome(ABC):
     """One response attempt decides whether the owner still has a writer to close."""
 
     @classmethod
-    async def send(cls, writer: asyncio.StreamWriter, response: dict[str, object],
-                   answer: str) -> ToolConnectionOutcome:
+    async def send(
+        cls, writer: asyncio.StreamWriter, response: dict[str, object], answer: str
+    ) -> ToolConnectionOutcome:
         try:
             writer.write((json.dumps(response) + "\n").encode("ascii"))
             await writer.drain()
@@ -65,8 +67,8 @@ class ToolChildGone(ToolConnectionOutcome):
         # await its failed close future a second time.
         ownership.pop_all()
         _LOG.warning(
-            "The Pi child stopped waiting for a tool check before its answer "
-            "(%s) could be sent", self.answer,
+            "The Pi child stopped waiting for a tool check before its answer " "(%s) could be sent",
+            self.answer,
         )
 
 
@@ -172,9 +174,7 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
             raise SelectedToolDenied("Native tool request belongs to another round")
         return identity
 
-    def require_current(
-        self, call_id: str, missing_message: str
-    ) -> tuple[ToolCallIdentity, Call]:
+    def require_current(self, call_id: str, missing_message: str) -> tuple[ToolCallIdentity, Call]:
         if self.rounds:
             identity = ToolCallIdentity(self.rounds[-1].number, call_id)
             call = self.get(identity)
@@ -186,7 +186,6 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
         return self[ToolCallIdentity(round_number, call_id)]
 
 
-
 class ToolListener:
     """One private endpoint and joined resource lifetime, independent of child binding."""
 
@@ -195,17 +194,19 @@ class ToolListener:
             Token256Text.decode(token)
         except MalformedRecord as error:
             raise ValueError("Selected tool transport requires a random 256-bit token") from error
-        self.path = Path(directory).absolute() / "s"
+        self.session_directory = Path(directory).absolute()
         self.token = token
         self._resources = AsyncExitStack()
         if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
             raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        PrivateDirectoryRole.require(self.path.parent.lstat())
-        if self.path.parent.resolve() != self.path.parent:
+        PrivateDirectoryRole.require(self.session_directory.lstat())
+        if self.session_directory.resolve() != self.session_directory:
             raise SelectedToolDenied("Selected tool socket parent is not private")
-        if self.path.exists() or self.path.is_symlink():
-            raise SelectedToolDenied("Selected tool socket already exists")
         with ExitStack() as prepared:
+            directory = self.session_directory / self.token[:32]
+            os.mkdir(directory, 0o700)
+            prepared.callback(directory.rmdir)
+            self.path = directory / "s"
             self.address = prepared.enter_context(PrivateSocketRole.address(self.path))
             self.socket = prepared.enter_context(socket.socket(socket.AF_UNIX))
             self.socket.bind(str(self.address))
@@ -220,8 +221,11 @@ class ToolListener:
     async def listen(self, transport: ToolTransport) -> None:
         try:
             self.server = await asyncio.start_unix_server(
-                transport._handle, sock=self.socket, limit=transport.max_request + 1,
-                start_serving=False, cleanup_socket=False,
+                transport._handle,
+                sock=self.socket,
+                limit=transport.max_request + 1,
+                start_serving=False,
+                cleanup_socket=False,
             )
             self._resources.push_async_callback(transport._drain_calls)
             self._resources.push_async_callback(self.server.wait_closed)
@@ -313,8 +317,10 @@ class ToolTransport(Generic[Call]):
             FieldCodec.encode(event.tool_call_id), "Native tool terminal has no declared call"
         )
         call.finish(
-            FieldCodec.encode(event.tool_name), FieldCodec.encode(event.is_error),
-            self.listener.path.parent, input_id,
+            FieldCodec.encode(event.tool_name),
+            FieldCodec.encode(event.is_error),
+            self.listener.session_directory,
+            input_id,
             identity.round_number,
         )
 
@@ -359,8 +365,9 @@ class ToolTransport(Generic[Call]):
         finally:
             self._handlers.discard(task)
 
-    async def _reply(self, reader: asyncio.StreamReader,
-                     writer: asyncio.StreamWriter) -> ToolConnectionOutcome:
+    async def _reply(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> ToolConnectionOutcome:
         try:
             if not self.listener.server.is_serving():
                 raise SelectedToolDenied("Owner tool socket is closed")
