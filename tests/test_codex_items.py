@@ -170,3 +170,18 @@ def test_function_output_names_remain_required_and_strict():
                     "type": "functionCallOutput", "id": "out", "output": "result", **name_fields,
                 },
             }]})
+
+
+def test_shared_tool_input_and_text_display_preserve_external_shapes():
+    from agent_comms.cli_bridges.codex_protocol import ItemEntry, TextInput, ToolText
+
+    assert TextInput(text="visible").display == ToolText(text="visible").display == "visible"
+    for wire in (
+        {"type": "dynamicToolCall", "id": "dynamic", "tool": "example",
+         "arguments": {"path": "input"}, "success": True},
+        {"type": "mcpToolCall", "id": "mcp", "server": "local", "tool": "example",
+         "arguments": {"path": "input"}, "status": "completed"},
+    ):
+        item = ItemEntry.model_validate({"turnId": "turn", "item": wire}).item
+        assert item.arguments == wire["arguments"]
+        assert item.model_dump(mode="json", by_alias=True)["arguments"] == wire["arguments"]

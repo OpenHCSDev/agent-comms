@@ -223,6 +223,10 @@ class Opaque:
         return dict(super().normalize_record(value, data), payload=value)
 
 
+class UnknownPayload(Opaque):
+    """The declaration an open family selects for an unknown external tag."""
+
+
 class StrictFields:
     """A closed native record rejects every undeclared external field."""
 
@@ -276,6 +280,20 @@ class PiPayload:
     def wire_discriminator(self):
         """Refined internal members borrow their original external declaration."""
         return FieldCodec.encode(type(self))
+
+
+class OpenPayload(PiPayload):
+    """An external tag selects its member or the family's declared unknown payload."""
+
+    wire_tag = "type"
+
+    @classmethod
+    def wire_member(cls, value):
+        try:
+            return cls.member_named(value.get(cls.wire_tag))
+        except UnknownFamilyMember:
+            member, = cls._family_root.members_with(UnknownPayload)
+            return member
 
 
 @dataclass(frozen=True)
@@ -436,7 +454,7 @@ class UnreportedUsage(PiUsage):
 
 
 @dataclass(frozen=True)
-class PiContent(PiPayload, DeclaredFamily, affix="Content"):
+class PiContent(OpenPayload, DeclaredFamily, affix="Content"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return ()
 
@@ -450,7 +468,6 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     def assistant_transcript(self, position: int, timestamp: float):
         return []
 
-    wire_tag = "type"
     text: ClassVar[str] = ""
     tool_round_allowed: ClassVar[bool] = False
 
@@ -459,13 +476,6 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         from .native_failures import NativePiUnavailable
 
         raise NativePiUnavailable("Native Pi assistant returned non-text content")
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownContent
 
 
 @dataclass(frozen=True)
@@ -540,7 +550,7 @@ class ImageContent(PiContent):
 
 
 @dataclass(frozen=True)
-class UnknownContent(Opaque, PiContent):
+class UnknownContent(UnknownPayload, PiContent):
     payload: dict[str, Any]
 
     def to_wire(self):
@@ -713,16 +723,8 @@ class ProviderTransportDetails(PiPayload):
 
 
 @dataclass(frozen=True)
-class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
-    wire_tag = "type"
+class PiDiagnostic(OpenPayload, DeclaredFamily, affix="Diagnostic"):
     provider_connection_failure: ClassVar[bool] = False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownDiagnostic
 
     def refine_model_request_failure(self, failure):
         return failure
@@ -757,12 +759,12 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class UnknownDiagnostic(Opaque, PiDiagnostic):
+class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
     payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
-class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+class PiMessage(OpenPayload, DeclaredFamily, affix="Message"):
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
@@ -843,13 +845,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @property
     def retry_progress(self):
         return False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownMessage
 
     @property
     def text(self) -> str:
@@ -1038,22 +1033,14 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownMessage(Opaque, PiMessage):
+class UnknownMessage(UnknownPayload, PiMessage):
     payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
-class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
-    wire_tag = "type"
+class PiDelta(OpenPayload, DeclaredFamily, affix="Delta"):
     progress: ClassVar[bool] = False
     response_progress: ClassVar[bool] = False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownDelta
 
     def events(self):
         return ()
@@ -1068,13 +1055,17 @@ class NoDelta(PiOmitted, PiDelta, declared_name=None):
 
 
 @dataclass(frozen=True)
-class TextDelta(PiDelta, declared_name="text_delta"):
+class ContentDelta(PiDelta, declared_name=None):
     delta: str
-    response_progress = True
 
     @property
     def progress(self):
         return bool(self.delta)
+
+
+@dataclass(frozen=True)
+class TextDelta(ContentDelta, declared_name="text_delta"):
+    response_progress = True
 
     def events(self):
         return (events.Chunk(text=self.delta),)
@@ -1085,13 +1076,7 @@ class TextDelta(PiDelta, declared_name="text_delta"):
 
 
 @dataclass(frozen=True)
-class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
-    delta: str
-
-    @property
-    def progress(self):
-        return bool(self.delta)
-
+class ThinkingDelta(ContentDelta, declared_name="thinking_delta"):
     def events(self):
         return (events.Thinking(text=self.delta),) if self.delta else ()
 
@@ -1099,9 +1084,6 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
 class ToolDelta:
     progress = True
     response_progress = True
-
-    async def emit(self, session):
-        return ()
 
 
 class ToolcallStartDelta(ToolDelta, PiDelta, declared_name="toolcall_start"):
@@ -1117,11 +1099,8 @@ class ToolcallEndDelta(ToolDelta, PiDelta, declared_name="toolcall_end"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownDelta(Opaque, PiDelta):
+class UnknownDelta(UnknownPayload, PiDelta):
     payload: dict[str, Any]
-
-    async def emit(self, session):
-        return ()
 
 
 @dataclass(frozen=True)

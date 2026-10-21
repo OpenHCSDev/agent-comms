@@ -13,22 +13,30 @@ from agent_comms.cli_protocol import TextWire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
     AcceptsNull,
+    BoundedText,
+    EnvelopeSequence,
+    Id128Text,
     ExternalJsonShape,
     FieldCodec,
     FieldRepresentation,
     MalformedRecord,
 )
 from agent_comms.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate
+from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate, RetryProgress
 from agent_comms.pi_payloads import (
+    ContentDelta,
     Opaque,
     PiContent,
+    PiDelta,
+    PiDiagnostic,
+    PiMessage,
     PiResponseData,
     SessionSwitchData,
     StateData,
     StrictFields,
     TextContent,
     UnknownContent,
+    UnknownPayload,
 )
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_phase import AcceptsPrompt, IdlePhase, ModelWaitPhase, TurnPhase
@@ -90,6 +98,45 @@ def test_opaque_retains_the_record_while_known_content_projects_declared_fields(
     known = PiContent.from_wire({"type": "text", "text": "visible", "future": True})
     assert known == TextContent(text="visible")
     assert known.to_wire() == {"type": "text", "text": "visible"}
+
+
+@pytest.mark.parametrize("family, wire", [
+    (PiContent, {"type": "future_content", "extra": [1]}),
+    (PiDiagnostic, {"type": "future_diagnostic", "extra": [1]}),
+    (PiMessage, {"role": "future_message", "extra": [1]}),
+    (PiDelta, {"type": "future_delta", "extra": [1]}),
+])
+def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
+    unknown, = family.members_with(UnknownPayload)
+    decoded = family.from_wire(wire)
+    assert type(decoded) is unknown
+    assert decoded.payload == wire
+    assert unknown.from_wire(wire) == decoded
+
+
+@pytest.mark.parametrize("representation, valid, invalid", [
+    (BoundedText, "visible", ""),
+    (EnvelopeSequence, 1, 0),
+    (Id128Text, "a" * 32, "not-an-id"),
+])
+def test_scalar_siblings_validate_identically_on_encode_and_decode(representation, valid, invalid):
+    assert representation.encode(valid) == representation.decode(valid) == valid
+    for convert in (representation.encode, representation.decode):
+        with pytest.raises(MalformedRecord):
+            convert(invalid)
+
+
+async def test_delta_siblings_share_progress_and_inherit_default_emission():
+    for member in PiDelta.members_with(ContentDelta):
+        assert member(delta="visible").progress
+        assert not member(delta="").progress
+    for kind in ("toolcall_start", "toolcall_delta", "toolcall_end", "future_delta"):
+        delta = PiDelta.from_wire({"type": kind})
+        assert await delta.emit(None) == delta.events() == ()
+    for member in PiEvent.members_with(RetryProgress):
+        assert member().retry_progress
+    phase = ModelWaitPhase(detail="retained")
+    assert phase.model_progress() is phase
 
 
 def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them():

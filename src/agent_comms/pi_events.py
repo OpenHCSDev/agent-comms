@@ -47,6 +47,12 @@ if TYPE_CHECKING:
     from .backend import TurnSession
 
 
+class RetryProgress:
+    @property
+    def retry_progress(self) -> bool:
+        return True
+
+
 class PiTurnPhase:
     """Pi declarations own event entry/end matching; shared phases own stage behavior."""
 
@@ -261,7 +267,7 @@ class NativeOperationError(NativePiEvent):
         raise NativePiOperationFailed(self)
 
 
-class AgentSettled(NativePiEvent):
+class AgentSettled(RetryProgress, NativePiEvent):
     def settles(self, session: TurnSession) -> bool:
         # A prior retained turn may finish while the new state query is
         # pending. It cannot settle a turn whose input start is unconfirmed.
@@ -273,10 +279,6 @@ class AgentSettled(NativePiEvent):
             return
         for event in await session.agent_settled(self):
             yield event
-
-    @property
-    def retry_progress(self) -> bool:
-        return True
 
 
 class AgentStart(phases.AcceptsPrompt, NativePiEvent):
@@ -897,7 +899,7 @@ class ToolExecutionEnd(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(
-    phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase
+    phases.AcceptsPrompt, RetryProgress, PiToolCallEvent, NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase
 ):
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_started(self.tool_id, self.tool_label)
@@ -911,10 +913,6 @@ class ToolExecutionStart(
 
     async def act(self, session: TurnSession) -> None:
         session.watchdog.prompt_accepted = True
-
-    @property
-    def retry_progress(self) -> bool:
-        return True
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1000,14 +1000,18 @@ class TextRepresentation[V](FieldRepresentation):
         return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class SpelledText(TextRepresentation[str]):
+class ValidatedScalar[V](FieldRepresentation):
+    """The wire scalar is the decoded value, validated identically in both directions."""
+
+    @classmethod
+    def encode(cls, value: object) -> V:
+        return cls.decode(value)
+
+
+class SpelledText(ValidatedScalar[str], TextRepresentation[str]):
     """Text with one declared spelling: what decoding accepts and what its schema reports."""
 
     spelling: ClassVar[re.Pattern[str]]
-
-    @classmethod
-    def encode(cls, value: object) -> str:
-        return cls.decode(value)
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -1032,14 +1036,10 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
-class BoundedText(TextRepresentation[str]):
+class BoundedText(ValidatedScalar[str], TextRepresentation[str]):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
     max_length: ClassVar[int] = 4096
-
-    @classmethod
-    def encode(cls, value: object) -> str:
-        return cls.decode(value)
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -1059,7 +1059,7 @@ class ResourcePathText(BoundedText):
         return path
 
 
-class SequenceNumber(FieldRepresentation):
+class SequenceNumber(ValidatedScalar[int]):
     """An exact integer bus position; its minimum is the kind's one rule."""
 
     minimum: ClassVar[int]
@@ -1070,10 +1070,6 @@ class SequenceNumber(FieldRepresentation):
         if position < cls.minimum:
             raise MalformedRecord(f"{cls.__name__} is at least {cls.minimum}")
         return position
-
-    @classmethod
-    def encode(cls, value: object) -> int:
-        return cls.decode(value)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -1685,6 +1681,16 @@ class ValueDecoder[T](ABC):
         return text
 
 
+class _ContextDecoder[T](ValueDecoder[T]):
+    """A standalone decode starts with one empty binding context."""
+
+    def decode(self, data: object) -> T:
+        return self.decode_bound(data, {})
+
+    @abstractmethod
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
+
+
 class _ChoiceDecoder[T](ValueDecoder[T]):
     """A finite domain: its command line offers exactly the editor's choices."""
 
@@ -1909,7 +1915,7 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class UnionDecoder[T](ValueDecoder[T]):
+class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
 
@@ -1939,9 +1945,6 @@ class UnionDecoder[T](ValueDecoder[T]):
             if alternative.accepts_value(value):
                 return alternative.encode(value)
         raise TypeError(f"Value does not match {self.target}")
-
-    def decode(self, data: object) -> T:
-        return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         first_error = None
@@ -2115,7 +2118,7 @@ class _PairKeyDictDecoder(_DictDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
@@ -2148,9 +2151,6 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
             key: value for key, value in data.items() if key != tag
         }
 
-    def decode(self, data):
-        return self.decode_bound(data, {})
-
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
@@ -2167,7 +2167,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(ValueDecoder[Any]):
+class _RecordDecoder(_ContextDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
@@ -2206,9 +2206,6 @@ class _RecordDecoder(ValueDecoder[Any]):
     @property
     def field_names(self) -> tuple[str, ...]:
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
-
-    def decode(self, data):
-        return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)

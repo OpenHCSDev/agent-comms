@@ -24,7 +24,7 @@ class TurnPhaseOutput(ThreadOutput):
 
 
 class StallExempt:
-    """Model progress does not end this excursion; its own events do."""
+    """Progress preserves this phase; an explicit transition replaces it."""
 
     def model_progress(self) -> TurnPhase:
         return self
@@ -179,9 +179,8 @@ class PublishingPhase(ClosingTurn, TurnPhase):
     label = "Finishing turn"
 
 
-class ModelWaitPhase(ActivityWord, TurnPhase):
-    def model_progress(self) -> TurnPhase:
-        return self
+class ModelWaitPhase(StallExempt, ActivityWord, TurnPhase):
+    pass
 
 
 class SettlingStatsPhase(TurnPhase):
