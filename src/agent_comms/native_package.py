@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
-from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -394,7 +394,7 @@ class VerifiedNativePackage:
         if len(pins) != 1:
             raise NativePackageError("Pinned native package tree commitment unavailable")
         try:
-            digest = FieldCodec.decode(Annotated[str, Sha256Text], pins[0])
+            digest: str = FieldCodec.decode(Annotated[str, Sha256Text], pins[0])
         except MalformedRecord as error:
             raise NativePackageError("Pinned native package tree commitment unavailable") from error
         if package_tree_digest(root) != digest:
