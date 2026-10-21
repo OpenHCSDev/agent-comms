@@ -3263,18 +3263,18 @@ class TodoStore(DurableStore):
     def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:
         """The original open Todo owns who assigns its unit, under this transaction."""
-        states = TodoState.open_names()
-        held = Todo.select(db,
-            where=f"({Todo.unit_index.term_sql(Todo)}) IN "
-                  f"(VALUES {','.join('(?,?,?)' for _ in states)}) "
-                  "AND NOT (creator=? AND creator_created=?)",
-            parameters=tuple(value for state in states
-                             for value in (unit.name, unit.wire_birth, state))
-                       + (assigner.name, assigner.wire_birth), limit=1)
-        for todo in held:
-            raise TodoError(
-                f"{unit.name} is assigned by {todo.creator} on open order {todo.order.checked().id} "
-                f"({todo.id}); finish or release that order before assigning it again.")
+        match = (f"({Todo.unit_index.term_sql(Todo)})="
+                 f"({','.join('?' for _ in Todo.unit_index.terms)})")
+        for state in TodoState.open_names():
+            held = Todo.select(db,
+                where=f"{match} AND NOT (creator=? AND creator_created=?)",
+                parameters=(unit.name, unit.wire_birth, state, assigner.name, assigner.wire_birth),
+                limit=1)
+            for todo in held:
+                raise TodoError(
+                    f"{unit.name} is assigned by {todo.creator} on open order "
+                    f"{todo.order.checked().id} ({todo.id}); "
+                    "finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
