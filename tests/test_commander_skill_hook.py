@@ -64,17 +64,13 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
         else "No commander is configured"
     )
     assert text.startswith(expected_notice)
-    catalog = Slop.catalog()
-    readme = catalog / "README.md"
     assert text.split("\n\n", 1)[1] == "\n\n".join((
         CommanderConfig.packaged_voice().read_text(),
         CommanderConfig.packaged_indictment().read_text(),
-        CommanderConfig.packaged_spine().read_text(),
         "# Recorded failures\n\n" + PostmortemFailure.catalog(),
         RuleFile.document(CommanderConfig.packaged_skill())[1],
         *(rule.render() for rule in RuleFile.packaged()),
-        readme.read_text(),
-        *(path.read_text() for path in sorted(set(catalog.glob("*.md")) - {readme})),
+        (Slop.catalog() / "README.md").read_text(),
     ))
     assert not tuple(bus.iterdir())
 
