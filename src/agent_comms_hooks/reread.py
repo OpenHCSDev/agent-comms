@@ -88,7 +88,12 @@ class Read(ToolInput):
 
 @dataclass(frozen=True)
 class ContextCadence(ClaudeTranscriptHook, ABC):
-    """A reminder due once context grew `every` tokens past its own mark, or shrank below it."""
+    """A reminder due once context grew `every` tokens past its own mark.
+
+    Context also shrinks without a compaction, as earlier thinking leaves the prompt,
+    so size never signals one; the session start hook, which runs at every compaction,
+    clears the marks instead.
+    """
 
     every: ClassVar[int]
     mark_suffix: ClassVar[str]
@@ -115,17 +120,13 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
         return 0
 
     def due(self, tokens: int) -> bool:
-        """Only a commander session, whose start hook wrote the parts, is reminded.
-
-        Context smaller than the mark means a compaction dropped what was read, so the
-        reminder is due at once; otherwise a mark set before compaction is never reached.
-        """
+        """Only a commander session, whose start hook wrote the parts, is reminded."""
         if not self.parts.exists():
             return False
         if not self.mark.exists():
             return True
         last = RereadMark.decode(json.loads(self.mark.read_text()))
-        return tokens < last.tokens or tokens - last.tokens >= self.every
+        return tokens - last.tokens >= self.every
 
     def prepare(self) -> None:
         """Nothing to write before the message unless a member needs it."""
