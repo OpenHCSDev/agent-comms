@@ -253,7 +253,7 @@ class BusDeletionPhase(VirtualBusPhase):
                     "src/agent_comms/wire_record.py",
                 )
             ),
-            PatternAbsent(r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields"),
+            PatternAbsent(r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields|/ \"wire\""),
         )
     )
 
