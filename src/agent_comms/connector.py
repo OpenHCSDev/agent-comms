@@ -564,11 +564,12 @@ class Connector:
         except (MalformedRecord, json.JSONDecodeError) as error:
             return OAuthError("invalid_redirect_uri", str(error)).response()
         client_id = secrets.token_urlsafe(16)
-        self.store.update(
+        await asyncio.to_thread(
+            self.store.update,
             lambda grants: replace(
                 grants,
                 clients=grants.clients | {client_id: RegisteredClient(registration.client_name)},
-            )
+            ),
         )
         return web.json_response(FieldCodec.encode(ClientRegistrationReply(
             client_id=client_id, client_id_issued_at=int(time.time()),
@@ -675,7 +676,7 @@ class Connector:
             return grants
 
         try:
-            self.store.update(spent)
+            await asyncio.to_thread(self.store.update, spent)
         except OAuthError as refusal:
             return refusal.response()
         return web.json_response(
@@ -684,7 +685,8 @@ class Connector:
 
     async def mcp(self, request: web.Request) -> web.Response:
         token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-        if not self.store.read().holds(token):
+        grants = await asyncio.to_thread(self.store.read)
+        if not grants.holds(token):
             raise web.HTTPUnauthorized(
                 headers={
                     "WWW-Authenticate": (f'Bearer resource_metadata="{self.resource_metadata_url}"')

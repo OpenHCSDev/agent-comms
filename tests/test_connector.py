@@ -402,15 +402,17 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     registered = await (await client.post(
         "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
     )).json()
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(secrets.token_bytes(48)).digest())
     query = AuthorizationQuery(
-        "code", registered["client_id"], CALLBACK, "another-browser-challenge", "S256", "account-two"
+        "code", registered["client_id"], CALLBACK, challenge.decode().rstrip("="), "S256", "account-two"
     )
     assert query.client_id != next(iter(grants.clients))
     redirected = await client.get(
         "/authorize", params=FieldCodec.encode(query), allow_redirects=False
     )
     assert redirected.status == 302
-    assert parse_qs(urlsplit(redirected.headers["Location"]).query)["state"] == [query.state]
+    redirected_query = parse_qs(urlsplit(redirected.headers["Location"]).query)
+    assert redirected_query["state"] == [query.state] and redirected_query["code"]
     assert len(comms.bus.inbox(owner.name)) == 1
 
     client.session.cookie_jar.clear()
@@ -420,6 +422,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
             "/authorize", params=FieldCodec.encode(query), allow_redirects=False
         )
         assert waiting.status == 200
+        assert "sent to the owner on comms" in await waiting.text()
     notices = comms.bus.inbox(owner.name)
     assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
     link = urlsplit(notices[-1].body.splitlines()[-1])
