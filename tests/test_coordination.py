@@ -1426,12 +1426,12 @@ def test_all_durable_tables_reject_delete_even_when_empty(db, table):
     assert triggers, f"{table} lacks fail-loud delete authority"
 
 
-def test_schema_drift_and_symlink_rejected(tmp_path):
+def test_unexplained_columns_and_symlinks_rejected(tmp_path):
     path = tmp_path / "db"
     with CoordinationStore(path):
         pass
     with sqlite3.connect(path) as c:
-        c.execute("CREATE INDEX stray ON participants(participant_lookup)")
+        c.execute("ALTER TABLE participants ADD COLUMN unexplained TEXT")
     with pytest.raises(SchemaVersionError):
         CoordinationStore(path)
     link = tmp_path / "link"
