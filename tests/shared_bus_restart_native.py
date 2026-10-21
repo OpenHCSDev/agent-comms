@@ -727,7 +727,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
                 origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for index in range(self.wave_size)]
             return
-        self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
+        self.originals = [self.service.bus.publisher.publish_ordinary(Message(
             'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', InfoKind), origin=AgentOrigin())
             for name in self.names]
 
