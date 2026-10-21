@@ -44,7 +44,8 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         from .goal_failure_observation import NoFailedTurnEvidence
         return NoFailedTurnEvidence()
 
-    def verified_turn(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+        """An accepted order or verified progress does not resolve unknown work."""
         pass
 
     def turn_permit(self, store: GoalAttemptStore, goals: Goals, owner: Thread,
@@ -78,13 +79,8 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
 
 
-class RetryableGeneration:
-    """A generation an explicit retry or a fresh order may proceed from; every other
-    generation's attempt is unresolved until someone inspects it."""
-
-
 @dataclass(frozen=True)
-class ReadyGeneration(GenerationState, RetryableGeneration):
+class ReadyGeneration(GenerationState):
     ready = True
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
@@ -138,7 +134,7 @@ class ReservedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(GenerationState, RetryableGeneration):
+class BlockedGeneration(GenerationState):
     failed = True
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
@@ -147,7 +143,7 @@ class BlockedGeneration(GenerationState, RetryableGeneration):
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.evidence.execution(source.goal.id)
 
-    def verified_turn(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
         store.authorize_current_retry(generation.goal_id, witness)
 
     def require_failure(self) -> None:

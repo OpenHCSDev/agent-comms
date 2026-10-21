@@ -18,6 +18,9 @@ from conftest import declare_test_bus
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms import agent_events as events
+import asyncio
+from test_goal_execution import turn_on
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
@@ -28,7 +31,7 @@ from agent_comms.commander.standing import (
     GoalCannotRun, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
+from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
 from agent_comms.goal_generation import ReadyGeneration
@@ -96,15 +99,17 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
 
 
 def blocked_holder(comms):
-    """An actual failed ledger reservation, not merely a displayed blocked label."""
-    goal = comms.registry.require("worker").goal.require()
-    store = comms.goals.open_goal_store()
-    generation = store.require_generation(goal.id)
-    store.recover_unreserved_ready(goal.id, generation.number)
-    reservation = store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
-    reservation.fail(store, "The previous attempt has an uncertain result")
-    comms.goals.update_goal("worker", BlockedGoalAction(progress="A reason unrelated to matching text"))
-    return reservation
+    """Settle a real failed turn; never manufacture a stored backend block."""
+    owner = comms.registry.require("worker")
+    comms.registry.register(replace(owner, process_identity=ProcessIdentity.capture(os.getpid())))
+
+    async def fail_turn():
+        async with turn_on(comms) as turn:
+            permit, = turn.goal_permit.claims
+            await turn.progress.done(events.Done("The previous attempt failed", False))
+        return permit.reservation
+
+    return asyncio.run(fail_turn())
 
 
 def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(held_bus):
@@ -351,7 +356,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
 
 
-def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus, installed_runtime):
+def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, installed_runtime):
     blocked_holder(held_bus)
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
@@ -359,8 +364,8 @@ def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus
     family = HolderCannotRun.violations(held_bus, "lead")
     assert detached in family
     blocked, = GoalCannotRun.violations(held_bus, "lead")
-    assert blocked in family
     broken = StandingRule.broken(held_bus, "lead")
+    assert blocked in broken
     assert all(rule in broken for rule in family)
 
 

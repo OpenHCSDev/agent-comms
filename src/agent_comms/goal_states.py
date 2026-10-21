@@ -149,9 +149,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
 class BlockedState(GoalState, FromOpenGoal):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
-        ordered = action.continue_goal(goal, ctx)
-        ctx.goals.open_goal_store().authorize_current_retry(goal.id, action.order.id)
-        return replace(ordered, state=ActiveGoal())
+        return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:

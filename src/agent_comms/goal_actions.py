@@ -510,6 +510,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.continue_work(store, generation, self.order.id)
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(

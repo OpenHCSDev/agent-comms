@@ -114,7 +114,9 @@ class IdleGoalExecution(NullMember, GoalExecution):
 class BoundGoalExecution(RecordMember, GoalExecution, declared_name=None):
     goal_id: str
     glyph: ClassVar[str] = "✓"
-    label: ClassVar[str]
+    @property
+    @abstractmethod
+    def label(self) -> str: ...
 
     @property
     def summary(self) -> str:
@@ -135,10 +137,7 @@ class WaitingExecution(BoundGoalExecution, declared_name=None):
         return self.presentation(ordinary.title)
 
 
-@dataclass(frozen=True)
-class RunnableExecution(BoundGoalExecution):
-    label = "Active"
-
+class ActiveExecution(BoundGoalExecution, declared_name=None):
     @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import PausedGoalAction
@@ -146,7 +145,12 @@ class RunnableExecution(BoundGoalExecution):
 
 
 @dataclass(frozen=True)
-class RunningExecution(RunnableExecution):
+class RunnableExecution(ActiveExecution):
+    label = "Active"
+
+
+@dataclass(frozen=True)
+class RunningExecution(ActiveExecution):
     label = "Running"
 
 

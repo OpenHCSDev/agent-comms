@@ -18,7 +18,6 @@ from agent_comms.goal_attempts import (
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
-from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from . import agent_events as events
@@ -48,7 +47,7 @@ class VerifiedGoalSettlement(MroDispatch):
             for goal in owner.goal.continued_by(current.goal):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
-                generation.lifecycle.verified_turn(store, generation, f"verified-turn:{account.turn.value}")
+                generation.lifecycle.continue_work(store, generation, f"verified-turn:{account.turn.value}")
 
     @property
     def progress_witness(self) -> str:
@@ -96,8 +95,8 @@ class TurnGoalAccount:
     def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
         try:
             store = comms.goals.open_goal_store()
-            claim_scope = comms.registry.snapshot().claim_generation(owner.name)
-            with _store_lock(comms._wire_lock_path):
+            with comms.registry.store.locked():
+                claim_scope = comms.registry.snapshot().claim_generation(owner.name)
                 generation = store.require_generation(goal.id)
                 return generation.lifecycle.turn_permit(store, comms.goals, owner, claim_scope, generation)
         except GoalAttemptError as error:
@@ -127,7 +126,7 @@ class TurnGoalAccount:
         self.has_productive_tool |= bool(event.ok)
         if event.name != "comms_set_goal" or event.ok is not True:
             return
-        with _store_lock(self.comms._wire_lock_path):
+        with self.comms.registry.store.locked():
             owner = self.comms.registry.snapshot().require(self.owner.name)
             claimed = tuple(permit for goal in owner.goal for permit in self._reserve_origin(owner, goal))
         for permit in claimed:
