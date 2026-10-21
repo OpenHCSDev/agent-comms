@@ -24,7 +24,7 @@ class TurnPhaseOutput(ThreadOutput):
 
 
 class StallExempt:
-    """Model progress does not end this excursion; its own events do."""
+    """Progress preserves this phase; an explicit transition replaces it."""
 
     def model_progress(self) -> TurnPhase:
         return self
@@ -35,6 +35,10 @@ class NoModelWait:
 
     def model_wait[Wait](self, backstop: Wait, unbounded: Wait) -> Wait:
         return unbounded
+
+
+class AcceptsPrompt:
+    """A native observation proves that Pi accepted the current prompt."""
 
 
 class ClosingTurn:
@@ -70,7 +74,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     # excursion's own backstop bounds the stall instead.
     pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
-    accepts_prompt: ClassVar[bool] = False
     accepts_followup: ClassVar[bool] = True
     can_compact: ClassVar[bool] = False
     can_cancel: ClassVar[bool] = True
@@ -146,7 +149,6 @@ class PreparingPhase(TurnPhase):
 
 class IdlePhase(ActivityWord, TurnPhase):
     busy = False
-    accepts_prompt = True
     accepts_followup = False
     can_compact = True
     can_cancel = False
@@ -177,9 +179,8 @@ class PublishingPhase(ClosingTurn, TurnPhase):
     label = "Finishing turn"
 
 
-class ModelWaitPhase(ActivityWord, TurnPhase):
-    def model_progress(self) -> TurnPhase:
-        return self
+class ModelWaitPhase(StallExempt, ActivityWord, TurnPhase):
+    pass
 
 
 class SettlingStatsPhase(TurnPhase):

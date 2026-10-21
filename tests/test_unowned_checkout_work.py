@@ -6,8 +6,11 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 
 import pytest
+
+from order_scope_fixture import FIX_SCOPE
 
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.change_report import FileLine
@@ -30,11 +33,13 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import WorkBranchError
+from order_scope_fixture import FIX_SCOPE
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -43,6 +48,29 @@ def git(directory: Path, *arguments: str) -> str:
          '-c', 'user.email=checkout@example.invalid', *arguments),
         check=True, capture_output=True, text=True, timeout=15,
     ).stdout
+
+
+def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus, tmp_path):
+    rule = checkout_bus.registry.storage_rule
+    worker = checkout_bus.registry.require('worker')
+    checkout = rule.order_checkout('worker', 'P1')
+    other = tmp_path / 'toad'
+    other.mkdir()
+    git(other, 'init', '-q', '--initial-branch=main')
+    git(other, 'commit', '-q', '--allow-empty', '-m', 'Second repository')
+    git(other, 'remote', 'add', 'origin', 'https://github.com/OpenHCSDev/toad.git')
+    lockstep = rule.repository_checkout('worker', 'P1', RepositoryName('OpenHCSDev', 'toad'))
+    git(other, 'worktree', 'add', '-q', '-b', 'worker-toad', str(lockstep))
+    misnamed = checkout.with_name('worker--P1--textual')
+    git(other, 'worktree', 'add', '-q', '-b', 'worker-misnamed', str(misnamed))
+
+    assert checkout.name == 'worker--P1'
+    assert lockstep.name == 'worker--P1--toad'
+    assert rule.owns_checkout(worker, checkout) and rule.owns_checkout(worker, lockstep)
+    assert not rule.owns_checkout(worker, misnamed)
+    assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)
+    assert lockstep in rule.checkouts_of(worker)
+    assert misnamed not in rule.checkouts_of(worker)
 
 
 @pytest.fixture
@@ -76,7 +104,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), run=MechanicalOrderRun(),
+        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(home), 'true'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
@@ -126,7 +154,7 @@ def assert_retained(c: Comms) -> None:
     assert held.work.checkout == c.registry.storage_rule.order_checkout('worker', 'P1')
     assert 'worker' in held.line() and str(held.work.checkout) in held.line()
     # The real automatic caller must not bypass the heartbeat's protection.
-    UnownedOrderWatch().pass_body(c)
+    UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
     assert c.goals.todos.get('P2') == before
     assert before.holder is None
 
@@ -142,7 +170,8 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         with LaunchRoot.from_path(root).selected():
             (checkout / 'work.py').write_text('# not yet published\n')
             assert_retained(c)
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
             git(checkout, 'add', 'work.py')
             git(checkout, 'commit', '-q', '-m', 'Unpushed work')
             assert git(checkout, 'status', '--porcelain') == ''
@@ -153,20 +182,22 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             waiting = UnownedWheelSpin.violations(c, 'lead')
             assert len(waiting) == 1
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
             config.write(tmp_path / 'copy-home')
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)
             assert available[0].unit == 'idle'
             assert set(available).isdisjoint(review.violations)
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assigned = c.goals.todos.get('P2')
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
         drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
@@ -187,5 +218,5 @@ def test_unreadable_checkout_is_not_clean(checkout_bus: Comms, tmp_path: Path):
         (checkout / '.git').unlink()
         before = c.goals.todos.get('P2')
         with pytest.raises(WorkBranchError):
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
         assert c.goals.todos.get('P2') == before
