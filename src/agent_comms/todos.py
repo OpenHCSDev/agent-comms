@@ -3125,6 +3125,17 @@ class TodoStore(TypedStore, DurableTables):
             raise TodoError(f"Unknown saved order: {order_id!r}")
         return rows
 
+    def related_problems(self, problem: Todo) -> tuple[Todo, ...]:
+        """Reissued orders retain the earlier declaration that linked their problem rows."""
+        identities = problem.held_order_ids
+        slots = ','.join('?' for _ in identities)
+        return self._select(
+            f'EXISTS (SELECT 1 FROM json_tree("order") AS declaration '
+            f"WHERE declaration.key='id' AND declaration.value IN ({slots})) "
+            f'OR EXISTS (SELECT 1 FROM json_each(prior_orders) AS declaration '
+            f"WHERE json_extract(declaration.value,'$.id') IN ({slots}))",
+            (*identities, *identities))
+
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
         return self._one(self._select("id=?", (todo_id,)), todo_id)

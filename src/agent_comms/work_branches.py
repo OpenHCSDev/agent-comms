@@ -185,6 +185,13 @@ query($owner: String!, $name: String!, $after: String) {
         return result.stdout.decode()
 
     @property
+    def local_work(self) -> bool:
+        """Uncommitted files or HEAD commits absent from every published remote ref."""
+        return bool(self._run("git", "--no-optional-locks", "status", "--porcelain")) or bool(
+            self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
+        )
+
+    @property
     def repository(self) -> tuple[str, str]:
         repository = Repo.of(self.checkout).github
         return repository.owner, repository.name
