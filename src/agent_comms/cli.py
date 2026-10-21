@@ -16,7 +16,8 @@ from collections.abc import Sequence
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_bridges.shared import SendArguments
 from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_protocol import CoreError, FailedCoreError
+from agent_comms.cli_protocol import CoreError
+from agent_comms.coordination_errors import CoordinationError
 from agent_comms.launch_root import LaunchRoot
 
 
@@ -67,9 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command.execute(route, sys.stdout)
     except KeyboardInterrupt:
         return 130
-    except SystemExit:
-        raise
-    except FailedCoreError.exception_type as exc:
+    except (ValueError, OSError, CoordinationError) as exc:
         return _fail(exc)
     return 0
 
