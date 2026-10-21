@@ -120,8 +120,6 @@ class BusPageIndex(TypedStore, DerivedTables):
         with ExitStack() as resources:
             db = resources.enter_context(self._attached(
                 lambda: closing(CoordinationStore.read_snapshot(self.path))))
-            if self.stored_schema(db):
-                self.require_schema(db)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
@@ -134,13 +132,13 @@ class BusPageIndex(TypedStore, DerivedTables):
 
     @contextmanager
     def covered_snapshot(self, opened: WireSnapshot):
-        """Admit an existing index and retain the revision proving its coverage."""
+        """Only the declared schema can cover a source; its owner rebuilds the rest."""
         if not self.path.exists():
             yield False
             return
         with self.snapshot():
-            stored = self.stored_schema(self.connection)
-            saved = BusPageSource.one(self.connection, singleton=1) if stored else None
+            saved = (BusPageSource.one(self.connection, singleton=1)
+                     if not self.schema_differs(self.connection) else None)
             yield saved is not None and saved.covers(opened)
 
     def covers(self, opened: WireSnapshot) -> bool:

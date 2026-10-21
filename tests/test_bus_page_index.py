@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
 from agent_comms.comms import Comms
+from agent_comms.cli import main
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import AllChannelDisplayScope
 from agent_comms.coordination_database import CoordinationStore
@@ -70,8 +71,7 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
     with closing(sqlite3.connect(path)) as db, db:  # an earlier declaration
         db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
                    '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
-    with pytest.raises(StaleBusPageIndexError):
-        bus.incoming_page('b', after=6)
+    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
@@ -82,6 +82,34 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
     with pytest.raises(StaleBusPageIndexError):
         archive.incoming_page('b', after=6)
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
+
+
+@pytest.mark.parametrize("checkpoint_damage", ["missing", "schema"])
+@pytest.mark.parametrize("page_damage", ["missing", "schema"])
+def test_history_reader_repairs_both_derived_indexes(
+    tmp_path, capsys, checkpoint_damage, page_damage,
+):
+    bus = retained_source(tmp_path / 'both-derived', 9, access=WritableAccess())
+    original = bus.log.path.read_bytes()
+    for name, damage in (
+        ('private_bus_checkpoint.sqlite3', checkpoint_damage),
+        ('bus_page_index.sqlite3', page_damage),
+    ):
+        path = bus.log.path.with_name(name)
+        if damage == 'missing':
+            for member in CoordinationStore.files(path):
+                member.unlink(missing_ok=True)
+        else:
+            with closing(sqlite3.connect(path)) as db, db:
+                db.execute('CREATE TABLE retired_shape (unused INTEGER)')
+    assert main(['--root', str(bus.log.path.parent), 'history', '--limit', '50']) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert [row['seq'] for row in result['everything']] == list(range(9, 0, -1))
+    assert bus.log.path.read_bytes() == original
+    with BusPageIndex(bus.log.path) as index, bus.log.opened_wire_snapshot(
+        opening=CurrentSnapshotOpening(),
+    ) as opened:
+        assert index.covers(opened)
 
 
 def test_append_commits_while_an_older_page_snapshot_is_open(tmp_path):
