@@ -103,8 +103,7 @@ class Repository:
         with self.comparing(base, head) as child:
             result = child.collect(timeout=timeout)
         assert result.returncode in (0, 1), result.stderr[-2000:]
-        # The report is the first document; what grew is printed after it for annotations.
-        return result.returncode, json.JSONDecoder().raw_decode(result.stdout.decode())[0]
+        return result.returncode, json.loads(result.stdout)
 
 
 def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:
