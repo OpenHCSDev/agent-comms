@@ -13,7 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.carry import CarryChain
 from agent_comms.native_pi import NativeContextJournal
-from agent_comms.native_session_files import NativeSessionFiles, PrivateSession
+from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
@@ -157,9 +157,13 @@ def test_the_schema_carry_runs_after_the_review_timer_carry():
     assert names.index("carry_review_timers") < names.index("carry_declared_schema")
 
 
-def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_chain(tmp_path):
-    lead = Registration(tmp_path / "registry.json").new_thread(
-        "lead", frozenset(), str(tmp_path), created_at=1.0)
+def test_a_bus_with_a_todo_deadline_and_an_outside_proof_carries_through_the_whole_chain(tmp_path):
+    """A registered thread's session outside the bus root is carried: the registry names it."""
+    registry = Registration(tmp_path / "registry.json")
+    session = tmp_path / "pi-home" / "sessions" / "lead.jsonl"
+    lead = registry.new_thread(
+        "lead", frozenset(), str(tmp_path), created_at=1.0, session_file=str(session))
+    registry.register(lead)
     order = PendingProblemOrder(
         id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(tmp_path), "true"), edits=("Fix the problem",),
@@ -172,8 +176,8 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
     with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
         db.execute('ALTER TABLE "todo" RENAME COLUMN "review_at" TO "deadline"')
         db.commit()
-    proof = NativeSessionFiles(PrivateSession.path_in(tmp_path, session_id="s")).input_proof
-    proof.parent.mkdir()
+    proof = NativeSessionFiles(session).input_proof
+    proof.parent.mkdir(parents=True)
     proof.with_suffix("").write_text("")
     with closing(sqlite3.connect(proof)) as db:
         NativeContextJournal.create(db)

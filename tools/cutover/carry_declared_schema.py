@@ -8,8 +8,8 @@ converted in place inside one write transaction: indexes, triggers and views
 come from the declarations of the tables it holds, the sealed copies go, and
 every table keeps its rows.
 
-The files are every durable SQLite file the bus declares and every saved session's
-input proof; a file whose tables all rebuild themselves is left to rebuild. Delete
+The files are every durable SQLite file the bus declares and every registered
+thread's session files, inside the bus root or not; a file whose tables all rebuild themselves is left to rebuild. Delete
 once every bus has run it.
 """
 
@@ -28,8 +28,8 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import DurableFile, SQLiteFile
-from agent_comms.native_session_files import SavedSessionFile
+from agent_comms.locked_store import DurableFile, RegistryFile, SQLiteFile
+from agent_comms.registration import Registration
 from agent_comms.typed_table import (
     DerivedTables,
     SQLiteSchemaObject,
@@ -194,11 +194,12 @@ class StoredFile:
 
 
 def stores(root: Path) -> tuple[StoredFile, ...]:
-    """Every durable SQLite file the bus declares, and every saved session's input proof."""
+    """Every durable SQLite file the bus declares, and every registered thread's session
+    files, wherever its runtime keeps them."""
     declared = {path for owner, directory in SQLiteFile.declarations_in(root)
                 if issubclass(owner, DurableFile) for path in owner.matching_in(directory)}
-    proofs = {path for session in SavedSessionFile.sessions_in(root)
-              for path in session.schema_paths if path.is_file()}
+    proofs = {path for path in Registration(RegistryFile.path_in(root)).schema_paths()
+              if path.is_file()}
     return tuple(map(StoredFile.read, sorted(declared | proofs)))
 
 
