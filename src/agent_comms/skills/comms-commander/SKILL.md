@@ -83,7 +83,7 @@ Pick the next unit. Read its actual state, not its message: worktree, `git log -
 One line per unit touched, then the next unit.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **A unit records its delivery, not just a chat report:** `order deliver PROBLEM --fork UNIT --pr N --sha HEAD_COMMIT --report-file REPORT.txt` (or the native `comms_order_deliver` tool). Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
+- **A unit records its delivery, not just a chat report:** the unit calls the native `comms_order_deliver` tool as itself. Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
 - **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/send-backs-and-strikes.md says when).
 
 ## Slop is a defined term
