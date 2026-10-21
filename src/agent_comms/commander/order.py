@@ -539,10 +539,9 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Replace a wrong check using the same rule as send; done still checks the delivered SHA."""
+        """Replace a wrong check of a pending or claimed order by the rule send uses; Core refuses
+        any other order or a closed problem (CorrectCheckTodo.apply); done checks the SHA."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open or not todo.pending:
-            sys.exit(f'Refused: {pid} has no pending order')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
@@ -1041,7 +1040,8 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         todo = ctx.comms.goals.todos.get(self.pid)
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
-        if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
+        storage = ctx.comms.registry.storage_rule
+        if not storage.owns_checkout(holder, source.checkout, source.checkout):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
         if not source.holds(todo):
             sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '

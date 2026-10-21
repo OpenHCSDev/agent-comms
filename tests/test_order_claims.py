@@ -14,6 +14,8 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimedProblemOrder,
+    CorrectCheckTodo,
+    DoneTodoState,
     DeliveredProblemOrder,
     PendingProblemOrder,
     SendBackVerdict,
@@ -146,4 +148,34 @@ def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_comman
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
         main(["send", "other", corrected_order_file(ctx), "--clean", "--reassign",
               "the claimant reported the delivery, so moving it would discard that claim"], ctx)
+    assert ctx.comms.goals.todos.get("P1") == claimed
+
+
+def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    repo = ctx.repos[0]
+
+    main(["check", "P1", "--check", f"{repo.checkout} :: printf 1 -> 0",
+          "--why", "the recorded check also counted lines the order never asked to remove"], ctx)
+    corrected = ctx.comms.goals.todos.get("P1")
+    assert isinstance(corrected.order, ClaimedProblemOrder)
+    assert corrected.order.check.command == "printf 1"
+    assert corrected.order.check_corrections[-1].previous == claimed.order.check
+    assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
+    assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
+        claimed.holder, claimed.review_at, claimed.strike_count)
+
+
+def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    closed = replace(claimed, state=DoneTodoState)
+    correction = CorrectCheckTodo(
+        expected_revision=claimed.revision, actor=ctx.incarnation,
+        previous=claimed.order.check, check=claimed.order.check,
+        reason="the recorded check also counted lines the order never asked to remove",
+    )
+    with pytest.raises(TodoError, match="is done"):
+        correction.apply(closed)
     assert ctx.comms.goals.todos.get("P1") == claimed

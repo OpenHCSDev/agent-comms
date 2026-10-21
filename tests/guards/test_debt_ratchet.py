@@ -92,6 +92,8 @@ class Repository:
         command = (
             sys.executable, str(source / "tools/debt_ratchet.py"),
             "--root", self.root, "--base", base, "--head", head,
+            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+            "--workers", "2",
         )
         environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
             (str(source / "src"), os.environ["PYTHONPATH"]))}
@@ -1159,3 +1161,21 @@ except FileNotFoundError: absent()
 def test_broad_handlers_only_count_defaults_returned_by_the_handler():
     source = b"""def read():\n    try: work()\n    except Exception:\n        return None\n    try: work()\n    except:\n        if condition: return {}\n    try: work()\n    except OSError:\n        return None\n    try: work()\n    except BaseException:\n        raise\n    try: work()\n    except Exception:\n        def helper(): return None\n        raise\n"""
     assert BroadExceptDefault.count(source, "read.py") == 2
+
+
+def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
+    """run-step.sh annotates the last lines of stdout and stderr merged into one pipe; the
+    report is flushed first, so what grew is what a reader without the job log sees."""
+    base = repo.commit({"check.py": 'value = row["a"]\n'})
+    head = repo.commit({"check.py": "value = type(x) is int\n"})
+    source = Path(__file__).resolve().parents[2]
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        (str(source / "src"), os.environ["PYTHONPATH"]))}
+    merged = subprocess.run(
+        (sys.executable, str(source / "tools/debt_ratchet.py"),
+         "--root", repo.root, "--base", base, "--head", head),
+        cwd=repo.path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, timeout=120,
+    )
+    assert merged.returncode == 1
+    assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))

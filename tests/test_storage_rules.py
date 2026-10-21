@@ -77,16 +77,16 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     assert storage.home == home
     assert storage.extra_checkouts == (old,)
     assert storage.adding(home) == storage
-    assert rule.owns_checkout(thread, home)
-    assert not rule.owns_checkout(other, old)
+    assert rule.owns_checkout(thread, home, home)
+    assert not rule.owns_checkout(other, old, old)
     with pytest.raises(StorageDenied):
-        comms.registry.decide_storage(other.name, (CheckoutStorageEffect(new),))
+        comms.registry.decide_storage(other.name, (CheckoutStorageEffect(new, home),))
     with pytest.raises(SelectedToolDenied):
-        comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
+        comms.registry.decide_storage('worker', (CheckoutStorageEffect(new, home),))
     comms.registry.decide_storage('worker', (RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread) == (home,)
-    comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
+    comms.registry.decide_storage('worker', (CheckoutStorageEffect(new, home),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 

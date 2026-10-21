@@ -14,7 +14,10 @@ from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Id128Text
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
+from agent_comms.goal_actions import (
+    BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction, SetGoalAction,
+)
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import RequestGoalOrder
 from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
@@ -170,3 +173,45 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
             current.original.goal_permission.require_current(comms.registry.require('worker').goal)
         finally:
             current.settle_unbound()
+
+
+@pytest.mark.asyncio
+async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path):
+    """The retry order's message is queued while the goal is blocked, so its owner input
+    carries no active goal id and captures the blocked state; the order then makes the goal
+    active, and that running turn keeps its tool calls."""
+    source = SourceRepository.create(tmp_path / 'source')
+    comms = Comms(tmp_path)
+    for name in ('lead', 'worker'):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
+    comms.goals.update_goal('lead', SetGoalAction(
+        text='Repair the blocked unit', goal_id='request', order=RequestGoalOrder(),
+    ))
+    comms.goals.update_goal('worker', CreateProblemGoalAction(
+        problem='P1', order=order(source), request='request',
+        review_at=RecordedEventTime(1000), commander='lead',
+        repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked unit',
+    ))
+    blocked = comms.goals.update_goal(
+        'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')
+    )
+    actor = comms.registry.require('lead').incarnation
+    agent = CommsAgent(comms, auto_wake=False)
+    # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
+    turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
+                     original_owner_input=True,
+                     original_goal_id=blocked.active().reported_id())
+    async with AsyncExitStack() as resources, AsyncExitStack() as permits:
+        assert await turn.acquire(resources, permits)
+        todo = comms.goals.todos.get('P1')
+        retried = comms.goals.update_goal('worker', OrderGoalAction(
+            problem='P1', expected_revision=todo.revision, assigner=actor,
+            commander='lead', request='request', review_at=RecordedEventTime(2000),
+            order=replace(order(source), id='retry'),
+        ))
+        assert retried.state == ActiveGoal()
+        # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
+        turn.original.goal_permission.require_current(comms.registry.require('worker').goal)
