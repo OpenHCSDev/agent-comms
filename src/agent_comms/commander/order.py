@@ -786,12 +786,14 @@ class DirectiveVerb(CommanderVerb):
     ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        originals = tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
-                          if message.message_id in self.answers)
-        if set(self.answers) != {message.message_id for message in originals}:
-            sys.exit('REFUSED: --answers must name original directives on this request '
-                     'or unanswered unit messages to this commander.')
-        return tuple(message.reference for message in originals)
+        """The named messages still open. A name that is no longer open (answered, or out of
+        the owed set since it was read) needs no answer and is dropped, never refused: the
+        owed set moves while the commander writes, and refusing the whole verb over a closed
+        name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
+        that is wrong leaves its real message owed, and the gate below refuses that."""
+        return tuple(message.reference
+                     for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                     if message.message_id in self.answers)
 
     def gate(self, ctx: Commander) -> None:
         self.answer_references(ctx)
