@@ -18,7 +18,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
-from agent_comms.pi_events import ToolExecutionStart
+from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
 
@@ -28,14 +28,29 @@ def _wire(token: str, **changes: object) -> bytes:
     return (json.dumps(data) + "\n").encode("utf-8")
 
 
-def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: Path, tool_listener) -> None:
+async def query(path: Path, payload: bytes) -> bool:
+    reader, writer = await asyncio.open_unix_connection(str(path))
+    try:
+        writer.write(payload)
+        await writer.drain()
+        return json.loads(await reader.readline())["ok"] is True
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
+    tmp_path: Path, tool_listener
+) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
 
         async def allow(self, round_number, call) -> None:
             raise AssertionError("invalid round must not allow a call")
 
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
+    socket = CodingToolSocket(
+        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid()
+    )
     repeated = ToolCallContent(id="duplicate", name="read", arguments={"path": "one"})
     with pytest.raises(DuplicateToolCallIdentity):
         socket.announce((repeated, repeated))
@@ -104,21 +119,25 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
-def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path, tool_listener) -> None:
+def test_fake_socket_requires_pid_token_matching_emitted_call(
+    tmp_path: Path, tool_listener
+) -> None:
     tmp_path.chmod(0o700)
     token = secrets.token_hex(32)
     observed: list[broker.SelectedToolRequest] = []
 
     async def run() -> None:
         wrong = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid() + 100000)
+            tool_listener(tmp_path, token), observed.append, pid=os.getpid() + 100000
+        )
         await wrong.start()
         try:
             assert not await query(wrong.listener.path, _wire(token))
         finally:
             await wrong.close()
         server = broker.SelectedToolSocket(
-            tool_listener(tmp_path, token), observed.append, pid=os.getpid())
+            tool_listener(tmp_path, token), observed.append, pid=os.getpid()
+        )
         await server.start()
         try:
             for changes in (
@@ -164,16 +183,74 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path, to
         finally:
             await server.close()
         assert not server.listener.path.exists()
-
-    async def query(path: Path, payload: bytes) -> bool:
-        reader, writer = await asyncio.open_unix_connection(str(path))
-        writer.write(payload)
-        await writer.drain()
-        row = await reader.readline()
-        writer.close()
-        await writer.wait_closed()
-        return json.loads(row)["ok"] is True
+        assert not server.listener.path.parent.exists()
 
     asyncio.run(run())
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("abandoned", (False, True))
+async def test_listener_isolated_from_previous_turn_and_keeps_session_ledger(
+    tmp_path: Path,
+    tool_listener,
+    abandoned: bool,
+) -> None:
+    tmp_path.chmod(0o700)
+    previous = tool_listener(tmp_path, secrets.token_hex(32))
+    if abandoned:
+        # A dead process closes its FD but leaves the socket inode and directory.
+        previous.socket.close()
+    previous_inode = previous.path.stat().st_ino
+    token = secrets.token_hex(32)
+    input_id = secrets.token_hex(16)
+    observed: list[broker.SelectedToolRequest] = []
+
+    def accept(request: broker.SelectedToolRequest) -> None:
+        broker.consume_selected_slot(tmp_path, input_id, request.call_id)
+        broker.record_selected_terminal(tmp_path, input_id, request.call_id)
+        observed.append(request)
+
+    server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
+    assert server.listener.path != previous.path
+    assert server.listener.path.parent.stat().st_mode & 0o777 == 0o700
+    await server.start()
+    try:
+        arguments = {"resource": "notes.txt", "contents": "é"}
+        server.announce(
+            (
+                ToolCallContent(
+                    id="call_1",
+                    name="selected_claimed_write",
+                    arguments=arguments,
+                ),
+            )
+        )
+        server.tool_started(
+            ToolExecutionStart(
+                tool_call_id="call_1",
+                tool_name="selected_claimed_write",
+                args=arguments,
+            )
+        )
+        assert await query(server.listener.path, _wire(token))
+        server.tool_finished(
+            ToolExecutionEnd(
+                tool_call_id="call_1",
+                tool_name="selected_claimed_write",
+                is_error=False,
+            ),
+            input_id,
+        )
+        server.assert_complete()
+        assert observed == [
+            broker.SelectedToolRequest(
+                "call_1",
+                broker.SelectedWriteArguments("notes.txt", "é"),
+            )
+        ]
+        assert (tmp_path / "selected-tool-ledger" / (input_id + ".done")).exists()
+    finally:
+        await server.close()
+    assert not server.listener.path.exists()
+    assert not server.listener.path.parent.exists()
+    assert previous.path.stat().st_ino == previous_inode
