@@ -67,12 +67,21 @@ from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySo
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
-from agent_comms.recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import (
+    EventTime,
+    RecordedEventSeconds,
+    RecordedEventTime,
+    UnrecordedEventTime,
+)
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.storage_rules import StorageRule
-from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
@@ -1437,37 +1446,6 @@ class NoSuccessor(NullMember, Successor):
         return ""
 
 
-class Replacement(SubclassUnion, affix="Replacement"):
-    """The order message a resend replaces, or none named."""
-
-    @abstractmethod
-    def names_latest(self, todo: Todo) -> bool: ...
-
-    @abstractmethod
-    def refusals(self, replacing: bool) -> tuple[str, ...]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ReplacedMessage(SingleFieldValue, Replacement):
-    message_id: str
-
-    def names_latest(self, todo: Todo) -> bool:
-        return todo.sent_in(self.message_id)
-
-    def refusals(self, replacing: bool) -> tuple[str, ...]:
-        return () if replacing else (
-            "--replaces: fix: name the current order on these problems to the same unit",)
-
-
-@dataclass(frozen=True, slots=True)
-class NoReplacement(NullMember, Replacement):
-    def names_latest(self, todo: Todo) -> bool:
-        return False
-
-    def refusals(self, replacing: bool) -> tuple[str, ...]:
-        return ()
-
-
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
@@ -2097,7 +2075,7 @@ class OrderedHunt(Hunt):
 
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
         super().require_commander(store, commander)
-        if not any(todo.order.id == self.sent or todo.sent_in(self.sent)
+        if not any(todo.id == self.sent
                    for todo in store.held_for_commander(commander)):
             raise ValueError("The hunt must name this commander's current order.")
 
@@ -2639,9 +2617,9 @@ class SupersededVerdict(ToolCallVerdict):
 
     def prepare(self, goals, current):
         replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
-                     if todo.sent_in(self.replacement)]
+                     if todo.id == self.replacement]
         if not replacing:
-            raise ValueError('The replacing message is not an open order from this commander.')
+            raise ValueError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
             raise ValueError('The replacing order went to the same unit; judge its edits ok or back.')
         if len(self.reason.split()) < 6:
@@ -3080,18 +3058,9 @@ class Todo(TypedTable):
         if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
-    def sent_in(self, message_id: str) -> bool:
-        """Only the latest recorded send names this order, not an earlier replacement."""
-        return bool(self.messages) and self.messages[-1].message_id == message_id
-
-    def require_replacement(self, replaces: Replacement) -> None:
+    def require_replacement(self) -> None:
         if not self.messages:
             raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
-        if not replaces.names_latest(self):
-            raise ValueError(
-                f"{self.holder} already holds {self.id}; "
-                f"pass --replaces {self.messages[-1].message_id}"
-            )
 
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
@@ -3192,27 +3161,37 @@ class TodoStore(DurableStore):
         with self.snapshot() as db:
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
-    def resolve_order(self, commander: ThreadIncarnation, unit: str, message: str) -> Todo:
-        found = [t for t in self.held_by(commander, unit)
-                 if t.sent_in(message) or t.order.id == message]
+    def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
+        found = [t for t in self.held_by(commander, unit) if t.id == problem]
         if len(found) != 1:
-            raise ValueError(f'{unit} owes no unique order {message}')
+            raise ValueError(f'{unit} holds no order on {problem}')
         return found[0]
 
-    def drop(self, commander: ThreadIncarnation, unit: str, message: str, by: str) -> Todo:
-        old = self.resolve_order(commander, unit, message)
+    def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
+        old = self.resolve_order(commander, unit, problem)
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise ValueError('Only a live newer order to the same unit replaces an old one.')
+        newer.require_replacement()
         with self.writing() as db:
             current = self._current(db, old.id)
             current.require_result(old)
             self._current(db, newer.id).require_result(newer)
-            result = replace(current, order=current.order.copy_as(
-                DroppedProblemOrder, replacing_message=by), assignment=None,
-                released=(*current.released, ReleaseTodo(current.revision, commander,
-                    current.held(), StrikeReason(f'Order {message} was replaced by the newer order {by} without a strike.'))),
-                revision=current.revision + 1)
+            result = replace(
+                current,
+                order=current.order.copy_as(
+                    DroppedProblemOrder, replacing_message=newer.messages[-1].message_id
+                ),
+                assignment=None,
+                released=(
+                    *current.released,
+                    ReleaseTodo(
+                        current.revision, commander, current.held(),
+                        StrikeReason(f'Order {problem} replaced by newer {by} without a strike.'),
+                    ),
+                ),
+                revision=current.revision + 1,
+            )
             result.upsert(db)
             return result
 
@@ -3227,8 +3206,10 @@ class TodoStore(DurableStore):
             replace(source, state=DoneTodoState, order=source.order.folded(into, why),
                     assignment=None, revision=source.revision + 1).upsert(db)
 
-    def link(self, commander: ThreadIncarnation, problem: str, unit: str, message: str) -> None:
-        sent = self.resolve_order(commander, unit, message)
+    def link(
+        self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str
+    ) -> None:
+        sent = self.resolve_order(commander, unit, held_problem)
         with self.writing() as db:
             source, target = self._current(db, sent.id), self._current(db, problem)
             source.require_result(sent)
