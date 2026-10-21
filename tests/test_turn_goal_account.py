@@ -1,6 +1,7 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
 
 from agent_comms.bus import Bus
+from agent_comms.lifecycle_capability import Terminal
 
 
 import pytest
@@ -46,7 +47,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
             result.dispatch_sync(state)
             assert permit.has_verified_progress(store)
             assert store.snapshot(goal.id).lifecycle == (
-                CompletedGeneration() if state.terminal else ReadyGeneration()
+                CompletedGeneration() if bool(state.items_with(Terminal, True)) else ReadyGeneration()
             )
             assert goal.state is state  # Recording never resumes an owner-paused goal.
 

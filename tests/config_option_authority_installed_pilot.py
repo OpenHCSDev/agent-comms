@@ -176,7 +176,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                     final = await refreshed.subscribe()
                 assert thinking(final['configOptions'])['currentValue'] == 'high'
                 assert service.registry.require(name).model == DeclaredModel(model)
-                assert not service.registry.require(name).active_turn.executing
+                assert not service.registry.require(name).executing
                 assert not list((service.root / 'native-sessions').rglob('*.jsonl'))
                 rows.append({
                     'model': model, 'startup_configured_off_retained': True,

@@ -5,14 +5,21 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
-    UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
-    EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
+    CompletedProgress,
+    ContextualProgress,
+    EngagedProgress,
+    FailedProgress,
+    IgnoredProgress,
+    InterruptedProgress,
+    PassiveProgress,
+    UnrecordedProgress,
 )
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
@@ -26,7 +33,7 @@ class PendingDecision:
     mode: WakePolicy
 
     def __post_init__(self):
-        if not self.mode.active:
+        if not self.mode.items_with(Active, self.mode):
             raise IntegrityViolationError("passive decision cannot be deferred or failed")
 
     @property
@@ -64,8 +71,6 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         raise IdentityConflict("full wake frame requires the current response obligation")
 
     def requires_selected_triage(self) -> bool:
-        if self.triage_pending:
-            return True
         if self.mode.triage:
             raise IdentityConflict("pending claim wake decision is not executable")
         return False
@@ -73,11 +78,13 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_engagement(self) -> Engagement:
         raise IdentityConflict("wake assignment is not engaged")
 
+    def require_engageable(self) -> None:
+        raise IdentityConflict("claim cannot engage this execution")
+
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
     notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
-    notification_changed: ClassVar[bool] = False
     records_conversation_response: ClassVar[bool] = False
 
     def recorded_response(self, original, replies, recipient_lookup):
@@ -99,18 +106,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             recipient,
             sender_lookup,
             self.notification_state(UnrecordedProgress() if activity is None else activity.progress),
-            changed=self.notification_changed,
         )
 
-    terminal: ClassVar[bool] = False
-    engaged: ClassVar[bool] = False
-    deferred: ClassVar[bool] = False
-    triage_pending: ClassVar[bool] = False
-    full_pending: ClassVar[bool] = False
-    preengagement_target: ClassVar[bool] = False
-    engageable: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
-    completed: ClassVar[bool] = False
 
     @classmethod
     def mode_expression(cls, expression: str) -> str:
@@ -124,15 +121,12 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def binding_expression(cls) -> str:
         return "execution_id IS NULL AND exact_target IS NULL"
 
+    def writable_pending_assignments(self, assignment):
+        return ()
+
     def permits_engagement_change(self, after):
         gaining = self.execution_id is None and after.execution_id is not None
-        return (not gaining or after.engaged) and not (
-            self.engageable and self.execution_id is None and after.failed and gaining
-        )
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[AssignmentState], ...]: ...
+        return not gaining or bool(after.items_with(EngagedAssignment, after))
 
     @property
     @abstractmethod
@@ -165,8 +159,6 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
     @classmethod
     def build_preengagement(cls, mode: WakePolicy) -> AssignmentState:
-        if cls.preengagement_target:
-            return cls.build(mode, None, None)
         raise IdentityConflict("preengagement transition is not declared")
 
     def preengagement(self, disposition: type[AssignmentState]) -> AssignmentState:
@@ -178,21 +170,20 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         return after
 
 
-class PassiveAssignment(AssignmentState):
+class PassiveAssignment(Terminal, AssignmentState):
     notification_state = PassiveProgress
-
-    terminal = True
 
     @property
     def mode(self):
         return PassiveWake()
 
-    @classmethod
-    def successors(cls):
-        return ()
+
+class EngageableAssignment:
+    def require_engageable(self) -> None:
+        pass
 
 
-class PendingNotification:
+class PendingNotification(EngageableAssignment, Pending):
     """Pending relevance/full execution membership, not another display state."""
 
     @classmethod
@@ -235,7 +226,7 @@ class SelectedResponseNotification:
         sender_lookup,
         *,
         observation,
-        activity,
+        activity=None,
         updated_at_ms=0,
         triage_inflight=False,
     ):
@@ -247,16 +238,28 @@ class SelectedResponseNotification:
         )
 
 
-class TriagePendingAssignment(PendingNotification, AssignmentState):
+class PreengagementTarget:
+    @classmethod
+    def build_preengagement(cls, mode: WakePolicy) -> AssignmentState:
+        return cls.build(mode, None, None)
+
+
+class ChangedNotification:
+    def notification(self, recipient, sender_lookup, **kwargs):
+        return replace(
+            super().notification(recipient, sender_lookup, **kwargs), changed=True
+        )
+
+
+class TriagePendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
 
-    triage_pending = True
-    preengagement_target = True
-    engageable = True
+    def requires_selected_triage(self) -> bool:
+        return True
 
     @property
     def mode(self):
@@ -267,11 +270,9 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
         return IgnoredAssignment, EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class FullPendingAssignment(PendingNotification, AssignmentState):
-
-    full_pending = True
-    preengagement_target = True
-    engageable = True
+class FullPendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
+    def writable_pending_assignments(self, assignment):
+        return (assignment,)
 
     @property
     def mode(self):
@@ -282,12 +283,8 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
         return EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class IgnoredAssignment(AssignmentState):
-    notification_changed = True
+class IgnoredAssignment(ChangedNotification, PreengagementTarget, Terminal, AssignmentState):
     notification_state = IgnoredProgress
-
-    terminal = True
-    preengagement_target = True
 
     @property
     def mode(self):
@@ -296,10 +293,6 @@ class IgnoredAssignment(AssignmentState):
     @property
     def verdict(self):
         return "ignore"
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 class AssignmentDecision:
@@ -322,8 +315,7 @@ class AssignmentDecision:
     def binding_expression(cls) -> str:
         active = ",".join(
             sql_literal(member)
-            for member in WakePolicy.members_with(WakePolicy)
-            if member.active
+            for member in WakePolicy.members_with(Active)
         )
         return (
             f"wake_mode IN ({active}) AND ((execution_id IS NULL AND exact_target IS NULL) "
@@ -348,8 +340,7 @@ class AssignmentDecision:
 
 
 @dataclass(frozen=True)
-class BoundAssignment(AssignmentDecision, AssignmentState):
-    notification_changed = True
+class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
     decision: Engagement
 
     @classmethod
@@ -386,14 +377,12 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
         return self.decision
 
 
-    engaged = True
-
     @classmethod
     def successors(cls):
         return CompletedAssignment, DeferredAssignment, FailedAssignment
 
 
-class CompletedAssignment(BoundAssignment):
+class CompletedAssignment(Complete, Terminal, BoundAssignment):
     def notification(
         self,
         recipient,
@@ -414,19 +403,12 @@ class CompletedAssignment(BoundAssignment):
 
     notification_state = CompletedProgress
 
-    terminal = True
-    completed = True
-
-    @classmethod
-    def successors(cls):
-        return ()
-
 
 @dataclass(frozen=True)
-class InterruptedAssignment(AssignmentDecision, AssignmentState):
-    notification_changed = True
+class InterruptedAssignment(
+    ChangedNotification, PreengagementTarget, AssignmentDecision, AssignmentState
+):
     decision: PendingDecision | Engagement
-    preengagement_target = True
 
     @classmethod
     def build(cls, mode, execution_id, target):
@@ -435,16 +417,15 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
         )
 
 
-class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
+class DeferredAssignment(
+    EngageableAssignment, Deferred, SelectedResponseNotification, InterruptedAssignment
+):
     def requires_selected_triage(self) -> bool:
         if self.execution_id is not None:
             return False
         return super().requires_selected_triage()
 
     notification_state = InterruptedProgress
-
-    deferred = True
-    engageable = True
 
     @classmethod
     def successors(cls):
@@ -458,12 +439,14 @@ class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
 
     def permits_engagement_change(self, after):
         return super().permits_engagement_change(after) and not (
-            self.execution_id is not None and (after.triage_pending or after.full_pending)
+            self.execution_id is not None and after.items_with(Pending, after)
         )
 
 
 @dataclass(frozen=True)
-class DeliveredAssignment(AssignmentDecision, AssignmentState):
+class DeliveredAssignment(
+    ChangedNotification, PreengagementTarget, Terminal, AssignmentDecision, AssignmentState
+):
     """The recipient's running turn took this message as one of its inputs.
 
     No execution answers it: the agent replies with its own tools. Only the
@@ -471,7 +454,6 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     """
 
     decision: PendingDecision
-    notification_changed = True
     records_conversation_response = True
 
     def recorded_response(self, original, replies, recipient_lookup):
@@ -501,9 +483,6 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
     notification_state = IgnoredProgress
 
-    terminal = True
-    preengagement_target = True
-
     @classmethod
     def binding_expression(cls) -> str:
         return AssignmentState.binding_expression()
@@ -512,12 +491,8 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     def build(cls, mode, execution_id, target):
         return cls(PendingDecision(mode))
 
-    @classmethod
-    def successors(cls):
-        return ()
 
-
-class FailedAssignment(InterruptedAssignment):
+class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def notification(
         self,
         recipient,
@@ -540,10 +515,3 @@ class FailedAssignment(InterruptedAssignment):
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 
     notification_state = FailedProgress
-
-    terminal = True
-    failed = True
-
-    @classmethod
-    def successors(cls):
-        return ()

@@ -326,7 +326,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 # It revokes further grants without replaying or canceling that turn.
                 await view.slash_command("/goal clear")
                 release.set()
-                await until(lambda: not comms.registry.require("project").active_turn.executing)
+                await until(lambda: not comms.registry.require('project').executing)
                 await asyncio.sleep(0.4)
                 assert comms.registry.require("project").goal is None
                 assert len(attempts()) == 2

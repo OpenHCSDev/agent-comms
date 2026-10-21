@@ -1,6 +1,7 @@
 """One original human-source workflow through the public CLI and file effects."""
 
 from agent_comms.bus import Bus
+from agent_comms.lifecycle_capability import Unresolved
 
 import json
 
@@ -8,7 +9,6 @@ from agent_comms.thread_text import SavedSessionFile
 from agent_comms.cli import main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
 
@@ -219,7 +219,7 @@ async def original_input_consumer_journey(tmp_path, command):
     reopened = Comms(comms.root)
     assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
         comms.bus.log.retained_context("renamed-beta", comms.registry).text())
-    assert all(stored_inputs(inputs.root).lookup(row.key) == row and row.unresolved for row in originals)
+    assert all(stored_inputs(inputs.root).lookup(row.key) == row and bool(row.items_with(Unresolved, True)) for row in originals)
     return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
             "refusals": 4, "rename_correction_drop_reopen": True,
             "original_input_bytes_preserved": True, "native_inputs": 0,
