@@ -27,7 +27,7 @@ from .typed_table import BooleanStorage, TypedRow, sql_literal
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .presentation import MessageNotification
     from .wake_policy import RecipientDecision
 
@@ -214,7 +214,7 @@ class UnrecordedNotificationSource(NotificationSource):
 class NotificationAssignmentRead:
     """Assignment rows captured from one caller-owned coordination snapshot."""
 
-    sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
 
     def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
@@ -236,8 +236,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def for_deliveries(
-        cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
-    ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
+        cls, originals: Iterable[Delivered], records: Iterable[NotificationAssignment],
+    ) -> Iterator[tuple[Delivered, tuple[NotificationSource, ...]]]:
         """Match notification assignments to messages and their recorded recipients."""
         by_recipient = {}
         for record in records:
@@ -255,7 +255,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def _recorded_conversation_responses(
-        cls, root: Path, sources: tuple[CommittedDelivery, ...],
+        cls, root: Path, sources: tuple[Delivered, ...],
         rows: tuple[NotificationAssignment, ...],
     ) -> tuple[NotificationAssignment, ...]:
         eligible = tuple(
@@ -263,16 +263,16 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .wire_log import WireLog
+        from .bus import Bus
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(WireLog.path_in(root)).checked_read() as source:
-            # Capture under the lock; decoding runs after it is released.
-            captured = source.replies(tuple({row.assignment.source for row in eligible}))
-        replies: dict[MessageReference, list[CommittedDelivery]] = {}
-        for reply in captured:
-            for answered in reply.message.answers:
-                replies.setdefault(answered, []).append(reply)
+        captured = Bus(Bus.path_in(root)).replies(
+            tuple({row.assignment.source for row in eligible}))
+        replies: dict[MessageReference, list[Delivered]] = {}
+        for record in captured:
+            for reply in record.deliveries():
+                for answered in reply.message.answers:
+                    replies.setdefault(answered, []).append(reply)
         resolved = []
         for row in rows:
             if row.assignment.lifecycle.records_conversation_response:
@@ -288,7 +288,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture(
-        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
+        cls, connection: sqlite3.Connection, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
@@ -342,7 +342,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def read(
-        cls, root: Path, sources: Sequence[CommittedDelivery]
+        cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore

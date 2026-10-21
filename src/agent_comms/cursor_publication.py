@@ -19,11 +19,9 @@ from .acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
-    EmptyCursorObservation,
     LiveCursorScope,
     NoCursorScope,
     UnavailableCursorObservation,
-    VerifiedCursorObservation,
     encode_updates,
 )
 from .comms import Comms
@@ -33,7 +31,7 @@ from .diagnostics import PublicationMeasurements
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
-from .native_runtime_input import CurrentNativeCursor
+from .cursor_owner import CursorState
 from .native_source_cursor import NativeSourceCursor
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
@@ -71,7 +69,7 @@ class CursorDelivery:
 
     async def advance(
         self, participant: SelectedParticipant, input_id: str,
-    ) -> CurrentNativeCursor | None:
+    ) -> CursorState:
         """Selected settlement borrows this recipient's serialized reader lifetime."""
         async with self.reading() as source_reads:
             return await NativeSourceCursor.advance_async(
@@ -163,7 +161,7 @@ class CursorPublication:
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )
-            cursor = await read_cursor(
+            state = await read_cursor(
                 bus, wire_root_id=root_id, owner_name=thread_name,
                 source_reads=source_reads,
             )
@@ -181,7 +179,7 @@ class CursorPublication:
         return CursorEnvelope(
             scope,
             revision,
-            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
+            state.observation(),
         )
 
     async def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:

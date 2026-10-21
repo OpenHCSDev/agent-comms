@@ -139,6 +139,13 @@ class Bus(StoreWriter, DurableFile):
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
 
+    def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
+        """One ascending keyset page after the last scanned bus sequence."""
+        with self.observing() as db:
+            return tuple(self._record(db, row) for row in BusRow.select(
+                db, where="{seq} > ?", parameters=(after,),
+                order_by=("seq",), limit=limit))
+
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             addressed = Addressed.table.select(

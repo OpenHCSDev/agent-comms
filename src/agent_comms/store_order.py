@@ -1,5 +1,6 @@
 """One complete acquisition order, loaded before store instances open."""
 from .message_bus import MessageBus
+from .bus import Bus
 from .wire_log import WireLog
 from .registry_store import RegistryStore
 from .catalog_store import ChannelCatalog
@@ -13,7 +14,7 @@ from .connector_store import ConnectorStore
 from .store_files import StoreLockOwner
 
 STORE_LOCK_ORDER = (
-    MessageBus, WireLog, RegistryStore, ChannelCatalog, ReadLedger,
+    MessageBus, Bus, WireLog, RegistryStore, ChannelCatalog, ReadLedger,
     RelationshipStore, RuntimeInfoStore, SharedLedger, CollaborationLedger, ConnectorStore,
     RuntimeChildrenStore,
 )

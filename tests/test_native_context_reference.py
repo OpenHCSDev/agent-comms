@@ -20,6 +20,8 @@ from agent_comms.native_input_record import NativeInputReference, UnrecordedNati
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.native_claim_epoch import RecordedNativeClaim
 from agent_comms.assignment_states import TriagePendingAssignment
+from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
+from agent_comms.cursor_owner import RecordedCursor, UnstartedCursor
 
 
 def cursor():
@@ -29,6 +31,19 @@ def cursor():
         input_id=TextNativeColumn("c" * 32), stage=TextNativeColumn("full"),
         session_id=TextNativeColumn("original-session"), request_generation=NumberNativeColumn(1),
     )
+
+
+@pytest.mark.parametrize("state, observation, covered_seq, proves", [
+    (UnstartedCursor(), EmptyCursorObservation(), 0, False),
+    (RecordedCursor(cursor()), VerifiedCursorObservation(cursor()), 1, True),
+])
+def test_native_cursor_state_owns_start_observation_and_input_proof(
+    state, observation, covered_seq, proves,
+):
+    assert state.covered_seq == covered_seq
+    assert state.observation() == observation
+    assert state.proves_input("c" * 32) is proves
+    assert not state.proves_input("d" * 32)
 
 
 def reservation():
