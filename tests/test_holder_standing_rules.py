@@ -57,7 +57,7 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path, source_repository, durable_home):
+def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
@@ -87,11 +87,12 @@ def held_bus(comms, tmp_path, source_repository, durable_home):
                   target="worker", text="Do not replay this input")
     assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
                        native_id=uuid4().hex, text="Do not replay this input")
-    CommanderConfig.on_machine('lead', (source,), comms.root, durable_home).write(durable_home)
+    configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
-    CommanderConfig.read_root(copied).write(durable_home)
-    return Comms(copied)
+    copied_bus = Comms(copied)
+    configured_repository(copied_bus)
+    return copied_bus
 
 
 def blocked_holder(comms):
@@ -312,7 +313,9 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     assert UnitAskUnanswered.asks(held_bus, 'lead', time.time()) == ()
 
 
-def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_repository, tmp_path, durable_home):
+def test_send_and_check_accept_a_deletion_check_on_fresh_main(
+    held_bus, source_repository, tmp_path, durable_home, configured_repository,
+):
     source = source_repository
     # Advance only the remote: the configured tree stays stale and dirty throughout.
     content = source.main_source + 'obsolete = 1\n' * 4
@@ -325,7 +328,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
     local.write_text(source.main_source + '# Uncommitted user work\n')
     before = local.read_bytes()
     head = source.git(source.checkout, 'rev-parse', 'HEAD')
-    worktrees = CommanderConfig.read_root(held_bus.root).worktrees
+    worktrees = configured_repository(held_bus, source).worktrees
     original = held_bus.goals.todos.get('P1')
     check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
     order = replace(original.order.checked(), id='delete-obsolete', check=check,
@@ -333,7 +336,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
     document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',
                          'This is stupid because dead declarations still occupy the source.',
                          unplanned_reason='Repair the order tool before returning to the planned work.',
-                         problems=('P1',))
+                         problems=())
     order_file = tmp_path / 'order.json'
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
@@ -344,13 +347,20 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 
+    # Problem creates the first order through Commander.send, including its message link.
+    cli('problem', str(order_file), '--to', 'worker', '--where', 'owner.py:2')
+    first = held_bus.goals.todos.get('P3')
+    assert first.messages
+    document = replace(document, problems=('P3',),
+                       order=replace(document.order, id='replacement-deletion'))
+    order_file.write_text(json.dumps(FieldCodec.encode(document)))
     cli('send', 'worker', str(order_file), '--clean')
-    sent = held_bus.goals.todos.get('P1')
+    sent = held_bus.goals.todos.get('P3')
     assert sent.order.check == check
     corrected = 'grep -c "^obsolete" owner.py'
-    cli('check', 'P1', '--check', f'{source.checkout} :: {corrected} -> 0', '--why',
+    cli('check', 'P3', '--check', f'{source.checkout} :: {corrected} -> 0', '--why',
         'The original count also included comments rather than only declarations')
-    current = held_bus.goals.todos.get('P1')
+    current = held_bus.goals.todos.get('P3')
     assert current.order.id == sent.order.id
     assert current.review_at == sent.review_at and current.strikes == sent.strikes
     assert current.order.check.command == corrected
@@ -366,7 +376,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
     print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
 
 
-def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus):
+def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus, installed_runtime):
     blocked_holder(held_bus)
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
@@ -438,7 +448,7 @@ def test_install_discovers_and_records_decision_cutover_once(held_bus):
     assert GoalWorkDecisions not in chain.pending(ledger.applied())
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
+def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
