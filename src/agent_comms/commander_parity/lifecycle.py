@@ -10,6 +10,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
@@ -27,6 +28,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
+from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.order_runs import ApplicationOrderRun
@@ -37,9 +39,14 @@ from agent_comms.todos import (
     FileDeliveryEvidence,
     FixScope,
     FixShape,
+    GithubPullRequest,
     OperationDelivery,
     PendingProblemOrder,
+    PullRequestLink,
+    PullRequests,
+    RecordPullRequest,
     Todo,
+    UnmergedListedPullRequest,
 )
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_result import ToolResult
@@ -213,6 +220,35 @@ class LifecycleRun:
         if len(rows) != 1:
             raise ValueError(f"A fresh copied workflow must create one problem, got {len(rows)}")
         return rows[0]
+
+    @contextlib.contextmanager
+    def forge(self, todo: Todo, diff: str) -> Iterator[None]:
+        """Real linked code/source with controlled gh responses, never real status writes."""
+        original = MeasuredCommander.read(CommanderConfig.path())
+        held = original.comms.goals.todos.held_by(original.incarnation, self.worker)
+        pulls = PullRequests(held)
+        requests = tuple(dict.fromkeys(request for row in held if row.repo == todo.repo
+            for request in pulls.listed(row.repo, UnmergedListedPullRequest, row)))
+        if len(requests) != 1:
+            raise ValueError("Head-review comparison requires one open PR linked to the copied worker.")
+        request, = requests
+        link = PullRequestLink(todo.repo, request.number)
+        self.commander.comms.goals.todos.apply(todo.id, RecordPullRequest(
+            todo.revision, self.commander.incarnation, link, todo.held().generation))
+        clock = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        row = GithubPullRequest(number=request.number, branch=request.branch, head=request.head,
+            updated=clock, base=request.base, created=clock, head_time=clock, ready_events=(),
+            closed=False, isDraft=False, mergeStateStatus="CLEAN", checks="SUCCESS", queued=False,
+            merge=None, merged=None)
+        directory = self.commander.root / "forge"
+        GithubFixture(todo.repo, {
+            str(row.number): GithubFixtureRequest(FieldCodec.encode(row), "")}, diff).write(directory)
+        previous = os.environ["PATH"]
+        os.environ["PATH"] = os.pathsep.join((str(directory), previous))
+        try:
+            yield
+        finally:
+            os.environ["PATH"] = previous
 
     def complete(self, todo: Todo) -> Todo:
         goal = self.commander.comms.registry.require(self.worker).goal

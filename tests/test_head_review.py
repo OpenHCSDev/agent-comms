@@ -1,5 +1,4 @@
 """One verdict family, a real Todo and the external gh executable boundary."""
-import json
 import os
 import time
 from dataclasses import dataclass, fields, replace
@@ -8,14 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from test_holder_standing_rules import held_bus
-from source_revision_fixture import SourceRepository
-from agent_comms.commander.judge import OkVerb, ShowVerb
+from test_holder_standing_rules import held_bus, held_source
+from agent_comms.commander.judge import BackVerb, OkVerb, ShowVerb
+from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 from agent_comms.commander.order import Commander, SayVerb
 from agent_comms.commander.standing import Unjudged
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.repo import Repo
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
     AcceptedVerdict, GithubPullRequest, HeadVerdict, OrderVerdict, PullRequestLink,
     RecordPullRequest, StrikeReason, TodoOperation,
@@ -39,33 +39,31 @@ class ReviewCase:
 
     def write(self, row: GithubPullRequest) -> None:
         self.row = row
-        self.binaries.joinpath("pull_requests.json").write_text(json.dumps({
-            "repo": self.comms.goals.todos.get("P1").repo.to_wire(),
-            "requests": {str(row.number): {"listed": FieldCodec.encode(row), "body": ""}},
-            "diff": self.diff,
-        }))
+        GithubFixture(self.comms.goals.todos.get("P1").repo,
+            {str(row.number): GithubFixtureRequest(FieldCodec.encode(row), "")}, self.diff).write(self.binaries)
 
     def posts(self) -> list[list[str]]:
-        return [call for line in self.binaries.joinpath("calls.jsonl").read_text().splitlines()
-                if (call := json.loads(line))[:3] == ["api", "--method", "POST"]]
+        return [call for call in GithubFixture.calls(self.binaries)
+                if call[:3] == ["api", "--method", "POST"]]
 
 
 @pytest.fixture
-def review_case(held_bus, tmp_path, monkeypatch):
+def review_case(held_bus, held_source, tmp_path, monkeypatch):
     binaries = tmp_path / "bin"
-    binaries.mkdir()
-    binaries.joinpath("gh").symlink_to(Path(__file__).with_name("github_cli_stub.py"))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+    held_bus.channels.create_tag("comms")
+    for name in ("lead", "worker"):
+        held_bus.channels.update_tags(name, add=frozenset({"comms"}))
     ctx = Commander(commander="lead", root=held_bus.root, state=tmp_path / "state", repos=(),
                     worktrees=tmp_path, scratch=tmp_path, disk=tmp_path)
     todo = held_bus.goals.todos.get("P1")
     held_bus.goals.todos.apply(todo.id, RecordPullRequest(todo.revision, todo.creator_identity,
-        PullRequestLink(todo.repo, SourceRepository.number), todo.held().generation))
+        PullRequestLink(todo.repo, held_source.number), todo.held().generation))
     checkout = Path(todo.order.checked().check.directory)
     head = Repo.git(checkout, "rev-parse", "feature").strip()
     diff = Repo.git(checkout, "diff", f"main...{head}")
     now = time.time()
-    row = GithubPullRequest(number=SourceRepository.number, branch="feature", head=head,
+    row = GithubPullRequest(number=held_source.number, branch="feature", head=head,
         updated=stamp(now), base="main", created=stamp(now - 3600), head_time=stamp(now - 1200),
         ready_events=(stamp(now - 700),), closed=False, isDraft=False, mergeStateStatus="CLEAN",
         checks="SUCCESS", queued=False, merge=None, merged=None)
@@ -118,6 +116,30 @@ def test_overdue_head_refuses_say_but_not_judgment(review_case):
     verb.apply(case.ctx)
     assert Unjudged.violations(case.comms, "lead") == ()
     assert "state=success" in case.posts()[-1]
+
+
+def test_back_posts_failure_roast_and_strike_without_replaying_unknown(review_case, capsys):
+    case = review_case
+    before = case.comms.goals.todos.get("P1")
+    inputs = InputDispositions(case.comms.root)
+    unresolved = inputs.lookup("unresolved-input")
+    BackVerb(problem="P1", why="The member copies behavior instead of deriving it from its parent",
+        serves="Repair the existing owner", lines=("+class Member(Parent):",),
+        roast="This is stupid because Member copies the shared behavior that Parent already owns and should supply.",
+        fix="Delete the member copy and inherit shared behavior from Parent.",
+        pattern="IMPL-12", fact="the owner of the shared behavior", at="owner.py:4",
+        derive="delete-copy", by="owner.py:2").apply(case.ctx)
+    saved = case.comms.goals.todos.get("P1")
+    assert "state=failure" in case.posts()[-1]
+    assert saved.head_verdict(case.row.head).head == case.row.head
+    assert saved.strike_count == before.strike_count + 1
+    assert inputs.lookup("unresolved-input") == unresolved
+    assert Unjudged.violations(case.comms, "lead") == ()
+    assert "roast sent to" in capsys.readouterr().out
+    with case.comms.bus.log.opened_wire_snapshot() as source:
+        bodies = tuple(message.body for message in source.newest_messages(1024 * 1024))
+    assert any("The slop:" in body and "What replaces it:" in body for body in bodies)
+    assert any("On the record:" in body and "strike 1 on P1" in body for body in bodies)
 
 
 def test_show_names_linked_head_and_diff_quotes_cannot_judge_other_code(review_case, capsys):

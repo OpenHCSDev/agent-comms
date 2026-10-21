@@ -679,6 +679,14 @@ class PullRequests:
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
 
+    def current(self, todo: Todo) -> PullRequest:
+        """The one open linked request a head judgment can select without guessing."""
+        requests = self.listed(todo.repo, UnmergedListedPullRequest, todo)
+        if len(requests) != 1:
+            raise TodoError(f"{todo.id} must link exactly one open pull request; found {len(requests)}.")
+        request, = requests
+        return request
+
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         key = (repo, todo.id)

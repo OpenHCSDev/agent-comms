@@ -260,13 +260,11 @@ def pr_commander(tmp_path, monkeypatch):
         (GithubPullRequest(number=3, merge=None, merged=None, **common), "Closed without merging."),
     )
     binaries = tmp_path / "bin"
-    binaries.mkdir()
-    (binaries / "gh").symlink_to(Path(__file__).with_name("github_cli_stub.py"))
-    (binaries / "pull_requests.json").write_text(json.dumps({
-        "repo": source.github.to_wire(),
-        "requests": {str(row.number): {"body": body, "listed": FieldCodec.encode(row)}
-                     for row, body in requests},
-    }))
+    from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
+
+    GithubFixture(source.github, {
+        str(row.number): GithubFixtureRequest(FieldCodec.encode(row), body)
+        for row, body in requests}).write(binaries)
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     lead = Registration(tmp_path / "registry.json").new_thread(
         source.checkout.name, frozenset(), str(source.checkout), created_at=1.0)

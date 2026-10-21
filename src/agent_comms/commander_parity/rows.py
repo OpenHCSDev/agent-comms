@@ -99,9 +99,9 @@ class StrikeLimitParityRow(ParityRow):
 
 class VerdictParityRow(ParityRow):
     number = 8
-    capability = "Verdicts on a unit's tool calls"
+    capability = "Verdicts on linked pull request heads"
     current = "`judge.py ok`, `back`; both invoke `CommsVerdictTool`"
-    native = "`CommsVerdictTool`, `SendBackVerdict`: one retained event and Goal revision"
+    native = "`HeadVerdict`: one review status, verdict and rejection Goal revision"
     phases = ()
     comparison = VerdictComparison.read
 

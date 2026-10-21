@@ -1,4 +1,4 @@
-"""Judge/native verdicts on actual native edits in LifecycleRun's disposable bus."""
+"""Judge/native head verdicts with copied native edits and controlled gh responses."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.commander.judge import BackVerb, Edit, OkVerb, VerdictVerb
-from agent_comms.todos import AcceptedVerdict, SendBackVerdict, Todo, ToolCallVerdict
+from agent_comms.todos import AcceptedHeadVerdict, HeadVerdict, PullRequests, RejectedHeadVerdict, Todo
 from agent_comms.tools import CommsVerdictTool, TodoChanged
 from agent_comms.turn_context import GoalSegment
 from agent_comms.commander_parity import ParityComparison
@@ -26,7 +26,7 @@ NATIVE_EDIT = Path(__file__).with_name("verdict_edit.mjs")
 
 @dataclass(frozen=True)
 class VerdictMutation:
-    call_id: str
+    head: str
     verdicts: int
     todo_revisions: int
     strikes: int
@@ -51,7 +51,7 @@ class VerdictObservation(LifecycleObservation):
 
 class VerdictCase(ABC):
     changes: ClassVar[int]
-    native_owner: ClassVar[type[ToolCallVerdict]]
+    native_owner: ClassVar[type[HeadVerdict]]
 
     @classmethod
     @abstractmethod
@@ -67,11 +67,10 @@ class VerdictCase(ABC):
 
     @staticmethod
     def native(run: LifecycleRun, command: VerdictVerb, todo: Todo, edit: Edit) -> object:
-        return run.commander.call(
-            CommsVerdictTool(
-                problem=todo.id, operation=command.operation(run.commander, todo, edit.id)
-            )
-        )
+        request = PullRequests((todo,)).current(todo)
+        command.check_diff(request.diff(todo.repo))
+        return run.commander.call(CommsVerdictTool(
+            problem=todo.id, operation=command.operation(run.commander, todo, request)))
 
     @classmethod
     def capture(
@@ -110,7 +109,9 @@ class VerdictCase(ABC):
             if len(edits) != 1 or edits[0].id != call_id:
                 raise ValueError("The copied unit must expose exactly its one real native edit")
             edit = edits[0]
-            invoke(run, cls.command(run, before, edit), before, edit)
+            with run.forge(before, '\n'.join(hunk.rendered() for hunk in edit.hunks)):
+                before = run.commander.comms.goals.todos.get(before.id)
+                invoke(run, cls.command(run, before, edit), before, edit)
             saved = run.commander.comms.goals.todos.get(before.id)
             worker = run.commander.comms.registry.require(run.worker)
             after = worker.goal.require()
@@ -119,8 +120,8 @@ class VerdictCase(ABC):
                 for item in run.commander.invocations
                 if isinstance(item.request, CommsVerdictTool)
             )
-            if len(native) != 1 or native[0][0].operation.tool_call_id != call_id:
-                raise ValueError("The native verdict must judge this one original copied tool call")
+            if len(native) != 1:
+                raise ValueError("The native verdict must judge exactly one linked current PR head")
             request, result = native[0]
             # goal_history returns committed revisions; its internal tags stay there.
             history_entries = run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id)[
@@ -128,7 +129,7 @@ class VerdictCase(ABC):
             ]
             progress = GoalSegment.capture(worker, after, run.commander.comms.goals).progress
             mutation = VerdictMutation(
-                request.operation.tool_call_id,
+                request.operation.head,
                 len(saved.verdicts) - len(before.verdicts),
                 saved.revision - before.revision,
                 saved.strike_count - before.strike_count,
@@ -161,14 +162,14 @@ class VerdictCase(ABC):
                 f"{cls.native_owner.__module__}.{cls.native_owner.__qualname__}",
                 len(native),
                 checks,
-                "",
+                "Copied native history and Todo; controlled gh responses, no live review status changed.",
                 mutation,
             )
 
 
 class AcceptedCase(VerdictCase):
     changes = 0
-    native_owner = AcceptedVerdict
+    native_owner = AcceptedHeadVerdict
 
     @classmethod
     def replacement(cls, run: LifecycleRun) -> str:
@@ -177,7 +178,7 @@ class AcceptedCase(VerdictCase):
     @classmethod
     def command(cls, run: LifecycleRun, todo: Todo, edit: Edit) -> OkVerb:
         return OkVerb(
-            ids=(f"{edit.id}:{edit.code()}",),
+            problem=todo.id,
             why="The native edit removes the copied workflow decision.",
             serves="Remove the copied workflow decision",
             lines=(edit.hunks[0].new_text,),
@@ -186,7 +187,7 @@ class AcceptedCase(VerdictCase):
 
 class SendBackCase(VerdictCase):
     changes = 1
-    native_owner = SendBackVerdict
+    native_owner = RejectedHeadVerdict
     why: ClassVar[str] = "The edit duplicates the copied workflow decision instead of removing it."
 
     @classmethod
@@ -196,8 +197,8 @@ class SendBackCase(VerdictCase):
     @classmethod
     def command(cls, run: LifecycleRun, todo: Todo, edit: Edit) -> BackVerb:
         return BackVerb(
-            ids=(f"{edit.id}:{edit.code()}",),
-            msg=todo.messages[-1].message_id,
+            problem=todo.id,
+            serves="Remove the copied workflow decision",
             lines=(edit.hunks[0].new_text,),
             why=cls.why,
             roast=(
@@ -207,7 +208,7 @@ class SendBackCase(VerdictCase):
             fix="Remove the copied decision and let the existing check measure its absence.",
             pattern="AGENT-2",
             fact="the copied workflow decision collection",
-            at=f"{run.decisions}:1",
+            at=todo.order.checked().owner.to_wire(),
             derive="delete-copy",
             by=f"{Path(__file__).resolve()}:1",
         )

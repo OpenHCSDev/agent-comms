@@ -49,9 +49,14 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path):
+def held_source(tmp_path):
+    return SourceRepository.create(tmp_path / "source")
+
+
+@pytest.fixture
+def held_bus(comms, tmp_path, held_source):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
-    source = SourceRepository.create(tmp_path / "source")
+    source = held_source
     for name in ("lead", "worker", "outsider"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout),
             process_identity=ProcessIdentity.capture(os.getpid())))

@@ -29,7 +29,6 @@ from agent_comms.todos import (
     Slop,
     StrikeReason,
     Todo,
-    UnmergedListedPullRequest,
 )
 from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
@@ -132,10 +131,7 @@ class VerdictVerb(JudgeVerb):
         todo = next((todo for todo in ctx.held_orders() if todo.id == self.problem), None)
         if todo is None:
             sys.exit(f'Refused: {self.problem} is not a held order of this commander.')
-        requests = PullRequests((todo,)).listed(todo.repo, UnmergedListedPullRequest, todo)
-        if len(requests) != 1:
-            sys.exit(f'Refused: {todo.id} must link exactly one open pull request; found {len(requests)}.')
-        request, = requests
+        request = PullRequests((todo,)).current(todo)
         self.check_diff(request.diff(todo.repo))
         result = ctx.call(CommsVerdictTool(problem=todo.id,
                           operation=self.operation(ctx, todo, request)))

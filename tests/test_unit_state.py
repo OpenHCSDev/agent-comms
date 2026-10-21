@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from test_holder_standing_rules import held_bus, blocked_holder, publish
+from test_holder_standing_rules import held_bus, held_source, blocked_holder, publish
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus

@@ -6,7 +6,7 @@ from agent_comms.commander.order import OrderFile
 from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
-from agent_comms.todos import SendBackVerdict, StrikeReason, Todo
+from agent_comms.todos import PullRequests, RejectedHeadVerdict, StrikeReason, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsFleetStoryTool,
@@ -25,48 +25,44 @@ class StoryCase(LifecycleCase):
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
         created = run.create()
-        verdict = SendBackVerdict(
-            created.revision,
-            run.commander.incarnation,
-            created.held(),
-            "story-review",
-            StrikeReason(cls.back_reason),
-            evidence=(created.order.checked().owner,),
-        )
-        run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
-        document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
-        run.commander.send(
-            run.worker,
-            document,
-            clean=True,
-        )
-        run.commander.strike(run.worker, created.id, cls.strike_reason,
-                             evidence=(created.order.checked().owner,))
-        saved = run.commander.comms.goals.todos.get(created.id)
-        run.commander.call(
-            CommsTodoCreateTool(
-                owner=run.worker,
-                order=CreateProblemGoalAction(
-                    problem="P2",
-                    order=replace(document.order, at=saved.order.checked().at),
-                    request=run.commander.comms.registry.require(run.commander.commander)
-                    .goal.require()
-                    .id,
-                    review_at=saved.review_at,
-                    commander=run.commander.commander,
-                    repo=saved.repo,
-                    text="The second problem shares the same real sent order.",
-                ),
+        with run.forge(created, "+ copied decision\n"):
+            created = run.commander.comms.goals.todos.get(created.id)
+            request = PullRequests((created,)).current(created)
+            verdict = RejectedHeadVerdict(
+                created.revision, run.commander.incarnation, created.held(),
+                reason=StrikeReason(cls.back_reason), head=request.head,
+                quote="Remove the copied workflow decision",
+                evidence=(created.order.checked().owner,),
             )
-        )
-        for _ in range(2):
-            story = run.commander.call(CommsOrderStoryTool(order_id=saved.order.checked().id))
-            assert isinstance(story, OrderStory)
-            print(story.line)
-        fleet = run.commander.call(CommsFleetStoryTool())
-        assert isinstance(fleet, FleetStory)
-        print("\n".join(fleet.lines))
-        return created, saved, run.commander.comms.goals.todos.get(created.id)
+            run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
+            document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
+            run.commander.send(run.worker, document, clean=True)
+            run.commander.strike(run.worker, created.id, cls.strike_reason,
+                                 evidence=(created.order.checked().owner,))
+            saved = run.commander.comms.goals.todos.get(created.id)
+            run.commander.call(
+                CommsTodoCreateTool(
+                    owner=run.worker,
+                    order=CreateProblemGoalAction(
+                        problem="P2",
+                        order=replace(document.order, at=saved.order.checked().at),
+                        request=run.commander.comms.registry.require(run.commander.commander)
+                        .goal.require().id,
+                        review_at=saved.review_at,
+                        commander=run.commander.commander,
+                        repo=saved.repo,
+                        text="The second problem shares the same real sent order.",
+                    ),
+                )
+            )
+            for _ in range(2):
+                story = run.commander.call(CommsOrderStoryTool(order_id=saved.order.checked().id))
+                assert isinstance(story, OrderStory)
+                print(story.line)
+            fleet = run.commander.call(CommsFleetStoryTool())
+            assert isinstance(fleet, FleetStory)
+            print("\n".join(fleet.lines))
+            return created, saved, run.commander.comms.goals.todos.get(created.id)
 
     @classmethod
     def checks(
