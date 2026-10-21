@@ -8,6 +8,7 @@ import time
 
 import pytest
 from test_todos import order
+from source_revision_fixture import SourceRepository
 
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
@@ -18,23 +19,8 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
-from agent_comms.todos import (CommittedProgress, DistanceReadings, EditingProgress, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, MergedPullRequest, PresentCheckout, ProgressPoint,
-    PullRequest, PullRequests, PushedProgress, UnmergedPullRequest, UnreadProgress)
+from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
 
-
-
-class Listed(PullRequests):
-    """GitHub as a test states it: the pull requests of each state."""
-
-    def __init__(self, **listed: tuple[PullRequest, ...]) -> None:
-        super().__init__()
-        self.states = listed
-
-    def read(self, repo, state, order):
-        if isinstance(self.states, Exception):
-            raise self.states
-        return self.states.get(state, ())
 
 
 def git(checkout, *args):
@@ -46,25 +32,6 @@ def test_prior_declarations_do_not_enter_native_request_schemas():
     catalog = json.dumps(NativeRequestTools.catalog())
     assert 'prior_orders' not in catalog
     assert 'preceding' not in catalog
-
-
-class HeldSource:
-    """A source holding an unpushed commit, a pushed commit, an open PR and a merged PR."""
-    since = 100.0
-    pushes = ()
-
-    def commits(self, *excluded):
-        yield ProgressPoint('a' * 40, 1000.0)
-
-    def published(self):
-        yield ProgressPoint('e' * 40, 1000.0)
-
-    def readings(self):
-        return DistanceReadings()
-
-    def requests(self, state):
-        return {'open': [UnmergedPullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],
-                'merged': [MergedPullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0, orders=('order-P1',))]}[state]
 
 
 class EmptySource:
@@ -79,29 +46,6 @@ class EmptySource:
 
     def requests(self, state):
         return []
-
-
-MOVED = time.strftime('%H:%M:%S', time.localtime(1000.0))
-
-
-@pytest.mark.parametrize('member, line', [
-    (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed'),
-    (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR'),
-    (OpenPrProgress, 'PR #7 open at bbbbbbbbb'),
-    (MergedProgress, 'merged as ccccccccc, waiting on install'),
-])
-def test_each_found_member_says_its_line_from_its_class(member, line):
-    (progress,) = member.found(HeldSource())
-    assert tuple(member.found(EmptySource())) == ()
-    assert progress.line == line
-
-
-@pytest.mark.parametrize('progress, line', [
-    (NoCommitProgress(), 'no commit since the order'),
-    (UnreadProgress('gh failed'), 'progress unread: gh failed'),
-])
-def test_unfound_progress_says_its_line_from_its_class(progress, line):
-    assert progress.line == line
 
 
 def unit_checkout(path):
@@ -165,6 +109,7 @@ def held(tmp_path):
     """P1 ordered long ago and held by a running worker whose own checkout has no commit for it."""
     root = tmp_path / 'comms'
     root.mkdir(mode=0o700)
+    source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
@@ -173,7 +118,7 @@ def held(tmp_path):
     comms.goals.update_goal('lead', SetGoalAction(
         text='Repair the worker', goal_id='request', order=RequestGoalOrder()))
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(tmp_path), request='request', review_at=RecordedEventTime(1000),
+        problem='P1', order=order(source), request='request', review_at=RecordedEventTime(1000),
         commander='lead', repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from typing import Annotated
@@ -10,9 +9,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from agent_comms import field_codec
-from agent_comms.cli_commands import DeclaredOptions
+from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.command import Command
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.native_package import (
     install_declared_sources,
     package_tree_digest,
@@ -25,20 +23,15 @@ from agent_comms.unit_instructions import UnitInstructions
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
+class NativePackageVerb(DeclaredVerb, Command, affix="Verb"):
     """One verb: its options are its fields, its parser comes from them, apply() does the work."""
 
     @abstractmethod
     def apply(self, ctx: None = None) -> None: ...
 
     @classmethod
-    def parse(cls, argv: list[str]) -> NativePackageVerb:
-        parser = argparse.ArgumentParser(prog="agent_comms.cli_native_package", description=__doc__)
-        verbs = parser.add_subparsers(dest="command", required=True)
-        for member in cls.members_with(cls):
-            member.add_parser(verbs)
-        args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_arguments(args)
+    def tool(cls) -> str:
+        return cls.__module__
 
 
 @dataclass(frozen=True, kw_only=True)
