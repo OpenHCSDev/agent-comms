@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
@@ -29,24 +29,20 @@ from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
 if TYPE_CHECKING:
+    from acp.agent.connection import AgentSideConnection
+
     from .acp import CommsAgent
     from .routing import MessageRoute
+    from .runtime import RuntimeProxy, RuntimeServer
 
 
+@dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
-    def __init__(
-        self,
-        agent: CommsAgent,
-        session_id: str,
-        client: Any,
-        turn_id: str | None = None,
-        route: MessageRoute | None = None,
-    ) -> None:
-        self.agent = agent
-        self.session_id = session_id
-        self.client = client
-        self.turn_id = turn_id
-        self.route = route
+    agent: CommsAgent
+    session_id: str
+    client: AgentSideConnection | RuntimeServer | RuntimeProxy
+    turn_id: str | None = None
+    route: MessageRoute | None = None
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:

@@ -16,7 +16,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistryDocument, RegistrySnapshot, UserThreadLookup
+from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
@@ -292,9 +292,18 @@ class Registration:
             edit.commit()
             return result
 
-    def canonical_name(self, name: str) -> str:
+    def read[**P, R](
+        self, operation: Callable[Concatenate[RegistryDocument, P], R],
+        *args: P.args, **kwargs: P.kwargs,
+    ) -> R:
         with self.store.reading() as document:
-            return document.canonical_name(name)
+            return operation(document, *args, **kwargs)
+
+    canonical_name = partialmethod(read, RegistryDocument.canonical_name)
+    last_seen = partialmethod(read, RegistryDocument.seen_at)
+    require = partialmethod(read, RegistryDocument.require)
+    status = partialmethod(read, RegistryDocument.status)
+    user_thread = partialmethod(read, RegistryDocument.user_thread)
 
     def goal_history(
         self, name: str, *, goal_id: str | None = None
@@ -307,18 +316,6 @@ class Registration:
             return GoalHistoryStore(self.store.path).history(
                 thread.created_at, thread.goal, goal_id=goal_id
             )
-
-    def last_seen(self, name: str) -> float:
-        with self.store.reading() as document:
-            return document.seen_at(name)
-
-    def require(self, name: str) -> Thread:
-        with self.store.reading() as document:
-            return document.require(name)
-
-    def status(self, name: str) -> ThreadStatus:
-        with self.store.reading() as document:
-            return document.status(name)
 
     def session_thread(
         self, project_path: Path, preferred: str | None = None,
@@ -339,11 +336,6 @@ class Registration:
             return ProjectThreadSelection.from_threads(tuple(
                 member for thread in located for member in thread.role.acp_thread(thread)
             ))
-
-    def user_thread(self) -> UserThreadLookup[Thread]:
-        """The human answer from this stored revision, without copying its roster."""
-        with self.store.reading() as document:
-            return document.user_thread()
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
