@@ -24,6 +24,7 @@ from agent_comms.repo import Repo
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
+    from agent_comms.message_reference import MessageReference
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import Todo
 
@@ -105,6 +106,13 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         found = (v for owner in owners for v in owner.violations(comms, commander))
         return tuple(rule for rule in found if isinstance(rule, cls) and rule.broke_after(after))
+
+
+class OrderRefusingStandingRule(StandingRule, declared_name=None):
+    """A broken rule owns the reason an unrelated commander order cannot proceed."""
+
+    @abstractmethod
+    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]: ...
 
 
 class UndatedStandingRule(StandingRule, declared_name=None):
@@ -290,7 +298,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(DatedStandingRule):
+class DirectiveUnacted(OrderRefusingStandingRule, DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
     request: str
@@ -315,6 +323,13 @@ class DirectiveUnacted(DatedStandingRule):
             f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
+
+    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
+        message = self.directive.original(comms.goals)
+        if message.reference in answers:
+            return ()
+        return (f"{message.message_id}: overdue owner directive on request {self.request}; "
+                "reply to the original message or use --answers MESSAGE_ID.",)
 
     def heartbeat_group(self) -> object:
         return type(self), self.request

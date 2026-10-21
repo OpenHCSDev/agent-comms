@@ -23,7 +23,9 @@ from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.wire_log import WireSnapshot
 from agent_comms.message_bus import WatchPass
-from agent_comms.standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import (
+    OrderRefusingStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+)
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
@@ -367,9 +369,13 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True)
-class Unjudged(ReasonedStandingRule, UndatedStandingRule):
-    limit: ClassVar[int] = 30
-    text = "UNJUDGED {why} edits -> judge or fork a judge slice"
+class Unjudged(OrderRefusingStandingRule, ReasonedStandingRule, UndatedStandingRule):
+    limit: ClassVar[int] = 50
+    text = "UNJUDGED {why} edits -> judge the edits before sending more orders"
+
+    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
+        return (f"{self.why} unjudged edits exceed the {self.limit} edit ceiling; "
+                "judge is the way out: judge the edits before sending more orders.",)
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
