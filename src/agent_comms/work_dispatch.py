@@ -31,7 +31,7 @@ from .thread_text import SavedSessionFile
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from agent_comms.phase_evidence import PlanReading
+    from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
     from .threads import Thread
     from .todos import PendingProblemOrder
@@ -128,8 +128,9 @@ class CheckedPhaseTask(PhaseTask):
         if not math.isfinite(self.review_seconds) or self.review_seconds <= 0:
             raise ValueError("A phase task needs a finite positive review interval.")
 
-    def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase],
-              reading: PlanReading) -> None:
+    def start(
+        self, comms: Comms, commander: Thread, phase: type[PlanPhase], reading: PlanReading
+    ) -> None:
         if not phase.ready(reading) or phase.ordered(reading):
             return
         # This task's existing row belongs to UnownedWheelSpin. Other phase subtasks

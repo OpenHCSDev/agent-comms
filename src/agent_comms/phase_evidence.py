@@ -43,8 +43,12 @@ class MainTree:
         return self.repo.contains(sha, self.commit)
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(("git", "-C", str(self.repo.checkout), *args),
-                              capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            ("git", "-C", str(self.repo.checkout), *args),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
 
 @dataclass(frozen=True)

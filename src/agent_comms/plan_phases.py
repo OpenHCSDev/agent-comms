@@ -129,8 +129,10 @@ class RecordPlanePhase(CommanderNativePhase):
 
 
 class ReviewQueuePhase(CommanderNativePhase):
+    """Revised 2026-10-21: a verdict per PR head gates the merge queue, so the review-queue
+    commit no longer proves this phase; P433 declares what main must show."""
+
     after = (RecordPlanePhase,)
-    evidence = CommitMerged("41e4ec7319432755d75dcd8dbbab35839a4eb005")
 
 
 class ControlPlanePhase(CommanderNativePhase):
@@ -173,8 +175,10 @@ class BusWriterPhase(VirtualBusPhase):
     """W: the one writer onto ``Bus.append``."""
 
     after = (BusInterfacePhase,)
-    evidence = PatternAbsent("append_private_unlocked",
-                             ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"))
+    evidence = PatternAbsent(
+        "append_private_unlocked",
+        ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"),
+    )
 
 
 class BusDeliveryReadersPhase(VirtualBusPhase):
@@ -183,18 +187,36 @@ class BusDeliveryReadersPhase(VirtualBusPhase):
     ``store_order`` keeps ``WireLog`` until C deletes the class, so it is not read here."""
 
     after = (BusWriterPhase,)
-    evidence = PatternAbsent(OLD_LOG_READ, tuple(f"src/agent_comms/{module}.py" for module in (
-        "wake_candidate_index", "notification_assignment", "read_ledger", "cursor_publication",
-        "goal_waits")))
+    evidence = PatternAbsent(
+        OLD_LOG_READ,
+        (
+            "src/agent_comms/wake_candidate_index.py",
+            "src/agent_comms/notification_assignment.py",
+            "src/agent_comms/read_ledger.py",
+            "src/agent_comms/cursor_publication.py",
+            "src/agent_comms/goal_waits.py",
+        ),
+    )
 
 
 class BusHistoryReadersPhase(VirtualBusPhase):
     """B2: history, presentation and transcript readers on ``seq``."""
 
     after = (BusWriterPhase,)
-    evidence = PatternAbsent(OLD_LOG_READ, (*(f"src/agent_comms/{module}.py" for module in (
-        "historical_views", "presentation", "transcripts", "transcript_sources", "active_route",
-        "acp", "comms", "message_bus")), "scripts/attach_historical_views.py"))
+    evidence = PatternAbsent(
+        OLD_LOG_READ,
+        (
+            "src/agent_comms/historical_views.py",
+            "src/agent_comms/presentation.py",
+            "src/agent_comms/transcripts.py",
+            "src/agent_comms/transcript_sources.py",
+            "src/agent_comms/active_route.py",
+            "src/agent_comms/acp.py",
+            "src/agent_comms/comms.py",
+            "src/agent_comms/message_bus.py",
+            "scripts/attach_historical_views.py",
+        ),
+    )
 
 
 class BusCarryPhase(VirtualBusPhase):
@@ -219,12 +241,20 @@ class BusDeletionPhase(VirtualBusPhase):
     """C: everything under the plan's "Deleted, not ported"."""
 
     after = (BusDeliveryReadersPhase, BusHistoryReadersPhase, BusCarryPhase)
-    evidence = AllEvidence((
-        PathsAbsent(tuple(f"src/agent_comms/{module}.py" for module in (
-            "private_bus_checkpoint", "checkpoint_seals", "bus_page_index", "wire_log",
-            "wire_record"))),
-        PatternAbsent(r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields"),
-    ))
+    evidence = AllEvidence(
+        (
+            PathsAbsent(
+                (
+                    "src/agent_comms/private_bus_checkpoint.py",
+                    "src/agent_comms/checkpoint_seals.py",
+                    "src/agent_comms/bus_page_index.py",
+                    "src/agent_comms/wire_log.py",
+                    "src/agent_comms/wire_record.py",
+                )
+            ),
+            PatternAbsent(r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields"),
+        )
+    )
 
 
 FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
@@ -233,29 +263,34 @@ FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
 class LifecycleFlagsPhase(MultipleInheritancePhase):
     """1A."""
 
-    evidence = PatternAbsent(r"^\s+(terminal|failed|successful|pending|active|executing"
-                             r"|unresolved|deferred|complete|completed)" + FLAG)
+    evidence = PatternAbsent(
+        r"^\s+(terminal|failed|successful|pending|active|executing"
+        r"|unresolved|deferred|complete|completed)" + FLAG
+    )
 
 
 class CodecFlagsPhase(MultipleInheritancePhase):
     """1B."""
 
     evidence = PatternAbsent(
-        r"^\s+(accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt)" + FLAG)
+        r"^\s+(accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt)" + FLAG
+    )
 
 
 class SmallFamilyFlagsPhase(MultipleInheritancePhase):
     """1C. ``GoalDisplay.visible`` stays by the commander's decision, so ``visible`` is not read."""
 
     evidence = PatternAbsent(
-        r"^\s+(multiple_targets|preengagement_target|notification_changed|input_uncertain)" + FLAG)
+        r"^\s+(multiple_targets|preengagement_target|notification_changed|input_uncertain)" + FLAG
+    )
 
 
 class TriggersPhase(MultipleInheritancePhase):
     """1D: every trigger derives from its table's capability in ``typed_table.py``."""
 
-    evidence = PatternAbsent(r"BEFORE (UPDATE|DELETE|INSERT)",
-                             ("src", ":!src/agent_comms/typed_table.py"))
+    evidence = PatternAbsent(
+        r"BEFORE (UPDATE|DELETE|INSERT)", ("src", ":!src/agent_comms/typed_table.py")
+    )
 
 
 class DuplicatesPhase(MultipleInheritancePhase):
@@ -265,8 +300,13 @@ class DuplicatesPhase(MultipleInheritancePhase):
 class FieldDirectivesPhase(MultipleInheritancePhase):
     """Batch 2."""
 
-    after = (LifecycleFlagsPhase, CodecFlagsPhase, SmallFamilyFlagsPhase, TriggersPhase,
-             DuplicatesPhase)
+    after = (
+        LifecycleFlagsPhase,
+        CodecFlagsPhase,
+        SmallFamilyFlagsPhase,
+        TriggersPhase,
+        DuplicatesPhase,
+    )
 
 
 class OwnTypeChecksPhase(MultipleInheritancePhase):
@@ -290,8 +330,13 @@ class DeadModulesPhase(RemainingSlopPhase):
 class TransitionScaffoldingPhase(RemainingSlopPhase):
     """0.4."""
 
-    evidence = PathsAbsent(("src/agent_comms/commander_parity", "tools/carry_rts_orders.py",
-                            "tools/cutover/rts-launchers.patch"))
+    evidence = PathsAbsent(
+        (
+            "src/agent_comms/commander_parity",
+            "tools/carry_rts_orders.py",
+            "tools/cutover/rts-launchers.patch",
+        )
+    )
 
 
 class AbsencePhase(RemainingSlopPhase):
@@ -312,4 +357,3 @@ class ExternalBoundariesPhase(RemainingSlopPhase):
     """Wave 3."""
 
     evidence = PatternAbsent(r"except Exception")
-
