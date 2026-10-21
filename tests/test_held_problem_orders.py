@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 import shlex
 import time
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +16,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
 from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
@@ -39,7 +41,10 @@ def held_commander(pr_commander):
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
     with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
-        ctx = source.model_copy(update={"root": root, "state": root / "state"})
+        ctx = source.model_copy(update={
+            "root": root, "state": root / "state",
+            "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
+        })
         yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
