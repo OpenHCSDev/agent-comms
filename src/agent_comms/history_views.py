@@ -33,7 +33,6 @@ from .channel_management import ChannelManagement
 from .channel_targets import CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
-from .coordination_errors import StaleRevision
 from .errors import UnknownChannelError
 from .exporting import (
     WireExportBoundary,
@@ -151,8 +150,10 @@ class ThreadPresentations:
     sent_source_limit: int
 
     def view(self, name: str) -> ThreadPresentation:
-        view = self.views.get(self.snapshot.canonical_name(name))
-        return NoThreadPresentation() if view is None else view.presentation
+        canonical = self.snapshot.canonical_name(name)
+        if canonical not in self.views:
+            return NoThreadPresentation()
+        return self.views[canonical].presentation
 
     def read(self, name: str) -> ThreadPresentation:
         return self.view(name).read_sources(
