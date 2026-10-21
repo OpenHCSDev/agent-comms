@@ -66,7 +66,7 @@ from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .wire_metadata import WireMetadata
-from .wire_watch import WatchSource, WireWatch
+from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
     from agent_comms.following_inputs import OwnerFollowingInputs
@@ -133,18 +133,6 @@ class TickRevisionPaths:
     @property
     def other(self) -> tuple[Path, ...]:
         return self.goal_waits, *self.goal_attempts, self.auth, *self.maintenance
-
-    @property
-    def watch_sources(self) -> tuple[WatchSource, ...]:
-        # The marker is the final durable publication for bus bytes and their
-        # checkpoint. Watching the intermediate files wakes readers before the
-        # append is complete and repeats the same observation several times.
-        replaced = (*self.registry, *self.bus[1:], self.goal_waits, self.auth, *self.maintenance)
-        modified = (*self.coordination, *self.goal_attempts)
-        return (
-            *(WatchSource.file(path) for path in replaced),
-            *(WatchSource.modified_file(path) for path in modified),
-        )
 
     def capture(self, local: tuple) -> TickRevision:
         revisions = lambda paths: tuple(FileRevision.capture(path) for path in paths)
@@ -237,7 +225,7 @@ class FailedTick(TickState):
         return await UnsettledTick()._next(observation, session_id, revision)
 
     async def apply(
-        self, observation: InputObservation, session_id: str, watcher: WireWatch,
+        self, observation: InputObservation, session_id: str, watcher: ChangeSignal,
     ) -> TickState:
         thread = observation.sessions.require(session_id)
         snapshot = await Coordination.run_worker(observation.comms.registry.snapshot)
@@ -253,7 +241,7 @@ class FullTick:
     revision: TickRevision
     entry: RegistryEntry
 
-    async def apply(self, observation: InputObservation, session_id: str, watcher: WireWatch) -> TickState:
+    async def apply(self, observation: InputObservation, session_id: str, watcher: ChangeSignal) -> TickState:
         thread = observation.sessions.require(session_id)
         owner = self.entry.owner_identity
         try:
@@ -285,7 +273,7 @@ class FullTick:
                 if state.self_tick_owed(
                     drained, needs_refresh, observation.turn_live(session_id),
                 ):
-                    watcher.notify()
+                    watcher.wake()
         except DEFERRED_DRAIN_ERRORS:
             pass
         return UnsettledTick()
@@ -328,7 +316,7 @@ class SettledTick(TickState):
             session_id, self, step.revision, step.entry,
         )
 
-    async def apply(self, observation: InputObservation, session_id: str, watcher: WireWatch) -> TickState:
+    async def apply(self, observation: InputObservation, session_id: str, watcher: ChangeSignal) -> TickState:
         return self
 
 
@@ -449,7 +437,9 @@ class InputObservation(ABC):
     async def observe(self, session_id: str) -> None:
         state: TickState = UnsettledTick()
         paths = self._tick_paths()
-        async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
+        async with aclosing(self.comms.bus.bus.watch(
+            FileSource(paths.auth), *(FileSource(path) for path in paths.maintenance),
+        )) as observations:
             async for watcher in observations:
                 self.state(session_id).observation_watcher = watcher
                 revision = await Coordination.run_worker(
@@ -683,7 +673,7 @@ class DrainedSession:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     drain_task: asyncio.Task[None] | None = None
     wake_task: asyncio.Task[None] | None = None
-    observation_watcher: WireWatch | None = None
+    observation_watcher: ChangeSignal | None = None
     turn: DrainTurn = field(default_factory=NoDrainTurn)
     queued: dict[str, QueuedInput] = field(default_factory=dict)
     restored: dict[str, QueuedInput] = field(default_factory=dict)
@@ -753,7 +743,7 @@ class DrainedSession:
 
     def notify_observer(self) -> None:
         if self.observation_watcher is not None:
-            self.observation_watcher.notify()
+            self.observation_watcher.wake()
 
     def open_inbox(self) -> TurnInbox:
         self.turn = self.turn.opened()

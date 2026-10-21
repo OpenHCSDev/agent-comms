@@ -1,31 +1,23 @@
-"""Actual queued owner handoff retains history and accepts a fresh native input."""
+"""Queued owner handoff wakes for registry and allocated queue entries."""
 
 import asyncio
-import sys
-
-import pytest
+from contextlib import aclosing
 
 import agent_comms.restart_queue as queue
-from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
+from agent_comms.bus import Bus
+from agent_comms.watched import DirectorySource, FileSource
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
 async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
     root = tmp_path / "wire"
     root.mkdir()
     directory = root / queue.DIRECTORY
     directory.mkdir()
-    watcher = open_wire_watcher(
-        WatchSource.file(root / "registry.json"), DirectoryWatchSource(directory)
-    )
-    try:
-        await watcher.prepare()
+    async with aclosing(Bus.watch_sources(
+        FileSource(root / "registry.json"), DirectorySource(directory),
+    )) as observations:
+        await anext(observations)
         (root / "registry.json").write_text("changed")
-        await asyncio.wait_for(watcher.wait(), 1)
-        await watcher.prepare()
+        await asyncio.wait_for(anext(observations), 1)
         (directory / "next.json").write_text("queued")
-        await asyncio.wait_for(watcher.wait(), 1)
-    finally:
-        watcher.close()
-
-
+        await asyncio.wait_for(anext(observations), 1)

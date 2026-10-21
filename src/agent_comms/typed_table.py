@@ -46,7 +46,7 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
+from .locked_store import DurableFile, FileStore, PublishedSQLiteFile, RuntimeFile, SQLiteFile, StoreCommittedError
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -1126,11 +1126,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreCommittedError(OSError):
-    """COMMIT succeeded; change signalling or connection retirement failed."""
-
-
-class StoreWriter(SQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits
@@ -1149,32 +1145,12 @@ class StoreWriter(SQLiteFile, FileStore):
         """The store whose committed row changes this writer publishes."""
         return self
 
-    @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        return super().files_in(root) | frozenset(cls._source_paths(cls.path_in(root)))
-
-    @staticmethod
-    def _source_paths(path: Path) -> tuple[Path, ...]:
-        return (path.with_suffix('.changed'),)
-
-    @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Watch committed row changes, never SQLite reader attachment or retirement."""
-        return cls._source_paths(cls.path_in(root))
-
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """The file's write transaction, and a touch of its watch file when rows changed."""
-        before = connection.total_changes
-        with self.write_transaction(connection):
-            yield connection
-        if connection.total_changes != before:
-            try:
-                self._source_paths(self.store.path)[0].write_bytes(b'')
-            except Exception as error:
-                raise StoreCommittedError(
-                    f"Committed {self.store.path}, but change notification failed: {error}"
-                ) from error
+        """Publish through the physical store after its row transaction commits."""
+        with self.publishing_changes(connection, self.store.path):
+            with self.write_transaction(connection):
+                yield connection
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:

@@ -30,11 +30,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.locked_store import DurableFile, RegistryFile, StoreCommittedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import SQLiteTableName, StoreCommittedError, WalStore
+from agent_comms.typed_table import SQLiteTableName, WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
