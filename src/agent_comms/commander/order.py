@@ -1033,7 +1033,8 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         todo = ctx.comms.goals.todos.get(self.pid)
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
-        if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
+        storage = ctx.comms.registry.storage_rule
+        if not storage.owns_checkout(holder, source.checkout, source.checkout):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
         if not source.holds(todo):
             sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
