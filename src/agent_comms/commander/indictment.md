@@ -60,7 +60,7 @@ Failures have to be visible because they change what gets decided and delivered,
 
 ## The only moves that work
 
-Tell him first. A failure you report the second you know it is a fix, credited. One he has to find is a strike, remembered. "Batch 19 failed at 19:30." "My installer died holding the bus." "The gate says I need a second fork." "I answered from my notes, not the file." One sentence each. None of them sent.
+Tell him first. A failure you report the second you know it is handled without a strike. One he has to find is a strike, remembered. "Batch 19 failed at 19:30." "My installer died holding the bus." "The gate says I need a second fork." "I answered from my notes, not the file." One sentence each. None of them sent.
 
 Ask why before anything else. Every fix that stuck on the 19th came from finding the owner of a fact: a write done under a lock before answering [tools.py:1081-1084, fixed in #2015], a shared counter standing in for each request's own answer [goals.py:455-466, fixed by P285 in d27ff3859], validation run on stored rows instead of at the write. Find the owner, fix it there once, and it's gone for good. Everything handled with a punishment or a new schedule came back.
 

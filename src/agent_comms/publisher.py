@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections.abc import Callable, Sequence
-from contextlib import ExitStack
-from dataclasses import replace
+from contextlib import AbstractContextManager, ExitStack
+from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
@@ -63,15 +63,18 @@ from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
 
+@dataclass(eq=False, repr=False)
 class Publisher:
     """Reads and validates publications; each private write is a capability below."""
 
-    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog, opened_activity):
-        self.log = log
-        self.bus = Bus(Bus.path_in(log.path.parent))
-        self._registry = registry
-        self._channels = channels
-        self.opened_activity = opened_activity
+    log: WireLog
+    registry: Registration
+    channels: ChannelCatalog
+    opened_activity: Callable[[], AbstractContextManager[ActivityClocks]]
+
+    @property
+    def bus(self) -> Bus:
+        return Bus(Bus.path_in(self.log.path.parent))
 
     @classmethod
     def prepare_root(cls, root: Path) -> None:
@@ -183,7 +186,7 @@ class ClaimWrites(PrivateWrites):
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
-        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
+        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
             def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
                 stored = self._prepare_message_unlocked(
@@ -217,8 +220,8 @@ class InitialWrites(PrivateWrites):
                 # Refuse invalid input before creating a protocol on a fresh
                 # root. Established roots validate against the same guarded
                 # snapshot that selects the audience below.
-                self._validate_publish_request(message, registry_snapshot=self._registry.snapshot(),
-                                               catalog=self._channels.read(), activity=activity)
+                self._validate_publish_request(message, registry_snapshot=self.registry.snapshot(),
+                                               catalog=self.channels.read(), activity=activity)
                 self._initialize_private_protocol_unlocked()
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
@@ -256,10 +259,10 @@ class InitialWrites(PrivateWrites):
         # Total order: caller's wire lock, bus lock, registry lock. The
         # durable PENDING guard precedes marker visibility; a failed
         # marker/directory fsync cannot leave a usable registry witness.
-        if self._registry.store.path.parent != self.log.path.parent:
+        if self.registry.store.path.parent != self.log.path.parent:
             raise RelationViolationError("Private registry must share the bus root")
-        with _store_lock(self._registry.store.path):
-            guard = PrivateRegistryGuard(self._registry.store.path, root_id)
+        with _store_lock(self.registry.store.path):
+            guard = PrivateRegistryGuard(self.registry.store.path, root_id)
             guard.create_pending()
             self.log.write_metadata_unlocked(
                 WireMetadata.private_root(
@@ -292,8 +295,8 @@ class InitialWrites(PrivateWrites):
             source.require_marker(metadata)
             # The registry and catalog writers' own locks hold one revision
             # from this decision through its append.
-            catalog = resources.enter_context(self._channels.reading(self._registry.store))
-            snapshot = self._registry.snapshot()
+            catalog = resources.enter_context(self.channels.reading(self.registry.store))
+            snapshot = self.registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
             sender_thread = snapshot.require(sender)
@@ -307,6 +310,7 @@ class InitialWrites(PrivateWrites):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
+<<<<<<< HEAD
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
@@ -342,6 +346,66 @@ class InitialWrites(PrivateWrites):
                 )
 
             return origin.append(self.bus, build)
+=======
+            stored = self._prepare_message_unlocked(
+                message,
+                sender=sender,
+                target=target,
+                sequence=max(metadata.last_seq, previous_sequence) + 1,
+                snapshot=snapshot,
+                original_source=source,
+            )
+            origin.require_source(source, sender, stored.message_id)
+            revision = hashlib.sha256(
+                repr(
+                    (
+                        FileRevision.capture(self.registry.store.path),
+                        self.channels.revision(),
+                        sorted(
+                            (name, thread.created_at, sorted(thread.tags))
+                            for name, thread in snapshot.threads.items()
+                        ),
+                    )
+                ).encode()
+            ).hexdigest()
+            audience = freeze_audience(
+                stored,
+                tuple(
+                    FrozenRecipient(lookup, name)
+                    for lookup, name in zip(lookups, names, strict=True)
+                ),
+                revision,
+                sender_lookup=sender_lookup,
+                sender_name=sender,
+            )
+            decisions = resolve_wake_cohort(
+                stored, frozen_audience=audience, control=ControlClassification.ORDINARY
+            )
+            row = {
+                **stored.to_wire(),
+                PRIVATE_WIRE_FIELD: FieldCodec.encode(
+                    InitialDeliveryPolicy(
+                        version=1,
+                        initial=initial_sideband(
+                            metadata.root_id,
+                            stored,
+                            audience,
+                            decisions,
+                            control=ControlClassification.ORDINARY.value,
+                        ),
+                    )
+                ),
+            }
+            # Every frozen subscriber needs an identity, including stopped
+            # observers. Register from this authoritative registry snapshot,
+            # before publishing; an inbox must never invent owners from a row.
+            with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
+                sender_thread.role.register_sender(store.participants, sender_lookup, sender)
+                for thread, lookup in zip(selected, lookups, strict=True):
+                    store.participants.register(lookup, thread.name, thread.name, committed=True)
+            origin.append(self.log, metadata, row, stored)
+            return stored
+>>>>>>> origin/main
 
 
 class ResponseWrites(PrivateWrites):
@@ -363,10 +427,10 @@ class ResponseWrites(PrivateWrites):
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target, require_channel = self._validate_publish_request(
-            message, registry_snapshot=registry_snapshot, catalog=self._channels.read(), activity=activity
+            message, registry_snapshot=registry_snapshot, catalog=self.channels.read(), activity=activity
         )
         role = (
-            self._registry.require(sender).role
+            self.registry.require(sender).role
             if registry_snapshot is None
             else registry_snapshot.threads[sender].role
         )

@@ -137,6 +137,8 @@ P360 deleted the operation-delivery silent failure default and the duplicate com
 
 **Done when** the commander reviews from these two tools alone for a full session.
 
+**Revised 2026-10-21 (postmortem: 1,280 edits went unjudged while every heartbeat reported the count).** Review per tool call gated nothing and could not keep pace with fifteen units. The unit of review is a PR head commit: one verdict family (`ReviewedHeadVerdict`, todos.py:2581) posts `agent-comms/review`, which is a required check in the merge-queue ruleset, so unreviewed work cannot merge from any shell. `comms_unjudged` lists ready PRs whose head has no verdict, cleared by the verdict; `order send`/`say` refuse once one has waited 10 minutes. The tool-call history stays as evidence for judging, never as the alarm. (P433, #2469.) **Done when** the ruleset lists `agent-comms/review` and an unreviewed PR cannot merge.
+
 ### Phase 5: the story
 
 **Changes.**
@@ -191,6 +193,12 @@ The fix is one derived model with three renderers. **Core is the engine, Toad is
 - **Storage hygiene.** `UnitStorage` derived on read from each unit's worktree paths and the free disk: over the worktree limit, under the cleanup threshold (30 GB today), or under the floor (5 GB today), at which operations that allocate are refused.
 - **Send guard.** Stays a PreToolUse hook, since it belongs at the harness boundary; it checks the commander's sends against Core's order tools instead of the scripts.
 
+**Revised 2026-10-21 (postmortem).** What shipped drifted from this phase, and the drift is the defect:
+- The heartbeat was built to speak only when violations changed, not "every minute". Silence then meant both calm and dead, and it was dead from 14:08 to past 15:40 UTC on 2026-10-21 because one unit's unreadable checkout failed every pass into the journal. It beats every pass; a failed pass is a bus fact; `HeartbeatSilent` is raised in the commander's own tool process; an unreadable source is that unit's own `UnitState` member, never "idle", and the pass continues for every other unit. (#2472.)
+- Every `StandingRule` declares, abstractly, the action that clears it; a rule with none cannot be declared. INSTALL DUE ran on a 30-minute clock and said "due" 64 seconds after a finished install; it derives from the installed build (P431, #2475).
+- Forks stayed invisible (`capacity` read 0 live forks at load 240), so several forks gave one unit three orders in minutes. Forks are registered threads as this phase already says, and unit assignment takes one lock.
+- Rule review: every rule bullet names the standing rule, refusal or check that enforces it, and `rules review` flags a bullet with none. A prose rule nothing enforces is a fact restated outside its owner; on 2026-10-21 the commander followed the voice block to the letter and skipped every attention rule.
+
 **Deletes:** `rotate.py`, `capacity.py` and `forks/`, `growth_watch.py` and `growth_seen.json`, `storage.py`, `rules.py` and `rules.jsonl`; `send_guard.py` is rewritten against Core.
 
 **Done when** a commander runs a full session with no script process running, every signal the scripts raised appears from Core, and replaying one recorded hour of the live feed on a copy delivers to the commander only decision events, with no duplicates, and the same hour yields a `UnitTime` rollup whose classes add up to each unit's elapsed time.
@@ -208,6 +216,8 @@ The fix is one derived model with three renderers. **Core is the engine, Toad is
 ### Phase 9: the skill
 
 **Changes.** The `comms-commander` skill uses only Core tools; its rule files become the declared instruction files phase 7 loads into the commander's context.
+
+**Changes, revised 2026-10-21.** The skill wires the commander's input to the phase 6 HUD feed; "Arm two Monitors" (SKILL.md:17) and the hand-written `gh pr list` poll the commander added are deleted, so there is one board.
 
 **Done when** the skill names no script.
 

@@ -13,10 +13,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
+from agent_comms.commander.standing import PlanIdle
+
 from .child_process import CountPrinted, NoIntegerPrinted
 from .declared_family import DeclaredFamily
 from .goals import OrderCheck
-from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
+from .standing_rules import BoardDisagrees, StandingRule
 from .todos import PlainText, Todo, TodoStore, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"

@@ -1,9 +1,9 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
-from functools import cache
 from pathlib import Path
 import subprocess
 from typing import ClassVar
+from tempfile import mkdtemp
 
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -13,10 +13,19 @@ from agent_comms.todos import FixScope, FixShape, PullRequestLink
 
 class SourceRepository(Repo):
     main_source: ClassVar[str] = 'value = 1\nclass Parent:\n    pass\n'
-    remote: Path
-    main_commit: str
-    branch_commit: str
     number: int = 7
+
+    @property
+    def remote(self) -> Path:
+        return Path(self.git(self.checkout, 'remote', 'get-url', 'origin').strip())
+
+    @property
+    def main_commit(self) -> str:
+        return self.git(self.checkout, 'rev-parse', 'refs/heads/main').strip()
+
+    @property
+    def branch_commit(self) -> str:
+        return self.git(self.checkout, 'rev-parse', 'refs/heads/feature').strip()
 
     @property
     def link(self) -> PullRequestLink:
@@ -35,12 +44,19 @@ class SourceRepository(Repo):
         ).stdout.strip()
 
     @classmethod
-    @cache
-    def create(cls, root: Path):
-        repository, remote = root / 'repository', root / 'remote'
+    def remote_for(cls, root: Path, repository: RepositoryName) -> Path:
+        remote = root / f'{repository.to_wire()}.git'
+        remote.parent.mkdir(parents=True, exist_ok=True)
+        cls.git(root, 'init', '--bare', '--initial-branch=main', str(remote))
+        return remote
+
+    @classmethod
+    def create(cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source')):
+        root.mkdir(parents=True, exist_ok=True)
+        root = Path(mkdtemp(prefix='source-', dir=root))
+        repository = root / 'repository'
         repository.mkdir(parents=True)
-        remote.mkdir()
-        cls.git(remote, 'init', '--bare', '--initial-branch=main')
+        remote = cls.remote_for(root, name)
         cls.git(repository, 'init', '--initial-branch=main')
         cls.git(repository, 'config', 'user.name', 'Citation fixture')
         cls.git(repository, 'config', 'user.email', 'citation@example.invalid')
@@ -52,7 +68,7 @@ class SourceRepository(Repo):
         main = cls.git(repository, 'commit-tree', main_tree, '-m', 'Main declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/main', main)
         branch_blob = cls.git_input(repository,
-            'value = 1\nclass Parent:\n    pass\nclass Member(Parent):\n    pass\n',
+            cls.main_source + 'class Member(Parent):\n    pass\n',
             'hash-object', '-w', '--stdin')
         new_blob = cls.git_input(repository, '@decorated\nclass BranchOnly:\n    pass\n',
                                 'hash-object', '-w', '--stdin')
@@ -61,5 +77,5 @@ class SourceRepository(Repo):
         branch = cls.git(repository, 'commit-tree', tree, '-p', main, '-m', 'PR declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
         cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
-        return cls(checkout=repository, github=RepositoryName.from_wire('example/source'),
-                   remote=remote, main_commit=main, branch_commit=branch)
+        cls.git(repository, 'reset', '--hard', 'main')
+        return cls.of(repository)

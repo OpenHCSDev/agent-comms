@@ -22,7 +22,7 @@ from agent_comms.todos import GoalRef, TodoStore
 from test_todos import order
 
 
-def test_every_bus_file_is_a_declared_root_file(tmp_path: Path) -> None:
+def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository) -> None:
     comms = Comms(tmp_path / "bus")
     comms.messaging.initialize_private_initial_protocol()
     for name in ("owner", "peer"):
@@ -46,7 +46,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path) -> None:
         "declared-files", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Keep declared bus files", creator=owner, owner=owner,
         generation="declared-files", goal=GoalRef(owner.name, owner.created_at, "goal-1"),
-        review_at=RecordedEventTime(1000.0), order=order(comms.root),
+        review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     assert todo.id == "declared-files"
     drain_candidate_catchup(comms.root)
