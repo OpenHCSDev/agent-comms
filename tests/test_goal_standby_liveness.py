@@ -67,10 +67,11 @@ def _waiting(tmp_path, *, second=False):
     return comms, goal
 
 
-def test_idle_target_refusal_is_side_effect_free(tmp_path):
+def test_stopped_target_refusal_is_side_effect_free(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
+    comms.registry.register(comms.registry.require("child"), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
     assert goal is not None
     authoritative = ("registry.json", "goal_waits.sqlite3", "input_dispositions.sqlite3")

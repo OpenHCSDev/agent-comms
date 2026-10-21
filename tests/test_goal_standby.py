@@ -146,6 +146,22 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
         )
 
 
+def test_standby_entry_accepts_idle_live_dependency(tmp_path):
+    comms = canonical_goal_wire(tmp_path)
+    for name in ("alice", "bob"):
+        comms.registry.declare(comms.registry.new_thread(
+            name, frozenset(), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid())))
+    alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+    assert not comms.agents.is_working(
+        comms.registry.require("bob").incarnation, comms.registry.snapshot())
+    comms.goals.update_goal("alice", StandbyGoalAction(
+        expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",)))
+    assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
+    assert comms.goals.recover_closed_goal_wait("alice") == ()
+    assert comms.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
+
+
 def test_idle_live_dependency_keeps_wait_group_open(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
