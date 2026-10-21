@@ -50,6 +50,7 @@ from agent_comms.field_codec import (
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.plan_phases import OrderPhase
 from agent_comms.problem_number import ProblemNumber
@@ -790,20 +791,22 @@ class DirectiveVerb(CommanderVerb):
         ),
     ] = ()
 
-    def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
+    def named(self, ctx: Commander) -> tuple[Message, ...]:
         """The named messages still open. A name that is no longer open (answered, or out of
         the owed set since it was read) needs no answer and is dropped, never refused: the
         owed set moves while the commander writes, and refusing the whole verb over a closed
         name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
         that is wrong leaves its real message owed, and the gate below refuses that."""
-        return tuple(message.reference
-                     for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+        return tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
                      if message.message_id in self.answers)
 
+    def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
+        return tuple(message.reference for message in self.named(ctx))
+
     def gate(self, ctx: Commander) -> None:
-        self.answer_references(ctx)
+        named = self.named(ctx)
         owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
-                     if rule.message.message_id not in self.answers)
+                     if not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines

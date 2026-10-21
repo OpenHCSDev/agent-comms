@@ -90,6 +90,14 @@ class Escalation:
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
     new vibe check, or the check would feed on its own messages."""
 
+    message: Message
+
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        """An escalation arrives as a burst: an answer naming any line of it covers every line
+        its sender sent before the answer, which UnansweredBurst reads once the answer is sent.
+        The gate runs just before the answer is sent, so it reads the answer the same way."""
+        return any(message.sender == self.message.sender for message in named)
+
 
 class AnswersOwedDegradation(Degradation):
     """Messages to the commander are waiting past their window; each message is one sign."""

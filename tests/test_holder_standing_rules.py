@@ -520,3 +520,22 @@ def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
     later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
     assert [m.message_id for m in VibeCheckSender.unanswered(held_bus, "lead", time.time())] == [
         later.message_id]
+
+
+def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
+    """The gate reads an answer the way UnansweredBurst reads it once sent: naming any line of
+    an escalation burst covers the sender's other lines, while another sender's stay owed."""
+    from agent_comms.commander.vibe_check import (
+        ChokeholdSender, ChokeholdUnanswered, VibeCheckSender, VibeCheckUnanswered,
+    )
+
+    VibeCheckSender.register(held_bus.registry)
+    ChokeholdSender.register(held_bus.registry)
+    now = time.time() - 3600
+    checks = [publish(held_bus, VibeCheckSender.sender, "lead", now + line) for line in range(3)]
+    holds = [publish(held_bus, ChokeholdSender.sender, "lead", now + 10 + line) for line in range(3)]
+    vibe = [VibeCheckUnanswered(message) for message in checks]
+    hold = [ChokeholdUnanswered(message) for message in holds]
+    assert all(rule.answered_by((checks[-1],)) for rule in vibe)
+    assert not any(rule.answered_by((checks[-1],)) for rule in hold)
+    assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))
