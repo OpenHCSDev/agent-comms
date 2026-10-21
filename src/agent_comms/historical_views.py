@@ -464,7 +464,7 @@ class HistoryArchive(DurableFile):
                     for path in paths:
                         if path.exists():
                             shutil.copy2(path, stage / path.name)
-                    TranscriptRoutes(source_root).snapshot(stage)
+                    TranscriptRoutes(source_root).retain(stage)
                     if revisions != tuple(FileRevision.capture(path) for path in paths):
                         raise ValueError("Historical source changed during snapshot; retry")
                     if source_read is not None:

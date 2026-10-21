@@ -32,7 +32,7 @@ def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")
     assert comms.registry.release_turn(lease) == (True, NoFinishedTurn())
-    assert not comms.registry.require("owner").turn_record.read().executing
+    assert not comms.registry.require('owner').executing
 
 
 def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_registration):

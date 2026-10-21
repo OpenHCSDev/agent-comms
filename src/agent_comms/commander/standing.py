@@ -30,7 +30,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import NamedViewer
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    DatedStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule, OwedAnswer, ReasonedStandingRule, StandingRule, UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
@@ -199,6 +199,30 @@ class RequestStalled(UndatedStandingRule):
                 " -> order its next step or mark it done")
 
 
+@dataclass(frozen=True)
+class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
+    """The first participant's replies that answer a second participant's message, newest
+    first; the page is read newest first, so an answer is seen before what it answers."""
+
+    scope: RepliesDisplayScope
+    since: float
+    empty: ClassVar[tuple[Message, ...]] = ()
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        replies: list[Message] = []
+        asked: set[MessageReference] = set()
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    replies.append(message)
+                else:
+                    asked.add(message.reference)
+        return tuple(reply for reply in replies if asked.intersection(reply.answers))
+
+
 @dataclass(frozen=True, slots=True)
 class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
     scope: RepliesDisplayScope
@@ -221,8 +245,18 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         return tuple(found)
 
 
+class PlanRule(UndatedStandingRule, declared_name=None):
+    """A rule read from one look at the plans and the commander's orders."""
+
+    @staticmethod
+    def plan_reading(comms: Comms, commander: str) -> PlanReading:
+        return CommanderConfig.read_root(comms.root).plan_reading(
+            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        )
+
+
 @dataclass(frozen=True)
-class PlanIdle(UndatedStandingRule):
+class PlanIdle(PlanRule):
     """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
 
     phase: type[PlanPhase]
@@ -230,9 +264,7 @@ class PlanIdle(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        reading = CommanderConfig.read_root(comms.root).plan_reading(
-            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
-        )
+        reading = cls.plan_reading(comms, commander)
         return tuple(
             cls(phase, reading)
             for phase in PlanPhase.members_with(PlanPhase)
@@ -251,10 +283,39 @@ class PlanIdle(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnitAskUnanswered(UndatedStandingRule):
+class PlanStalled(PlanRule):
+    """A ready phase that a unit has held past the window while main still lacks it. Holding an
+    order is not moving the plan: something structural keeps it still (steps that only land
+    together, a blocked holder, a missing owner), and re-sending the order changes nothing."""
+
+    phase: type[PlanPhase]
+    since: float
+    window: ClassVar[int] = 2 * 60 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading, now = cls.plan_reading(comms, commander), time.time()
+        return tuple(
+            cls(phase, since)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(reading) and phase.ordered(reading)
+            for since in (phase.ordered_since(reading),)
+            if now - since >= cls.window
+        )
+
+    def line(self) -> str:
+        hours = (time.time() - self.since) / 3600
+        return (
+            f"PLAN STALLED: {self.phase.plan.declared_name} phase {self.phase.declared_name}"
+            f" held {hours:.1f}h and not on main ({self.phase.plan.document}) -> find what holds"
+            " it still and change that this wake: integrate steps that only land together,"
+            " take it over, or reassign it"
+        )
+
+
+@dataclass(frozen=True)
+class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     unit: str
-    reference: MessageReference
-    sent_at: float
     seconds: ClassVar[int] = 5 * 60
 
     @staticmethod
@@ -274,12 +335,16 @@ class UnitAskUnanswered(UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
+        return tuple(cls(message, snapshot.canonical_name(message.sender))
                      for message in cls.asks(comms, commander, time.time() - cls.seconds))
 
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return cls.asks(comms, commander, time.time())
+
     def line(self) -> str:
-        age = max(0, int((time.time() - self.sent_at) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.reference.seq}:{self.reference.message_id}, "
+        age = max(0, int((time.time() - self.message.timestamp) // 60))
+        return (f"UNANSWERED {self.unit}: message {self.cited}, "
                 f"{age} min old -> commander must answer")
 
 
