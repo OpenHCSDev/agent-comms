@@ -123,6 +123,14 @@ class OAuthError(Exception):
 
 
 @dataclass(frozen=True)
+class ApprovalLink:
+    """The approval route's payload, decoded once at the HTTP boundary."""
+
+    request_id: str
+    secret: str = field(repr=False)
+
+
+@dataclass(frozen=True)
 class ClientRegistration:
     """Dynamic client registration accepts exactly claude.ai's redirect."""
 
@@ -608,7 +616,7 @@ class Connector:
         grants = await asyncio.to_thread(self.store.update, decided)
         for pending in notices:
             path = request.app.router[self.approve.__name__].url_for(
-                request_id=pending.query.request_id, secret=approval
+                **FieldCodec.encode(ApprovalLink(pending.query.request_id, approval))
             )
             await asyncio.to_thread(
                 self.request_approval, grants.clients[query.client_id].name, f"{self.issuer}{path}"
@@ -639,15 +647,15 @@ class Connector:
 
     async def approve(self, request: web.Request) -> web.Response:
         """Consume the owner's link and establish browser trust in the same store update."""
-        request_id, secret = request.match_info["request_id"], request.match_info["secret"]
+        link = FieldCodec.decode(ApprovalLink, dict(request.match_info))
         code, browser = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         approved: list[AuthorizationQuery] = []
 
         def consumed(grants: ConnectorGrants) -> ConnectorGrants:
             now = time.time()
-            held = grants.requests.get(request_id)
+            held = grants.requests.get(link.request_id)
             if held is None or not held.live(now) or not secrets.compare_digest(
-                held.approval_digest, digest(secret)
+                held.approval_digest, digest(link.secret)
             ):
                 raise web.HTTPBadRequest(text="This approval link is unknown, expired or used.")
             approved.append(held.query)
