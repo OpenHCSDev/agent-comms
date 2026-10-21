@@ -14,6 +14,7 @@ from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .field_codec import (
     NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireName, WireTransient,
+    boundary_decoder,
 )
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
@@ -139,12 +140,12 @@ class TurnGeneration(SubclassUnion, affix="Generation"):
     def fence(
         self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
         record: StoredTurnRecord,
-    ) -> TurnLeaseFence | None: ...
+    ) -> TurnLease: ...
 
     @abstractmethod
     def claim_fence(
         self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
-    ) -> TurnLeaseFence | None: ...
+    ) -> TurnLease: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +164,7 @@ class RecordedGeneration(SingleFieldValue, TurnGeneration):
     def fence(
         self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
         record: StoredTurnRecord,
-    ) -> TurnLeaseFence | None:
+    ) -> TurnLease:
         return claimed.claim_fence(TurnIdentity(incarnation, self.value), turn_id, record)
 
     def claim_fence(
@@ -188,13 +189,13 @@ class UnrecordedGeneration(NullMember, TurnGeneration):
     def fence(
         self, claimed: TurnGeneration, incarnation: ThreadIncarnation, turn_id: str,
         record: StoredTurnRecord,
-    ) -> None:
-        return None
+    ) -> NoTurnLease:
+        return NoTurnLease()
 
     def claim_fence(
         self, identity: TurnIdentity, turn_id: str, record: StoredTurnRecord,
-    ) -> None:
-        return None
+    ) -> NoTurnLease:
+        return NoTurnLease()
 
 
 @dataclass(frozen=True)
@@ -253,7 +254,7 @@ class ActiveTurn(RecordMember, TurnDeclaration):
 
     def lease(
         self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
-    ) -> TurnLeaseFence | None:
+    ) -> TurnLease:
         return self.turn_generation.fence(self.claimed_generation, incarnation, self.id, record)
 
     def observed_id(self, finished: str | None) -> str:
@@ -305,11 +306,108 @@ class TurnState:
         return turn_id is None or self.active.observed_id(self.finished_turn_id) == turn_id
 
 
+class TurnLease(ABC):
+    """A thread's exact local turn lease, or the declared absence of one."""
+
+    leased: ClassVar[bool]
+
+    @abstractmethod
+    def require(self, refusal: Exception) -> TurnLeaseFence: ...
+
+    @abstractmethod
+    def held(self) -> tuple[TurnLeaseFence, ...]: ...
+
+    @abstractmethod
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+        """This lease holds ``turn_id`` under ``claim_scope``."""
+
+    @abstractmethod
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool: ...
+
+    @abstractmethod
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+        """During a turn, its exact ID or the preceding generation; idle, the caller's answer."""
+
+    @abstractmethod
+    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+        """A stored wait's reporting turn is this lease's turn."""
+
+    @abstractmethod
+    def stored_turn_id(self) -> str | None:
+        """The reporting turn ID a stored goal wait records."""
+
+    @abstractmethod
+    def stored_generation(self) -> int | None:
+        """The turn generation a stored goal wait records."""
+
+
+@dataclass(frozen=True)
+class NoTurnLease(NullMember, TurnLease):
+    """The thread holds no local turn."""
+
+    leased = False
+
+    def require(self, refusal: Exception) -> TurnLeaseFence:
+        raise refusal
+
+    def held(self) -> tuple[TurnLeaseFence, ...]:
+        return ()
+
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+        return False
+
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        return False
+
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+        return idle
+
+    @boundary_decoder
+    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+        return False
+
+    @boundary_decoder
+    def stored_turn_id(self) -> str | None:
+        return None
+
+    @boundary_decoder
+    def stored_generation(self) -> int | None:
+        return None
+
+
 @dataclass(frozen=True, slots=True, eq=False)
-class TurnLeaseFence(TurnFence):
+class TurnLeaseFence(TurnFence, TurnLease):
     """Exact local begin-turn lease and its original record."""
 
     record: StoredTurnRecord = field(kw_only=True)
+    leased = True
+
+    def require(self, refusal: Exception) -> TurnLeaseFence:
+        return self
+
+    def held(self) -> tuple[TurnLeaseFence, ...]:
+        return (self,)
+
+    def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
+        return self.can_attest(claim_scope) and TurnId(self.turn_id) == turn_id
+
+    def authored(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        return (self.identity, self.turn_id) == (identity, turn.value)
+
+    def observes_task_turn(self, identity: TurnIdentity, turn: TurnId, idle: bool) -> bool:
+        return self.authored(identity, turn) or identity.generation == self.identity.generation - 1
+
+    @boundary_decoder
+    def reports(self, turn_id: str | None, generation: int | None) -> bool:
+        return (turn_id, generation) == (self.turn_id, self.identity.generation)
+
+    @boundary_decoder
+    def stored_turn_id(self) -> str | None:
+        return self.turn_id
+
+    @boundary_decoder
+    def stored_generation(self) -> int | None:
+        return self.identity.generation
 
 
 class TurnRecord(SubclassUnion, affix=""):
@@ -330,7 +428,7 @@ class TurnRecord(SubclassUnion, affix=""):
 
     @abstractmethod
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None: ...
+              generation: int) -> TurnLease: ...
 
 
 @dataclass(frozen=True)
@@ -347,8 +445,8 @@ class NoTurnRecord(NullMember, TurnRecord):
         pass
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
-        return None
+              generation: int) -> NoTurnLease:
+        return NoTurnLease()
 
 
 @dataclass(frozen=True)
@@ -369,7 +467,7 @@ class StoredTurnReference(RecordMember, TurnRecord):
         self.read()
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
+              generation: int) -> TurnLease:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 
@@ -416,7 +514,7 @@ class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
         return record
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
-              generation: int) -> TurnLeaseFence | None:
+              generation: int) -> TurnLease:
         active = self.read()
         active.validate_owner(process, generation)
         return active.lease(incarnation, self)

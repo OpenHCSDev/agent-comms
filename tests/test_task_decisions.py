@@ -19,6 +19,7 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.tools import invoke_tool
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.turn_lease import NoTurnLease
 from functools import partial
 from bus_history import read_history
 
@@ -59,7 +60,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
     subject = comms.messaging.send_user_message("recipient", exact, worktree=owner.worktree)
     original_bytes = (comms.root / "bus.jsonl").read_bytes()
-    assert owner.turn_lease is None
+    assert owner.turn_lease == NoTurnLease()
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
     assert isinstance(pin.task, HumanConstraintPin)
     assert isinstance(pin.role, NoticeRole) and not pin.role.response_policy(pin).starts_turn and pin.task.subject == subject.reference
@@ -164,7 +165,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     original = read_history(comms)[0]
     assert isinstance(original.task, Constraint)
     assert original.body == exact and original.task.author == owner.incarnation
-    assert original.task.source_turn == owner.turn_identity
+    assert original.task.source_turn == owner.require_turn_lease().identity
     assert original.reference == FieldCodec.decode(type(original.reference), result["reference"])
     assert "text" not in FieldCodec.encode(original.task)
     assert "decision" not in original.to_wire()
@@ -221,7 +222,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     original = read_history(comms)[0]
     assert original.reference == FieldCodec.decode(type(original.reference), first["reference"])
     assert original.task.author == alpha.incarnation
-    assert original.task.source_turn == alpha.turn_identity
+    assert original.task.source_turn == alpha.require_turn_lease().identity
     assert isinstance(original.role, NoticeRole) and not original.role.response_policy(original).starts_turn
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
@@ -319,7 +320,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     comms.registry.register(owner)
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,
-        source_turn=owner.turn_identity,
+        source_turn=owner.require_turn_lease().identity,
         source_turn_id=TurnId(owner.require_turn_lease().turn_id),
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))

@@ -2,6 +2,7 @@
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.native_package import pinned_native_package
 from agent_comms.restart_scope import OwnersNamed
+from agent_comms.turn_lease import NoTurnLease
 
 import os
 import signal
@@ -124,7 +125,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert current.worktree == original.worktree and current.session_file == original.session_file
         assert current.goal == original.goal and current.goal.state.declared_name == 'blocked'
         assert current.model == original.model and current.thinking_level == original.thinking_level
-        assert current.turn_lease is None and native.provider.posts == 0
+        assert current.turn_lease == NoTurnLease() and native.provider.posts == 0
         assert replacement.arguments == launch.arguments
         assert RestartEnvironment.inherit(replacement.environment).native_config == RestartEnvironment.inherit(launch.environment).native_config
         assert baseline == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}

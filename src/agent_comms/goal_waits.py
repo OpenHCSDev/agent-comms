@@ -396,9 +396,8 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
                     current_turn = peer.turn_lease
                     if (
                         peer_wait is None
-                        or current_turn is None
-                        or peer_wait.report_turn_id != current_turn.turn_id
-                        or peer_wait.report_turn_generation != current_turn.identity.generation
+                        or not current_turn.reports(
+                            peer_wait.report_turn_id, peer_wait.report_turn_generation)
                     ):
                         return ()
                 if peer_wait is not None:

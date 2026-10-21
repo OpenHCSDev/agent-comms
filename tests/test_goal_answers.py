@@ -30,8 +30,7 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
         goal = comms.goals.update_goal("worker", SetGoalAction(text="Original work"))
     turn = TurnId(uuid4().hex)
     owner = comms.agents.begin_turn("worker", turn.value)
-    lease = owner.thread.turn_lease
-    assert lease is not None
+    lease = owner.thread.require_turn_lease()
     try:
         with ExitStack() as claims:
             permit = (

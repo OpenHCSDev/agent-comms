@@ -634,14 +634,14 @@ class AddedFile(PatchChange):
     wire_tag = 'add'
 
     def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
-        return ToolDiff.from_versions(path, '', content, before_path='/dev/null')
+        return ToolDiff.between('/dev/null', path, '', content)
 
 
 class DeletedFile(PatchChange):
     wire_tag = 'delete'
 
     def patch(self, path: str, content: str) -> ToolDiff | NoToolDiff:
-        return ToolDiff.from_versions(path, content, '', after_path='/dev/null')
+        return ToolDiff.between(path, '/dev/null', content, '')
 
 
 class UpdatedFile(PatchChange):

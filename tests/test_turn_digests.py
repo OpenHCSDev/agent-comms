@@ -14,6 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.turn_digests import LastTurns
+from agent_comms.thread_text import SavedSessionFile
 
 
 def prepared(tmp_path):
@@ -69,7 +70,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(comms.registry.new_thread('native', frozenset(), str(tmp_path), session_file=str(source)))
+    comms.registry.declare(comms.registry.new_thread('native', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(source))))
     answer = endpoint(comms, 'native', 1)
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'

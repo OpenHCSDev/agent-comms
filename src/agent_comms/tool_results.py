@@ -52,10 +52,13 @@ class ToolDiff:
     format: Literal["unified", "numbered"] = "unified"
 
     @classmethod
-    def from_versions(cls, path: str, before: str, after: str, *,
-                      before_path: str | None = None, after_path: str | None = None) -> ToolDiff | NoToolDiff:
+    def from_versions(cls, path: str, before: str, after: str) -> ToolDiff | NoToolDiff:
+        return cls.between(path, path, before, after)
+
+    @classmethod
+    def between(cls, before_path: str, after_path: str, before: str, after: str) -> ToolDiff | NoToolDiff:
         lines = tuple(unified_diff(before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=before_path or path, tofile=after_path or path))
+            fromfile=before_path, tofile=after_path))
         return cls(''.join(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n' for line in lines)) if lines else NoToolDiff()
 
     def parts(self) -> tuple[ToolDiff, ...]:

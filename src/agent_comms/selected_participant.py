@@ -272,8 +272,7 @@ class SelectedParticipant(MroDispatch):
             )
         except RelationViolationError as error:
             raise StaleFence("selected owner stopped or busy before native turn") from error
-        lease = thread.turn_lease
-        assert lease is not None
+        lease = thread.require_turn_lease()
         try:
             current = RegistryOwner(thread=thread, claimed_generation=generation)
             current.require_registry(comms.registry)

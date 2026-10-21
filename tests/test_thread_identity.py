@@ -12,6 +12,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
+from agent_comms.turn_lease import NoTurnLease
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.registration import Registration
 from agent_comms.thread_identity import (
@@ -60,13 +61,13 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     registry.heartbeat("owner")
     leased, generation = registry.lease_local_turn("owner", "turn")
     assert generation == identity.generation
-    assert leased.turn_identity == TurnIdentity(identity.incarnation, 1)
+    assert leased.require_turn_lease().identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
     assert registry.snapshot().claim_generation('owner') == before.claim_generation('owner')
     assert registry.release_turn(registry.require("owner").turn_lease)[0]
     finished = registry.require("owner")
     assert finished.turn_generation == 1
-    assert finished.turn_identity is None
+    assert finished.turn_lease == NoTurnLease()
     assert registry.snapshot().owner_identity("owner") == identity
     # A fresh owner consumer can cache this identity without compensating for turns.
     cache = {identity: "owner resource"}

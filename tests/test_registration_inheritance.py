@@ -11,6 +11,7 @@ from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.turn_lease import NoTurnLease
 
 
 def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
@@ -124,7 +125,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
                 comms.registry.snapshot(), 'Original reply publication')
     finally:
         assert comms.agents.finish_turn(original.turn_lease)
-    assert comms.registry.require('owner').turn_lease is None
+    assert comms.registry.require('owner').turn_lease == NoTurnLease()
 
 
 def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):

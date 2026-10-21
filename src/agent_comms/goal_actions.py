@@ -336,18 +336,11 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner=thread.incarnation.require_recorded(),
-                report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
-                report_turn_generation=(
-                    reporting_lease.identity.generation if reporting_lease is not None else None
-                ),
+                report_turn_id=reporting_lease.stored_turn_id(),
+                report_turn_generation=reporting_lease.stored_generation(),
                 target_turn_generations=tuple(
-                    (
-                        lease.identity.generation
-                        if (lease := snapshot.threads[
-                            snapshot.canonical_name(target.incarnation.name)
-                        ].turn_lease) is not None
-                        else None
-                    )
+                    snapshot.threads[snapshot.canonical_name(target.incarnation.name)]
+                    .turn_lease.stored_generation()
                     for target in wait_targets
                 ),
             )

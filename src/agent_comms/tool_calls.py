@@ -210,5 +210,5 @@ class CliWriteArguments(CliPathArguments):
     def call(self, call_id: str) -> DecodedToolCall:
         call = super().call(call_id)
         before = self.path + " (previous content not supplied)"
-        diff = ToolDiff.from_versions(self.path, "", self.content, before_path=before)
+        diff = ToolDiff.between(before, self.path, "", self.content)
         return diff.patch(call)

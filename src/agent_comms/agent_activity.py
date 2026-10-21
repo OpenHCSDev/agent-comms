@@ -263,8 +263,7 @@ class AgentActivity:
         """Return the exact owner installed by this atomic begin, including its lease."""
         with _store_lock(self._wire_lock_path):
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
-            lease = leased.turn_lease
-            assert lease is not None
+            lease = leased.require_turn_lease()
             try:
                 phase = PreparingPhase(detail)
                 lease.record.transition(lease, phase)
