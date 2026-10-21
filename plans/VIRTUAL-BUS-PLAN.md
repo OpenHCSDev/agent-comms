@@ -25,10 +25,13 @@ Each semantic is a class. A record kind is a family member that inherits the cap
 | `Addressed` | `addressed(seq, sender, target)` plus the inbox index | sender/target read out of JSON at every reader |
 | `KeyedPublication` | `UNIQUE(publication_key)`; republishing a key returns the committed row | `record_key`, `seen_keys`, `add_unique`, and the UNKNOWN reservation in `last_seq` (an uncertain commit becomes a lookup by key) |
 | `Claimed` | claim transitions, written in the append's transaction | checkpoint claim rows, `claimed_after_seq`, `require_claim` |
-| `PrivateDelivery` and `PublicMessage` | the two record kinds, as classes | `has_private_wire_fields`, `RedactedPublicWireRecord` decided by key probing |
+| `Delivered` | a private delivery's `audience`, `decisions` and `control` | the private half of `CommittedDelivery`; `decisions_digest` (a hash of `decisions`), `resolver_version`, `policy_version`, `manifest_codec` (TIME-4) and `wire_root_id` are deleted, not stored |
+| `PublicRecord`, `KeyedPublicRecord`, `PrivateRecord`, `KeyedPrivateRecord` | the four record kinds, each only its bases: `BusRecord` + `Message` (+ `Delivered`) (+ `KeyedPublication`) | `has_private_wire_fields`, `RedactedPublicWireRecord` decided by key probing |
 | `Paged` | one keyset query, `WHERE seq < ? ORDER BY seq DESC LIMIT ?`, on `BusRecord` | `bus_page_index.py` and every byte-budgeted page |
 | `Watched` | the store's committed-change signal (`TypedStore.transaction` already touches `.changed`) | `wire_watch.py` following file growth |
 | `Activity` | its own capability table under the same root | `activity.jsonl` and `activity_checkpoint.py` |
+
+**Message is the record, not a copy of it.** `Message` declares the fields a bus message has; its bases are the bus capabilities (`class Message(Addressed, BusCapability)`), so its own fields are its table and `Addressed` is a table every addressed record shares. No field list sits beside `Message`. `seq` belongs to `bus_rows` and is excluded from every capability table by derivation from `BusRow`'s fields. Structured fields (`mentions`, `task`, `report`, `answers`) are typed columns through `TypedTable`'s existing `JsonStorage` and `MessageKind` through `FamilyClassStorage`: one encoded field per column, never the whole record.
 
 **No blob.** A row's fields are its capability tables' columns, and `FieldCodec` decodes a record from them. Storing the encoded record beside extracted columns would be a second writable copy of the same fields (IDEN-5). External transcripts (Claude, Codex, Pi sessions) are not ours and stay files.
 
@@ -72,6 +75,7 @@ Pi GPT units (Tristan, 2026-10-20), ordered through `agent-comms-commander order
 | Unit | Work |
 |---|---|
 | A | `Bus`, `BusRecord`, the capability classes and their derived tables, and the append, page, lookup-by-key and watch signatures. Published before anyone else starts. |
+| W | The one writer onto `Bus.append`: `WireLog.append_private_unlocked` (`wire_log.py:768`), called from `bus_publication.py` and `publisher.py`, writes the four record kinds. Readers move after it, because a reader cut over before the writer reads a store nothing fills. |
 | B1 | Delivery, wake, cursors and notification readers onto `seq` and the capabilities: `wake_candidate_index`, `notification_assignment`, `read_ledger`, `cursor_publication`, `goal_waits`, `store_order`. |
 | B2 | History, presentation and transcript readers: `historical_views`, `presentation`, `transcripts`, `transcript_sources`, `active_route`, `acp`, `comms`, `message_bus`, `publisher`, plus `scripts/attach_historical_views.py`. |
 | C | Deleting everything under "Deleted, not ported", with the derived indexes rebuilt as `DerivedTables`. |
