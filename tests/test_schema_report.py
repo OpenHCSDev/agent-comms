@@ -48,7 +48,7 @@ def test_comparison_names_changed_missing_and_extra_objects():
             SQLiteSchemaDifference("missing", None, "sql"))
 
 
-def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, monkeypatch):
+def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, durable_home):
     comms = context_comms(tmp_path)
     path = comms.root / "todos.sqlite3"
     _old_todo(path)
