@@ -275,7 +275,7 @@ class NoThreadPresentation(ThreadPresentation):
     title: str = ""
     marker: str = ""
     summary: str = ""
-    status: ThreadPresentationStatus = ThreadRetired()
+    status: ThreadRetired = ThreadRetired()
 
     def require(self, name: str) -> ThreadPresentation:
         raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
