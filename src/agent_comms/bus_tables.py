@@ -17,7 +17,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index, SharedFileTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index, SharedFileTables, TypedTable, sql_literal
 from agent_comms.message_reference import MessageReference
 
 
@@ -71,6 +71,33 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
 class AnsweredSource(TypedTable, BusProjectionTables):
     original: Annotated[MessageReference, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
+
+    @classmethod
+    def unanswered(
+        cls, db: sqlite3.Connection, requesters: frozenset[str], responders: frozenset[str],
+        since: float, before: float, upper: int, limit: int,
+    ) -> tuple[messages.BusRecord, ...]:
+        """Read unanswered originals through the existing reference and sender indexes."""
+        reference = ",".join(
+            value for item, key in FieldCodec.record_fields(MessageReference)
+            for value in (sql_literal(key), MessageIdentitySource._sql("asked.{" + item.name + "}"))
+        )
+        asking = ",".join("?" for _ in requesters)
+        replying = ",".join("?" for _ in responders)
+        query = (
+            f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
+            f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
+            f'WHERE asked.sender IN ({asking}) AND '
+            + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + f'AND asked.seq < ? AND NOT EXISTS ('
+            f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}}=json_object({reference}) ')
+            + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
+        )
+        sequences = db.execute(query, (*requesters, since, before, upper, *responders, limit))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
 @dataclass(frozen=True)

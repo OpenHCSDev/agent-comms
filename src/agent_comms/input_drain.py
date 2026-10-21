@@ -56,7 +56,6 @@ from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
-from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
@@ -769,16 +768,14 @@ class InputDrain(InputObservation):
         source = self.state(session_id).following.get(input_id)
         if source is not None:
             def record():
-                with _store_lock(self.comms._wire_lock_path):
-                    for key in source.keys:
-                        self.dispositions.clear_native(key, native_id, text)
+                for key in source.keys:
+                    self.dispositions.clear_native(key, native_id, text)
             await Coordination.run_worker(record)
         await self.input_refused(session_id, input_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
-        """Settle the selected inputs under the bus lock before turn cleanup finishes."""
-        with _store_lock(self.comms._wire_lock_path):
-            return self.dispositions.settle_unbound(keys)
+        """Commit selected input retirement before turn cleanup finishes."""
+        return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(self, following: OwnerFollowingInputs) -> None:
         """Retire the ending turn's existing input owner; retain UNKNOWN only as notices."""

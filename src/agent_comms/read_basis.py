@@ -966,6 +966,9 @@ class ChannelDisplayScope(MessageDisplayScope):
     def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
         return (values[target] for target in self.targets if target in values)
 
+    def activity(self, source: Bus):
+        return source.target_activity(*self.index_predicate)
+
     @property
     def index_targets(self) -> frozenset[str]:
         return self.targets
@@ -1056,6 +1059,14 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
     def includes_indexed(self, row) -> bool:
         return self._includes(row.sender, row.target, row.mentions)
+
+    def activity(self, source: Bus):
+        from .bus_activity_index import ChannelActivity
+
+        return ChannelActivity.combine((
+            ChannelDisplayScope(self.channel, self.targets).activity(source),
+            source.participant_activity(self.participant_names),
+        ))
 
     def _includes(self, sender: str, target: str, mentions: Iterable[str]) -> bool:
         return (target in self.targets or sender in self.participant_names

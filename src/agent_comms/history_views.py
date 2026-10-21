@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
-from contextlib import ExitStack
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -61,7 +60,6 @@ from .presentation import (
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .store_files import SharedLock, _store_lock
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
@@ -191,12 +189,11 @@ class HistoryViews:
         self.messaging = messaging
         self.goals = goals
         self.ledger = ledger
-        self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
-        return MessageNotification.references(self.root, self.registry, self.bus.log, references)
+        return MessageNotification.references(self.root, self.registry, self.bus.bus, references)
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:
@@ -209,7 +206,7 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path):
+        with self.bus.opened_activity() as activity:
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
                 document.restore_missing(incoming, activity, existing=existing)
@@ -264,12 +261,10 @@ class HistoryViews:
     ) -> WireExportProvenance:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
-        with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path, mode=SharedLock()):
-                resolved = scope.resolve(self.bus.require_channel, self.registry)
-                through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
-
-            selected = (message for message in messages if resolved.matches(message))
+        resolved = scope.resolve(self.bus.require_channel, self.registry)
+        with self.bus.bus.reading() as source:
+            through = source.revision()
+            selected = (message for message in source.message_history() if resolved.matches(message))
             return WireTranscriptExporter(
                 format=format,
                 scope=resolved.scope,
@@ -364,7 +359,7 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
-            clocks = self.bus.activity_index.snapshot(source)
+            clocks = source.activity_clocks()
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
@@ -409,7 +404,7 @@ class HistoryViews:
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
-        return self.bus.log.latest_sequence()
+        return self.bus.bus.revision()
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""

@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable, Sequence
 from abc import abstractmethod
-from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Self
@@ -18,11 +17,9 @@ from agent_comms.goal_states import BlockedState
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.goal_generation import GenerationState, RetryableGeneration
 from agent_comms.message_page import MessageReadRequest
-from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
-from agent_comms.bus_page_index import BusPageIndex
-from agent_comms.wire_log import WireSnapshot
+from agent_comms.bus import BusReader
 from agent_comms.message_bus import WatchPass
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -206,18 +203,16 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
     before: float
     empty: ClassVar[tuple[Message, ...]] = ()
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        answered: set[MessageReference] = set()
+    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
         found: list[Message] = []
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    answered.update(message.answers)
-                elif message.timestamp <= self.before and message.reference not in answered:
-                    found.append(message)
+        with source.reading() as reader:
+            upper = reader.revision() + 1
+            while page := reader.unanswered_page(
+                self.scope.second_names - self.scope.first_names, self.scope.first_names,
+                since=self.since, before=self.before, upper=upper,
+            ):
+                found.extend(message for message in page if self.scope.includes(message))
+                upper = page[-1].seq
         return tuple(found)
 
 
@@ -265,9 +260,9 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
         peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
         since = min(todo.order.checked().at.recorded_at("A held order")
                     for todos in held.values() for todo in todos)
-        return comms.bus.log.read_page(UnansweredUnitAsks(
+        return UnansweredUnitAsks(
             RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
-        ))
+        ).read_opened(comms.bus.bus)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:

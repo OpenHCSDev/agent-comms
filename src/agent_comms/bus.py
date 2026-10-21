@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus_publication import Delivered, KeyedPublication
+from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     Addressed,
     BusRow,
@@ -60,7 +63,7 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
-class BusReader(ABC):
+class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and an admitted read snapshot."""
 
     @abstractmethod
@@ -75,6 +78,19 @@ class BusReader(ABC):
     def revision(self) -> int:
         with self.observing() as db:
             return BusRow.last_seq(db)
+
+    def activity_clocks(self):
+        with self.observing() as db:
+            return BusActivityIndex.clocks(db)
+
+    def target_activity(self, predicate: str, parameters: tuple):
+        with self.observing() as db:
+            return BusActivityIndex.aggregate(db, predicate, parameters)
+
+    def participant_activity(self, names: frozenset[str]):
+        marks = ','.join('?' for _ in names)
+        with self.observing() as db:
+            return BusDisplayIndex.aggregate(db, f'participant IN ({marks})', tuple(names))
 
     def claim_projection(self) -> ClaimProjection:
         with self.observing() as db:
@@ -122,6 +138,17 @@ class BusReader(ABC):
             return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
+
+    def message_history(self) -> Iterator[Message]:
+        """Public bulk export, paged within one committed SQLite snapshot."""
+        with self.reading() as source:
+            after, through = 0, source.revision()
+            while after < through:
+                records = source.since(after, 100)
+                for record in records:
+                    for message in record.messages():
+                        yield Message.from_message(message)
+                after = records[-1].seq
 
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
@@ -226,6 +253,13 @@ class BusReader(ABC):
             (lookup, *sender_lookups), after=after, before=before, limit=limit,
             descending=descending,
         )
+
+    def unanswered_page(
+        self, requesters: frozenset[str], responders: frozenset[str], *,
+        since: float, before: float, upper: int, limit: int = 100,
+    ) -> tuple[BusRecord, ...]:
+        with self.observing() as db:
+            return AnsweredSource.unanswered(db, requesters, responders, since, before, upper, limit)
 
     def replies(self, references: tuple[MessageReference, ...]):
         with self.observing() as db:
