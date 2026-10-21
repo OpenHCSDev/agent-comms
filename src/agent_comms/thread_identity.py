@@ -191,6 +191,11 @@ class BirthlessIncarnation(ThreadIncarnation):
     def renamed(self, name: str) -> Self:
         return type(self)(name)
 
+    @classmethod
+    def recorded_as(cls, name: str) -> BirthlessIncarnation:
+        """The member a stored name and this member's wire birth decode to."""
+        return cls(name)
+
 
 @dataclass(frozen=True)
 class DeletedThreadIncarnation(BirthlessIncarnation):
@@ -228,11 +233,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     WIRE_BIRTH: ClassVar[float] = -2.0
     hands_out_released_work: ClassVar[bool] = True
 
-    def __post_init__(self) -> None:
-        # The class owns the watcher's name; a stored spelling is never its identity.
-        object.__setattr__(self, "name", declared_words(type(self).__name__.removesuffix("Incarnation")))
-        super().__post_init__()
-
     def require_may_change(self, todo: Todo) -> None:
         """The Core watcher may advance released orders without a commander turn."""
 
@@ -240,6 +240,11 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     def watcher(cls) -> CoreWatcherIncarnation:
         """Named by its class: ``CoreWatcherIncarnation`` is ``core_watcher``."""
         return cls(declared_words(cls.__name__.removesuffix("Incarnation")))
+
+    @classmethod
+    def recorded_as(cls, name: str) -> CoreWatcherIncarnation:
+        """The class owns the watcher's name; a stored spelling is never its identity."""
+        return cls.watcher()
 
     @property
     def birth_description(self) -> str:
@@ -327,7 +332,7 @@ class ThreadIncarnationRecord:
 
     def incarnation(self) -> ThreadIncarnation:
         if self.created_at in BirthlessIncarnation.members:
-            return BirthlessIncarnation.members[self.created_at](self.name)
+            return BirthlessIncarnation.members[self.created_at].recorded_as(self.name)
         return RecordedThreadIncarnation(self.name, self.created_at)
 
     @classmethod

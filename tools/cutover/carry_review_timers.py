@@ -21,6 +21,10 @@ from agent_comms.installer.carry import Carried, Carry
 from agent_comms.todos import Assignment, StrikeTodo, Todo, TodoStore
 
 
+# The column the order deadline was stored in; the review timer keeps its instant.
+RETIRED_COLUMN = "deadline"
+
+
 # These old declarations exist only at this one-time format boundary: the strike kinds Core
 # no longer declares, so their stored rows decode before they are carried.
 @dataclass(frozen=True, kw_only=True)
@@ -82,13 +86,10 @@ def carry(root: Path, *, apply: bool) -> int:
     with closing(CoordinationStore.writer(path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
-            (dated,) = db.execute(
-                "SELECT count(*) FROM pragma_table_info(?) WHERE name = 'deadline'",
-                (Todo.declared_name,)).fetchone()
-            if not dated:
+            if RETIRED_COLUMN not in Todo.stored_columns(db):
                 db.rollback()
                 return 0
-            db.execute(f'ALTER TABLE "{Todo.declared_name}" RENAME COLUMN deadline TO review_at')
+            Todo.rename_stored_column(db, RETIRED_COLUMN, "review_at")
             todos = tuple(map(carried_todo, Todo.stream(db)))
             Todo.drop(db)
             Todo.create(db)
