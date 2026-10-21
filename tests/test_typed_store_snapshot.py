@@ -79,3 +79,25 @@ def test_existing_undeclared_schema_is_not_treated_as_missing(tmp_path):
         with store.snapshot():
             pytest.fail("An existing invalid file must not become an empty store")
     assert store.path.stat().st_size == 0
+
+
+def test_a_durable_writer_derives_declared_objects_and_refuses_an_undeclared_column(tmp_path):
+    """A durable file's writer rebuilds what its declaration says (indexes and other
+    row-less objects, missing ones created); a table whose columns differ keeps its rows and is
+    refused, since the declaration cannot say what the extra column meant."""
+    store = InputDispositions(tmp_path)
+    assert store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
+    declared = store.declared_schema()
+    with store.writing() as connection:
+        for name, sql in declared.items():
+            if not sql.lstrip().upper().startswith("CREATE TABLE"):
+                connection.execute(f'DROP INDEX IF EXISTS "{name}"')
+    with store.writing() as connection:
+        assert not store.schema_differs(connection)
+    assert store.lookup("first").source_text == "first"
+    with store.writing() as connection:
+        connection.execute(
+            f'ALTER TABLE "{InputDispositionRow.declared_name}" ADD COLUMN extra TEXT DEFAULT "kept"')
+    with pytest.raises(RelationViolationError):
+        with store.writing():
+            pytest.fail("A table whose columns differ from the declaration must be refused")

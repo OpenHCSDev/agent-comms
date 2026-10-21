@@ -47,6 +47,8 @@ from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
+from .coordination_errors import CoordinationError
+from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
 
 
@@ -293,7 +295,7 @@ class RuntimeServer:
             pass
         except asyncio.CancelledError:
             pass
-        except Exception as error:
+        except (ValueError, RequestError, CoordinationError, NativeRequestFailure) as error:
             # Reply to this requester, then propagate the original failure to the server task.
             with suppress(SubscriberClosed):
                 await client.send(OwnerFailure.of(error))
