@@ -14,6 +14,7 @@ import agent_comms.store_files as store_files
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -128,9 +129,8 @@ class TestConcurrentWire:
         assert set(comms.agents.runtime_info.read().observations) == set(names)
         snapshot = comms.registry.snapshot()
         assert set(comms.agents.all_activity(snapshot.threads.values(), snapshot=snapshot)) == set(names)
-        assert {name: comms.ledger.read().entries[name] for name in names} == {
-            name: "ready" for name in names
-        }
+        ledger = FieldCodec.encode(comms.ledger.read())
+        assert {name: ledger[name] for name in names} == {name: "ready" for name in names}
 
     def test_concurrent_claims_allocate_unique_names(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
