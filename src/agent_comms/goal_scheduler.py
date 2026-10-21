@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -233,4 +234,6 @@ class GoalScheduler:
             event = await Coordination.run_worker(partial(
                 self.comms.goals.goal_changed, thread_name, record.snapshot,
             ))
-            record.snapshot = await event.publish(self.effects, session_id, record.snapshot)
+            record.snapshot = await event.publish(
+                AcpEventConsumer(self.effects, session_id, self.effects._runtime), record.snapshot
+            )
