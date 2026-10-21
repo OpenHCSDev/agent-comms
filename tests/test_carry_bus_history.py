@@ -99,7 +99,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
     from agent_comms.core_stamp import WheelStamp
-    from agent_comms.errors import UnclaimedError
+    from agent_comms.errors import RelationViolationError, UnclaimedError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.carry import Carried
@@ -193,6 +193,16 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     converted, = HistoryArchive(Bus.path_in(root)).sources()
     converted.validate()
     assert converted.root == str(root / archived.relative_to(original))
+    fresh = tmp_path / "fresh-sqlite"
+    fresh.mkdir()
+    fresh_bus = Bus(Bus.path_in(fresh))
+    with fresh_bus.writing():
+        pass
+    assert BusHistory(fresh, fresh, spill, True).carry() == Carried(0)
+    with fresh_bus.writing() as db:
+        HistoryOffset.create(db)
+    with pytest.raises(RelationViolationError, match="already staged"):
+        BusHistory(fresh, fresh, spill, True).carry()
 
 
 if __name__ == "__main__":

@@ -526,15 +526,26 @@ class HistoryInput:
     original_identity: RecordedBusIdentity
 
     @classmethod
-    def capture(cls, root: Path, original_root: Path) -> HistoryInput:
+    def capture(cls, root: Path, original_root: Path) -> tuple[HistoryInput, ...]:
         source = root / BusHistory.filename
         Carry.require_confined(root, source)
         original = original_root / BusHistory.filename
         Carry.require_confined(original_root, original)
+        bus = Bus(Bus.path_in(root))
+        if not source.is_file() and not original.is_file():
+            # A fresh SQLite bus has no retired history. An interrupted cutover
+            # also lacks JSONL here, but its offset table proves input was moved.
+            if bus.path.is_file():
+                with bus.observing() as db:
+                    if HistoryOffset.present(db):
+                        raise RelationViolationError(
+                            f"History input was already staged; restore its backup before retry: {source}"
+                        )
+            return ()
         if not source.is_file() or not original.is_file():
             raise RelationViolationError(f"History source or its original is absent: {source}")
-        return cls(Bus(Bus.path_in(root)), source, HistoryMetadata.read(root),
-                   RecordedBusIdentity.capture(original))
+        return (cls(bus, source, HistoryMetadata.read(root),
+                    RecordedBusIdentity.capture(original)),)
 
     def moved(self, root: Path, spill: Path) -> HistoryInput:
         target = spill / self.source.relative_to(root)
@@ -597,8 +608,10 @@ class BusHistory(Carry):
             catalog = HistoryCatalogSource.read(self.root, self.original_root)
             roots = (self.root, *(source.mapped_root(self.root, self.original_root)
                                   for source in catalog))
-            inputs = tuple(HistoryInput.capture(
-                root, self.original_root / root.relative_to(self.root)) for root in roots)
+            inputs = tuple(source for root in roots for source in HistoryInput.capture(
+                root, self.original_root / root.relative_to(self.root)))
+            if not inputs:
+                return Carried(0)
             if not self.apply:
                 count = 0
                 for source in inputs:
