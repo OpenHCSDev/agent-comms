@@ -61,6 +61,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
             comms.goals.update_goal(worker, CreateProblemGoalAction(
                 problem='P1', order=order(source), request='request',
                 review_at=RecordedEventTime(1000), commander='lead',
+                assigner=comms.registry.require('lead').incarnation,
                 repo=RepositoryName.from_wire('org/repo'), text='Repair following input',
             ))
             saved.provider.response_gate = asyncio.Event()
@@ -127,6 +128,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
+        assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
     actor = comms.registry.require('lead').incarnation

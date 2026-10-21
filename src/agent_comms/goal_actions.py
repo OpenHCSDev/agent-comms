@@ -499,9 +499,12 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     request: str
     review_at: EventTime
     commander: str
+    assigner: ThreadIncarnation
 
-    @abstractmethod
-    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
+    def bound_to(
+        self, actor: ThreadIncarnation, commander: ThreadIncarnation,
+    ) -> ProblemOrderGoalAction:
+        return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
@@ -548,11 +551,6 @@ class OrderGoalAction(ProblemOrderGoalAction):
     traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
         NoSourceReference()
     )
-    assigner: ThreadIncarnation
-
-    def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
-        return replace(self, commander=actor.name, assigner=actor)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
@@ -577,13 +575,11 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: RepositoryName
     text: str
 
-    def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
-        return replace(self, commander=actor.name)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=generation, goal=goal, review_at=self.review_at, order=self.order)
+            assigner=self.assigner, generation=generation, goal=goal,
+            review_at=self.review_at, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)

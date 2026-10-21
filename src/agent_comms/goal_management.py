@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
 from .goal_presentation import (
     GoalPublicationSnapshot,
     GoalSnapshot,
@@ -98,11 +99,11 @@ class Goals:
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
-    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
-        actor = self.registry.require(commander).incarnation
+    def fire(self, unit: str, reason: StrikeReason, actor: ThreadIncarnation) -> tuple[Todo, ...]:
+        owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
         with _store_lock(self._wire_lock_path):
-            return store.fire(unit, actor, reason)
+            return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

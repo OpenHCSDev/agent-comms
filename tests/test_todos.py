@@ -94,7 +94,7 @@ def _assign_process(root: str, checkout: str, name: str, created: float, gate) -
     gate.wait(timeout=5)
     try:
         row = store.assign(
-            "todo-1", expected_revision=1,
+            "P1", expected_revision=1,
             owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation,
             generation=f"generation-{name}", goal=GoalRef("lead", 1.0, "goal-1"),
             review_at=RecordedEventTime(1000.0), order=order(SourceRepository.of(Path(checkout))),
@@ -109,7 +109,7 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path, s
     lead = thread("lead", tmp_path, 1.0)
     goal = GoalRef("lead", 1.0, "goal-1")
     original = store.create(
-        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
+        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, goal=goal,
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     assert original.repo == RepositoryName.from_wire("OPENHCSDEV/agent-comms")
@@ -117,22 +117,22 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path, s
     assert original.assignment == Assignment("lead", 1.0, "lead", 1.0, "initial")
     assert (
         store.create(
-            "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
+            "P1", RepositoryName.from_wire("openhcsdev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, goal=goal,
             owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
         )
         == original
     )
     with pytest.raises(TodoConflict):
         store.create(
-            "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "A different task", creator=lead, goal=goal,
+            "P1", RepositoryName.from_wire("openhcsdev/agent-comms"), "A different task", creator=lead, assigner=lead.incarnation, goal=goal,
             owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
         )
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = thread("lead", tmp_path, 2.0)
     assert store.get(original.id).goal == goal
     with pytest.raises(TodoConflict):
-        store.apply("todo-1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
-    assert store.get("todo-1") == original
+        store.apply("P1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
+    assert store.get("P1") == original
 
 
 def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
@@ -140,7 +140,7 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     lead = thread("lead", tmp_path, 1.0)
     worker = thread("worker", tmp_path, 2.0)
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Obsolete problem",
-        creator=lead, owner=worker, generation="first", goal=GoalRef("lead", 1.0, "request"),
+        creator=lead, assigner=lead.incarnation, owner=worker, generation="first", goal=GoalRef("lead", 1.0, "request"),
         review_at=RecordedEventTime(1000), order=order(source_repository))
     released = store.apply(todo.id, ReleaseTodo(todo.revision, lead.incarnation, todo.held(),
         StrikeReason("The previous worker stopped before completing this assigned repair on main.")))
@@ -165,7 +165,7 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_reposit
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Delivered problem",
-        creator=lead, owner=lead, generation="first", goal=GoalRef("lead", 1.0, "request"),
+        creator=lead, assigner=lead.incarnation, owner=lead, generation="first", goal=GoalRef("lead", 1.0, "request"),
         review_at=RecordedEventTime(1000), order=order(source_repository))
     delivered = store.apply(todo.id, DeliverTodo(todo.revision, lead.incarnation,
         OperationDelivery(at=RecordedEventTime(20)), todo.order.id))
@@ -182,7 +182,7 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     store.create(
-        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "One implementation", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "One implementation", creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
@@ -195,7 +195,7 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
         observed = [future.result(timeout=10) for future in results]
     assert sorted(result[0] for result in observed) == ["conflict", "won"]
     assert observed[0][1] == observed[1][1]
-    persisted = TodoStore(tmp_path).get("todo-1")
+    persisted = TodoStore(tmp_path).get("P1")
     assert persisted.assignment.owner == observed[0][1]
     assert persisted.revision == 2
     assert len(store.list(RepositoryName.from_wire("OpenHCSDev/agent-comms"))) == 1
@@ -207,13 +207,13 @@ def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path, sou
     for index, repo in enumerate(("org/repo/branch", "../repo", "org/", "org/repo name")):
         with pytest.raises(ValueError):
             store.create(
-                f"invalid-{index}", RepositoryName.from_wire(repo), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+                f"invalid-{index}", RepositoryName.from_wire(repo), "task", creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"),
                 owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
             )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
     store.create(
-        "todo-1", RepositoryName.from_wire("org/repo"), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "P1", RepositoryName.from_wire("org/repo"), "task", creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     with pytest.raises(ValueError):
@@ -224,7 +224,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create(
-        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
+        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     cells = merged.order.board_cells(merged)
@@ -276,7 +276,7 @@ def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
-        pid, source.github, "Fix the sidebar", creator=lead, owner=lead,
+        pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation, owner=lead,
         generation="pr-work", goal=GoalRef(lead.name, 1.0, "pr-work"),
         review_at=RecordedEventTime(1000),
         order=replace(order(source), id=f"order-{pid}", run=run))
@@ -518,7 +518,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
     originals = tuple(
         ctx.comms.goals.todos.create(
             f"P{index}", source.github, "Keep application work held until its run is recorded",
-            creator=lead, owner=worker, generation="merge-run",
+            creator=lead, assigner=lead.incarnation, owner=worker, generation="merge-run",
             goal=GoalRef(lead.name, lead.created_at, "merge-run"),
             review_at=RecordedEventTime(1000),
             order=replace(order(source), id=f"merge-order-{index}", run=run,

@@ -16,10 +16,10 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from importlib.resources import files
 from math import ceil
 from pathlib import Path
@@ -80,6 +80,7 @@ from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
 from agent_comms.recorded_time import (
     EventTime,
@@ -2173,6 +2174,9 @@ class GoalReference(SubclassUnion):
     def threads(self) -> tuple[str, ...]:
         return ()
 
+    def authorize_order(self, current: Todo, actor: ThreadIncarnation) -> None:
+        actor.require_may_change(current)
+
 
 @dataclass(frozen=True)
 class NoGoalReference(NullMember, GoalReference):
@@ -2207,6 +2211,9 @@ class GoalRef(RecordMember, GoalReference):
 
     def request(self) -> str:
         return self.goal_id
+
+    def authorize_order(self, current: Todo, actor: ThreadIncarnation) -> None:
+        current.require_commander(self.incarnation)
 
 
 class TodoHolder(ABC):
@@ -2257,6 +2264,11 @@ class Assignment(TodoHolder):
     def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
         return cls(owner.name, owner.wire_birth, parent.name, parent.wire_birth, generation)
 
+    @classmethod
+    def sql_field(cls, name: str) -> str:
+        """Queries use the codec's declared wire key, not another record shape."""
+        return f"json_extract({{assignment}}, '$.{FieldCodec.record_key(cls, name)}')"
+
     def __post_init__(self) -> None:
         _text(self.owner, "Thread name", 128)
         _text(self.parent, "Thread name", 128)
@@ -2272,7 +2284,7 @@ class Assignment(TodoHolder):
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        """Who made the assignment: the order's commander, or Core's watcher."""
+        """The acting assigner: commander, registered fork, or watcher; not Todo.creator."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
     def held(self, current: Todo) -> Assignment:
@@ -2409,6 +2421,9 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
 class TodoOperation(TodoCommand, declared_name=None):
     """Commands the ordinary commander's tools accept."""
 
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return replace(self, actor=actor)
+
 
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
@@ -2420,8 +2435,12 @@ class AssignTodo(TodoOperation):
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return replace(self, proposed=replace(self.proposed,
+                       parent=actor.name, parent_created=actor.wire_birth))
+
     def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
-        TodoStore.require_unit_in(db, self.proposed.owner_identity, current.creator_identity)
+        TodoStore.require_unit_in(db, self.proposed.owner_identity, self.actor)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2430,7 +2449,7 @@ class AssignTodo(TodoOperation):
                 proposed, self.review_at, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
-        self.actor.require_may_change(current)
+        self.goal.authorize_order(current, self.actor)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
@@ -2858,6 +2877,9 @@ class WordingCorrection(TodoOperation):
     message_id: str
     words: tuple[str, ...]
 
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return self
+
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         corrections = (*current.corrections, self)
@@ -3024,10 +3046,11 @@ class ChangeTodoState(TodoOperation):
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
-        "json_extract({assignment}, '$.owner')",
-        "json_extract({assignment}, '$.owner_created')", "{state}",
+        Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
-    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)), unit_index)
+    problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)),
+               unit_index, problem_index)
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3048,6 +3071,12 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
     prior_orders: tuple[CheckedProblemOrder, ...] = ()
+
+    @classmethod
+    def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        return tuple(cls.read(db.execute(
+            f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
+            parameters)))
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
@@ -3237,11 +3266,11 @@ class Todo(TypedTable):
         self.order.folded(target.id, why)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
-        if self.creator_identity != actor:
+        if self.creator_identity != actor.commanding_identity:
             raise TodoConflict(self)
 
     def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.creator_identity != actor:
+        if self.creator_identity != actor.commanding_identity:
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
@@ -3283,20 +3312,35 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True)
-class ProblemNumber(TypedTable):
-    """Allocated global problem numbers, including reservations not yet sent."""
+class ProblemAllocation(TypedTable):
+    """Only issued, unsent numbers; creating a Todo removes its allocation row.
+
+    SQLite's sequence remembers issuance, while Todo.id owns every created identity.
+    """
 
     number: Annotated[int, Column(primary_key=True, auto_increment=True)]
 
     @classmethod
-    def reserve(cls, db: sqlite3.Connection, problem: str) -> None:
-        if re.fullmatch(r'P[1-9]\d*', problem):
-            cls(int(problem[1:])).insert_if_absent(db)
+    def reserve(cls, db: sqlite3.Connection, text: str) -> ProblemNumber:
+        try:
+            problem = ProblemNumber.parse(text)
+        except ValueError as error:
+            raise TodoError(f'Malformed problem ID: {text!r}') from error
+        return cls.issue(db, problem)
 
     @classmethod
-    def allocate(cls, db: sqlite3.Connection) -> str:
-        cursor = db.execute(f'INSERT INTO "{cls.declared_name}" DEFAULT VALUES')
-        return f'P{cursor.lastrowid}'
+    def issue(cls, db: sqlite3.Connection, problem: ProblemNumber) -> ProblemNumber:
+        cls(problem.number).insert(db)
+        return problem
+
+    @classmethod
+    def allocate(cls, db: sqlite3.Connection) -> ProblemNumber:
+        number, = db.execute(
+            f'SELECT max(COALESCE((SELECT max({Todo.problem_index.term_sql(Todo)}) '
+            f'FROM "{Todo.declared_name}"), 0), '
+            'COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0)) + 1',
+            (cls.declared_name,)).fetchone()
+        return cls.issue(db, ProblemNumber(number))
 
 
 @dataclass(frozen=True, slots=True)
@@ -3310,7 +3354,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemNumber)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemAllocation)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3334,24 +3378,20 @@ class TodoStore(DurableStore):
 
     def allocate_problem(self) -> str:
         with self.writing() as db:
-            return ProblemNumber.allocate(db)
+            return str(ProblemAllocation.allocate(db))
 
-    @staticmethod
-    def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
+    @classmethod
+    def require_unit_in(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:
         """The original open Todo owns who assigns its unit, under this transaction."""
-        match = (f"({Todo.unit_index.term_sql(Todo)})="
-                 f"({','.join('?' for _ in Todo.unit_index.terms)})")
-        for state in TodoState.open_names():
-            held = Todo.select(db,
-                where=f"{match} AND NOT (creator=? AND creator_created=?)",
-                parameters=(unit.name, unit.wire_birth, state, assigner.name, assigner.wire_birth),
-                limit=1)
-            for todo in held:
-                raise TodoError(
-                    f"{unit.name} is assigned by {todo.creator} on open order "
-                    f"{todo.order.checked().id} ({todo.id}); "
-                    "finish or release that order before assigning it again.")
+        for todo in cls.held_in(db,
+                f'NOT ({Assignment.sql_field("parent")}=? '
+                f'AND {Assignment.sql_field("parent_created")}=?)',
+                (assigner.name, assigner.wire_birth), unit=unit):
+            raise TodoError(
+                f"{unit.name} is assigned by {todo.held().parent} on open order "
+                f"{todo.order.checked().id} ({todo.id}); "
+                "finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3365,10 +3405,11 @@ class TodoStore(DurableStore):
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
-        found = [t for t in self.held_by(commander, unit) if t.id == problem]
-        if len(found) != 1:
+        found = self.get(problem)
+        found.require_commander(commander)
+        if not found.state.open or found.holder != unit:
             raise ValueError(f'{unit} holds no order on {problem}')
-        return found[0]
+        return found
 
     def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
         old = self.resolve_order(commander, unit, problem)
@@ -3425,17 +3466,30 @@ class TodoStore(DurableStore):
                     assignment=source.held(), goal=source.goal, review_at=source.review_at,
                     messages=source.messages, revision=target.revision + 1).upsert(db)
 
-    def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        """Rows in creation order; an absent store has none, and a read never creates one."""
+    @staticmethod
+    def _open(db: sqlite3.Connection, where: str, parameters: tuple,
+              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        states = state.open_names()
+        selected = ','.join('?' for state in states)
+        return Todo.rows(db, f"state IN ({selected}) AND ({where})", (*states, *parameters))
+
+    @classmethod
+    def held_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
+                *, unit: ThreadIncarnation) -> tuple[Todo, ...]:
+        """The one open-unit query, used by every reader and writer."""
+        terms = Todo.unit_index.terms[:-1]
+        match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
+        return cls._open(db, f'{match} AND ({where})',
+                         (unit.name, unit.wire_birth, *parameters))
+
+    def _select(self, where: str, parameters: tuple, *,
+                reader: Callable[[sqlite3.Connection, str, tuple], tuple[Todo, ...]] = Todo.rows,
+                ) -> tuple[Todo, ...]:
+        """An absent store has no rows; only this boundary opens a read snapshot."""
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
-            return self._rows(db, where, parameters)
-
-    @staticmethod
-    def _rows(db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        return tuple(Todo.read(db.execute(
-            f"SELECT * FROM {Todo.declared_name} WHERE {where} ORDER BY rowid", parameters)))
+            return reader(db, where, parameters)
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -3445,7 +3499,7 @@ class TodoStore(DurableStore):
 
     @classmethod
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
-        return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
+        return cls._one(Todo.rows(db, "id=?", (todo_id,)), todo_id)
 
     def for_order(self, order_id: str) -> tuple[Todo, ...]:
         """A sent order can cover several linked problems; its ID is not a Todo key."""
@@ -3473,17 +3527,18 @@ class TodoStore(DurableStore):
         return self._select("repo=?", (repo.to_wire(),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        return self._select(
-            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
-            "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+        return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
+                            reader=partial(self.held_in, unit=owner))
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return self._open("assignment IS NOT NULL", (), OpenTodoState)
+        return self._select("assignment IS NOT NULL", (),
+                            reader=partial(self._open, state=OpenTodoState))
 
     def reassignable(self) -> tuple[Todo, ...]:
         """Work Core released after its objective strikes; never a commander's released backlog.
         No clock releases work: a held order stays held until its commander moves it."""
-        return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
+        return tuple(todo for todo in self._select("assignment IS NULL", (),
+                     reader=partial(self._open, state=OpenTodoState))
                      if todo.pending and todo.handed_out_on_release)
 
     def merged_orders(self, commander: ThreadIncarnation,
@@ -3518,9 +3573,8 @@ class TodoStore(DurableStore):
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._open(
-            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
-            (owner.name, owner.wire_birth)))
+        return any(todo.pending for todo in self._select(
+            '1', (), reader=partial(self.held_in, unit=owner)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """Every order that served one request, a Goal on the commander's thread, open or done."""
@@ -3529,7 +3583,8 @@ class TodoStore(DurableStore):
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+        return self._select("creator=? AND creator_created=?",
+                            (commander.name, commander.wire_birth), reader=self._open)
 
     def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
@@ -3541,13 +3596,12 @@ class TodoStore(DurableStore):
                          todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))
 
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
-            (commander.name, commander.wire_birth))
+        return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
+            (commander.name, commander.wire_birth), reader=self._open)
 
-    def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
-        return self._open(
-            "creator=? AND creator_created=? AND json_extract(assignment,'$.owner')=?",
-            (commander.name, commander.wire_birth, unit))
+    def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._select('creator=? AND creator_created=?',
+            (commander.name, commander.wire_birth), reader=partial(self.held_in, unit=unit))
 
     def require_recurrence_declaration(
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
@@ -3573,12 +3627,6 @@ class TodoStore(DurableStore):
             for assignment in (*todo.holder_state.current_assignments(),
                                *(release.previous for release in todo.released)))
 
-    def _open(self, where: str, parameters: tuple,
-              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
-        states = state.open_names()
-        selected = ','.join('?' for state in states)
-        return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
-
     def create(
         self,
         todo_id: str,
@@ -3587,25 +3635,27 @@ class TodoStore(DurableStore):
         *,
         creator: Thread,
         owner: Thread,
+        assigner: ThreadIncarnation,
         generation: str,
         review_at: EventTime,
         order: PendingProblemOrder,
         goal: GoalRef,
     ) -> Todo:
+        number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
         DirectiveText.require(text)
         order.require_wording()
         order.require_writable()
         proposed = Todo.ordered(
-            todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
+            todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, goal)
         with self.writing() as db:
-            self.require_unit_in(db, assignee, identity)
-            ProblemNumber.reserve(db, todo_id)
+            self.require_unit_in(db, assignee, assigner)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
             current.require_assignment(proposed.assignment)
+            ProblemAllocation.delete(db, number=number.number)
             return current
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
@@ -3618,27 +3668,28 @@ class TodoStore(DurableStore):
             result.upsert(db)
             return self._current(db, todo_id)
 
-    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+    def correct(self, unit: ThreadIncarnation, message_id: str, text: str) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
         if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
         with self.writing() as db:
-            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
-                    if todo.state.open)
+            held = self.held_in(db, '1', (), unit=unit)
             corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
                               for todo in held)
             for todo in corrected:
                 todo.upsert(db)
             return corrected
 
-    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+    def fire(
+        self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
+    ) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
-            held = tuple((todo, todo.held()) for todo in self._rows(
-                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
-                (unit, actor.name, actor.wire_birth))
-                if todo.state.open)
+            commander = actor.commanding_identity
+            held = tuple((todo, todo.held()) for todo in self.held_in(
+                db, 'creator=? AND creator_created=?',
+                (commander.name, commander.wire_birth), unit=unit))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)

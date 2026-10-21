@@ -310,7 +310,7 @@ class OwnerLifecycle:
             orders = tuple(
                 todo
                 for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
-                for todo in self.goals.todos.held_by(commander.incarnation, owned.name)
+                for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
             if orders:

@@ -74,6 +74,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request="request",
+            assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
@@ -218,6 +219,7 @@ def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(h
     now = time.time()
     held_bus.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P3", commander="lead", request="request",
+        assigner=held_bus.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Repair P3",
         review_at=RecordedEventTime(now + 3600),
         order=replace(original, id='order-P3'),

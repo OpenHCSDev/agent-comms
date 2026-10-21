@@ -103,6 +103,10 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     ) -> T:
         return otherwise()
 
+    @property
+    def commanding_identity(self) -> ThreadIncarnation:
+        return self
+
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
@@ -126,7 +130,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
                              if name == canonical.name))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     """The recorded creation owns identity; names remain registry-resolved routes.
 
@@ -136,6 +140,14 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
 
     name: str = field(compare=False)
     created_at: float
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ThreadIncarnation):
+            return NotImplemented
+        return self.wire_birth == other.wire_birth
+
+    def __hash__(self) -> int:
+        return hash(self.wire_birth)
 
     @property
     def wire_birth(self) -> float:
