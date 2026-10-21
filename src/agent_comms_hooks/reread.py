@@ -63,10 +63,27 @@ class RereadOrder(HookRecord):
 
 
 @dataclass(frozen=True)
-class ReadInput(HookRecord):
-    """The Read tool's input, as Claude Code names the tool and its field."""
+class ToolInput(HookRecord):
+    """A tool call's input; a member is named as Claude Code names its tool, and the
+    family itself stands for every tool no member declares."""
+
+    def read_paths(self) -> frozenset[str]:
+        return frozenset()
+
+    @classmethod
+    def called(cls, tool_name: str, tool_input: dict) -> ToolInput:
+        members = {member.__name__: member for member in cls.__subclasses__()}
+        return members.get(tool_name, cls).decode(tool_input)
+
+
+@dataclass(frozen=True)
+class Read(ToolInput):
+    """The Read tool's input: it reads the one file it names."""
 
     file_path: str
+
+    def read_paths(self) -> frozenset[str]:
+        return frozenset((self.file_path,))
 
 
 @dataclass(frozen=True)
@@ -143,10 +160,7 @@ class ToolUseReminder(ContextCadence, ABC):
     tool_input: dict
 
     def read_paths(self) -> frozenset[str]:
-        """The file this call read with the Read tool; none for every other tool."""
-        if self.tool_name != "Read":
-            return frozenset()
-        return frozenset((ReadInput.decode(self.tool_input).file_path,))
+        return ToolInput.called(self.tool_name, self.tool_input).read_paths()
 
 
 @dataclass(frozen=True)
