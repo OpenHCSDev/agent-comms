@@ -145,7 +145,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             assert [(row.body, isinstance(row.role, NoticeRole)) for row in read_history(comms)] == [
                 ("committed progress", True),
             ]
-            progress.result = events.Done("refused", False)
+            await progress.done(events.Done("refused", False))
             # A real writer holds the bus, so the failure notice's worker waits
             # on the flock while the turn is cancelled.
             with _store_lock(comms.root / "bus.jsonl"):

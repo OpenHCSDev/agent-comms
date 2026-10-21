@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+
+if TYPE_CHECKING:
+    import sqlite3
+    from .goal_attempts import AttemptRecord
+
+
+class ReadyAttempt(ABC):
+    """Attempt outcomes that record their own evidence before a fresh grant."""
+
+    @abstractmethod
+    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -39,7 +50,10 @@ class ClaimedAttempt(GoalAttemptPhase):
         return FailedAttempt, SucceededAttempt, ResolvedAttempt
 
 
-class FailedAttempt(GoalAttemptPhase):
+class FailedAttempt(ReadyAttempt, GoalAttemptPhase):
+    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
+        attempt.advance(db, self, resolution=note)
+
     def require_failure(self) -> None:
         return None
 
@@ -48,8 +62,11 @@ class FailedAttempt(GoalAttemptPhase):
         return (ResolvedAttempt,)
 
 
-class SucceededAttempt(GoalAttemptPhase):
+class SucceededAttempt(ReadyAttempt, GoalAttemptPhase):
     terminal = verified_progress = True
+
+    def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
+        attempt.advance(db, self, progress_witness=note)
 
     @classmethod
     def successors(cls):
