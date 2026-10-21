@@ -11,6 +11,8 @@ from types import CodeType
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -103,7 +105,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         review_at=RecordedEventTime(1000),
         goal=GoalRef("lead", lead.created_at, "storage-case"),
         order=PendingProblemOrder(
-            id="storage-case-order",
+            id="storage-case-order", scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
             run=MechanicalOrderRun(),
             check=OrderCheck(str(tmp_path), "true"),

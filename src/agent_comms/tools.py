@@ -1037,21 +1037,20 @@ class CommsOrderDoneTool(CommsTodoTool):
     order_id: Annotated[str, *tool_field("Exact open order ID")]
     delivery: Annotated[
         OrderDelivery,
-        *tool_field("A clean commit delivery or an operation verified by the order's check"),
+        *tool_field("A checked implementation delivery for fix, or a report for triage"),
     ]
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
             "Merged, installed or working claims, each with the artifact Core verifies in the order's "
-            "checkout; at least one"
+            "checkout; at least one for fix, none for triage reports"
         ),
     ]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        ProgressClaim.require_claimed(self.claims, "delivered")
-        verified = ProgressClaim.require_all(
-            self.delivery.required_claims(self.claims), comms, Path(todo.order.check.directory)
-        )
+        order = todo.order.checked()
+        verified = order.scope.verified_claims(
+            self.delivery, self.claims, comms, Path(order.check.directory))
         return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
                            verified_claims=verified)
 

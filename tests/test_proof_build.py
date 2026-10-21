@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.comms import Comms
@@ -136,7 +138,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for problem, delivery, expected_error in cases:
             build = delivery.proof_build
             order = PendingProblemOrder(
-                owner=FileLine(__file__, 1),
+                scope=FIX_SCOPE, owner=FileLine(__file__, 1),
                 check=OrderCheck(str(checkout), "printf 0", CountCheckResult(0)),
                 edits=("Record the copied application proof on its installed build.",),
                 banned=("Do not change the source bus.",),

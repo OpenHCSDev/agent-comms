@@ -32,6 +32,8 @@ from agent_comms.launch_runtime import ProofBuildMismatchError, RecordedBuildIde
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.todos import (
     DeliveredProblemOrder,
+    FixScope,
+    FixShape,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
@@ -152,6 +154,7 @@ class LifecycleRun:
             )
             repo = config.module_repo(__name__)
             order = PendingProblemOrder(
+                scope=FixScope(FixShape(parents=(FileLine.class_declaration(Todo),), members=())),
                 owner=FileLine(str(repo.module_file(__name__)), 1),
                 check=OrderCheck(str(repo.checkout), command, CountCheckResult(0)),
                 edits=(

@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
 from agent_comms.errors import ToolRefusedError
@@ -61,7 +63,7 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 
 def order(root: Path):
-    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
+    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))

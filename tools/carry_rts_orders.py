@@ -137,9 +137,11 @@ class RtsOrder:
         check = OrderCheck.parse(f"{directory} :: {command} -> {expected}")
         if check is None:
             raise ValueError(f"{self.facts}: the order needs a check")
+        owner = FileLine(place[1], int(place[2]))
         return todos.PendingProblemOrder(
             id=self.msg,
-            owner=FileLine(place[1], int(place[2])),
+            owner=owner,
+            scope=todos.FixScope(todos.FixShape(parents=(owner,), members=())),
             check=check,
             edits=tuple(re.findall(r"^\s*\d+[.)] (.+?)\s*$", body, re.M)),
             banned=tuple(
