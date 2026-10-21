@@ -281,6 +281,49 @@ class CommanderContext(CommanderConfig):
     def call(self, tool):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
+    def on_record(self, line: str, recorded: str, audience: VerdictAudience,
+                  answers: tuple[MessageReference, ...] = ()) -> None:
+        """Publish what Core already recorded; never record it again after a failed post."""
+        try:
+            self.post(audience, f'On the record: {line}', answers)
+        except (SystemExit, ValueError) as failed:
+            print(f'{recorded} recorded, but the post failed ({failed}). '
+                  'Repost with order.post; do not record it again.', file=sys.stderr)
+            raise
+
+    def strike(self, unit: str, task: str, why: str, caught: str = 'review', *,
+               evidence: tuple[FileLine, ...], kind: type[StrikeTodo] = StrikeTodo,
+               answers: tuple[MessageReference, ...] = ()) -> None:
+        """Record and publish the acting commander's failure finding on the original Todo."""
+        caught = f'{self.actor_name} at {caught}' if caught in STAGES else caught
+        if not any(stage in caught for stage in STAGES):
+            sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{self.actor_name} at review".')
+        todo = self.comms.goals.todos.get(task)
+        todo.state.require_open(todo)
+        if todo.held().owner != unit:
+            sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
+        self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
+                                      f'{why} (caught by {caught})',
+                                      evidence=evidence), answers)
+
+    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
+                 answers: tuple[MessageReference, ...] = ()) -> None:
+        """Core records the strike, then this acting context publishes its result."""
+        refuse(strike.reason, *OUTGOING)
+        if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
+                .todo.revision == todo.revision):
+            return
+        self.posted(unit, self.comms.goals.todos.get(todo.id), strike, answers)
+
+    def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
+               answers: tuple[MessageReference, ...] = ()) -> None:
+        """Publish a strike Core already recorded on the task's Todo."""
+        n = struck(todo, unit)
+        line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
+                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
+        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
+        print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
+
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
 
@@ -511,8 +554,8 @@ class Commander(CommanderContext):
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, review_at=review_at, commander=self.commander,
-                assigner=self.actor_identity)))
+                order=order, request=request, review_at=review_at,
+                commander=self.commander, assigner=self.actor_identity)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
@@ -594,55 +637,6 @@ class Commander(CommanderContext):
         lines += ['', '## Withdrawn orders', '',
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
         return '\n'.join(lines) + '\n'
-
-    def on_record(self, line: str, recorded: str, audience: VerdictAudience,
-                  answers: tuple[MessageReference, ...] = ()) -> None:
-        """Publish what Core already recorded; no second narrative file.
-
-        Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
-        """
-        try:
-            self.post(audience, f'On the record: {line}', answers)
-        except (SystemExit, ValueError) as failed:
-            print(f'{recorded} recorded, but the post failed ({failed}). '
-                  'Repost with order.post; do not record it again.', file=sys.stderr)
-            raise
-
-    def strike(self, unit: str, task: str, why: str, caught: str = 'review', *,
-               evidence: tuple[FileLine, ...], kind: type[StrikeTodo] = StrikeTodo,
-               answers: tuple[MessageReference, ...] = ()) -> None:
-        """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
-        failure stays private and none is described in words that hide what happened."""
-        caught = f'{self.commander} at {caught}' if caught in STAGES else caught
-        # What matters is how a mistake happened, how often, and how and when it was caught.
-        if not any(stage in caught for stage in STAGES):
-            sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{self.commander} at review".')
-        todo = self.comms.goals.todos.get(task)
-        todo.state.require_open(todo)
-        if todo.held().owner != unit:
-            sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
-                                      f'{why} (caught by {caught})',
-                                      evidence=evidence), answers)
-
-    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo,
-                 answers: tuple[MessageReference, ...] = ()) -> None:
-        """Core records the strike on the task's Todo, then posts it to #comms."""
-        refuse(strike.reason,
-            *OUTGOING)  # posted to #comms, so refused before Core records the strike
-        if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
-                .todo.revision == todo.revision):
-            return
-        self.posted(unit, self.comms.goals.todos.get(todo.id), strike, answers)
-
-    def posted(self, unit: str, todo: Todo, strike: StrikeTodo,
-               answers: tuple[MessageReference, ...] = ()) -> None:
-        """Publish a strike Core already recorded on the task's Todo to #comms."""
-        n = struck(todo, unit)
-        line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
-                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
-        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
-        print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
     def done(self, pid, sha, screenshot='', seen=''):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit

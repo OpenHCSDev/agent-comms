@@ -16,7 +16,7 @@ import pytest
 from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
 from agent_comms.commander.cli import main
-from agent_comms.commander.order import Commander, OrderFile
+from agent_comms.commander.order import Commander, CommanderContext, OrderFile
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.external_transcript import ExternalTranscript
@@ -147,6 +147,14 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert posted.returncode == 0, posted.stderr
     assert comms.registry.status('fork-one').receiving
     assert store.get('P40') == saved
+    acting = CommanderContext.read_root(comms.root).model_copy(
+        update={'actor': CommanderForkCaller(fork.name)})
+    acting.strike('worker', 'P40',
+        'The fork found the requested source change missing during its copied review.',
+        evidence=(order.owner,))
+    saved = store.get('P40')
+    assert saved.strikes[-1].actor == fork.incarnation
+    assert 'caught by fork-one at review' in str(saved.strikes[-1].reason)
     refused = command(comms, 'order', 'retire')
     assert refused.returncode != 0 and 'Only a commander fork can retire' in refused.stderr
     retired = command(comms, 'order', 'retire', '--fork', 'fork-one')
@@ -296,6 +304,8 @@ def test_malformed_problem_ids_are_refused_without_writes(fork_bus):
         with store.writing() as db, pytest.raises(TodoError) as refused:
             ProblemAllocation.reserve(db, text)
         assert text in str(refused.value)
+    with store.writing() as db:
+        assert ProblemAllocation.reserve(db, retained.id) == ProblemNumber.parse(retained.id)
     with store.snapshot() as db:
         assert ProblemAllocation.select(db) == []
     assert store.list(source.github) == (retained,)

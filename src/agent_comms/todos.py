@@ -3330,7 +3330,8 @@ class ProblemAllocation(TypedTable):
 
     @classmethod
     def issue(cls, db: sqlite3.Connection, problem: ProblemNumber) -> ProblemNumber:
-        cls(problem.number).insert(db)
+        if not Todo.select(db, id=str(problem), limit=1):
+            cls(problem.number).insert_if_absent(db)
         return problem
 
     @classmethod

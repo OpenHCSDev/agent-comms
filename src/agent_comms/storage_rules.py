@@ -4,7 +4,6 @@ from __future__ import annotations
 import getopt
 import json
 import math
-import re
 import shutil
 import subprocess
 import time
