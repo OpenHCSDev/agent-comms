@@ -13,7 +13,7 @@ from .goal_attempt_phase import (
     GoalAttemptPhase,
 )
 from .lifecycle import LifecycleState
-from .goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 if TYPE_CHECKING:
     from .goal_attempts import Generation, GoalAttemptStore

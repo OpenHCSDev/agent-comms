@@ -6,18 +6,18 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, ClassVar
 
-from .ordinary_turn_rules import OrdinaryGoalGrantCheck
+from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .goal_management import Goals
-    from .goals import GoalDeclaration
-    from .pi_payloads import PiUsage
-    from .thread_identity import TurnId
-    from .threads import Thread
-    from .turn_context import TurnContext
-    from .turn_goal_account import TurnGoalAccount, VerifiedGoalSettlement
-    from .turn_terminal import TurnTerminal
+    from agent_comms.goal_attempts import GoalAttemptStore, LaunchPermit
+    from agent_comms.goal_management import Goals
+    from agent_comms.goals import GoalDeclaration
+    from agent_comms.pi_payloads import PiUsage
+    from agent_comms.thread_identity import TurnId
+    from agent_comms.threads import Thread
+    from agent_comms.turn_context import TurnContext
+    from agent_comms.turn_goal_account import TurnGoalAccount, VerifiedGoalSettlement
+    from agent_comms.turn_terminal import TurnTerminal
 
 
 class GoalTurnPermit(ABC):

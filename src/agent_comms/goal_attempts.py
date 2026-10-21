@@ -55,7 +55,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .locked_store import DurableFile, SQLiteFile
-from .goal_turn_permit import GoalTurnPermit
+from agent_comms.goal_turn_permit import GoalTurnPermit
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable

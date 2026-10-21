@@ -10,7 +10,7 @@ from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .owned_send import OwnedSend
-from .goal_turn_permit import NoLaunchPermit
+from agent_comms.goal_turn_permit import NoLaunchPermit
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput

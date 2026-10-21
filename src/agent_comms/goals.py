@@ -26,7 +26,7 @@ from .field_codec import (
     RecordMember, SubclassUnion,
 )
 from .goal_states import ActiveGoal, GoalState
-from .goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance

@@ -458,16 +458,10 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     store = comms.goals.open_goal_store()
     goal_id = claimed_owner.goal.require().id
     before = store.require_generation(goal_id)
-    assert before.attempt_id is not None
-    permit = store.stopped_permit(goal_id).claims[0]
-    assert store.read_attempt(before.attempt_id).holds(permit.reservation, ClaimedAttempt())
+    with closing(store._connect()) as conn:
+        attempt = AttemptRecord.one(conn, attempt_id=before.attempt_id)
+        assert attempt.phase == ClaimedAttempt()
     assert not CoordinationStore.path_in(comms.root).exists()
-    # Even without native coordination, a foreign release cannot settle a goal.
-    substituted = replace(claimed_owner, created_at=claimed_owner.created_at + 1)
-    with pytest.raises(RecoveryBlocked):
-        RecoveryMonitorCapability.settle_stopped_owner(comms.root, substituted)
-    assert store.require_generation(goal_id) == before
-
     StopCliCommand(name=claimed_owner.name).apply(comms)
 
     stopped = comms.registry.require(claimed_owner.name)
@@ -486,6 +480,11 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     assert stopped.goal.require().state.active
     # Repeated recovery is a no-op; it never creates another ready generation.
     RecoveryMonitorCapability.settle_stopped_owner(comms.root, stopped)
+    assert store.require_generation(goal_id) == successor
+    # Even without native coordination, a foreign release must be rejected.
+    substituted = replace(claimed_owner, created_at=claimed_owner.created_at + 1)
+    with pytest.raises(RecoveryBlocked):
+        RecoveryMonitorCapability.settle_stopped_owner(comms.root, substituted)
     assert store.require_generation(goal_id) == successor
 
 

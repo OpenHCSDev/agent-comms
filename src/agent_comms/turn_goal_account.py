@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from .goal_attempts import (
+from agent_comms.goal_attempts import (
     GoalAttemptError, GoalAttemptStore, LaunchPermit,
 )
-from .goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
