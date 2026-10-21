@@ -8,6 +8,7 @@ import secrets
 import select
 import socket
 import sys
+import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -22,7 +23,7 @@ from agent_comms.cli_protocol import Outcome, TaggedWire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
-from agent_comms_hooks.watch import SessionRefusedError, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, SessionRefusedError, WatchClaim, WatchRecord
 
 if TYPE_CHECKING:
     from .shared import LineMonitorBridge, MonitorProbe, Serve
@@ -31,15 +32,31 @@ if TYPE_CHECKING:
 class BridgeExit:
     """Normal retirement has no successor runtime."""
 
+    def keeping(self, held: HeldClaim) -> BridgeExit:
+        """Without a successor the claim ends with this process."""
+        return self
+
     def finish(self, operation: Serve, record: WatchRecord) -> None:
         pass
 
 
 @dataclass
 class BridgeReplacement(BridgeExit):
-    """Keep the owner-launched process, not its old bus resources, through install."""
+    """An install asked for a successor; the claim is not yet kept for it."""
 
     peer: socket.socket
+
+    def keeping(self, held: HeldClaim) -> ClaimedReplacement:
+        return ClaimedReplacement(self.peer, held.inheritable())
+
+
+@dataclass
+class ClaimedReplacement(BridgeReplacement):
+    """Keep the owner-launched process and its session claim, not its old bus resources,
+    through install. The claim's locked description passes to the successor through exec,
+    so no session hook ever sees the claim lapse and launches a second bridge."""
+
+    claim: int
 
     def finish(self, operation: Serve, record: WatchRecord) -> None:
         self.peer.setblocking(True)
@@ -64,7 +81,7 @@ class BridgeReplacement(BridgeExit):
             return
         operation.owner.require_alive()
         runtime.require_available()
-        command = operation.command(record, runtime)
+        command = operation.successor(self.claim).command(record, runtime)
         os.execve(command[0], command, runtime.environment(os.environ))
 
 
@@ -285,6 +302,17 @@ class InspectSession(SessionRequest):
             raise ValueError("Session bridge did not report its process and runtime")
         return reply
 
+    def awaited(self, claim: WatchClaim, seconds: float = 30) -> SessionInformation:
+        """An install swaps the endpoint; its socket is absent for that gap, not gone."""
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                return self.information(claim)
+            except (FileNotFoundError, ConnectionRefusedError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)
+
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
             owner=service.owner, process=ProcessIdentity.capture(os.getpid()),
@@ -359,7 +387,7 @@ class MonitorService:
 
 
 async def read_monitor(claim: WatchClaim) -> None:
-    session = await asyncio.to_thread(InspectSession().information, claim)
+    session = await asyncio.to_thread(InspectSession().awaited, claim)
     with claim.reader_held():
         while session.owner.alive():
             try:

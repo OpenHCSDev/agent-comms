@@ -311,7 +311,7 @@ class OwnedTurn:
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.goals.finish(self.terminal)
+        self.goals.finish(self.runner.owner_stop.interrupting(self.terminal))
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
@@ -404,8 +404,8 @@ class OwnedTurn:
                         return
                     await self.run_native()
                 except asyncio.CancelledError as error:
-                    self.terminal = self.terminal.interrupted(
-                        TurnTerminal.from_cancellation(error))
+                    cancelled = TurnTerminal.from_cancellation(error)
+                    self.terminal = cancelled.interrupting(self.terminal)
                     raise
 
     def settle_unbound(self):

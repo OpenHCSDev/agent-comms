@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve
+from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
@@ -107,7 +107,7 @@ def run(*command: str | Path, cwd: Path = Path(), env: Mapping[str, str] = os.en
     completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
                                capture_output=True, text=True)
     if completed.returncode:
-        raise UpgradeRefused(f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}")
+        raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n{completed.stderr.strip()}")
     return completed.stdout
 
 
@@ -323,9 +323,11 @@ class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+    unresumed: tuple[str, ...]
+    """Session bridges paused for the swap that did not come back."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines())
+        return (*super().lines(), *self.live.lines(), *self.unresumed)
 
 
 @dataclass(frozen=True)
@@ -356,7 +358,7 @@ class Stack:
     @classmethod
     def build(cls, checkout: Path, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
-        source = cls(checkout, home)
+        source = cls(checkout, home, runtime=LaunchRuntime.running())
         source.require_uv()
         run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
             cwd=checkout)
@@ -374,21 +376,9 @@ class Stack:
             run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
                 "--no-editable", cwd=checkout,
                 env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
-            run(checkout / "stack/bin/prepare-pi-native", "--python", built.python,
-                cwd=checkout, env=built.environment(checkout / "src"))
-            native = Path(run(built.python, "-c",
-                "from agent_comms.native_package import pinned_location; print(pinned_location())",
-                cwd=checkout, env=built.environment(checkout / "src")).strip())
-            package = Path(run(built.python, "-c",
-                "import agent_comms; from pathlib import Path; "
-                "print(Path(agent_comms.__file__).parent)",
-                cwd=checkout, env=built.environment()).strip())
-            destination = package / "_native" / native.relative_to(checkout / "stack")
-            destination.parents[2].mkdir(mode=0o700, parents=True)
-            shutil.copytree(native, destination)
+            built.install_native()
             RuntimeResolution.capture(built.python, core).save(prefix)
             built.imports()
-            built.prepare_native()
         except BaseException:
             shutil.rmtree(prefix)
             raise
@@ -397,11 +387,27 @@ class Stack:
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
 
+    def install_native(self) -> None:
+        """Build, copy and qualify this interpreter's native artifact before publication."""
+        run(self.checkout / "stack/bin/prepare-pi-native", "--python", self.python,
+            cwd=self.checkout, env=self.environment(self.checkout / "src"))
+        native = Path(run(self.python, "-c",
+            "from agent_comms.native_package import pinned_location; print(pinned_location())",
+            cwd=self.checkout, env=self.environment(self.checkout / "src")).strip())
+        package = Path(run(self.python, "-c",
+            "import agent_comms; from pathlib import Path; "
+            "print(Path(agent_comms.__file__).parent)",
+            cwd=self.checkout, env=self.environment()).strip())
+        destination = package / "_native" / native.relative_to(self.checkout / "stack")
+        destination.parents[2].mkdir(mode=0o700, parents=True)
+        shutil.copytree(native, destination)
+        self.prepare_native()
+
     def prepare_native(self) -> None:
         run(self.python, "-c", "from agent_comms.native_package import "
             "VerifiedNativePackage,pinned_native_package; "
             "from agent_comms.unit_instructions import UnitInstructions; "
-            "VerifiedNativePackage.acquire(pinned_native_package()); UnitInstructions.prepare()",
+            "VerifiedNativePackage.qualify(pinned_native_package()); UnitInstructions.prepare()",
             cwd=self.checkout, env=self.environment())
 
     def publish(self) -> None:
@@ -613,9 +619,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
         install.announce(report)
-        result = InstalledUpgrade(current, target, root, names, rehearsal,
-                                  install.install(rehearsal), harnesses())
+        bridges = SessionBridgeResumes()
+        live_run = install.install(rehearsal, bridges)
+        result = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
+                                  harnesses(), bridges.lines())
         report.finished(result)
+        bridges.require_resumed()
         return result
     except UpgradeRefused as error:
         report.failed(error)
@@ -673,7 +682,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
 
-    def install(self, rehearsal: Rehearsed) -> LiveRun:
+    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -682,8 +691,8 @@ class Install[Rehearsed: Rehearsal](ABC):
         """
         with ExitStack() as resources:
             for bridge in Serve.running(self.installed.home):
-                for paused in bridge.pause(resources):
-                    resources.callback(paused.resume)
+                bridges.pause(bridge, resources)
+            resources.callback(bridges.resume)
             return self.live(rehearsal)
 
     @abstractmethod

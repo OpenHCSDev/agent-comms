@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -338,7 +339,9 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
         await asyncio.gather(turn, return_exceptions=True)
         await owner.shutdown()
     rows = stored_inputs(comms.root).rows
-    assert len(rows) == 1 and not next(iter(rows.values())).unresolved
+    with pytest.raises(ValueError):
+        next(iter(rows.values())).require(Unresolved, ValueError("review required"))
+    assert len(rows) == 1
     compaction_events = [field.event for update in updates
                          for field in decode_updates(update.field_meta or {})
                          if isinstance(field, CompactionChangedUpdate)]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import dataclasses
 import json
 import sys
@@ -72,7 +74,7 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, GoalExecution
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .message_bus import HeldBusWrite
@@ -221,7 +223,7 @@ class GoalSet(OwnGoalPublication):
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
-    execution: Annotated[ThreadGoalExecution, WireName("goal_execution")]
+    execution: Annotated[GoalExecution, WireName("goal_execution")]
 
 
 @dataclass(frozen=True)
@@ -830,7 +832,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ),
         )
         goal = goal.require()
-        if not goal.state.active or goal.progress != progress:
+        if not goal.state.items_with(Active, goal) or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
         return GoalUpdated(goal)
 

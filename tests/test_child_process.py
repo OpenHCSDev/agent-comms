@@ -18,10 +18,12 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    DiesWithLauncherLifetime,
     ExitedOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
+    OutlivesLauncherLifetime,
     SpawnedProcess,
     SynchronousProcess,
     Platform,
@@ -320,6 +322,42 @@ time.sleep(60)
         await child.stop()
 
 
+LAUNCHER = """import json,sys,time
+from pathlib import Path
+from agent_comms.child_process import OutlivesLauncherLifetime, SpawnedProcess
+from agent_comms.field_codec import FieldCodec
+sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
+children = (SpawnedProcess.launch(sleeper),
+            SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime))
+Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c.identity) for c in children]))
+time.sleep(60)
+"""
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_PDEATHSIG is the Linux binding")
+@pytest.mark.asyncio
+async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path: Path) -> None:
+    announcement = tmp_path / "children.json"
+    launcher = SpawnedProcess.launch((sys.executable, "-c", LAUNCHER, str(announcement)))
+    observed = ()
+    try:
+        await ready(announcement)
+        tied, resident = observed = identities(announcement)
+        assert tied.alive() and resident.alive()
+        # SIGKILL runs no exit handler: only the kernel binding can retire the child.
+        launcher.process.kill()
+        launcher.process.wait(timeout=5)
+        async with asyncio.timeout(2):
+            while tied.alive():
+                await asyncio.sleep(.01)
+        assert resident.alive(), "a declared resident must outlive its launcher"
+    finally:
+        launcher.close()
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
+
+
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
     recorded = []
@@ -437,7 +475,8 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError),
         Platform.current().launch(
-            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running()
+            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running(),
+            DiesWithLauncherLifetime,
         ) as launch,
         launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
     ):

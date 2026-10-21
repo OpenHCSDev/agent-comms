@@ -437,7 +437,8 @@ class Platform(DeclaredFamily, affix="Platform"):
 
     @abstractmethod
     def launch(
-        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+        lifetime: type[ChildLifetime],
     ) -> ChildLaunch: ...
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
@@ -500,9 +501,14 @@ class PosixPlatform(Platform):
         fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
     def launch(
-        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+        lifetime: type[ChildLifetime],
     ) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds, runtime)
+        return PosixLaunch(command, pass_fds, runtime, lifetime.launcher(self))
+
+    def parent_death_binding(self) -> int:
+        """Darwin has no parent-death signal: its exec gate binds no launcher."""
+        return 0
 
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
@@ -529,6 +535,10 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
+    def parent_death_binding(self) -> int:
+        """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
+        return os.getpid()
+
     @staticmethod
     def _stat(pid: int) -> LinuxProcessRecord:
         try:
@@ -875,11 +885,42 @@ class Win32Platform(Platform):
                 self.kernel.CloseHandle(job)
 
     def launch(
-        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime
+        self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+        lifetime: type[ChildLifetime],
     ) -> ChildLaunch:
+        # Windows binds no launcher: its named job owns every child's lifetime.
         if pass_fds:
             raise NotImplementedError("POSIX descriptor inheritance is unavailable on Windows")
         return WindowsLaunch(command, self, runtime)
+
+
+class ChildLifetime(DeclaredFamily, affix="Lifetime"):
+    """Whether a launched child may outlive the process that launched it."""
+
+    @classmethod
+    @abstractmethod
+    def launcher(cls, platform: PosixPlatform) -> int:
+        """The PID the exec gate binds the child's life to; zero binds none."""
+
+
+class DiesWithLauncherLifetime(ChildLifetime):
+    """Every child by default: a killed launcher cannot leave it running under init.
+
+    The kernel signal follows the launching thread, so the thread that launches
+    the child must outlive it, as the event loop and a pool worker's task do.
+    """
+
+    @classmethod
+    def launcher(cls, platform: PosixPlatform) -> int:
+        return platform.parent_death_binding()
+
+
+class OutlivesLauncherLifetime(ChildLifetime):
+    """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
+
+    @classmethod
+    def launcher(cls, platform: PosixPlatform) -> int:
+        return 0
 
 
 class ChildRegistration(ABC):
@@ -1021,10 +1062,12 @@ class WindowsLaunch(ChildLaunch):
 
 
 class PosixLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime):
+    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+                 launcher: int):
         super().__init__(runtime)
         self.command = command
         self.pass_fds = pass_fds
+        self.launcher = launcher
         self.read_fd, self.write_fd = os.pipe()
         self.error_r, error_w = os.pipe()
         self.error_writer = os.fdopen(error_w, "wb", buffering=0)
@@ -1038,6 +1081,7 @@ class PosixLaunch(ChildLaunch):
             _EXEC_GATE,
             str(self.read_fd),
             str(self.error_writer.fileno()),
+            str(self.launcher),
             *self.command,
         )
 
@@ -1263,10 +1307,17 @@ class ChildResult:
 # The gate establishes identity before even an instantaneous executable can
 # exit. It owns no business logic or stored state and preserves exec PID/group.
 _EXEC_GATE = """import os,sys
-fd=int(sys.argv[1]); error_fd=int(sys.argv[2]); go=os.read(fd,1); os.close(fd)
+fd=int(sys.argv[1]); error_fd=int(sys.argv[2]); launcher=int(sys.argv[3])
+if launcher:
+    import ctypes
+    # PR_SET_PDEATHSIG (1) survives exec: the kernel kills this child with its launcher.
+    if ctypes.CDLL(None, use_errno=True).prctl(1, 9):
+        os.write(error_fd, str(ctypes.get_errno()).encode()); os._exit(126)
+    if os.getppid() != launcher: os._exit(126)
+go=os.read(fd,1); os.close(fd)
 if go != b'G': sys.exit(126)
 os.set_inheritable(error_fd, False)
-try: os.execvpe(sys.argv[3], sys.argv[3:], os.environ)
+try: os.execvpe(sys.argv[4], sys.argv[4:], os.environ)
 except OSError as error:
     os.write(error_fd, str(error.errno).encode()); os._exit(126)
 """
@@ -1467,11 +1518,12 @@ class AttachedChild(ChildProcess):
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
         runtime: LaunchRuntime = LaunchRuntime.running(),
+        lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> AttachedChild:
         if not command:
             raise ValueError("A child command is required")
         platform = Platform.current()
-        with platform.launch(command, pass_fds, runtime) as launch:
+        with platform.launch(command, pass_fds, runtime, lifetime) as launch:
             child = await launch.spawn_async(cwd=cwd, env=env, stdio=stdio)
             try:
                 launch.release(child.identity)
@@ -1764,10 +1816,11 @@ class SpawnedProcess(SynchronousProcess):
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
+        lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> SpawnedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, (), runtime) as launch:
+        with Platform.current().launch(command, (), runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:
@@ -1842,13 +1895,16 @@ class PoolWorkerStopped(BaseException):
 class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
     """Parallel work whose workers and nested child owners cannot outlive its parent."""
 
-    def __init__(self) -> None:
+    def __init__(self, workers: int) -> None:
+        """The caller declares the width; no default multiplies it under a parallel runner."""
+        if workers < 1:
+            raise ValueError("A pool needs at least one worker")
         ExitStack.__init__(self)
         ParentLifeline.__enter__(self)
         self.callback(ParentLifeline.__exit__, self)
         try:
             ProcessPoolExecutor.__init__(
-                self, mp_context=multiprocessing.get_context("fork"),
+                self, max_workers=workers, mp_context=multiprocessing.get_context("fork"),
                 initializer=self._initialize, initargs=(self.read_fd, self.write_fd),
             )
         except BaseException:

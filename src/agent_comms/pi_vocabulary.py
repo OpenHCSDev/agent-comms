@@ -7,17 +7,22 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
+from .declared_family import DeclaredFamily
+from .field_codec import (
+    AcceptsNull,
+    DefaultExternalName,
+    ExternalName,
+    FieldCodec,
+    FieldRepresentation,
+)
+from .lifecycle_capability import Failed, LifecycleCapability, Successful
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
-class PiStopReason(DeclaredFamily, affix="StopReason"):
-    failed = False
-    successful = False
+class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
     tool_round = False
     explicit_abort = False
     tracked_failure = "Provider returned an unsuccessful terminal"
@@ -37,16 +42,6 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         from .coordination_tables.attempts import ReplayFact
 
         return UnknownOutcomeAttempt(), ReplayFact.NONE
-
-    @classmethod
-    def from_external(cls, value):
-        from .field_codec import FieldCodec
-
-        value = FieldCodec.decode(str | None, value)
-        try:
-            return cls.member_named(value)
-        except UnknownFamilyMember:
-            return UnreportedStopReason
 
     @classmethod
     def permits_progress(cls):
@@ -72,9 +67,9 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
-    def require_failed_terminal(cls):
+    def require_failed_terminal(cls) -> None:
         # A saved tool round cannot establish whether the live owner accepted it.
-        if cls.successful or cls.tool_round:
+        if cls.items_with(Successful, cls):
             raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
@@ -102,8 +97,7 @@ class FinishedPiStop:
         return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
 
 
-class StopStopReason(FinishedPiStop, PiStopReason):
-    successful = True
+class StopStopReason(Successful, FinishedPiStop, PiStopReason):
 
     @classmethod
     async def apply(cls, session, message):
@@ -112,10 +106,8 @@ class StopStopReason(FinishedPiStop, PiStopReason):
             yield event
 
 
-class FailedPiStop(FinishedPiStop):
+class FailedPiStop(Failed, FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
-
-    failed = True
 
     @classmethod
     def error_notice(cls, message) -> str:
@@ -136,6 +128,11 @@ class LengthStopReason(FailedPiStop, PiStopReason):
 
 class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
     tool_round = True
+
+    @classmethod
+    def require_failed_terminal(cls):
+        # A saved tool round cannot establish whether the live owner accepted it.
+        raise ValueError("Saved assistant message did not end its turn as a failure")
 
     @classmethod
     async def apply(cls, session, message):
@@ -181,22 +178,12 @@ class DeferredStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class UnreportedStopReason(UnfinishedPiStop, PiStopReason):
+class UnreportedStopReason(DefaultExternalName, UnfinishedPiStop, PiStopReason):
     pass
 
 
-class CompactionReason(DeclaredFamily, affix="CompactionReason"):
+class CompactionReason(ExternalName, affix="CompactionReason"):
     """Why Pi's own engine compacted: Pi's reason names, decoded once at ingress."""
-
-    @classmethod
-    def from_external(cls, value):
-        from .field_codec import FieldCodec
-
-        value = FieldCodec.decode(str | None, value)
-        try:
-            return cls.member_named(value)
-        except UnknownFamilyMember:
-            return UnknownCompactionReason
 
 
 class ManualCompactionReason(CompactionReason):
@@ -211,7 +198,7 @@ class ThresholdCompactionReason(CompactionReason):
     pass
 
 
-class UnknownCompactionReason(CompactionReason):
+class UnknownCompactionReason(DefaultExternalName, CompactionReason):
     pass
 
 

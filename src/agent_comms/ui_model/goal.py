@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from agent_comms.goal_presentation import ThreadGoalExecution
+    from agent_comms.goal_presentation import GoalExecution
     from agent_comms.goals import GoalDeclaration
 
 
@@ -25,13 +25,13 @@ class GoalDisplay(ABC):
     def visible(self) -> bool: ...
 
     @abstractmethod
-    def heading(self, execution: ThreadGoalExecution) -> str: ...
+    def heading(self, execution: GoalExecution) -> str: ...
 
-    def details_heading(self, execution: ThreadGoalExecution) -> str:
+    def details_heading(self, execution: GoalExecution) -> str:
         return self.heading(execution)
 
     @abstractmethod
-    def standby(self, execution: ThreadGoalExecution) -> bool: ...
+    def standby(self, execution: GoalExecution) -> bool: ...
 
     @abstractmethod
     def action_failure(self, error: Exception) -> str: ...
@@ -49,11 +49,11 @@ class GoalUnavailable(GoalDisplay):
 
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: GoalExecution) -> bool:
         return False
 
     def action_failure(self, error: Exception) -> str:
         return str(error)
 
-    def heading(self, execution: ThreadGoalExecution) -> str:
+    def heading(self, execution: GoalExecution) -> str:
         return self.last_confirmed.unavailable_heading
