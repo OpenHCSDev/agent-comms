@@ -10,27 +10,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Self
 
-from ..comms import Comms
-from ..goal_actions import ReissuedOrderGoalAction
-from ..goals import Goal, GoalRevision
-from ..goal_states import BlockedState
-from ..goal_history import GoalHistoryStore
-from ..goal_generation import GenerationState, RetryableGeneration
-from ..message_page import MessageReadRequest
-from ..message_reference import MessageReference
-from ..messages import Message
-from ..read_basis import RepliesDisplayScope
-from ..bus_page_index import BusPageIndex
-from ..wire_log import WireSnapshot
-from ..message_bus import WatchPass
-from ..standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
+from agent_comms.comms import Comms
+from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.goals import Goal, GoalRevision
+from agent_comms.goal_states import BlockedState
+from agent_comms.goal_history import GoalHistoryStore
+from agent_comms.goal_generation import GenerationState, RetryableGeneration
+from agent_comms.message_page import MessageReadRequest
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.wire_log import WireSnapshot
+from agent_comms.message_bus import WatchPass
+from agent_comms.standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
 from agent_comms.storage_rules import OrderCheckoutWork
-from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
-from ..threads import Thread
-from ..todos import Todo
-from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
-from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
-from .config import CommanderConfig
+from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
+from agent_comms.threads import Thread
+from agent_comms.todos import Todo
+from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms.commander.config import CommanderConfig
 
 
 @dataclass(frozen=True)
@@ -318,17 +318,32 @@ class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
                 f"{self.work.checkout} -> restore its holder; do not hand the row away")
 
 
-class UnownedOrderWatch(WatchPass):
-    """Hand released work to idle units after the scheduled pass enters the bus."""
+@dataclass(frozen=True)
+class UnownedObservation:
+    commander: Thread
+    rule: UnownedWheelSpin
 
-    def pass_body(self, comms: Comms) -> None:
+
+class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
+    """Observe released work and its checkouts before entering the bus to assign it."""
+
+    def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
-        for commander in {todo.creator_identity.name for todo in available}:
-            mine = (todo for todo in available if todo.creator_identity.name == commander)
-            for rule in UnownedWheelSpin.paired(
-                comms, commander, mine, CoreWatcherIncarnation.watcher()
-            ):
-                rule.enforce(comms, commander)
+        observed = []
+        for name in {todo.creator_identity.name for todo in available}:
+            commander = comms.registry.require(name)
+            mine = (todo for todo in available if todo.creator_identity.name == name)
+            observed.extend(
+                UnownedObservation(commander, rule)
+                for rule in UnownedWheelSpin.paired(
+                    comms, name, mine, CoreWatcherIncarnation.watcher()
+                )
+            )
+        return tuple(observed)
+
+    def pass_body(self, comms: Comms, observed: tuple[UnownedObservation, ...]) -> None:
+        for item in observed:
+            item.rule.enforce(comms, item.commander.name)
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

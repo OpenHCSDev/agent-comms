@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 
 import pytest
 
@@ -30,6 +31,7 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
@@ -126,7 +128,7 @@ def assert_retained(c: Comms) -> None:
     assert held.work.checkout == c.registry.storage_rule.order_checkout('worker', 'P1')
     assert 'worker' in held.line() and str(held.work.checkout) in held.line()
     # The real automatic caller must not bypass the heartbeat's protection.
-    UnownedOrderWatch().pass_body(c)
+    UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
     assert c.goals.todos.get('P2') == before
     assert before.holder is None
 
@@ -142,7 +144,8 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         with LaunchRoot.from_path(root).selected():
             (checkout / 'work.py').write_text('# not yet published\n')
             assert_retained(c)
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
             git(checkout, 'add', 'work.py')
             git(checkout, 'commit', '-q', '-m', 'Unpushed work')
             assert git(checkout, 'status', '--porcelain') == ''
@@ -153,20 +156,22 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             waiting = UnownedWheelSpin.violations(c, 'lead')
             assert len(waiting) == 1
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
             config.write(tmp_path / 'copy-home')
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)
             assert available[0].unit == 'idle'
             assert set(available).isdisjoint(review.violations)
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assigned = c.goals.todos.get('P2')
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
+                        StandingRule.broken(c, 'lead'))
         drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
@@ -187,5 +192,5 @@ def test_unreadable_checkout_is_not_clean(checkout_bus: Comms, tmp_path: Path):
         (checkout / '.git').unlink()
         before = c.goals.todos.get('P2')
         with pytest.raises(WorkBranchError):
-            UnownedOrderWatch().pass_body(c)
+            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
         assert c.goals.todos.get('P2') == before

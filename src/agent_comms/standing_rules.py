@@ -6,7 +6,6 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
-import subprocess
 import time
 from abc import abstractmethod
 from collections import Counter, defaultdict
@@ -254,11 +253,10 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
                  for todo in cls.todos(comms, commander)}
         candidates: list[str] = []
         for repo in repos:
-            log = subprocess.run(
-                ['git', '-C', str(repo.checkout), 'log', 'origin/main', '--since=7.days',
-                 '--name-only', '--format=', '--', repo.source], capture_output=True, text=True)
+            log = repo.git(repo.checkout, 'log', 'origin/main', '--since=7.days',
+                           '--name-only', '--format=', '--', repo.source)
             churn = Counter(str((repo.checkout / name).resolve())
-                            for name in log.stdout.splitlines()
+                            for name in log.splitlines()
                             if name.endswith('.py') and (repo.checkout / name).is_file())
             candidates.extend(path for path, _ in churn.most_common(15))
         return tuple(sorted(set(candidates), key=lambda path: (hunted.get(path, 0), path)))[:1]

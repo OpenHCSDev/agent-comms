@@ -5,16 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
-from .message_bus import WatchPass
-from .registration import Registration
+from agent_comms.message_bus import WatchPass
+from agent_comms.registration import Registration
+from agent_comms.standing_rules import StandingRule
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.threads import Thread
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .goal_management import Goals
-from .standing_rules import StandingRule
-from .thread_execution import ExternalThreadExecution
-from .thread_identity import ThreadIncarnation
-from .threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.goal_management import Goals
+    from agent_comms.todos import Todo
 
 
 @dataclass
@@ -24,8 +25,8 @@ class CommanderReview:
     violations: frozenset[StandingRule]
     turn: int = 0
 
-    def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
-        rules = StandingRule.broken(comms, commander.name)
+    def wake(self, comms: Comms, sender: str, commander: Thread,
+             rules: tuple[StandingRule, ...]) -> None:
         found = frozenset(rules)
         previous = self.violations
         if found == previous:
@@ -48,8 +49,15 @@ class CommanderReview:
         comms.messaging.send(sender, commander.name, "\n".join(lines))
 
 
+@dataclass(frozen=True)
+class CommanderObservation:
+    thread: Thread
+    merged: tuple[Todo, ...]
+    rules: tuple[StandingRule, ...]
+
+
 @dataclass
-class CommanderHeartbeat(WatchPass):
+class CommanderHeartbeat(WatchPass[tuple[CommanderObservation, ...]]):
     sender: ClassVar[str] = "commander-heartbeat"
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
@@ -78,15 +86,24 @@ class CommanderHeartbeat(WatchPass):
             )
         )
 
-    def pass_body(self, comms: Comms) -> None:
+    def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
+        return tuple(
+            CommanderObservation(
+                thread,
+                comms.goals.todos.merged_orders(thread.incarnation, comms.registry),
+                StandingRule.broken(comms, thread.name),
+            )
+            for thread in self.commanders(comms.registry, comms.goals)
+        )
+
+    def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """Inactive commanders retire their review after the pass enters the bus."""
         self.register(comms.registry)
-        commanders = self.commanders(comms.registry, comms.goals)
-        live = {thread.incarnation for thread in commanders}
+        live = {item.thread.incarnation for item in observed}
         self.reviews = {
             owner: review for owner, review in self.reviews.items() if owner in live
         }
-        for thread in commanders:
-            comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry)
-            review = self.reviews.setdefault(thread.incarnation, CommanderReview(frozenset()))
-            review.wake(comms, self.sender, thread)
+        for item in observed:
+            comms.goals.todos.record_merges(item.merged)
+            review = self.reviews.setdefault(item.thread.incarnation, CommanderReview(frozenset()))
+            review.wake(comms, self.sender, item.thread, item.rules)

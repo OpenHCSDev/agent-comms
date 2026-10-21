@@ -30,11 +30,11 @@ from uuid import uuid4
 
 from agent_comms.order_runs import OrderRun
 
-from . import skills
-from .bus_publication import AgentOrigin
-from .change_report import FileLine, NoSourceReference, SourceReference
-from .channel_targets import CommandTarget
-from .child_process import (
+from agent_comms import skills
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.change_report import FileLine, NoSourceReference, SourceReference
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.child_process import (
     BoundedRun,
     CheckPrinted,
     ChildResult,
@@ -42,10 +42,10 @@ from .child_process import (
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
-from .command import Command
-from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
-from .field_codec import (
+from agent_comms.command import Command
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import (
     FieldCodec,
     GitCommitText,
     MalformedRecord,
@@ -58,23 +58,23 @@ from .field_codec import (
     WireValue,
     boundary_decoder,
 )
-from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
-from .locked_store import DurableFile, RegistryFile
-from .maintenance_barrier import MaintenanceBarrier
-from .messages import InfoKind, Message
-from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
-from .plan_phases import OrderPhase, UnplannedPhase
-from .private_bus_checkpoint import PublicMessages
-from .progress_claims import MergedClaim, ProgressClaim
-from .recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
-from .repo import Repo
-from .repository_name import RepositoryName
-from .standing_rules import UndatedStandingRule
-from .storage_rules import StorageRule
-from .thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
-from .threads import Thread
-from .typed_table import (
+from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from agent_comms.launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.messages import InfoKind, Message
+from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.private_bus_checkpoint import PublicMessages
+from agent_comms.progress_claims import MergedClaim, ProgressClaim
+from agent_comms.recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.storage_rules import StorageRule
+from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.threads import Thread
+from agent_comms.typed_table import (
     Column,
     DurableStore,
     Index,
@@ -82,12 +82,12 @@ from .typed_table import (
     TextStorage,
     TypedTable,
 )
-from .work_branches import WorkBranchError, WorkBranches
+from agent_comms.work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .goal_management import Goals
-    from .registration import Registration
+    from agent_comms.comms import Comms
+    from agent_comms.goal_management import Goals
+    from agent_comms.registration import Registration
 
 
 @dataclass(frozen=True)
@@ -3303,12 +3303,16 @@ class TodoStore(DurableStore):
         return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
                      if todo.pending and todo.handed_out_on_release)
 
-    def reconcile_merges(self, commander: ThreadIncarnation, registry: Registration) -> None:
-        """Read before locking; record merge changes whose observed revision still holds."""
+    def merged_orders(self, commander: ThreadIncarnation,
+                      registry: Registration) -> tuple[Todo, ...]:
+        """Observe linked merges without holding a write lock."""
         held = self.held_for_commander(commander)
         pulls = PullRequests(held)
-        completed = tuple(closed for todo in held
-                          for closed in todo.order.closed_by_merge(todo, registry, pulls))
+        return tuple(closed for todo in held
+                     for closed in todo.order.closed_by_merge(todo, registry, pulls))
+
+    def record_merges(self, completed: tuple[Todo, ...]) -> None:
+        """Record only merge changes whose observed revision still holds."""
         if not completed:
             return
         with self.writing() as db:

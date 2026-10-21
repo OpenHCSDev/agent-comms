@@ -331,7 +331,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus)
+    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
     assert commander.incarnation in heartbeat.reviews
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
     page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
