@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import StaleFence
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner, CursorState
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
-from .proven_source_coverage import SourceCoverage
+from .proven_source_coverage import SourceCoverage, SourcePrefix
 from .store_files import StoreLockContention
 from .threads import Thread
 
@@ -65,9 +65,9 @@ class NativeSourceCursor:
         return cls._advance_owned(bus, wire_root_id, owner, claim_scope, person.participant_generation,
                                   None, store, source_reads=source_reads)
 
-    def _coverage(self, lookup, contention=None):
+    def _coverage(self, lookup):
         return SourceCoverage(self.bus, self.store, wire_root_id=self.wire_root_id,
-                              recipient_lookup=lookup, contention=contention)
+                              recipient_lookup=lookup)
 
     def advance(self, *, owner: Thread, owner_claimed_generation: int, owner_generation: int,
                 committed_input_id: str | None, source_reads: NativeEvidenceScope) -> CursorState:
@@ -79,7 +79,7 @@ class NativeSourceCursor:
                                        StoreLockContention(2.0) if committed_input_id is not None else None)
 
     def _advance_proven(self, identity, committed_input_id, source_reads, contention):
-        sources = self._coverage(identity.lookup, contention)
+        sources = self._coverage(identity.lookup)
         with self.store.session.boundary(self.bus, blocking=False, contention=contention):
             with self.store.session.read():
                 state = identity.state(self.store.session._connection)
@@ -87,8 +87,7 @@ class NativeSourceCursor:
         proof = coverage.proof
         with (self.store.session.boundary(self.bus, blocking=False, contention=contention) as boundary,
               self.store.session.writing() as db):
-            if sources.witness_unlocked() != coverage.source_witness:
-                raise IdentityConflict('current cursor canonical source changed before commit')
+            coverage.source_prefix.require_current(self.bus.bus)
             identity.require_live(self.bus, boundary.registry, 'current cursor owner or private root changed')
             identity.require_participant(self.store, 'current cursor recipient generation changed')
             if identity.cursor(db) != state.cursor:
@@ -119,12 +118,10 @@ class NativeSourceCursor:
                                        generation=person.participant_generation,
                                        claimed_generation=captured.claimed_generation)
                 state = identity.state(db)
-        sources = self._coverage(identity.lookup)
         with source_reads.borrow():
-            witness = state.source_witness(identity, sources, source_reads)
+            prefix = SourcePrefix.capture(self.bus.bus, state.covered_seq)
         with self.store.session.boundary(self.bus, blocking=False) as boundary:
-            if sources.witness_unlocked() != witness:
-                raise IdentityConflict('current cursor canonical source changed while reading')
+            prefix.require_current(self.bus.bus)
             identity.require_live(self.bus, boundary.registry, 'current native cursor owner changed while reading')
             with self.store.session.read():
                 identity.require_participant(self.store, 'current native cursor participant generation changed')
