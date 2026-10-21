@@ -137,9 +137,6 @@ class CursorState(ABC):
     @abstractmethod
     def require_coverage(self, owner, db, coverage, proof) -> None: ...
 
-    @abstractmethod
-    def source_witness(self, owner, sources, source_reads): ...
-
 
 @dataclass(frozen=True)
 class UnstartedCursor(CursorState):
@@ -172,9 +169,6 @@ class UnstartedCursor(CursorState):
 
     def require_coverage(self, owner, db, coverage, proof):
         pass  # No durable cursor exists to assert coverage.
-
-    def source_witness(self, owner, sources, source_reads):
-        return sources.witness()
 
 
 @dataclass(frozen=True)
@@ -239,6 +233,3 @@ class RecordedCursor(CursorState):
     def require_coverage(self, owner, db, coverage, proof):
         owner.require_coverage(db, self.row, coverage)
         proof.require_reference(owner, self.row)
-
-    def source_witness(self, owner, sources, source_reads):
-        return sources.recorded_witness(self)
