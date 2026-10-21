@@ -29,6 +29,7 @@ from agent_comms.coordination_tables.executions import (
     NoPointedExecution,
     PointerAttempt,
     PointerExecution,
+    ReplayAssessment,
     ReplayAssessments,
 )
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
@@ -52,7 +53,7 @@ class RecoverySnapshot:
     links: Annotated[
         tuple[ExecutionAssignmentLink, ...], SnapshotName("execution_claims")
     ]
-    replay: ReplayAssessments | None
+    replay: ReplayAssessment
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
     publication_evidence: Annotated[
@@ -144,8 +145,8 @@ class RecoverySnapshot:
     def validate_membership(self) -> None:
         execution = self.execution
         execution_id = execution.execution_id
+        self.replay.require_execution(execution_id)
         related = (
-            self.replay,
             *self.obligations,
             *self.publication_intents,
             *self.publication_evidence,

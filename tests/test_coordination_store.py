@@ -36,6 +36,7 @@ from agent_comms.attempt_states import (
 from agent_comms.attempt_start import INITIAL_LEASE_DURATION_MS
 from agent_comms.coordination_errors import (
     IdentityConflict,
+    IntegrityViolationError,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
@@ -44,7 +45,11 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import ReplayAssessments
+from agent_comms.coordination_tables.executions import (
+    NoReplayAssessment,
+    ReplayAssessment,
+    ReplayAssessments,
+)
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -629,9 +634,9 @@ def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
         )
         assert type(outcome.value.execution.lifecycle) is FailedExecution
         assert not outcome.value.can_retry
-        assert outcome.value.replay is not None
-        assert outcome.value.replay.facts == ReplayFact.TOOL_CALL_STARTED
-        assert outcome.value.replay.side_effects_possible
+        replay = outcome.value.replay.require_assessment()
+        assert replay.facts == ReplayFact.TOOL_CALL_STARTED
+        assert replay.side_effects_possible
 
 
 @pytest.mark.parametrize("first_fact", ["process_dead", "backend_done"])
@@ -700,8 +705,8 @@ def test_provider_proof_carries_until_later_attempt_records_output(
             reason_code=GivenReasonCode("provider_failed"),
             failure=ProviderRetryExhausted("controlled provider failure"),
         )
-        proof = deferred.value.replay
-        assert deferred.value.can_retry and proof is not None and proof.allows_retry
+        proof = deferred.value.replay.require_assessment()
+        assert deferred.value.can_retry and proof.allows_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
         second = db.attempts.start(
             AttemptStart(
@@ -717,8 +722,7 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         assert second.value.snapshot.replay == proof
         with db.session.writing() as connection:
             ReplayAssessments.accumulate(connection, "exec", fact)
-        revoked = db.snapshots.get("exec").replay
-        assert revoked is not None
+        revoked = db.snapshots.get("exec").replay.require_assessment()
         assert revoked.facts == fact and not revoked.allows_retry
 
         second_fence = final_evidence(db, second.value.fence, pointer_revision=3)
@@ -734,18 +738,61 @@ def test_provider_proof_carries_until_later_attempt_records_output(
         assert outcome.value.replay == revoked
 
 
+def test_replay_states_own_presence_revision_and_retry_authorization(db_path: Path) -> None:
+    with ready(db_path) as store, store.session.writing() as connection:
+        absent = store.snapshots.get("exec").replay
+        assert absent == NoReplayAssessment()
+        assert FieldCodec.encode(absent, ReplayAssessment) is None
+        assert FieldCodec.decode(ReplayAssessment, None) == absent
+        snapshot = store.snapshots.get("exec")
+        encoded = FieldCodec.encode(snapshot)
+        assert encoded["replay"] is None
+        assert FieldCodec.decode(RecoverySnapshot, encoded) == snapshot
+        absent.require_revision(None)
+        assert not absent.allows_retry
+        with pytest.raises(IntegrityViolationError):
+            absent.require_assessment()
+        with pytest.raises(StaleRevision):
+            absent.require_revision(1)
+        absent.revoke_retry(connection)
+        assert ReplayAssessments.count(connection) == 0
+
+        absent.authorize_retry(connection, "exec")
+        recorded = ReplayAssessments.for_execution(connection, "exec").require_assessment()
+        assert recorded.allows_retry and recorded.revision == 1
+        assert FieldCodec.decode(ReplayAssessment, FieldCodec.encode(recorded)) == recorded
+        recorded.require_revision(1)
+        with pytest.raises(StaleRevision):
+            recorded.require_revision(None)
+        with pytest.raises(IntegrityViolationError):
+            recorded.require_execution("another-execution")
+        changes = connection.total_changes
+        ReplayAssessments.authorize_if_unobserved(connection, "exec")
+        assert not recorded.observe(
+            connection, "exec", facts=ReplayFact.NONE,
+            replay_safe=True, side_effects_possible=False,
+        )
+        assert connection.total_changes == changes
+        ReplayAssessments.revoke(connection, "exec")
+        revoked = ReplayAssessments.for_execution(connection, "exec").require_assessment()
+        assert not revoked.allows_retry and revoked.revision == 2
+        changes = connection.total_changes
+        ReplayAssessments.revoke(connection, "exec")
+        assert connection.total_changes == changes
+
+
 def test_repeated_replay_fact_does_not_rewrite_its_durable_assessment(db_path: Path) -> None:
     with ready(db_path) as db:
         connection = db.session._connection
         ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
-        before = ReplayAssessments.one(connection, execution_id="exec")
+        before = ReplayAssessments.for_execution(connection, "exec").require_assessment()
         changes = connection.total_changes
         for _ in range(100):
             ReplayAssessments.accumulate(connection, "exec", ReplayFact.ASSISTANT_OUTPUT)
         assert connection.total_changes == changes
-        assert ReplayAssessments.one(connection, execution_id="exec") == before
+        assert ReplayAssessments.for_execution(connection, "exec") == before
         ReplayAssessments.accumulate(connection, "exec", ReplayFact.THINKING_OUTPUT)
-        after = ReplayAssessments.one(connection, execution_id="exec")
+        after = ReplayAssessments.for_execution(connection, "exec").require_assessment()
         assert after.facts == ReplayFact.ASSISTANT_OUTPUT | ReplayFact.THINKING_OUTPUT
         assert after.revision == before.revision + 1
         assert not after.allows_retry
@@ -821,8 +868,7 @@ def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
         )
         assert type(settled.value.execution.lifecycle) is FailedExecution
         assert not settled.value.can_retry
-        assert settled.value.replay is not None
-        assert settled.value.replay.facts == ReplayFact.TOOL_EXECUTED
+        assert settled.value.replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
 def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
@@ -881,7 +927,7 @@ def test_fenced_connectivity_audit_and_monotone_replay(db_path: Path) -> None:
                 replay_safe=True,
                 side_effects_possible=False,
             )
-        assert db.snapshots.get("exec").replay.facts == ReplayFact.TOOL_EXECUTED
+        assert db.snapshots.get("exec").replay.require_assessment().facts == ReplayFact.TOOL_EXECUTED
 
 
 def test_recovered_audit_requires_same_attempt_new_incident_and_resumption(db_path: Path) -> None:

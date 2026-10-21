@@ -19,7 +19,6 @@ from agent_comms.coordination_session import CoordinationSession, NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.recovery import (
     ACPClientConnectivity,
     ConnectivityFacet,
@@ -180,18 +179,13 @@ class AttemptStore:
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             before = snapshot.replay
-            if (before.revision if before else None) != expected_replay_revision:
-                raise StaleRevision("replay assessment revision changed")
-            after = ReplayAssessments(
-                fence.execution_id,
-                facts,
-                replay_safe,
-                side_effects_possible,
-                1 if before is None else before.revision + 1,
-            )
-            if not after.record(self.session._connection, snapshot.replay):
+            before.require_revision(expected_replay_revision)
+            if not before.observe(
+                self.session._connection, fence.execution_id, facts=facts,
+                replay_safe=replay_safe, side_effects_possible=side_effects_possible,
+            ):
                 return AlreadyApplied(snapshot)
-            return Applied(self.snapshots.get(after.execution_id))
+            return Applied(self.snapshots.get(fence.execution_id))
 
     def fail_unknown(
         self,

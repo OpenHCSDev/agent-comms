@@ -111,8 +111,9 @@ def recover_starting_owner(released_starting):
         after.attempt.lifecycle.require(Failed, ValueError("failure required"))
         assert not after.is_current
         assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not after.replay.replay_safe
+        replay = after.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert not CurrentExecutions.require(store.session._connection,
             owner_lookup=owner.incarnation.lookup).unresolved
         assert input_evidence(store) == inputs
@@ -298,8 +299,9 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
         snapshot = store.snapshots.get(execution_id)
         assert not snapshot.is_current
         assert type(snapshot.execution.lifecycle) is FailedExecution
-        assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not snapshot.replay.replay_safe
+        replay = snapshot.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert input_evidence(store) == before_input
     assert (root / "bus.jsonl").read_bytes() == before_bus
     assert input_id in str(before_input)
@@ -382,8 +384,9 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
         RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
         after = store.snapshots.get(execution_id)
         assert not after.is_current and isinstance(after.attempt.lifecycle, Failed)
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not after.replay.replay_safe
+        replay = after.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert input_evidence(store) == before_input
     assert (root / "bus.jsonl").read_bytes() == before_bus
     assert comms.registry.require("beta") == successor
@@ -410,4 +413,4 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
             fence, expected_pointer_revision=before.pointer_revision
         ).value
         assert not after.is_current and not after.can_retry
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert after.replay.require_assessment().facts & ReplayFact.UNKNOWN_EFFECTS

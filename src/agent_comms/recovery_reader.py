@@ -53,7 +53,7 @@ class RecoveryReader:
                 )
             )
             assignments = tuple(self.assignments.get(link.assignment_id) for link in links)
-            replay = ReplayAssessments.one(db, execution_id=execution_id)
+            replay = ReplayAssessments.for_execution(db, execution_id)
             obligations = tuple(ResponseObligation.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",

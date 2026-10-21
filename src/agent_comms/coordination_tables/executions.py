@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Annotated, ClassVar
@@ -14,7 +14,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError
+from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, StaleRevision
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
@@ -23,6 +23,7 @@ from agent_comms.coordination_tables.attempts import (
 )
 from agent_comms.execution_states import ExecutionState
 from agent_comms.field_codec import (
+    MalformedRecord,
     NullMember,
     SingleFieldValue,
     SnapshotExclude,
@@ -229,9 +230,7 @@ class ExecutionRecord(
         return super().schema_objects(if_not_exists=if_not_exists) | {
             cls.retry_view: f"CREATE VIEW {existence}{cls.retry_view} AS\n" + _RETRY_BASIS}
 
-    def retry_authorized(self, replay: ReplayAssessments | None, obligations) -> bool:
-        if replay is None:
-            return False
+    def retry_authorized(self, replay: ReplayState, obligations) -> bool:
         return (
             self.lifecycle.has_retry_budget(self.max_attempts)
             and replay.allows_retry
@@ -452,8 +451,85 @@ class RetryPartition(GuardedAfterWrites):
         AND b.authorized = 1 AND e.status = 'failed' AND e.current_attempt_ordinal IS NOT NULL)"""
 
 
+class ReplayState(ABC):
+    """An original replay assessment, or the state before one has been recorded."""
+
+    @property
+    @abstractmethod
+    def allows_retry(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def next_revision(self) -> int: ...
+
+    @abstractmethod
+    def require_revision(self, expected: object) -> None: ...
+
+    @abstractmethod
+    def require_execution(self, execution_id: str) -> None: ...
+
+    @abstractmethod
+    def require_assessment(self) -> ReplayAssessments: ...
+
+    @abstractmethod
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None: ...
+
+    @abstractmethod
+    def revoke_retry(self, db: sqlite3.Connection) -> None: ...
+
+    @abstractmethod
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool: ...
+
+    def observe(
+        self, db: sqlite3.Connection, execution_id: str, *, facts: ReplayFact,
+        replay_safe: bool, side_effects_possible: bool,
+    ) -> bool:
+        self.require_execution(execution_id)
+        after = ReplayAssessments(
+            execution_id, facts, replay_safe, side_effects_possible, self.next_revision
+        )
+        return self.record(db, after)
+
+
+@dataclass(frozen=True, slots=True)
+class NoReplayAssessment(NullMember, ReplayState):
+    @property
+    def allows_retry(self) -> bool:
+        return False
+
+    @property
+    def next_revision(self) -> int:
+        return 1
+
+    def require_revision(self, expected: object) -> None:
+        try:
+            type(self).from_wire(expected)
+        except MalformedRecord as error:
+            raise StaleRevision("replay assessment revision changed") from error
+
+    def require_execution(self, execution_id: str) -> None:
+        """No recorded assessment claims an execution identity."""
+
+    def require_assessment(self) -> ReplayAssessments:
+        raise IntegrityViolationError("replay assessment is absent")
+
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
+        self.observe(
+            db, execution_id, facts=ReplayFact.NONE,
+            replay_safe=True, side_effects_possible=False,
+        )
+
+    def revoke_retry(self, db: sqlite3.Connection) -> None:
+        """An absent assessment has granted nothing to revoke."""
+
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool:
+        after.insert(db)
+        return True
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayAssessments(
+    ReplayState,
     IncrementingColumn,
     MonotoneColumns,
     AccumulatingBits,
@@ -516,18 +592,40 @@ class ReplayAssessments(
         )
 
     @classmethod
+    def for_execution(cls, db: sqlite3.Connection, execution_id: str) -> ReplayAssessment:
+        return next(iter(cls._keyed(db, dict(execution_id=execution_id))), NoReplayAssessment())
+
+    @classmethod
     def authorize_if_unobserved(cls, db: sqlite3.Connection, execution_id: str) -> None:
         """Record provider-failure proof only while no output fact exists."""
-        before = cls.one(db, execution_id=execution_id)
-        if before is None:
-            cls(execution_id, ReplayFact.NONE, True, False, 1).record(db, None)
+        cls.for_execution(db, execution_id).authorize_retry(db, execution_id)
 
     @classmethod
     def revoke(cls, db: sqlite3.Connection, execution_id: str) -> None:
         """A nonretryable failure consumes any earlier provider-failure proof."""
-        before = cls.one(db, execution_id=execution_id)
-        if before is not None and before.replay_safe:
-            replace(before, replay_safe=False, revision=before.revision + 1).record(db, before)
+        cls.for_execution(db, execution_id).revoke_retry(db)
+
+    @property
+    def next_revision(self) -> int:
+        return self.revision + 1
+
+    def require_revision(self, expected: object) -> None:
+        if expected != self.revision:
+            raise StaleRevision("replay assessment revision changed")
+
+    def require_execution(self, execution_id: str) -> None:
+        if self.execution_id != execution_id:
+            raise IntegrityViolationError("snapshot records belong to another execution")
+
+    def require_assessment(self) -> ReplayAssessments:
+        return self
+
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
+        """An existing assessment cannot be authorized by a later provider failure."""
+
+    def revoke_retry(self, db: sqlite3.Connection) -> None:
+        if self.replay_safe:
+            self.record(db, replace(self, replay_safe=False, revision=self.next_revision))
 
     def require_successor(self, after: ReplayAssessments) -> None:
         accumulated = replace(
@@ -539,24 +637,21 @@ class ReplayAssessments(
         if accumulated != after:
             raise IdentityConflict("replay facts cannot be erased")
 
-    def record(self, db: sqlite3.Connection, before: ReplayAssessments | None) -> bool:
-        """Persist monotonic replay evidence inside the checked transaction."""
-
-        if before is not None:
-            if replace(before, revision=self.revision) == self:
-                return False
-            before.require_successor(self)
-            ReplayAssessments.update(
-                db,
-                where="execution_id=?",
-                parameters=(self.execution_id,),
-                facts=self.facts,
-                replay_safe=self.replay_safe,
-                side_effects_possible=self.side_effects_possible,
-                revision=before.revision + 1,
-            )
-        else:
-            self.insert(db)
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool:
+        """The original recorded state validates and persists its successor."""
+        after.require_execution(self.execution_id)
+        if replace(self, revision=after.revision) == after:
+            return False
+        self.require_successor(after)
+        ReplayAssessments.update(
+            db,
+            where="execution_id=?",
+            parameters=(self.execution_id,),
+            facts=after.facts,
+            replay_safe=after.replay_safe,
+            side_effects_possible=after.side_effects_possible,
+            revision=self.next_revision,
+        )
         return True
 
     def __post_init__(self) -> None:
@@ -582,3 +677,7 @@ class ReplayAssessments(
 
     checks = ("facts = 0 OR replay_safe = 0",)
     unique = (("execution_id", "retry_authorized"),)
+
+
+# The fixed external snapshot format is still a row object or JSON null.
+type ReplayAssessment = ReplayAssessments | NoReplayAssessment
