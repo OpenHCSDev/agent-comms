@@ -85,7 +85,11 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
             assert replace(individual, read_identity=None) == visible[0].presentation
         else:
             from agent_comms.registry_document import RosterVisibility
-            assert (individual is not None) == expected.in_view(RosterVisibility(archived=True))
+            if expected.in_view(RosterVisibility(archived=True)):
+                assert individual.require("owner") is individual
+            else:
+                with pytest.raises(UnregisteredThreadError):
+                    individual.require("owner")
         with pytest.raises(UnregisteredThreadError):
             comms.views.thread_presentations(("missing",)).require("missing")
         if isinstance(status, CliInboxPresence):
@@ -159,6 +163,26 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     assert row.disconnected(SessionDisconnected('Request failed')) is row
     assert row.presentation.summary == status.declared_name.title()
     assert transferred.status.without_work() is transferred.status
+
+
+@pytest.mark.parametrize("status,listed,rename", [
+    (RunningThreadStatus(), True, True),
+    (IdleThreadStatus(), True, False),
+    (ConnectedThreadStatus(), True, True),
+    (NoBridgeThreadStatus(), True, True),
+    (StoppedThreadStatus(), False, False),
+    (ArchivedThreadStatus(), False, False),
+    (DeletingThreadStatus(), False, False),
+])
+def test_presence_owns_roster_membership_and_self_rename(status, listed, rename):
+    from agent_comms.registry_document import RosterVisibility
+
+    assert status.in_view(RosterVisibility(stopped=False)) == listed
+    if rename:
+        status.require_self_rename()
+    else:
+        with pytest.raises(RelationViolationError, match="Only a running thread"):
+            status.require_self_rename()
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():

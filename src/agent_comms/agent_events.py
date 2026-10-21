@@ -41,6 +41,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 
 if TYPE_CHECKING:
+    from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
     from .input_disposition import InputDocument
@@ -51,7 +52,6 @@ if TYPE_CHECKING:
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
-    from .turn_effects import TurnEffects
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
 
@@ -69,13 +69,13 @@ class GoalChange(ABC):
 
     @abstractmethod
     async def publish(
-        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
     ) -> GoalPublicationSnapshot: ...
 
 
 class GoalUnchanged(NullMember, GoalChange):
     async def publish(
-        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
     ) -> GoalPublicationSnapshot:
         return previous
 
@@ -91,9 +91,9 @@ class GoalChanged(AgentEvent, GoalChange):
     snapshot: GoalSnapshot
 
     async def publish(
-        self, effects: TurnEffects, session_id: str, previous: GoalPublicationSnapshot,
+        self, consumer: AcpEventConsumer, previous: GoalPublicationSnapshot,
     ) -> GoalPublicationSnapshot:
-        await effects._emit_event(session_id, self)
+        await consumer.dispatch(self)
         return self.snapshot
 
 

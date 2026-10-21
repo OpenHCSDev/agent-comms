@@ -6,8 +6,10 @@ import time
 
 import pytest
 
-from test_holder_standing_rules import held_bus, plan_repository, blocked_holder, publish
+from test_holder_standing_rules import held_bus, blocked_holder, publish
 from agent_comms.launch_runtime import LaunchRoot
+from agent_comms.field_codec import FieldCodec, RecordedTimestamp
+from agent_comms.native_entries import SessionEntry
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import SavedSessionFile
@@ -19,9 +21,9 @@ from agent_comms.ui_model.unit_state import (
 
 
 def recorded_turn(comms, calls):
-    now = time.time()
-    stamp = datetime.fromtimestamp(now, UTC).isoformat()
-    rows = [dict(type="session", id="state-source", version=3),
+    clock = RecordedTimestamp(datetime.fromtimestamp(time.time(), UTC))
+    stamp = clock.at.isoformat()
+    rows = [FieldCodec.encode(SessionEntry(id="state-source", timestamp=clock, version=3)),
             dict(type="message", id="input", timestamp=stamp,
                  message=dict(role="user", content="Repair the existing owner"))]
     for index in range(calls):
@@ -69,7 +71,10 @@ def test_unit_state_family_uses_real_records(held_bus, member):
                     comms.registry.require("lead").incarnation,
                     OperationDelivery(at=RecordedEventTime(time.time())), todo.order.id))
         elif member is Moving:
-            pass  # Freshly assigned work before its first call deadline.
+            with comms.goals.todos.writing() as db:
+                for todo in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation):
+                    replace(todo, order=replace(todo.order.checked(),
+                        at=RecordedEventTime(time.time()))).upsert(db)
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
         source = next(source for source in UnitState.observations(comms, "lead")

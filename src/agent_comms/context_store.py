@@ -53,6 +53,11 @@ class ContextSourceState(ABC):
     def initialized(self, db: sqlite3.Connection) -> ContextStoreInfo: ...
 
     @abstractmethod
+    def latest(
+        self, store: ContextStore, db: sqlite3.Connection, owner: ThreadIncarnation
+    ) -> RecordedContextState: ...
+
+    @abstractmethod
     def page(
         self,
         store: ContextStore,
@@ -70,6 +75,11 @@ class UnrecordedContextSource(ContextSourceState):
         stored = ContextStoreInfo(1, ContextStoreIdentity(uuid.uuid4().hex))
         stored.insert(db)
         return stored
+
+    def latest(
+        self, store: ContextStore, db: sqlite3.Connection, owner: ThreadIncarnation
+    ) -> RecordedContextState:
+        return AbsentContext()
 
     def page(
         self,
@@ -100,6 +110,11 @@ class ContextStoreInfo(ContextSourceState, TypedTable):
 
     def initialized(self, db: sqlite3.Connection) -> ContextStoreInfo:
         return self
+
+    def latest(
+        self, store: ContextStore, db: sqlite3.Connection, owner: ThreadIncarnation
+    ) -> RecordedContextState:
+        return store.latest(db, self.source, owner)
 
     def page(
         self,
@@ -218,6 +233,18 @@ class ContextRequest(TypedTable):
         )
 
     @classmethod
+    def newest(cls, db: sqlite3.Connection, owner: ThreadIncarnation) -> list[ContextRequest]:
+        """The thread's newest request, read through the owner index."""
+        return cls.select(
+            db,
+            thread_name=owner.name,
+            thread_birth=owner.wire_birth,
+            order_by=("id",),
+            descending=True,
+            limit=1,
+        )
+
+    @classmethod
     def append(cls, db: sqlite3.Connection, record: RecordedContextManifest) -> int:
         versions = tuple(ContextSegmentVersion.append(db, part) for part in record.segments)
         identity = FieldCodec.decode(
@@ -240,8 +267,38 @@ class ContextRequest(TypedTable):
         return self.identity.with_segments(tuple(parts))
 
 
-class RecordedContextState(ABC):
+class ContextPriorSupersededError(RelationViolationError):
+    """Another writer recorded this thread's context after the prior this writer holds."""
+
+
+class ContextPrior(ABC):
+    """What a context writer knows about its thread's previous request."""
+
+    @abstractmethod
+    def read(self, store: ContextStore, owner: ThreadIncarnation) -> RecordedContextState: ...
+
+
+class UnreadContextPrior(ContextPrior):
+    """A writer that has not yet read its thread's previous request."""
+
+    def read(self, store: ContextStore, owner: ThreadIncarnation) -> RecordedContextState:
+        return store.prior(owner)
+
+
+UNREAD_CONTEXT = UnreadContextPrior()
+
+
+class RecordedContextState(ContextPrior):
     """The previous request, including the first request's lack of a predecessor."""
+
+    def read(self, store: ContextStore, owner: ThreadIncarnation) -> RecordedContextState:
+        return self
+
+    @abstractmethod
+    def require_newest(
+        self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
+    ) -> None:
+        """Refuse when another writer recorded this thread after this prior."""
 
     @abstractmethod
     def next_recording_turn(self) -> int: ...
@@ -259,6 +316,14 @@ class AbsentContext(RecordedContextState):
     def next_recording_turn(self) -> int:
         return 1
 
+    def require_newest(
+        self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
+    ) -> None:
+        if ContextRequest.newest(db, owner):
+            raise ContextPriorSupersededError(
+                f"{owner.name} has recorded context this writer never read"
+            )
+
     def segment(self, position: int, original: SegmentManifest) -> SegmentRecording:
         return UnrecordedSegment()
 
@@ -272,6 +337,15 @@ class CapturedContext(RecordedContextState):
 
     def next_recording_turn(self) -> int:
         return self.recorded.recording_turn + 1
+
+    def require_newest(
+        self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
+    ) -> None:
+        newest = ContextRequest.newest(db, owner)
+        if source != self.source or not newest or newest[0].id != self.record_id:
+            raise ContextPriorSupersededError(
+                f"{owner.name} recorded context after request {self.record_id}"
+            )
 
     def segment(self, position: int, original: SegmentManifest) -> SegmentRecording:
         if position < len(self.value.segments):
@@ -426,42 +500,29 @@ class ContextStore(DurableStore):
         source: ContextStoreIdentity,
         owner: ThreadIncarnation,
     ) -> RecordedContextState:
-        rows = ContextRequest.select(
-            db,
-            thread_name=owner.name,
-            thread_birth=owner.wire_birth,
-            order_by=("id",),
-            descending=True,
-            limit=1,
-        )
+        rows = ContextRequest.newest(db, owner)
         if rows:
             return self.resolve(db, source, rows[0])
         return AbsentContext()
 
-    def record(self, manifest: ContextManifest) -> None:
-        with self.writing() as db:
-            self.record_in(db, manifest)
+    def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
+        """Read the thread's previous request from a snapshot, outside any write lock."""
+        with self.snapshot() as db:
+            return ContextStoreInfo.source_in(db).latest(self, db, owner)
 
-    def record_in(self, db: sqlite3.Connection, manifest: ContextManifest) -> int:
-        source = ContextStoreInfo.source_in(db).initialized(db)
-        prior = self.latest(db, source.source, manifest.thread)
-        return self.record_after(db, source.source, prior, manifest).record_id
-
-    def record_after(
-        self,
-        db: sqlite3.Connection,
-        source: ContextStoreIdentity,
-        prior: RecordedContextState,
-        manifest: ContextManifest,
-    ) -> CapturedContext:
-        """Record ``manifest`` after ``prior``; the result is the next request's prior,
+    def record_after(self, prior: ContextPrior, manifest: ContextManifest) -> CapturedContext:
+        """Append ``manifest`` after ``prior``; the result is the next request's prior,
         so a writer holding its last request never resolves it again."""
-        record, entries = prior.capture(manifest)
+        recorded = prior.read(self, manifest.thread)
+        record, entries = recorded.capture(manifest)
         record.turn.require_recorded()
-        for entry in entries:
-            # A journal identity owns the first entry value across requests.
-            ContextEntry.capture(entry).insert_if_absent(db)
-        return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
+        with self.writing() as db:
+            source = ContextStoreInfo.source_in(db).initialized(db).source
+            recorded.require_newest(db, source, manifest.thread)
+            for entry in entries:
+                # A journal identity owns the first entry value across requests.
+                ContextEntry.capture(entry).insert_if_absent(db)
+            return CapturedContext(source, ContextRequest.append(db, record), record, manifest)
 
     def resolve(
         self,

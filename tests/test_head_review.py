@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from test_holder_standing_rules import held_bus, plan_repository
+from test_holder_standing_rules import held_bus
 from agent_comms.commander.judge import BackVerb, OkVerb, ShowVerb
 from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 from agent_comms.commander.order import Commander, SayVerb

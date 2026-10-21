@@ -1,6 +1,7 @@
 """Row 13 runs the shared copied lifecycle, then reads its original Todo facts."""
 
 from dataclasses import replace
+from time import time
 
 from agent_comms.commander.order import OrderFile
 from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
@@ -10,9 +11,11 @@ from agent_comms.todos import PullRequests, RejectedHeadVerdict, StrikeReason, T
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsFleetStoryTool,
+    CommsInboxTool,
     CommsOrderStoryTool,
     CommsTodoCreateTool,
     CommsVerdictTool,
+    InboxPageRead,
 )
 
 
@@ -35,7 +38,8 @@ class StoryCase(LifecycleCase):
                 evidence=(created.order.checked().owner,),
             )
             run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
-            document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
+            document = OrderFile.read(run.document.read_text())
+            document = replace(document, problems=(created.id,), order=document.order.reissued(time()))
             run.commander.send(run.worker, document, clean=True)
             run.commander.strike(run.worker, created.id, cls.strike_reason,
                                  evidence=(created.order.checked().owner,))
@@ -70,7 +74,21 @@ class StoryCase(LifecycleCase):
     ) -> tuple[tuple[str, bool], ...]:
         orders = tuple(result for result in native if isinstance(result, OrderStory))
         fleets = tuple(result for result in native if isinstance(result, FleetStory))
+        current = rows[-1]
+        inbox = run.commander.call(CommsInboxTool(thread=run.worker, ack=False))
+        assert isinstance(inbox, InboxPageRead)
+        worker = run.commander.comms.registry.require(run.worker)
+        goal = worker.goal.require()
+        assigned = goal.order.todos(run.commander.comms.goals, worker.incarnation, goal.id)
         return (
+            ("replacement message recorded", len(current.messages) == len(rows[0].messages) + 1),
+            ("replacement delivered to worker", any(
+                message.message_id == current.latest_message.message_id
+                for message in inbox.messages)),
+            ("replacement is worker's current order",
+             current.order.checked().id != rows[0].order.checked().id
+             and any(todo.id == current.id and todo.order.checked().id == current.order.checked().id
+                     for todo in assigned)),
             ("two actual order reads", len(orders) == 2),
             ("one actual fleet read", len(fleets) == 1),
             ("record unchanged by reads", rows[-2] == rows[-1]),
