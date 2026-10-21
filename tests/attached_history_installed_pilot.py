@@ -96,7 +96,7 @@ async def main():
         assert all('history' in message for message in output['messages'])
         print(f'INSTALLED_CLI_HISTORY_READ_{len(output["messages"])}_ORIGINAL_ROWS',flush=True)
         session=next(item for item in declared if item.thread.name=='nra-architecture')
-        session_path=Path(session.thread.session_file)
+        session_path=Path(session.thread.runtime.read_key)
         native_before=hashlib.sha256(session_path.read_bytes()).hexdigest()
         native_page=comms.transcripts.thread_transcript_page(
             session.thread.name,historical_source=session.source.key)

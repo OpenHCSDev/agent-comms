@@ -3,6 +3,7 @@
 from typing import Annotated
 from dataclasses import dataclass, replace
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms import field_codec
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
@@ -42,7 +43,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         "owner",
         frozenset({"team"}),
         '/old',
-        session_file=str(tmp_path / "session.jsonl"),
+        session_file=SavedSessionFile(str(tmp_path / "session.jsonl")),
         model=DeclaredModel('provider/model'),
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
@@ -110,7 +111,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         observed = comms.registry.attach_native_session(original, saved)
         current = comms.registry.require('owner')
         assert current.worktree == str(new) and current.earlier_projects == (old,)
-        assert current.session_file == observed.thread.session_file == saved
+        assert current.session_file == observed.thread.session_file == SavedSessionFile(saved)
         assert observed.thread.worktree == str(old)
         assert observed.turn_lease == original.turn_lease == current.turn_lease
         # Later native observations use the same source and preserve old -> new.

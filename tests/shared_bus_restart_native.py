@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -135,7 +136,7 @@ async def configured_pure_channel(arguments):
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
-        original = arguments.saved_source or Path(source.session_file)
+        original = arguments.saved_source or Path(source.runtime.read_key)
         before = hashlib.sha256(original.read_bytes()).hexdigest()
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
@@ -147,7 +148,7 @@ async def configured_pure_channel(arguments):
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
         source_hashes[str(original)] = before
         name = f'purechannel-owner-{index}'
-        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
         service.registry.declare(child)
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
@@ -641,7 +642,7 @@ async def retained_owner():
             wire_root_id=launch.wire_root_id,
             owner_name=name,
             native_package=launch.native_package,
-            session_file=Path(owner.session_file),
+            session_file=Path(owner.runtime.read_key),
             cursor_delivery=agent.cursors.delivery(name),
         )
         result = await agent.turns.run_selected(name, execution)
@@ -845,7 +846,7 @@ async def run(arguments):
                 with closing(sqlite3.connect(str(saved)+'.input-proof')) as copied:
                     original.backup(copied)
             Path(str(saved)+'.input-proof').chmod(0o600)
-            service.registry.register(replace(owner, session_file=str(saved)))
+            service.registry.register(replace(owner, session_file=SavedSessionFile(str(saved))))
     for index in range(arguments.history):
         publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
@@ -911,7 +912,7 @@ async def run(arguments):
                         open_files.append(os.readlink(descriptor))
                     except FileNotFoundError:
                         pass
-                if owner.session_file not in open_files:
+                if owner.runtime.read_key not in open_files:
                     break
                 opened_owners.append(owner)
             if len(opened_owners) != len(names):

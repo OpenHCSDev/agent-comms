@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
@@ -58,7 +59,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file='/retained/session.jsonl', created_at=12.5)
+        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=SavedSessionFile('/retained/session.jsonl'), created_at=12.5)
         comms.registry.register(thread, status)
         before = comms.registry.snapshot()
         saved = comms.registry.store.path.read_bytes()

@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import ANY_CHANNEL
@@ -152,7 +153,7 @@ class TestThreadOps:
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
-            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))
+            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(session_file)))
         )
 
         events = wired.transcripts.thread_transcript_page("transcript-thread").events
@@ -178,7 +179,7 @@ class TestThreadOps:
             + "\n"
         )
         wired.registry.declare(
-            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))
+            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(session_file)))
         )
 
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
@@ -488,7 +489,7 @@ class TestLedgerOps:
                     + "\n"
                 )
         wired.registry.declare(
-            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
+            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(path)))
         )
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
@@ -557,7 +558,7 @@ class TestReDeclarationPreservesProvenance:
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
         wired.registry.declare(
-            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=str(tmp_path / 's.json'))
+            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=SavedSessionFile(str(tmp_path / 's.json')))
         )
         wired.registry.declare(wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
         assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")

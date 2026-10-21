@@ -28,7 +28,7 @@ from .field_codec import (
     WireRequired,
 )
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
-from .thread_text import NoThreadText, ThreadText
+from .thread_text import NoSessionFile, NoThreadText, SessionFile, ThreadText
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -261,7 +261,7 @@ class ThreadProvenance:
     tags: frozenset[str]
     worktree: str
     created_at: Annotated[float, WireRequired()]
-    session_file: str | None = None
+    session_file: SessionFile = field(default_factory=NoSessionFile)
     title: ThreadText = field(default_factory=NoThreadText)
     backend: Annotated[type[AgentBackend], WireOmitDefault()] = field(
         default_factory=AgentBackend.for_new_threads
@@ -270,8 +270,7 @@ class ThreadProvenance:
     @cached_property
     def runtime(self) -> RuntimeLocation:
         """The codec decoded both stored fields; their record owns this binding."""
-        return (self.backend.unstarted_type(self.backend) if self.session_file is None
-                else self.backend.location_type(self.session_file))
+        return self.session_file.location(self.backend)
 
     @property
     def display_title(self) -> str:

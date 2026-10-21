@@ -1,5 +1,6 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import AllChannelDisplayScope, NamedViewer
 import json
@@ -188,7 +189,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     session.write_text("".join(json.dumps(r) + "\n" for r in records))
     with old.registry.store.editing() as edit:
         edit.document.threads["bob"] = replace(edit.document.threads["bob"], created_at=10.0)
-        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=str(session))
+        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=SavedSessionFile(str(session)))
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)

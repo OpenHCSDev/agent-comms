@@ -6,6 +6,7 @@ journey. The isolated root is retained on failure, including uncertain inputs.
 
 from __future__ import annotations
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio
@@ -124,7 +125,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
-    comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
+    comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=SavedSessionFile(str(fresh.path)), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(
@@ -173,7 +174,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                 assert subscriber.failure_facts == [request_failure.failure]
                 assert len(requests) == 2 and not provider_errors
                 owner = comms.registry.require("error-native")
-                native = Path(owner.session_file)
+                native = Path(owner.runtime.read_key)
                 original = native.read_bytes()
                 dispositions = stored_inputs(root)
             async with attached(FailureSubscriber()) as client:

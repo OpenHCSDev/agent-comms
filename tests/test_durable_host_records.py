@@ -3,6 +3,7 @@ import asyncio
 import json
 
 import pytest
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.pi_payloads import ReportedText, RequestId
 from agent_comms.field_codec import MalformedRecord
 
@@ -98,7 +99,7 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
         thread = thread_registration.new_thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                        session_file=location.path)
+                        session_file=SavedSessionFile(location.path))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)

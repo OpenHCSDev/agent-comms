@@ -6,6 +6,7 @@ two CLI-registered threads exchange messages, a child forks, the child reads
 its inbox and responds, and the parent acknowledges.
 """
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import json
@@ -85,7 +86,7 @@ class TestEndToEndLifecycle:
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
         comms.registry.declare(
-            comms.registry.new_thread(name=parent.name, tags=parent.tags, worktree=parent.worktree, parent=parent.parent, task=parent.task, process_identity=parent.process_identity, session_file=str(session))
+            comms.registry.new_thread(name=parent.name, tags=parent.tags, worktree=parent.worktree, parent=parent.parent, task=parent.task, process_identity=parent.process_identity, session_file=SavedSessionFile(str(session)))
         )
 
         # 2. Parent forks a child (pi binary faked with a live stub script).

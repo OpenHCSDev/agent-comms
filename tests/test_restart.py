@@ -4,6 +4,7 @@ import sys
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.pi_counts import PiCount
@@ -21,7 +22,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     session.write_text("")
     comms = wire(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(session))))
     comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=PiCount.from_wire(23)))
     comms.agents.observe_runtime_info(
         "worker", AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(100))

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -215,7 +216,7 @@ class TestRegistration:
         owner = registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()))
         registry.register(owner)
         before = registry.snapshot().claim_generation("a")
-        registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
+        registry.register(replace(owner, session_file=SavedSessionFile(str(tmp_path / "session.jsonl"))))
         assert registry.snapshot().claim_generation("a") == before
         assert Registration(registry.store.path).snapshot().claim_generation("a") == before
 

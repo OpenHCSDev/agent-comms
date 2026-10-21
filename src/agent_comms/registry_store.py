@@ -24,6 +24,7 @@ from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
+from .thread_text import SavedSessionFile
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 from .wire_metadata import WireMetadata
@@ -88,7 +89,7 @@ class RegistryEdit:
         current = owner.require_source_snapshot(self.original.snapshot)
         status = self.document.status(current.name)
         return NativeSourcePublication(
-            thread=replace(current, session_file=session_file), status=status,
+            thread=replace(current, session_file=SavedSessionFile(session_file)), status=status,
             previous=current, previous_status=status,
         )
 

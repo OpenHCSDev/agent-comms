@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -262,12 +263,12 @@ def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
 
 def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path, *, thread_registration):
     process = ProcessIdentity.capture(os.getpid())
-    thread = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=process, session_file=str(tmp_path / 'a.jsonl'), model=DeclaredModel('model-a'), created_at=1.0)
+    thread = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=process, session_file=SavedSessionFile(str(tmp_path / 'a.jsonl')), model=DeclaredModel('model-a'), created_at=1.0)
 
     assert thread.same_launch(replace(thread, title=GivenThreadText("Renamed"), tags=frozenset({"team"}), turn_generation=3))
     for changed in (
         replace(thread, process_identity=NoProcess()),
-        replace(thread, session_file=str(tmp_path / "b.jsonl")),
+        replace(thread, session_file=SavedSessionFile(str(tmp_path / "b.jsonl"))),
         replace(thread, model=DeclaredModel("model-b")),
         replace(thread, worktree=str(tmp_path / "elsewhere")),
         replace(thread, created_at=2.0),

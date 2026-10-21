@@ -65,7 +65,7 @@ def main():
 
     def protected():
         thread = service.registry.require(args.thread)
-        native = Path(thread.session_file)
+        native = Path(thread.runtime.read_key)
         with sqlite3.connect((root / 'coordination.sqlite3').as_uri() + '?mode=ro', uri=True) as connection:
             connection.execute('PRAGMA query_only=ON')
             counts = {name: connection.execute(f'SELECT count(*) FROM {name}').fetchone()[0]

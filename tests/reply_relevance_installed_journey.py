@@ -1,4 +1,5 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib
@@ -80,7 +81,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []

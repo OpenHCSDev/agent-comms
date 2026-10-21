@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
@@ -186,7 +187,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
-            replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
+            replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.registry.rename("worker", "renamed")

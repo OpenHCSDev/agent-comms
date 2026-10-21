@@ -37,7 +37,6 @@ from .pi_vocabulary import (
 from .registration_inheritance import (
     InheritApplied,
     InheritEmpty,
-    InheritMissing,
     InheritPrevious,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
@@ -45,7 +44,7 @@ from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .thread_text import NoParent, NoSessionFile, NoThreadText, SessionFile, ThreadParent, ThreadText
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
@@ -152,8 +151,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     parent: ThreadParent = field(default_factory=NoParent)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: Annotated[str | None, RegistrationPolicy(InheritMissing)] = (
-        field(default=None, kw_only=True)
+    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = (
+        field(default_factory=NoSessionFile, kw_only=True)
     )
     model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
         default_factory=UndeclaredModel

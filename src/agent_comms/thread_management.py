@@ -54,7 +54,7 @@ from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, ThreadRole
-from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
+from .thread_text import ForkedParent, GivenThreadText, NoThreadText, SavedSessionFile, ThreadText
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
@@ -160,7 +160,7 @@ class NewThreadSpec:
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
-            yield replace(thread, session_file=location.read_key)
+            yield replace(thread, session_file=SavedSessionFile(location.read_key))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -178,7 +178,7 @@ class ForkSpec(NewThreadSpec):
     def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
         return replace(self.declaration(self.project, registry), parent=ForkedParent(parent.name),
                        tags=self.tags.for_child(parent.tags),
-                       backend=parent.backend, session_file=runtime.read_key)
+                       backend=parent.backend, session_file=SavedSessionFile(runtime.read_key))
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -261,7 +261,7 @@ class ThreadManagement:
             name,
             tags,
             str(project),
-            session_file=str(session_path),
+            session_file=SavedSessionFile(str(session_path)),
             title=snapshot.title,
         ))
         with _store_lock(self._wire_lock_path):
@@ -461,7 +461,7 @@ class ThreadManagement:
                     model=saved_model, thinking_level=NoThinkingOverride,
                 ),
                 process_identity=process,
-                session_file=location.read_key,
+                session_file=SavedSessionFile(location.read_key),
             )
             self.registry.register(attached)
             return attached

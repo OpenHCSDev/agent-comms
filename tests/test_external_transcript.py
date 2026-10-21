@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
@@ -101,7 +102,7 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('pi', frozenset(), str(tmp_path), session_file=str(tmp_path / 'session.jsonl')))
+    comms.registry.declare(comms.registry.new_thread('pi', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(tmp_path / 'session.jsonl'))))
     with pytest.raises(ValueError):
         comms.transcripts.external("pi")
 

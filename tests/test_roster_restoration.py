@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.coordination_tables.executions import NoPointedExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import NoProcess, ProcessIdentity
@@ -20,7 +21,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     old = Comms(tmp_path / "old")
     current = Comms(tmp_path / "current")
     live = old.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(tmp_path / 'saved.jsonl'), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
+    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=SavedSessionFile(str(tmp_path / 'saved.jsonl')), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
     old.registry.declare(live)
     old.registry.declare(missing)
     missing = old.agents.begin_turn("missing", "old-turn").thread

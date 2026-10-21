@@ -600,8 +600,8 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     assert source.read_bytes() == before
     if os.name == "posix":
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
-        assert stat.S_IMODE(Path(thread.session_file).stat().st_mode) == 0o600
-    records = [json.loads(line) for line in Path(thread.session_file).read_text().splitlines()]
+        assert stat.S_IMODE(Path(thread.runtime.read_key).stat().st_mode) == 0o600
+    records = [json.loads(line) for line in Path(thread.runtime.read_key).read_text().splitlines()]
     assert records[0]["type"] == "session" and records[0]["version"] == 3
     parent = None
     for record in records[1:]:

@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
@@ -28,7 +29,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     if transition == 'metadata':
         updated = replace(leased, title=GivenThreadText('new title'), tags=frozenset({'changed'}))
     elif transition == 'session':
-        updated = replace(leased, session_file=str(tmp_path / 'new.jsonl'))
+        updated = replace(leased, session_file=SavedSessionFile(str(tmp_path / 'new.jsonl')))
     elif transition == 'restart':
         kwargs['new_owner'] = True
         advances_owner = True

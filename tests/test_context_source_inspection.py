@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from agent_comms.thread_text import NoSessionFile
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
@@ -100,7 +101,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(tmp_p
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
-        assert owner.session_file is None
+        assert owner.session_file == NoSessionFile()
         connection = RuntimeConnection(comms, owner.name,
                                        socket_path(comms.root, owner.require_process().pid))
         try:
@@ -116,7 +117,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(tmp_p
                 await connection.request("context_core_source", **parameters))
             assert text.text == source.public_text(comms)
             assert agent.turns.persistent_backends == {}
-            assert owner.session_file is None
+            assert owner.session_file == NoSessionFile()
         finally:
             await connection.close()
 

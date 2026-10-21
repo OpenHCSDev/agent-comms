@@ -1,6 +1,7 @@
 """Real isolated owners: birth-bound launch, retirement and refusal to interrupt."""
 
 from __future__ import annotations
+from agent_comms.thread_text import NoSessionFile
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -139,7 +140,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert "PublicationActivationBlocked" in trace
         assert logs[0].stat().st_mode & 0o777 == 0o600
         assert not socket_path(tmp_path, result.pid).exists()
-        assert owner.session_file is None
+        assert owner.session_file == NoSessionFile()
     finally:
         if owner.process_alive:
             ObservedProcess(owner.process_identity).stop_sync()
