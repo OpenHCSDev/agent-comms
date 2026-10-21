@@ -16,22 +16,25 @@ from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent_comms.repository_name import RepositoryName
+    from agent_comms.todos import GithubPullRequest
 
 
 @dataclass(frozen=True)
 class GithubFixtureRequest:
-    listed: dict[str, object]
+    listed: GithubPullRequest
     body: str
 
 
 @dataclass(frozen=True)
 class GithubFixture:
     repo: RepositoryName
-    requests: dict[str, GithubFixtureRequest]
+    requests: tuple[GithubFixtureRequest, ...]
     diff: str = ""
     call_file: ClassVar[str] = "calls.jsonl"
 
     def write(self, directory: Path) -> None:
+        from agent_comms.field_codec import FieldCodec
+
         directory.mkdir(parents=True, exist_ok=True)
         program = directory / "gh"
         source = f"#!{sys.executable}\n" + Path(__file__).read_text().partition("\n")[2]
@@ -41,12 +44,13 @@ class GithubFixture:
         else:
             program.write_text(source)
             program.chmod(0o755)
-        for number, request in self.requests.items():
-            response = self.address(directory, f"repos/{self.repo.to_wire()}/pulls/{number}")
+        for request in self.requests:
+            response = self.address(directory,
+                f"repos/{self.repo.to_wire()}/pulls/{request.listed.number}")
             response.parent.mkdir(parents=True, exist_ok=True)
-            response.write_text(json.dumps(dict(request.listed, body=request.body)))
+            response.write_text(json.dumps(dict(FieldCodec.encode(request.listed), body=request.body)))
             comparison = self.address(directory, f"repos/{self.repo.to_wire()}/compare/"
-                f"{request.listed['base']}...{request.listed['head']}")
+                f"{request.listed.base}...{request.listed.head}")
             comparison.parent.mkdir(parents=True, exist_ok=True)
             comparison.write_text(self.diff)
 

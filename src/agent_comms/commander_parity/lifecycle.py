@@ -46,7 +46,6 @@ from agent_comms.todos import (
     PullRequests,
     RecordPullRequest,
     Todo,
-    UnmergedListedPullRequest,
 )
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_result import ToolResult
@@ -113,6 +112,7 @@ class LifecycleRun:
     decisions: Path
     document: Path
     artifact: Path
+    source_repository: Repo
 
     @classmethod
     @contextlib.contextmanager
@@ -195,7 +195,8 @@ class LifecycleRun:
                     )
                 )
             )
-            yield cls(commander, worker.name, decisions, document, root / "application.json")
+            yield cls(commander, worker.name, decisions, document, root / "application.json",
+                      Repo.of(Path(worker.worktree)))
 
     @staticmethod
     def python_environment() -> dict[str, str]:
@@ -224,25 +225,21 @@ class LifecycleRun:
     @contextlib.contextmanager
     def forge(self, todo: Todo, diff: str) -> Iterator[None]:
         """Real linked code/source with controlled gh responses, never real status writes."""
-        original = MeasuredCommander.read(CommanderConfig.path())
-        held = original.comms.goals.todos.held_by(original.incarnation, self.worker)
-        pulls = PullRequests(held)
-        requests = tuple(dict.fromkeys(request for row in held if row.repo == todo.repo
-            for request in pulls.listed(row.repo, UnmergedListedPullRequest, row)))
-        if len(requests) != 1:
-            raise ValueError("Head-review comparison requires one open PR linked to the copied worker.")
-        request, = requests
-        link = PullRequestLink(todo.repo, request.number)
-        self.commander.comms.goals.todos.apply(todo.id, RecordPullRequest(
+        repository = self.source_repository
+        if repository.github != todo.repo:
+            raise ValueError("The copied order must cite the code repository being compared.")
+        branch = Repo.git(repository.checkout, "branch", "--show-current").strip()
+        link = PullRequestLink.created(todo.repo, branch)
+        saved = self.commander.comms.goals.todos.apply(todo.id, RecordPullRequest(
             todo.revision, self.commander.incarnation, link, todo.held().generation))
+        request = PullRequests((saved,)).current(saved)
         clock = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         row = GithubPullRequest(number=request.number, branch=request.branch, head=request.head,
             updated=clock, base=request.base, created=clock, head_time=clock, ready_events=(),
             closed=False, isDraft=False, mergeStateStatus="CLEAN", checks="SUCCESS", queued=False,
             merge=None, merged=None)
         directory = self.commander.root / "forge"
-        GithubFixture(todo.repo, {
-            str(row.number): GithubFixtureRequest(FieldCodec.encode(row), "")}, diff).write(directory)
+        GithubFixture(todo.repo, (GithubFixtureRequest(row, ""),), diff).write(directory)
         previous = os.environ["PATH"]
         os.environ["PATH"] = os.pathsep.join((str(directory), previous))
         try:

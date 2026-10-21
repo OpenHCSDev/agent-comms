@@ -49,14 +49,15 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_source(tmp_path):
-    return SourceRepository.create(tmp_path / "source")
+def plan_repository():
+    """Read the actual plan repository and installed commits; never invent a Core history."""
+    return Repo.of(Path(__file__).resolve().parents[1])
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path, held_source):
+def held_bus(comms, tmp_path, source_repository, plan_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
-    source = held_source
+    source = source_repository
     for name in ("lead", "worker", "outsider"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout),
             process_identity=ProcessIdentity.capture(os.getpid())))
@@ -83,7 +84,7 @@ def held_bus(comms, tmp_path, held_source):
     assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
                        native_id=uuid4().hex, text="Do not replay this input")
     config = CommanderConfig(
-        commander="lead", root=comms.root, state=tmp_path, repos=(),
+        commander="lead", root=comms.root, state=tmp_path, repos=(plan_repository,),
         worktrees=tmp_path, scratch=tmp_path, disk=tmp_path,
     )
     config.root_path(comms.root).write_text(config.model_dump_json())

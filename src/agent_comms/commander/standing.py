@@ -30,6 +30,8 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.work_branches import WorkBranches
 from agent_comms.ui_model.unit_state import UnitState
+from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_phases import PlanPhase
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,35 @@ class RequestStalled(UndatedStandingRule):
     def line(self) -> str:
         return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
                 " -> order its next step or mark it done")
+
+
+@dataclass(frozen=True)
+class PlanIdle(UndatedStandingRule):
+    """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
+
+    phase: type[PlanPhase]
+    reading: PlanReading = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        reading = CommanderConfig.read_root(comms.root).plan_reading(
+            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        )
+        return tuple(
+            cls(phase, reading)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(reading) and not phase.ordered(reading)
+        )
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.phase.task.start(comms, comms.registry.require(commander), self.phase, self.reading)
+
+    def line(self) -> str:
+        return (
+            f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
+            f" ({self.phase.plan.document}), no open order; done when"
+            f" {self.phase.evidence.describe()} -> {self.phase.task.instruction}"
+        )
 
 
 @dataclass(frozen=True)

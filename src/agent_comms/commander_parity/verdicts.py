@@ -14,6 +14,8 @@ from typing import ClassVar
 from uuid import uuid4
 
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.commander.judge import BackVerb, Edit, OkVerb, VerdictVerb
 from agent_comms.todos import AcceptedHeadVerdict, HeadVerdict, PullRequests, RejectedHeadVerdict, Todo
 from agent_comms.tools import CommsVerdictTool, TodoChanged
@@ -81,9 +83,8 @@ class VerdictCase(ABC):
             worker = run.commander.comms.registry.require(run.worker)
             goal = worker.goal.require()
             history = len(run.commander.comms.goals.goal_history(run.worker, goal_id=goal.id))
-            session_file = worker.session_file
-            if not session_file:
-                raise ValueError("The copied unit must have its own recorded native session")
+            session_file = worker.session_file.require(
+                "The copied unit must have its own recorded native session")
             for path in (Path(session_file), run.decisions, Path(worker.worktree)):
                 path.resolve().relative_to(run.commander.root.resolve())
             package = resolve_comms_route().launch().require_private().validate()
@@ -99,7 +100,8 @@ class VerdictCase(ABC):
                     cls.replacement(run),
                 ),
                 cwd=worker.worktree,
-                env=package.node_environment(dict(os.environ)),
+                env=package.node_environment(LaunchRoot.environment(
+                    ThreadLaunch.strip(dict(os.environ)))),
             )
             if not child.outcome.successful:
                 raise RuntimeError(

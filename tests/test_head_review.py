@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from test_holder_standing_rules import held_bus, held_source
+from test_holder_standing_rules import held_bus, plan_repository
 from agent_comms.commander.judge import BackVerb, OkVerb, ShowVerb
 from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 from agent_comms.commander.order import Commander, SayVerb
@@ -40,7 +40,7 @@ class ReviewCase:
     def write(self, row: GithubPullRequest) -> None:
         self.row = row
         GithubFixture(self.comms.goals.todos.get("P1").repo,
-            {str(row.number): GithubFixtureRequest(FieldCodec.encode(row), "")}, self.diff).write(self.binaries)
+            (GithubFixtureRequest(row, ""),), self.diff).write(self.binaries)
 
     def posts(self) -> list[list[str]]:
         return [call for call in GithubFixture.calls(self.binaries)
@@ -48,7 +48,7 @@ class ReviewCase:
 
 
 @pytest.fixture
-def review_case(held_bus, held_source, tmp_path, monkeypatch):
+def review_case(held_bus, source_repository, tmp_path, monkeypatch):
     binaries = tmp_path / "bin"
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     held_bus.channels.create_tag("comms")
@@ -58,12 +58,12 @@ def review_case(held_bus, held_source, tmp_path, monkeypatch):
                     worktrees=tmp_path, scratch=tmp_path, disk=tmp_path)
     todo = held_bus.goals.todos.get("P1")
     held_bus.goals.todos.apply(todo.id, RecordPullRequest(todo.revision, todo.creator_identity,
-        PullRequestLink(todo.repo, held_source.number), todo.held().generation))
+        PullRequestLink(todo.repo, source_repository.number), todo.held().generation))
     checkout = Path(todo.order.checked().check.directory)
     head = Repo.git(checkout, "rev-parse", "feature").strip()
     diff = Repo.git(checkout, "diff", f"main...{head}")
     now = time.time()
-    row = GithubPullRequest(number=held_source.number, branch="feature", head=head,
+    row = GithubPullRequest(number=source_repository.number, branch="feature", head=head,
         updated=stamp(now), base="main", created=stamp(now - 3600), head_time=stamp(now - 1200),
         ready_events=(stamp(now - 700),), closed=False, isDraft=False, mergeStateStatus="CLEAN",
         checks="SUCCESS", queued=False, merge=None, merged=None)

@@ -260,9 +260,8 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
     binaries = tmp_path / "bin"
     from agent_comms.commander_parity.github_fixture import GithubFixture, GithubFixtureRequest
 
-    GithubFixture(source.github, {
-        str(row.number): GithubFixtureRequest(FieldCodec.encode(row), body)
-        for row, body in requests}).write(binaries)
+    GithubFixture(source.github, tuple(
+        GithubFixtureRequest(row, body) for row, body in requests)).write(binaries)
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     lead = Registration(tmp_path / "registry.json").new_thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)
