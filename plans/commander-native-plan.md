@@ -154,7 +154,7 @@ P360 deleted the operation-delivery silent failure default and the duplicate com
 
 Commanding is a high-tempo RTS. The fleet loses information because Core hands the commander raw events and long prose and leaves it to classify every unit in its head. On 2026-10-20/21 all ten units sat blocked with no alarm, a unit's alert waited about seven hours, four orders went out twice, and work was reassigned away from the unit holding it. Every one of those had a rule in prose and nothing in Core that derived it. The reread alone is about 125K characters (46K of skill, rules and indictment plus a 76K pattern catalog), injected again every 100K tokens.
 
-The fix is one derived model with three renderers. **Core is the engine, Toad is the screen, the commander's context is the HUD feed.** Nothing computes fleet state twice.
+The fix is one derived model with four renderers. **Core is the engine, Toad is the screen, the commander's context is the HUD feed, and the connector serves claude-ai the same frames.** Nothing computes fleet state twice.
 
 **Engine: `CommanderHud` in `ui_model`, derived on read, holding no state but one cursor.**
 - **`UnitState` family.** The rotation tick's classification moves out of SKILL prose into Core: `Blocked` (goal execution blocked while holding an order), `Detached` (not receiving), `AwaitingCommander` (a question, alert or handoff with no commander answer, from `Message.answers`), `Stuck` (no tool call while holding an order), `Spinning` (send-backs or reruns with no new commit), `StalledOnNothing` (turn ended holding an order with nothing pending), `DeliveredUnclosed` (merged or installed, order open), `Moving` (fresh commit on the order's surface), `Idle` (no order). Each member derives itself from turn digests, git, goal execution and messages; owns its card line, its ping and its default action. Urgency order is the MRO, never a rank field.
@@ -168,6 +168,10 @@ The fix is one derived model with three renderers. **Core is the engine, Toad is
 - Hotkeys are Core tool requests, one keystroke each: strike, send-back, correction, resume a blocked unit, approve to the queue, close with artifact, open the order editor. The page computes nothing about orders, strikes or states.
 - Frame pacing: rendering reads frames only; nothing scales with history; keypress-to-paint p99 under one frame at 144 Hz.
 - The sidebar shows each unit's state glyph and open order beside its thread.
+
+**Connector: the same frames for claude-ai, the supreme commander.**
+- One read tool, `comms_hud`, renders `CommanderHud.frame()` as a bounded tree: one line per plan phase (done-evidence on main, holder, its `UnitState`) and per unit card, anomalies first, each line ending with an expand id, and a closing line naming what it folded. `expand` returns one subtree (a phase's PRs and holders, a unit's recent turns, a card's diff); `since` returns the delta from the caller's cursor.
+- It replaces reading `comms_threads` (about 200K characters) and `comms_todo_list` (about 780K) whole to answer "is the fleet on the plans": the tool derives that answer; it stores nothing.
 
 **Context feed: what lands in the commander's context, tiered like a HUD.**
 - **Every tool call:** new pings only, at most five lines, each with its default action. This replaces the bus heartbeat's message text; the heartbeat keeps only the job of waking an idle commander.
@@ -197,6 +201,10 @@ The fix is one derived model with three renderers. **Core is the engine, Toad is
 - The heartbeat was built to speak only when violations changed, not "every minute". Silence then meant both calm and dead, and it was dead from 14:08 to past 15:40 UTC on 2026-10-21 because one unit's unreadable checkout failed every pass into the journal. It beats every pass; a failed pass is a bus fact; `HeartbeatSilent` is raised in the commander's own tool process; an unreadable source is that unit's own `UnitState` member, never "idle", and the pass continues for every other unit. (#2472.)
 - Every `StandingRule` declares, abstractly, the action that clears it; a rule with none cannot be declared. INSTALL DUE ran on a 30-minute clock and said "due" 64 seconds after a finished install; it derives from the installed build (P431, #2475).
 - Forks stayed invisible (`capacity` read 0 live forks at load 240), so several forks gave one unit three orders in minutes. Forks are registered threads as this phase already says, and unit assignment takes one lock.
+- Every heartbeat line is owed, like a unit's unanswered ask. On 2026-10-21 the commander read past twelve stopped units holding orders, PLAN IDLE and HUNT DUE for over an hour, because only asks gate the order verbs. The owner is `StandingRule` (`src/agent_comms/standing_rules.py:32`): each violation is owed a disposition, and `OwedAnswer` (#2532) becomes the member whose disposition is a reply.
+  - A disposition is the order, strike, release or hunt that names the line, or a deferral with a reason of 8+ plain words.
+  - `DirectiveVerb.gate` (`src/agent_comms/commander/order.py:795`) refuses while any current line has none, as it does for owed asks.
+  - A line that fires unchanged for 3 beats goes to the owner.
 - Rule review: every rule bullet names the standing rule, refusal or check that enforces it, and `rules review` flags a bullet with none. A prose rule nothing enforces is a fact restated outside its owner; on 2026-10-21 the commander followed the voice block to the letter and skipped every attention rule.
 
 **Deletes:** `rotate.py`, `capacity.py` and `forks/`, `growth_watch.py` and `growth_seen.json`, `storage.py`, `rules.py` and `rules.jsonl`; `send_guard.py` is rewritten against Core.

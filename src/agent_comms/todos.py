@@ -28,13 +28,21 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.order_runs import OrderRun
-
 from agent_comms import skills
+from agent_comms.build_identity import (
+    BuildIdentity,
+    CommitInstallation,
+    RecordedBuildIdentity,
+    UnrecordedBuildIdentity,
+)
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
-    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
-    SourceReference, SourceRevision,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    PullRequestHeadRevision,
+    SourceReference,
+    SourceRevision,
 )
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import (
@@ -62,16 +70,11 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.build_identity import (
-    BuildIdentity,
-    CommitInstallation,
-    RecordedBuildIdentity,
-    UnrecordedBuildIdentity,
-)
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import InfoKind, Message
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message
+from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
@@ -93,6 +96,7 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
+    ExpressionIndex,
     Index,
     JsonStorage,
     TextStorage,
@@ -1443,7 +1447,11 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         return False
 
     def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("This problem cannot receive another order.")
+        raise TodoError("This problem cannot receive another order.")
+
+    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
+        """Every reassignment is a transfer unless the order state says otherwise."""
+        self.require_transfer(todo)
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
@@ -1714,7 +1722,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("Only an undelivered order can change owner.")
+        raise TodoError("Only an undelivered order can change owner.")
 
     def require_writable(self) -> None:
         for check in (self.check, *self.deletes.checks):
@@ -1930,6 +1938,11 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
 
+    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
+        """A corrected order to the claimant replaces its claim; another owner is a transfer."""
+        if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
+            self.require_transfer(todo)
+
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return ()
 
@@ -1953,7 +1966,7 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         owner = todo.holder_state.previous_assignment().owner
-        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
+        raise TodoError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -2387,6 +2400,9 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+        """Only assignment operations compete for a unit."""
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -2404,6 +2420,9 @@ class AssignTodo(TodoOperation):
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
+
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+        TodoStore.require_unit_in(db, self.proposed.owner_identity, current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2560,6 +2579,8 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def line(self) -> str: ...
 
     def apply(self, current: Todo) -> Todo:
+        # A verdict's time bounds which edits it judges, so the write refuses one it cannot date.
+        self.at.require_recorded("A verdict")
         current.require_revision(self.expected_revision)
         current.require_assignment(self.previous)
         judged = self.judged(current)
@@ -2629,7 +2650,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
 
     def judged_through(self, since: float) -> float:
         """Accepting a head judges the whole diff, so every edit made before it is judged."""
-        return max(since, self.at.recorded_at("A head review"))
+        return self.at.latest_with(since)
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
@@ -2687,6 +2708,57 @@ class SupersededVerdict(ToolCallVerdict):
         if len(self.reason.split()) < 6:
             raise ValueError('Say why this edit was replaced in 6+ words.')
         return self
+
+    def judged(self, current: Todo) -> Todo:
+        return current
+
+
+@dataclass(frozen=True)
+class DroppedVerdict(ToolCallVerdict):
+    """The unit discarded the edit: no branch, remote branch or worktree of its repository holds it.
+
+    Git answers this at judge time; the commander supplies only the edit Core recorded.
+    """
+    path: str
+    added: tuple[str, ...]
+    line = "Dropped: on no branch, remote branch or worktree"
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
+        if not lines:
+            raise TodoError(
+                "An edit that adds no line cannot be shown dropped; judge it ok or back.")
+        self.refuse_held(Path(current.order.checked().check.directory), lines)
+        return self
+
+    def refuse_held(self, checkout: Path, lines: tuple[str, ...]) -> None:
+        """Refuse while any place still holds every added line: the file on disk, then any
+        branch, remote branch or worktree HEAD of the checkout."""
+        target = Path(self.path)
+        if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
+            self.refuse(str(target))
+        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)",
+                        "refs/heads", "refs/remotes")
+        heads = [entry.removeprefix("HEAD ")
+                 for entry in self.git(checkout, "worktree", "list", "--porcelain")
+                 if entry.startswith("HEAD ")]
+        patterns = [arg for line in lines for arg in ("-e", line)]
+        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns,
+                         *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}",
+                         allowed=(0, 1))
+        if found:
+            self.refuse(found[0].split(":", 1)[0])
+
+    def refuse(self, holder: str) -> None:
+        raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
+
+    @staticmethod
+    def git(checkout: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> list[str]:
+        ran = subprocess.run(("git", "-C", str(checkout), *args),
+                             capture_output=True, text=True, timeout=120)
+        if ran.returncode not in allowed:
+            raise TodoError(ran.stderr.strip() or f"git {args[0]} failed in {checkout}.")
+        return ran.stdout.splitlines()
 
     def judged(self, current: Todo) -> Todo:
         return current
@@ -2959,7 +3031,11 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
-    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+    unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        "json_extract({assignment}, '$.owner')",
+        "json_extract({assignment}, '$.owner_created')", "{state}",
+    ))
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)), unit_index)
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3143,7 +3219,7 @@ class Todo(TypedTable):
         return self.holder_state.proposed_assignment(proposed)
 
     def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
-        self.order.require_transfer(self)
+        self.order.require_reassignment(self, proposed)
         holder = self.holder_state
         holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)
@@ -3214,6 +3290,23 @@ def _participant(thread: Thread) -> ThreadIncarnation:
     return thread.incarnation
 
 
+@dataclass(frozen=True)
+class ProblemNumber(TypedTable):
+    """Allocated global problem numbers, including reservations not yet sent."""
+
+    number: Annotated[int, Column(primary_key=True, auto_increment=True)]
+
+    @classmethod
+    def reserve(cls, db: sqlite3.Connection, problem: str) -> None:
+        if re.fullmatch(r'P[1-9]\d*', problem):
+            cls(int(problem[1:])).insert_if_absent(db)
+
+    @classmethod
+    def allocate(cls, db: sqlite3.Connection) -> str:
+        cursor = db.execute(f'INSERT INTO "{cls.declared_name}" DEFAULT VALUES')
+        return f'P{cursor.lastrowid}'
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -3225,7 +3318,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemNumber)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3246,6 +3339,27 @@ class TodoStore(DurableStore):
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection
+
+    def allocate_problem(self) -> str:
+        with self.writing() as db:
+            return ProblemNumber.allocate(db)
+
+    @staticmethod
+    def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
+                        assigner: ThreadIncarnation) -> None:
+        """The original open Todo owns who assigns its unit, under this transaction."""
+        match = (f"({Todo.unit_index.term_sql(Todo)})="
+                 f"({','.join('?' for _ in Todo.unit_index.terms)})")
+        for state in TodoState.open_names():
+            held = Todo.select(db,
+                where=f"{match} AND NOT (creator=? AND creator_created=?)",
+                parameters=(unit.name, unit.wire_birth, state, assigner.name, assigner.wire_birth),
+                limit=1)
+            for todo in held:
+                raise TodoError(
+                    f"{unit.name} is assigned by {todo.creator} on open order "
+                    f"{todo.order.checked().id} ({todo.id}); "
+                    "finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3494,6 +3608,8 @@ class TodoStore(DurableStore):
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
             review_at, order, goal)
         with self.writing() as db:
+            self.require_unit_in(db, assignee, identity)
+            ProblemNumber.reserve(db, todo_id)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -3503,6 +3619,7 @@ class TodoStore(DurableStore):
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
             current = self._current(db, todo_id)
+            command.require_unit(db, current)
             result = command.apply(current)
             if result == current:
                 return current
