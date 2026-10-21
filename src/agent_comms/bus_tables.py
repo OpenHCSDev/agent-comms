@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import closing
 from dataclasses import Field, dataclass, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
@@ -26,6 +27,14 @@ class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
 
 class BusProjectionTables(SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
+
+    @classmethod
+    def reset_schema(cls, db: sqlite3.Connection) -> None:
+        """Rebuild this family's rows from history, using the append projection owner."""
+        super().reset_schema(db)
+        with closing(BusRow.stream(db, order_by=("seq",))) as headers:
+            for header in headers:
+                header.kind.read_from(db, header.seq).project_into(db)
 
 
 @dataclass(frozen=True)

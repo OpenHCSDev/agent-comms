@@ -20,7 +20,7 @@ def claim_record(seq):
 
 
 def test_claimed_capability_lookup_and_rollback(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+    bus = Bus.install(Bus.path_in(tmp_path))
     history = PublicRecord.from_message(Message("author", "worker", "history", InfoKind))
     plain = bus.append(lambda seq, db: replace(history, seq=seq))
     with pytest.raises(UnclaimedError) as missing:

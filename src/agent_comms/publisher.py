@@ -64,10 +64,6 @@ class Publisher:
     channels: ChannelCatalog
     opened_activity: Callable[[], AbstractContextManager[ActivityClocks]]
 
-    @classmethod
-    def prepare_root(cls, root: Path) -> None:
-        """A publisher that only reads leaves its root as it finds it."""
-
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot,
         catalog: CatalogDocument, activity: ActivityClocks,
@@ -109,16 +105,7 @@ class Publisher:
         )
 
 
-class PrivateWrites(Publisher):
-    """A publisher that makes some private write; its root exists before it writes."""
-
-    @classmethod
-    def prepare_root(cls, root: Path) -> None:
-        with Bus(Bus.path_in(root)).writing():
-            pass
-
-
-class ClaimWrites(PrivateWrites):
+class ClaimWrites(Publisher):
     """Publishes claim envelopes."""
 
     def release_resources(
@@ -194,7 +181,7 @@ class ClaimWrites(PrivateWrites):
         return self._claim_result(lambda: self.bus.append(build).require_claim_transition())
 
 
-class InitialWrites(PrivateWrites):
+class InitialWrites(Publisher):
     """Publish an initial message and its frozen delivery decisions together."""
 
     def publish_ordinary(self, message: Message, *, origin: InitialOrigin) -> Message:
@@ -256,7 +243,7 @@ class InitialWrites(PrivateWrites):
             return origin.append(self.bus, build)
 
 
-class ResponseWrites(PrivateWrites):
+class ResponseWrites(Publisher):
     """Publishes keyed responses."""
 
     def _publish_keyed_response_unlocked(
