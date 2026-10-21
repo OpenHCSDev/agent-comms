@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
-from .launch_runtime import LaunchRuntime
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -926,7 +926,7 @@ class ChildLaunch(ABC):
         self,
         *,
         cwd=None,
-        env=None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -1464,7 +1464,7 @@ class AttachedChild(ChildProcess):
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
         runtime: LaunchRuntime = LaunchRuntime.running(),
@@ -1628,7 +1628,7 @@ class BoundedRun:
         timeout: float,
         input: bytes | None = None,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         runtime: LaunchRuntime = LaunchRuntime.running(),
     ):
@@ -1761,7 +1761,7 @@ class SpawnedProcess(SynchronousProcess):
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
@@ -1919,7 +1919,7 @@ class NamespacedChild(ChildProcess):
         *,
         deadline: float,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
     ) -> NamespacedChild:
         platform = Platform.current()
         if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):
