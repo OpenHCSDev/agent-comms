@@ -80,7 +80,7 @@ def record_from(declaration, message):
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
 @pytest.mark.parametrize(
     "role",
-    (
+    tuple(
         MessageRoleWire(change=change, notice=notice).role()
         for change in (MessageRoleWire().change, *MembershipChange)
         for notice in (False, True)
