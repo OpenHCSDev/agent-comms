@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import (
-    Addressed, BusCapability, BusRecord, BusRow, BusTables, KeyedPublication,
+    Addressed,
+    BusRecord,
+    BusRow,
+    BusTables,
+    KeyedPublication,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
@@ -60,18 +63,7 @@ class Bus(StoreWriter):
 
     def append(self, record: BusRecord) -> int:
         with self.writing() as db:
-            if issubclass(type(record), KeyedPublication):
-                prior = KeyedPublication.table.select(db, acknowledgement=record.acknowledgement)
-                if prior:
-                    return prior[0].seq
-            cursor = BusRow.insert_values(db, kind=type(record), at=time.time())
-            seq = FieldCodec.decode(int, cursor.lastrowid)
-            for table in type(record).tables():
-                table(seq=seq, **{
-                    item.name: getattr(record, item.name)
-                    for item in BusCapability.declared_fields(table)
-                }).insert(db)
-            return seq
+            return record.append_to(db)
 
     @staticmethod
     def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
@@ -83,7 +75,6 @@ class Bus(StoreWriter):
                 raise RelationViolationError(
                     f"Bus row {header.seq} lacks {table.declared_name}")
             values.update(FieldCodec.encode_fields(rows[0]))
-        values[FieldCodec.record_key(Message, "seq")] = header.seq
         return FieldCodec.decode_record(member, values)
 
     def lookup(self, seq: int) -> BusRecord:
@@ -101,9 +92,8 @@ class Bus(StoreWriter):
 
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
         with CoordinationStore.observing(self.path) as db:
-            headers = BusRow.read(db.execute(
-                f'SELECT b.* FROM "{BusRow.declared_name}" b '
-                f'JOIN "{Addressed.table.declared_name}" a ON a.seq=b.seq '
-                "WHERE a.target=? AND a.seq>? ORDER BY a.seq LIMIT ?",
-                (target, after, limit)))
-            return tuple(self._record(db, row) for row in headers)
+            addressed = Addressed.table.select(
+                db, where="{seq} > ?", parameters=(after,), order_by=("seq",), limit=limit,
+                target=target)
+            return tuple(self._record(db, header) for row in addressed
+                         for header in BusRow.select(db, seq=row.seq))
