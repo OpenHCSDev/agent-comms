@@ -20,13 +20,13 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, TurnRouting
+from .routing import TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     AssistantTranscript,
@@ -132,8 +132,8 @@ class AssignedSourceWindow:
     """Conversation and sent sources captured with one acknowledgement frontier."""
 
     cursor: WireFrontier
-    sources: tuple[CommittedDelivery, ...]
-    sent_sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    sent_sources: tuple[Delivered, ...]
 
 
 class TranscriptTraversal(ABC):

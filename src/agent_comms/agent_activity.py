@@ -16,7 +16,7 @@ from .notification_progress import AcknowledgedProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
     from .registration import Registration
@@ -162,7 +162,7 @@ class AgentActivity:
         return observed
 
     def observe_recipients(
-        self, recipients: Iterable[tuple[CommittedDelivery, FrozenRecipient]], *,
+        self, recipients: Iterable[tuple[Delivered, FrozenRecipient]], *,
         snapshot: RegistrySnapshot,
     ) -> Mapping[str, RecipientActivity]:
         """Acquire one bounded window's recipients from the original sends."""

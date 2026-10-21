@@ -13,8 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.bus import Bus
-from agent_comms.bus_publication import CommittedDelivery
+from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -57,7 +56,7 @@ def _root(
 
 def _accepted(
     comms: Comms, store: Coordination, root_id: str, target: str, body: str
-) -> tuple[CommittedDelivery, WakeAssignment]:
+) -> tuple[Delivered, WakeAssignment]:
     message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.bus.delivery(message.seq)
     for recipient in initial.audience.recipients:

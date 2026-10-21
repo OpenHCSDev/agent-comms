@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .messages import InfoKind, Message
@@ -26,7 +26,7 @@ class SelectedSource:
 
     assignment_id: str
     store: AssignmentStore
-    delivery: CommittedDelivery
+    delivery: Delivered
 
     @property
     def assignment(self) -> WakeAssignment:

@@ -10,7 +10,7 @@ from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
@@ -197,7 +197,7 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
+        comms: Comms, owner: Thread, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""

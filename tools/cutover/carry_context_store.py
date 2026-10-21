@@ -23,7 +23,7 @@ from agent_comms.context_store import (
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, Id128Text, WireName
+from agent_comms.field_codec import FieldCodec, Id128Text, SingleFieldValue, WireName
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.private_path import FileRevision, PrivateFileRole
@@ -35,20 +35,21 @@ from agent_comms.turn_context import (
     RecordedContextManifest,
     SegmentManifest,
 )
-from agent_comms.typed_table import Column, Index, TypedTable
+from agent_comms.typed_table import Column, Index, TextStorage, TypedTable
 
 from .carry_bus_history import BusHistory, HistoryMetadata
+
+
+@dataclass(frozen=True)
+class ContextRootId(SingleFieldValue):
+    value: Annotated[str, Id128Text]
 
 
 @dataclass(frozen=True)
 class ContextMarker(HistoryMetadata):
     """Only the original root and sequence boundary participate in this conversion."""
 
-    root_id: Annotated[str, WireName("wire_root_id")]
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        Id128Text.from_text(self.root_id)
+    root_id: Annotated[ContextRootId, WireName("wire_root_id")]
 
 
 class ContextCheckpoint(DurableFile, SQLiteFile):
@@ -72,7 +73,7 @@ class ContextPrefix(TypedTable, declared_name="prefix_certificate"):
 
     singleton: Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[2]
-    root_id: str
+    root_id: Annotated[ContextRootId, Column(storage=TextStorage)]
     offset: int
     through_seq: int
     digest: str

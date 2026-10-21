@@ -26,7 +26,7 @@ from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
 
 
 class ExecutionPresentation(ABC):
@@ -103,7 +103,7 @@ class GoalExecutionState(StrEnum):
 class GoalWaitTarget(WireValue):
     incarnation: RecordedThreadIncarnation
 
-    def sent(self, original: CommittedDelivery) -> bool:
+    def sent(self, original: Delivered) -> bool:
         """Only this declared incarnation can supply a dependency reply."""
         return original.audience.sender_lookup == self.incarnation.lookup
 
