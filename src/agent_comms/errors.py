@@ -44,7 +44,11 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
     """A claim row may be visible after failed durability; never replay automatically."""
 
 
-class HumanInitialUnknownError(RelationViolationError):
+class HumanSendError(RelationViolationError):
+    """A human send Core did not complete; delivery_failure decodes each member for the sender."""
+
+
+class HumanInitialUnknownError(HumanSendError):
     """A private USER initial may be committed; inspect its ID, never retry."""
 
     def __init__(self, wire_root_id: str, wire_seq: int, message_id: str) -> None:
@@ -57,7 +61,7 @@ class HumanInitialUnknownError(RelationViolationError):
         )
 
 
-class HumanClaimBlockedError(RelationViolationError):
+class HumanClaimBlockedError(HumanSendError):
     """A prior private reservation cannot be safely retried."""
 
 
