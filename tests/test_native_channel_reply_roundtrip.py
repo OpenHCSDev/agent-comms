@@ -3,6 +3,8 @@ from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.owner_cutover import PreserveOwnerRuntime
 from acp.schema import SessionNotification
 
 import asyncio
@@ -37,19 +39,19 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
-def start_source_owner(comms, name):
+def start_source_owner(comms, name, runtime: RestoredRuntime):
     """Use the shared interpreter, but retain this fixture's exact source imports.
 
     Ordinary owner starts intentionally discard PYTHONPATH and would launch
     shared main, making the branch client a read-only other-build attachment.
-    Guarded restarts then preserve this real original launch normally.
+    The retained restart request uses this same explicit source-runtime policy.
     """
     thread = comms.registry.require(name)
     with (comms.registry.storage_rule.room_for_start(thread, comms.root),
           _store_lock(comms.owners._wire_lock_path)):
         return comms.owners._launch_owner_unlocked(
             thread, NativeArguments.default_binary,
-            launch_runtime=RestoredRuntime(Path(sys.executable)),
+            launch_runtime=runtime,
         )
 
 
@@ -62,6 +64,7 @@ def start_source_owner(comms, name):
 )
 async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads, native_runtime_package):
     package = native_runtime_package.path
+    runtime = RestoredRuntime(Path(sys.executable))
     requests = []
     failures = []
     request_times = []
@@ -278,7 +281,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     try:
         for name in projects:
-            await asyncio.to_thread(start_source_owner, comms, name)
+            await asyncio.to_thread(start_source_owner, comms, name, runtime)
         await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
         if restart_after_reply:
             for name, project in projects.items():
@@ -475,7 +478,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 name: Path(before.threads[name].session_file).read_bytes() for name in projects
             }
             await attachment.shutdown()
-            await asyncio.to_thread(comms.owners.restart_owners, list(projects))
+            restart = OwnerRestartRequest(tuple(projects), launch_runtime=runtime)
+            await asyncio.to_thread(PreserveOwnerRuntime().restart, comms.owners, restart)
             after = comms.registry.snapshot()
             for name in projects:
                 old, current = before.threads[name], after.threads[name]
