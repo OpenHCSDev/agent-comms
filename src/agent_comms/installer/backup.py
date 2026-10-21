@@ -23,6 +23,7 @@ from string import Formatter
 from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore, RuntimeFile
@@ -40,13 +41,12 @@ with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as wri
 """
 
 
-class UpgradeRefused(Exception):
+class UpgradeRefused(CoordinationError):
     """The update stopped without permission to discard its original data."""
     prefix: ClassVar[str] = "install: refused:"
 
-    @property
-    def output(self) -> str:
-        return f"{self.prefix} {self}"
+    def __str__(self) -> str:
+        return f"{self.prefix} {super().__str__()}"
 
     @classmethod
     def public_message(cls, output: str) -> str:
