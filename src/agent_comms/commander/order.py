@@ -52,7 +52,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_tool_call import SelectedToolDenied
-from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -412,15 +412,14 @@ class Commander(CommanderContext):
         reading = self.plan_reading(self.comms.goals.todos.history_for_commander(self.incarnation))
         problems.extend(order.phase.order_refusals(reading, document.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder)
-        busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
-                     for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
+        busy = tuple(todo for todo in held if todo.holder == unit and todo.id not in group)
         if busy:
             snapshot = self.comms.registry.snapshot()
             occupied = {todo.holder for todo in held} | {self.commander} | self.parked
             idle = sorted(thread.name for thread in snapshot.threads.values()
                           if thread.name not in occupied and thread.role.executor(thread)
                           and snapshot.status(thread.name).active)
-            problems.append(f'{unit} already holds plan orders '
+            problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
