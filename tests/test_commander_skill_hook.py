@@ -64,17 +64,13 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
         else "No commander is configured"
     )
     assert text.startswith(expected_notice)
-    catalog = Slop.catalog()
-    readme = catalog / "README.md"
     assert text.split("\n\n", 1)[1] == "\n\n".join((
         CommanderConfig.packaged_voice().read_text(),
         CommanderConfig.packaged_indictment().read_text(),
-        CommanderConfig.packaged_spine().read_text(),
         "# Recorded failures\n\n" + PostmortemFailure.catalog(),
         RuleFile.document(CommanderConfig.packaged_skill())[1],
         *(rule.render() for rule in RuleFile.packaged()),
-        readme.read_text(),
-        *(path.read_text() for path in sorted(set(catalog.glob("*.md")) - {readme})),
+        (Slop.catalog() / "README.md").read_text(),
     ))
     assert not tuple(bus.iterdir())
 
@@ -201,3 +197,34 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
     assert all(member.evidence for member in members)
 
 
+
+
+def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(tmp_path, monkeypatch):
+    from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    config = CommanderConfig.path()
+    config.parent.mkdir(parents=True)
+    config.write_text(json.dumps(
+        {"commander": "claude-code", "root": str(tmp_path), "state": str(tmp_path), "repos": []}))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
+    WatchClaim("s").enrol(WatchRecord("unit-x", str(tmp_path), ()))
+    assert CommanderStart.decode(record).take(0) == ()
+    assert not CommanderStart.decode(record).parts.exists()
+
+
+def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch):
+    from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    config = CommanderConfig.path()
+    config.parent.mkdir(parents=True)
+    config.write_text(json.dumps(
+        {"commander": "claude-code", "root": str(tmp_path), "state": str(tmp_path), "repos": []}))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    WatchClaim("s").enrol(WatchRecord("claude-code", str(tmp_path), ()))
+    assert CommanderStart.decode(
+        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take(0)
