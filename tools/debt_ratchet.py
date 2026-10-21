@@ -937,7 +937,8 @@ class DeclaredSpellings:
         for spellings, nodes in ((self.unmistakable, ast.walk(tree)),
                                  (self.names, TypePositions.literals(tree))):
             for node in nodes:
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in spellings:
+                if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and node.value in spellings):
                     record(node, NamedDeclaration, spellings[node.value])
         return sorted(found.values(), key=lambda site: site.line)
 
