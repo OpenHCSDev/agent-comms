@@ -2987,7 +2987,7 @@ class Todo(TypedTable):
 
     @property
     def unjudged_since(self) -> float:
-        """Edits before the order, or before a later verdict that judges a whole head, are judged."""
+        """Edits before the order, or before a later verdict judging a whole head, are judged."""
         since = self.order.checked().at.recorded_at("An order")
         for verdict in self.verdicts:
             since = verdict.judged_through(since)
