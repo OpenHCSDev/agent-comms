@@ -59,7 +59,7 @@ class _SessionRoutes:
         self._input_cache: dict[str, InputDisplay | None] = {}
 
     def get(self, entry_id: str | None) -> TurnRouting | None:
-        if entry_id is None or self._connection is None:
+        if entry_id is None:
             return None
         if entry_id not in self._cache:
             row = TranscriptRoute.one(
@@ -69,14 +69,13 @@ class _SessionRoutes:
         return self._cache[entry_id]
 
     def input_display(self, native_id: str | None) -> InputDisplay | None:
-        if native_id is None or self._connection is None:
+        if native_id is None:
             return None
         if native_id not in self._input_cache:
             self._input_cache[native_id] = InputDisplay.one(self._connection, native_id=native_id)
         return self._input_cache[native_id]
 
     def close(self) -> None:
-        self._connection = None
         self._lifetime.close()
 
     def __enter__(self) -> "_SessionRoutes":
@@ -88,8 +87,7 @@ class _SessionRoutes:
 
 @dataclass(frozen=True, slots=True)
 class TranscriptRoutes(DurableStore):
-    """Annotations written by an owner, not a transcript-derived cache. Reads never write:
-    the store's snapshot refuses a schema that differs, and only its writer installs one."""
+    """Annotations written by an owner, not a transcript-derived cache."""
 
     root: Path
     filename: ClassVar[str] = "transcript_routes.sqlite3"
