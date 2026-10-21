@@ -7,7 +7,7 @@ import json
 import pytest
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_commands import CliCommand, InstallCliCommand
 from agent_comms.comms import Comms
 from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, GivenBinary, InheritedArguments
 from agent_comms.history_result import (
@@ -56,6 +56,27 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
     fresh = build_parser().parse_args(["restart", "--all"])
     assert CliCommand.member_named(fresh.command).from_arguments(fresh).agent_bin == ConfiguredBinary()
+
+
+def test_install_paths_decode_before_the_install_child_changes_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    options = build_parser().parse_args([
+        "install", "--checkout", "checkout", "--project", "~/project",
+        "--spill-dir", "spill", "--repos", "first,~/second",
+    ])
+    command = InstallCliCommand.from_arguments(options)
+    assert command.checkout == tmp_path / "checkout"
+    assert command.project == tmp_path / "home/project"
+    assert command.spill_dir == tmp_path / "spill"
+    assert command.repos.checkouts == (tmp_path / "first", tmp_path / "home/second")
+    encoded = FieldCodec.encode(command)
+    monkeypatch.chdir(tmp_path.parent)
+    assert FieldCodec.decode(InstallCliCommand, encoded) == command
+    defaults = InstallCliCommand()
+    assert defaults.checkout.is_absolute()
+    assert defaults.project.is_absolute()
+    assert defaults.spill_dir.is_absolute()
 
 
 @pytest.mark.parametrize(
