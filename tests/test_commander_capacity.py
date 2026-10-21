@@ -1,4 +1,4 @@
-"""Capacity reports the existing load formula and live forks without policy advice."""
+"""Capacity reports the existing load formula and working forks without policy advice."""
 
 import pytest
 
@@ -13,7 +13,8 @@ def test_capacity_reports_load_and_forks(unjudged):
     assert load.total == 24 + 2 * 14 + unjudged / 10
     assert str(load) == (
         f"load {load.total:.0f} (24 open orders, 14 review timers up, {unjudged} unjudged edits), "
-        "1 live forks ['judge']"
+        f"1 working forks ['judge'], {load.total / 2:.0f} per reader"
     )
+    assert load.share == load.total / 2
 
 
