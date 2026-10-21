@@ -39,6 +39,29 @@ jobs:
       - name: Collect the test suite
         run: pytest --collect-only -q -p no:cacheprovider
 
+  native-scripts:
+    name: native-scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install Core
+        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e .
+      - name: Prepare pinned native Pi
+        uses: ./.github/actions/prepare-native
+      - name: Run every native script
+        shell: bash
+        run: |
+          export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())')"
+          for script in stack/test-*; do
+            printf '\nRunning %s\n' "$script"
+            "$script" || { status=$?; printf 'FAILED: %s (exit %s)\n' "$script" "$status" >&2; exit "$status"; }
+          done
+
   ratchet:
     name: debt-${{ matrix.kind }}
     runs-on: ubuntu-latest

@@ -1,11 +1,10 @@
 """Public agent-comms and ACP fields consumed by pinned Toad builds."""
 
-from dataclasses import asdict
-
 import pytest
 from acp.schema import NewSessionResponse
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
 from agent_comms.routing import MessageRoute
@@ -27,8 +26,11 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     session = NewSessionResponse(
         session_id="worker", field_meta=(await agent.sessions.metadata("worker"))
     ).model_dump(by_alias=True, exclude_none=True)
-    assert session["_meta"]["agentComms"]["thread"] == "worker"
-    assert session["_meta"]["agentComms"]["wireRoot"] == str(comms.root.resolve())
+    configuration = next(update for update in decode_updates(session["_meta"])
+                         if isinstance(update, CoordinationChangedUpdate))
+    assert configuration.thread == comms.registry.require("worker").incarnation
+    assert configuration.thread.name == "worker"
+    assert configuration.wire_root == str(comms.root.resolve())
 
     updates = []
 
@@ -42,5 +44,5 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     assert len(updates) == 1
     update = updates[0]
     assert update["content"]["text"] == "routed reply"
-    assert update["_meta"]["agentComms"]["route"] == asdict(route)
-    assert MessageRoute.from_wire(update["_meta"]["agentComms"]["route"]) == route
+    assert decode_updates(update["_meta"]) == (TextRouteUpdate(route),)
+    await agent.shutdown()

@@ -54,6 +54,6 @@ The commander isn't built into Core yet; `plans/commander-native-plan.md` moves 
 | Server | `127.0.0.1:18766/mcp` on ts-gaming; nothing else listens |
 | Public URL, added in claude.ai under Connectors | `https://ts-gaming.tail553874.ts.net/mcp`, through Tailscale Funnel |
 | Grants, stored as token digests | `~/.local/state/agent-comms/connector/` |
-| Approve a login | `agent-comms-connector approve <id>` (installed once #1546 merges); `pending` lists waiting requests, `revoke` drops all grants |
+| Approve a login | Open the single-use link sent to the owner on comms and confirm on its page; that issuer remembers the browser. Unknown browsers share a bounded waiting queue, then receive HTTP 429 without another notice. `agent-comms-connector revoke` drops grants and remembered browsers |
 | Switch the public URL off | `tailscale funnel --https=443 off` |
 | Its plan | `plans/comms-claude-connector-pr.md` |

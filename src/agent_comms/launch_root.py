@@ -2,28 +2,51 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
 
 
-class UnstartedLaunch:
+class LaunchSelection(ABC):
+    """The current selection owns its scoped installation and root requirement."""
+
+    @abstractmethod
+    def require(self) -> LaunchRoot: ...
+
+    def install(self) -> None:
+        LaunchRoot._current = self
+
+    @contextmanager
+    def selected(self) -> Iterator[Self]:
+        previous = LaunchRoot._current
+        self.install()
+        try:
+            yield self
+        finally:
+            previous.install()
+
+
+class UnstartedLaunch(LaunchSelection):
     """A process with no selected root; startup must run before use."""
+
+    def require(self) -> LaunchRoot:
+        raise RelationViolationError("Comms process did not select a root at startup.")
 
 
 @dataclass(frozen=True)
-class LaunchRoot:
+class LaunchRoot(LaunchSelection):
     """A process's selected root travels in its arguments, never its environment."""
 
     path: Annotated[Path, PathText]
     argument: ClassVar[str] = "--comms-root"
     environment_name: ClassVar[str] = "AGENT_COMMS_ROOT"
-    _current: ClassVar[LaunchRoot | UnstartedLaunch] = UnstartedLaunch()
+    _current: ClassVar[LaunchSelection] = UnstartedLaunch()
 
     @classmethod
     def from_path(cls, path: str | Path) -> LaunchRoot:
@@ -36,22 +59,10 @@ class LaunchRoot:
 
     @classmethod
     def current(cls) -> LaunchRoot:
-        if isinstance(cls._current, UnstartedLaunch):
-            raise RelationViolationError("Comms process did not select a root at startup.")
-        return cls._current
+        return cls._current.require()
 
-    def install(self) -> None:
-        LaunchRoot._current = self
-
-    @contextmanager
-    def selected(self) -> Iterator[LaunchRoot]:
-        """Borrow a selection without changing later callers."""
-        previous = LaunchRoot._current
-        self.install()
-        try:
-            yield self
-        finally:
-            LaunchRoot._current = previous
+    def require(self) -> LaunchRoot:
+        return self
 
     def arguments(self) -> tuple[str, str]:
         return self.argument, str(self.path)

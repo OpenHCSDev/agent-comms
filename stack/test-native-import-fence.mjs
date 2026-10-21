@@ -1,4 +1,5 @@
-// Isolated contract tests for the draft boundary module; NOT canonical/PR77 E2E clearance.
+#!/usr/bin/env node
+// Isolated import-boundary contracts; canonical startup is checked separately.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';

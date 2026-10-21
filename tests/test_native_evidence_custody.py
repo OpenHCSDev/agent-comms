@@ -9,9 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from agent_comms.native_entries import NativeEntry, NativeEvidenceRead
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
+from agent_comms.native_input_record import NativeInputLocation
 from agent_comms.native_transcript import NativeTranscript
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.coordinator import Coordination
+from agent_comms.store_files import StoreLockContention, _store_lock
 from test_native_pi import INPUT_ID, _evidence
 
 
@@ -50,15 +53,17 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
     files = _evidence(tmp_path)
     session = files.session
     restored_input = "d" * 32
-    restored = b"".join(json.dumps(row).encode() + b"\n" for row in (
-        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored", "version": 3},
-        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored-entry", "message": {
-            "role": "user", "inputId": restored_input, "inputDigest": "e" * 64,
-            "content": [{"type": "text", "text": "restored sou"}],
-        }},
-    ))
-    with NativeEvidenceRead.open(session) as evidence:
-        header, entries = evidence.observe()
+    restored = (session.read_bytes().replace(b'"sid"', b'"new"')
+                .replace(INPUT_ID.encode(), restored_input.encode())
+                .replace(b"separate", b"restored"))
+    _header, original = NativeTranscript(session).forward(0, session.stat().st_size)
+    location = NativeInputLocation(INPUT_ID, "sid", "entry", session_entry_start=original.start)
+    restored_location = NativeInputLocation(
+        restored_input, "new", "entry", session_entry_start=original.start,
+    )
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
+        header, entries = evidence.observe(location)
         assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
             assert len(restored) == session.stat().st_size
@@ -68,8 +73,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             replacement.write_bytes(restored)
             replacement.chmod(0o600)
             replacement.replace(session)
-        header, entries = evidence.observe()
-        assert header.id == "restored"
+        header, entries = evidence.observe(restored_location)
+        assert header.id == "new"
         assert tuple(evidence.inputs) == (restored_input,)
         assert evidence.source.size == len(restored)
 
@@ -102,9 +107,6 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
 
 
 def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
-    import sqlite3
-    from agent_comms.native_pi import NativeContextJournal
-
     files = _evidence(tmp_path)
     original = sqlite3.OperationalError("consumer transaction refused")
     with pytest.raises(sqlite3.OperationalError) as caught:
@@ -130,17 +132,15 @@ def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
 
 
 def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
-    from agent_comms.store_files import StoreLockContention, _store_lock
     lock_target = tmp_path / "ownership"
-    def compete():
-        with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
-            pytest.fail("A competing thread acquired exclusive ownership")
-
-    with ThreadPoolExecutor(max_workers=1) as worker:
-        with _store_lock(lock_target):
-            pending = worker.submit(compete)
+    with _store_lock(lock_target):
+        # Reentrancy is intentional; a separate execution must contend.
+        def compete():
             with pytest.raises(BlockingIOError):
-                pending.result(timeout=2)
+                with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+                    pytest.fail("A competing descriptor acquired exclusive ownership")
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            worker.submit(compete).result(timeout=1)
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
     with _store_lock(lock_target, blocking=False):
@@ -160,8 +160,6 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
 @pytest.mark.asyncio
 async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(tmp_path):
     """Cancellation cannot retire borrowed source before its SQL worker closes."""
-    from agent_comms.coordinator import Coordination
-
     files = _evidence(tmp_path)
     session = files.session
     _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)

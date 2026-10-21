@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [pkg, root, mode] = process.argv.slice(1);
+const [pkg, root] = process.argv.slice(1);
 assert.equal(process.env.PI_OFFLINE, '0');
 const { DefaultPackageManager } = await import(pathToFileURL(join(pkg, 'dist/core/package-manager.js')));
 const agent = join(root, 'agent'), project = join(root, 'project'), bin = join(root, 'bin');
@@ -64,18 +64,7 @@ async function denied(name, action, requireRejection = true) {
     if (requireRejection) assert.equal(error?.code, 'ERR_NATIVE_IMPORT_BOUNDARY', `${name}: ${error}`);
     results.push({ name, refused: !!error, noSubprocess: true });
 }
-if (mode === 'old') {
-    // Preserve old-byte proof: present installations reach the actual commands,
-    // while the separately guarded real update rejects the same source.
-    for (const source of [npmSource, gitSource]) {
-        globals = [source]; projects = []; reset();
-        assert.equal((await pm.checkForAvailableUpdates()).length, 1);
-        const observed = calls();
-        assert.ok(observed.some(call => call.args[0] === (source === npmSource ? 'view' : 'ls-remote')));
-        results.push({ source, updateCheckCommands: observed });
-        await denied(`old-update-${source}`, () => pm.updateConfiguredSources([{ source, scope: 'user' }]));
-    }
-} else {
+{
     // Complete source-set admission: user/project, plain/filtered source entries,
     // approved-before-denied ordering, pinned source and absent-install variants.
     for (const source of [npmSource, gitSource, 'npm:unapproved-fixture@0.1.0', 'npm:missing-fixture']) {
@@ -131,4 +120,4 @@ if (mode === 'old') {
     }
 }
 reset();
-console.log(JSON.stringify({ ok: true, mode, cases: results.length, results }));
+console.log(JSON.stringify({ ok: true, cases: results.length, results }));
