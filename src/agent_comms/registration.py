@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from functools import partialmethod
 from pathlib import Path
 from typing import Concatenate
 
@@ -195,17 +194,17 @@ class Registration:
         for effect in effects:
             effect.check(projection)
 
-    def change[**P, R](
-        self, operation: Callable[Concatenate[RegistryDocument, P], R],
-        *args: P.args, **kwargs: P.kwargs,
-    ) -> R:
-        with self.store.editing() as edit:
-            result = operation(edit.document, *args, **kwargs)
-            edit.commit()
-            return result
+    @staticmethod
+    def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[Concatenate[Registration, P], R]:
+        def change(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
+            with self.store.editing() as edit:
+                result = operation(edit.document, *args, **kwargs)
+                edit.commit()
+                return result
+        return change
 
-    restore_stopped = partialmethod(change, RegistryDocument.restore_stopped)
-    rename = partialmethod(change, RegistryDocument.rename)
+    restore_stopped = changing(RegistryDocument.restore_stopped)
+    rename = changing(RegistryDocument.rename)
 
     def fence_idle_owners(
         self, selected: Sequence[tuple[Thread, int]]
@@ -221,16 +220,16 @@ class Registration:
             edit.commit()
             return fenced
 
-    unregister = partialmethod(change, RegistryDocument.unregister)
-    archive = partialmethod(change, RegistryDocument.archive)
-    begin_delete = partialmethod(change, RegistryDocument.begin_delete)
-    archive_originals = partialmethod(change, RegistryDocument.archive_originals)
-    begin_delete_originals = partialmethod(change, RegistryDocument.begin_delete_originals)
-    remove_originals = partialmethod(change, RegistryDocument.remove_originals)
-    change_tag = partialmethod(change, RegistryDocument.change_tag)
-    remove = partialmethod(change, RegistryDocument.remove)
-    heartbeat = partialmethod(change, RegistryDocument.heartbeat)
-    release_turn = partialmethod(change, RegistryDocument.release_turn)
+    unregister = changing(RegistryDocument.unregister)
+    archive = changing(RegistryDocument.archive)
+    begin_delete = changing(RegistryDocument.begin_delete)
+    archive_originals = changing(RegistryDocument.archive_originals)
+    begin_delete_originals = changing(RegistryDocument.begin_delete_originals)
+    remove_originals = changing(RegistryDocument.remove_originals)
+    change_tag = changing(RegistryDocument.change_tag)
+    remove = changing(RegistryDocument.remove)
+    heartbeat = changing(RegistryDocument.heartbeat)
+    release_turn = changing(RegistryDocument.release_turn)
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
@@ -292,18 +291,18 @@ class Registration:
             edit.commit()
             return result
 
-    def read[**P, R](
-        self, operation: Callable[Concatenate[RegistryDocument, P], R],
-        *args: P.args, **kwargs: P.kwargs,
-    ) -> R:
-        with self.store.reading() as document:
-            return operation(document, *args, **kwargs)
+    @staticmethod
+    def reading[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[Concatenate[Registration, P], R]:
+        def read(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
+            with self.store.reading() as document:
+                return operation(document, *args, **kwargs)
+        return read
 
-    canonical_name = partialmethod(read, RegistryDocument.canonical_name)
-    last_seen = partialmethod(read, RegistryDocument.seen_at)
-    require = partialmethod(read, RegistryDocument.require)
-    status = partialmethod(read, RegistryDocument.status)
-    user_thread = partialmethod(read, RegistryDocument.user_thread)
+    canonical_name = reading(RegistryDocument.canonical_name)
+    last_seen = reading(RegistryDocument.seen_at)
+    require = reading(RegistryDocument.require)
+    status = reading(RegistryDocument.status)
+    user_thread = reading(RegistryDocument.user_thread)
 
     def goal_history(
         self, name: str, *, goal_id: str | None = None

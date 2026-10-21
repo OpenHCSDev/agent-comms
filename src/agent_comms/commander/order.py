@@ -1239,4 +1239,4 @@ class BoardVerb(OrderVerb):
 
 
 def main(a, ctx: Commander):
-    OrderVerb.parse(a, __doc__).apply(ctx)
+    OrderVerb.parse(a).apply(ctx)

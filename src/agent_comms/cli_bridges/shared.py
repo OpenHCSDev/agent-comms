@@ -97,9 +97,9 @@ class DeclaredVerb(DeclaredOptions, DeclaredFamily, affix="Verb"):
         return cls.__module__.rpartition('.')[2].replace('_', '-')
 
     @classmethod
-    def parse(cls, argv: Sequence[str], description: str | None = None) -> Self:
+    def parse(cls, argv: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(
-            prog=cls.tool(), description=description or sys.modules[cls.__module__].__doc__,
+            prog=cls.tool(), description=sys.modules[cls.__module__].__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         verbs = parser.add_subparsers(dest="command", required=True)

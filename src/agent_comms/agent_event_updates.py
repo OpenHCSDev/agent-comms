@@ -33,14 +33,14 @@ if TYPE_CHECKING:
 
     from .acp import CommsAgent
     from .routing import MessageRoute
-    from .runtime import RuntimeProxy, RuntimeServer
+    from .runtime import RuntimeServer, SocketClient
 
 
 @dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
     agent: CommsAgent
     session_id: str
-    client: AgentSideConnection | RuntimeServer | RuntimeProxy
+    client: AgentSideConnection | RuntimeServer | SocketClient
     turn_id: str | None = None
     route: MessageRoute | None = None
 
