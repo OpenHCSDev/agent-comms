@@ -511,7 +511,7 @@ class Commander(CommanderContext):
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
                 assigner=self.incarnation, traced=traced,
                 order=order, request=request, review_at=review_at, commander=self.commander)))
-        message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
+        message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
         for pid in group:

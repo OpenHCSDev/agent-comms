@@ -441,12 +441,18 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
+            request = FieldCodec.decode_record(
+                cls, dict(arguments), field_types=cls.context_types(comms, arguments))
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
         return FieldCodec.encode(caller.invoke(request, comms).to_wire())
+
+    @classmethod
+    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+        """Ordinary tools need no contextual narrowing of their declared field types."""
+        return {}
 
     @abstractmethod
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -1037,21 +1043,26 @@ class CommsOrderDoneTool(CommsTodoTool):
     order_id: Annotated[str, *tool_field("Exact open order ID")]
     delivery: Annotated[
         OrderDelivery,
-        *tool_field("A clean commit delivery or an operation verified by the order's check"),
+        *tool_field("A checked implementation delivery for fix, or a report for triage"),
     ]
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
             "Merged, installed or working claims, each with the artifact Core verifies in the order's "
-            "checkout; at least one"
+            "checkout; at least one for fix, none for triage reports"
         ),
     ]
 
+    @classmethod
+    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+        problem = FieldCodec.field_plan(cls, "problem").read(arguments)
+        return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
+
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        ProgressClaim.require_claimed(self.claims, "delivered")
-        verified = ProgressClaim.require_all(
-            self.delivery.required_claims(self.claims), comms, Path(todo.order.check.directory)
-        )
+        order = todo.order.checked()
+        order.require_delivery(self.order_id)
+        verified = order.scope.verified_claims(
+            self.delivery, self.claims, comms, Path(order.check.directory))
         return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
                            verified_claims=verified)
 

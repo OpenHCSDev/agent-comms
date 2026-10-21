@@ -23,6 +23,8 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     AcceptedVerdict,
     CommitDelivery,
+    FixScope,
+    FixShape,
     PendingProblemOrder,
     StrikeReason,
     StrikeTodo,
@@ -104,6 +106,7 @@ def create_order(problem: str = "P1") -> None:
                 review_at=RecordedEventTime(now + 3600),
                 order=PendingProblemOrder(
                     id=f"record-order-{problem}",
+                    scope=FixScope(FixShape(parents=(FileLine.class_declaration(PendingProblemOrder),), members=())),
                     owner=FileLine(str(CHECKOUT / "src/agent_comms/todos.py"), 69),
                     check=OrderCheck(str(CHECKOUT), "printf 1", CountCheckResult(1)),
                     edits=(

@@ -530,6 +530,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         commander.goal.require().require_id(self.request).require_active().order.require_request()
         self.review_at.require_recorded("A review time")
         self.order.owner.require_exists(Path(self.order.check.directory))
+        self.order.scope.require_references(Path(self.order.check.directory))
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)
         return request

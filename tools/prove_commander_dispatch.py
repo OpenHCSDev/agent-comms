@@ -31,13 +31,12 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.messages import Message
 from agent_comms.plan_phases import RecordPlanePhase
-from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import OperationDelivery, PendingProblemOrder
+from agent_comms.todos import ReportDelivery, PendingProblemOrder, TriageScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
@@ -207,7 +206,7 @@ class ObserveProofCommand(ProofCommand):
             )
         )
         order = PendingProblemOrder(
-            id=uuid4().hex,
+            id=uuid4().hex, scope=TriageScope(),
             owner=FileLine(__file__, 1),
             check=OrderCheck(str(project), check_command, CountCheckResult(1)),
             edits=(
@@ -261,8 +260,8 @@ class ObserveProofCommand(ProofCommand):
         CommsOrderDoneTool(
             problem=problem,
             order_id=received_order.id,
-            delivery=OperationDelivery(),
-            claims=(WorkingClaim(str(artifact)),),
+            delivery=ReportDelivery(report=found.body),
+            claims=(),
         ).apply(comms, ThreadCaller(commander.name))
         asyncio.run(stop_after_turn(comms, started.name))
         print("STOPPED after its turn ended; original history retained", flush=True)

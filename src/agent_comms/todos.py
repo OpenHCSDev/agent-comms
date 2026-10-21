@@ -24,7 +24,8 @@ from importlib.resources import files
 from math import ceil
 from pathlib import Path
 from statistics import median
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from types import get_original_bases
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
 
@@ -114,12 +115,33 @@ class FileDeliveryEvidence(DeliveryEvidence):
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
-    evidence: Annotated[DeliveryEvidence, WireOmitDefault()] = field(
-        default_factory=NoDeliveryEvidence
-    )
-    proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
-        default_factory=UnrecordedBuildIdentity
-    )
+
+    @property
+    def installation_commits(self) -> tuple[str, ...]:
+        return ()
+
+    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
+        return ()
+
+    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
+        """The one false-completion writer, shared by every checked delivery."""
+        now = time.time()
+        spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
+        FailedCheckStrike.make(todo, now,
+            f"reported done with {self.work} but its order check failed: {error}; "
+            f"cost {spent:.1f} minutes").record(goals, todo.id)
+
+    @abstractmethod
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> OrderDelivery: ...
+
+    def closing_artifact(self) -> str:
+        raise ValueError("A triage report is not installed application evidence.")
+
+    def require_installation(self, check: OrderCheck) -> None:
+        raise ValueError("A triage report cannot be installed.")
 
     @property
     def work(self) -> str:
@@ -131,6 +153,24 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
 
     def story_text(self) -> str:
         return self.work
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckedDelivery(OrderDelivery, declared_name=None):
+    """Implementation deliveries share source checks and installed-build evidence."""
+
+    evidence: Annotated[DeliveryEvidence, WireOmitDefault()] = field(
+        default_factory=NoDeliveryEvidence
+    )
+    proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
+        default_factory=UnrecordedBuildIdentity
+    )
+
+    def closing_artifact(self) -> str:
+        return self.evidence.artifact()
+
+    def require_installation(self, check: OrderCheck) -> None:
+        self.proof_build.require_installed(self.installation_commits, Path(check.directory))
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -144,7 +184,7 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     async def verified(
         self, todo: Todo, registry: Registration,
         verified_claims: dict[ProgressClaim, tuple[str, ...]],
-    ) -> OrderDelivery:
+    ) -> CheckedDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
         order = todo.order.checked()
         check = order.check
@@ -163,26 +203,9 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
-    @property
-    def installation_commits(self) -> tuple[str, ...]:
-        """An operation has no source commit to require in the installed build."""
-        return ()
-
-    def merged_commits(self, repo: Repo) -> tuple[str, ...]:
-        """Operations have no commit whose ancestry could prove a merge."""
-        return ()
-
-    def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
-        """A false completion records the failed order check once, for every delivery kind."""
-        now = time.time()
-        spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
-        FailedCheckStrike.make(todo, now,
-            f"reported done with {self.work} but its order check failed: {error}; "
-            f"cost {spent:.1f} minutes").record(goals, todo.id)
-
 
 @dataclass(frozen=True, kw_only=True)
-class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
+class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
     """A delivery recorded before checked and delivered commits were told apart.
 
     Its one commit is both facts; Core refuses new deliveries of this kind."""
@@ -341,7 +364,7 @@ class CheckedCommitDelivery(CommitDelivery):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OperationDelivery(OrderDelivery):
+class OperationDelivery(CheckedDelivery):
     @property
     def line(self) -> str:
         return "operation checked"
@@ -354,6 +377,27 @@ class OperationDelivery(OrderDelivery):
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReportDelivery(OrderDelivery):
+    """The triage answer returned to the commander, not a claim of implementation."""
+
+    report: str
+
+    def __post_init__(self) -> None:
+        if not self.report.strip():
+            raise ValueError("report must contain the triage findings")
+
+    @property
+    def work(self) -> str:
+        return self.report
+
+    async def verified(
+        self, todo: Todo, registry: Registration,
+        verified_claims: dict[ProgressClaim, tuple[str, ...]],
+    ) -> ReportDelivery:
+        return replace(self, at=EventTime.capture(time.time()))
 
 
 @dataclass(frozen=True)
@@ -1542,6 +1586,95 @@ class FoldedProblemOrder(ProblemOrder):
         return self.original.story()
 
 
+@dataclass(frozen=True)
+class FixShape:
+    """The parent declarations owning a fix and the related member declarations."""
+
+    parents: tuple[FileLine, ...]
+    members: tuple[FileLine, ...]
+
+    def __post_init__(self) -> None:
+        if not self.parents:
+            raise ValueError("scope.shape.parents must name at least one parent class declaration")
+
+    def require_references(self, root: Path) -> None:
+        for location in (*self.parents, *self.members):
+            location.require_class(root)
+
+
+@dataclass(frozen=True)
+class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
+    """What the commander authorizes, including the delivery type at its boundary."""
+
+    delivery_class: ClassVar[type[OrderDelivery]]
+
+    def __init_subclass__(cls, **options):
+        super().__init_subclass__(**options)
+        cls.delivery_class = next(
+            get_args(base)[0]
+            for owner in cls.__mro__
+            for base in get_original_bases(owner)
+            if get_origin(base) is OrderScope
+        )
+
+    def require_references(self, root: Path) -> None:
+        """Triage has no implementation declarations to validate."""
+
+    @abstractmethod
+    def instructions(self, problem: str) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def verified_claims(
+        self, delivery: Delivery, claims: tuple[ProgressClaim, ...],
+        comms: Comms, checkout: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]: ...
+
+    @abstractmethod
+    def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
+
+
+class TriageScope(OrderScope[ReportDelivery]):
+    def instructions(self, problem: str) -> tuple[str, ...]:
+        return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
+                "Return the report to your commander; do not open an implementation PR.")
+
+    def verified_claims(
+        self, delivery: ReportDelivery, claims: tuple[ProgressClaim, ...],
+        comms: Comms, checkout: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]:
+        if claims:
+            raise ValueError("scope triage returns a report, not merged, installed or working claims")
+        return {}
+
+    def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
+        order = todo.order.checked().copy_as(ReportedProblemOrder, delivery=delivery)
+        return DoneTodoState.closed(todo, order)
+
+
+@dataclass(frozen=True)
+class FixScope(OrderScope[CheckedDelivery]):
+    shape: FixShape
+
+    def require_references(self, root: Path) -> None:
+        self.shape.require_references(root)
+
+    def instructions(self, problem: str) -> tuple[str, ...]:
+        return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
+                "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
+                f"Open the PR with agent-comms-commander order pr {problem} "
+                "--title '<title>' --body-file <file>; Core records its link on this order.")
+
+    def verified_claims(
+        self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...],
+        comms: Comms, checkout: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]:
+        ProgressClaim.require_claimed(claims, "delivered")
+        return ProgressClaim.require_all(delivery.required_claims(claims), comms, checkout)
+
+    def completed(self, todo: Todo, delivery: CheckedDelivery) -> Todo:
+        return replace(todo, order=todo.order.delivered(delivery), revision=todo.revision + 1)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
@@ -1568,6 +1701,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     id: str
     pull_requests: Annotated[tuple[PullRequestLink, ...], WireOmitDefault()] = ()
     owner: FileLine
+    scope: OrderScope
     check: OrderCheck
     edits: tuple[str, ...]
     banned: tuple[str, ...]
@@ -1674,10 +1808,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                              "Use order pr --existing; do not create another PR.") from error
         return url
 
-    def pull_request_instruction(self, problem: str) -> str:
-        return (f"Open the PR with agent-comms-commander order pr {problem} "
-                "--title '<title>' --body-file <file>; Core records its link on this order.")
-
     def work_instructions(self) -> tuple[str, ...]:
         return (f"Owner: {self.owner.to_wire()}",
                 f"Check: {self.check.directory} :: {self.check.command}",
@@ -1687,10 +1817,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
-            f"Order: {self.id}", self.pull_request_instruction(todo.id),
+            f"Order: {self.id}", *self.scope.instructions(todo.id),
             *self.work_instructions()))
 
-    def delivered(self, delivery):
+    def delivered(self, delivery: CheckedDelivery):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
@@ -1815,15 +1945,13 @@ class DeliveredProblemOrder(CheckedProblemOrder):
                 or super().observed_merges(repo, source))
 
     def closing_artifact(self) -> str:
-        return self.delivery.evidence.artifact()
+        return self.delivery.closing_artifact()
 
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def require_installation(self) -> None:
-        self.delivery.proof_build.require_installed(
-            self.delivery.installation_commits, Path(self.check.directory)
-        )
+        self.delivery.require_installation(self.check)
 
     def installed(self, works: str, artifact: str) -> InstalledProblemOrder:
         self.run.require_closing(works)
@@ -1834,6 +1962,23 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReportedProblemOrder(DeliveredProblemOrder):
+    """A triage answer is complete when returned, with no fictitious installation."""
+
+    delivery: ReportDelivery
+    line: ClassVar[str] = "Report returned"
+
+    def require_close(self) -> None:
+        pass
+
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+        return ()
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2659,7 +2804,9 @@ class ServeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class DeliverTodo(TodoOperation):
+class DeliverTodo(TodoOperation, declared_name=None):
+    """Internal delivery command; the order-done tool owns its wire boundary and claims."""
+
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
@@ -2685,8 +2832,8 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        return replace(current, order=current.order.delivered(self.delivery),
-                       revision=current.revision + 1)
+        self.delivery.at.require_delivery()
+        return current.order.checked().scope.completed(current, self.delivery)
 
 
 @dataclass(frozen=True)
