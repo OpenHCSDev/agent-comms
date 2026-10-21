@@ -14,8 +14,7 @@ from dataclasses import dataclass, replace
 from itertools import dropwhile, takewhile
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeToolHook, ClaudeToolHookProgram
-from agent_comms_hooks.reread import ToolInput
+from agent_comms_hooks import ClaudeToolHook, ClaudeToolHookProgram, HookRecord
 from agent_comms_hooks.shell import ShellCommand, shell_commands
 
 Words = tuple[str, ...]
@@ -80,7 +79,7 @@ class Pgrep:
 
 
 @dataclass(frozen=True)
-class Bash(ToolInput):
+class Bash(HookRecord):
     """The Bash tool's input: one shell command line."""
 
     command: str
