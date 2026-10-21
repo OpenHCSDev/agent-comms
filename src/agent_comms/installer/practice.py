@@ -49,7 +49,7 @@ def prepare_runtime_home(home: Path) -> None:
     uv.unlink(missing_ok=True)
     installed_uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
     executable = shutil.which("uv", path=str(installed_uv.parent)) or shutil.which("uv")
-    if executable is None:
+    if not executable:
         raise UpgradeRefused("Preparing a private runtime home requires uv")
     uv.symlink_to(executable)
     cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
