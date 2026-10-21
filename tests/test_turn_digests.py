@@ -76,6 +76,10 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     second = endpoint(comms, 'cli', FieldCodec.decode(TurnBound, first['older']))
     third = endpoint(comms, 'cli', FieldCodec.decode(TurnBound, second['older']))
     assert [page['turns'][0]['turn_id'] for page in (first, second, third)] == ['two', 'one', 'old']
+    before = endpoint(comms, 'cli', TurnsBefore(at=3.0, count=2))
+    assert [turn['turn_id'] for turn in before['turns']] == ['one', 'old']
+    since = endpoint(comms, 'cli', TurnsSince(3.0))
+    assert [turn['turn_id'] for turn in since['turns']] == ['two', 'one']
 
 
 def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
