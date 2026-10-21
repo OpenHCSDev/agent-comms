@@ -11,6 +11,7 @@ subsequent sign-ins need no repeated step. Grant storage retains only secret dig
 Usage:
   agent-comms-connector serve --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector round_trip ROOT [--port PORT]
+  agent-comms-connector install-service --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector revoke
 """
 
@@ -39,7 +40,7 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
-from .cli_commands import DeclaredOptions
+from .cli_bridges.shared import DeclaredOptions
 from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire
@@ -794,13 +795,15 @@ class ConnectorVerb(
 ):
     """One connector command: its options are its fields, and its parser comes from them."""
 
+    program: ClassVar[str] = "agent-comms-connector"
+
     @abstractmethod
     def apply(self, ctx: ConnectorStore) -> int | str: ...
 
     @classmethod
     def parse(cls, argv: Sequence[str] | None) -> ConnectorVerb:
         parser = argparse.ArgumentParser(
-            prog="agent-comms-connector",
+            prog=cls.program,
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -812,8 +815,9 @@ class ConnectorVerb(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ServeVerb(ConnectorVerb):
-    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
+class ConnectorOptions(DeclaredOptions):
+    """The endpoint's CLI fields and their declared argument spelling."""
+
     root: Annotated[
         Path,
         PathText,
@@ -831,6 +835,16 @@ class ServeVerb(ConnectorVerb):
             flags=("--issuer",), options={"help": "Public origin the OAuth metadata names"}
         ),
     ] = f"http://{LOOPBACK}:{PORT}"
+
+    def command_arguments(self) -> tuple[str, ...]:
+        return tuple(word for plan in FieldCodec.field_plans(type(self))
+                     for word in (Argument.declared(plan.annotation).flags[0],
+                                  str(plan.current(self))))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(ConnectorOptions, ConnectorVerb):
+    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)

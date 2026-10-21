@@ -7,6 +7,7 @@ service has no instance of it and contributes nothing: there is no list of servi
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from ..declared_family import DeclaredFamily
+from ..launch_runtime import LaunchRuntime
 
 
 class ServiceNotServingError(RuntimeError):
@@ -60,12 +62,11 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         failure = f"{self} did not serve again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
-                if instance != self:
-                    runtime = instance.runtime()
-                    if runtime == installed:
-                        instance.serves()
-                        return f"{instance} restarted onto {installed}"
-                    failure = f"{instance} runs {runtime}, not the installed {installed}"
+                runtime = instance.runtime()
+                if runtime == installed:
+                    instance.serves()
+                    return f"{instance} restarted onto {installed}"
+                failure = f"{instance} runs {runtime}, not the installed {installed}"
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -74,13 +75,13 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 class SystemdUserService(HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
-    Its process reports READY=1 once it serves (``ready``), and ``restart`` declares that
-    to systemd first, so ``systemctl restart`` returns only when the service is serving.
+    Its owned unit declares readiness. The process reports READY=1 once it serves,
+    so a restart returns only when it is serving. Systemd, not this configuration,
+    owns the current PID.
     """
 
-    pid: int
+    program: ClassVar[str]
     unit: ClassVar[str]
-    readiness: ClassVar[str] = "[Service]\nType=notify\nNotifyAccess=main\n"
     notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
 
     @classmethod
@@ -97,16 +98,40 @@ class SystemdUserService(HostService, declared_name=None):
             notify.sendall(b"READY=1")
 
     @property
-    def readiness_file(self) -> Path:
-        return Path.home() / ".config/systemd/user" / f"{self.unit}.d" / "agent-comms-readiness.conf"
+    def unit_file(self) -> Path:
+        return Path.home() / ".config/systemd/user" / self.unit
+
+    def unit_text(self, arguments: tuple[str, ...]) -> str:
+        executable = LaunchRuntime.current_pointer() / "bin" / self.program
+        # systemd uses C-quoted words, then expands specifiers and environment
+        # references. Protect literal percent/dollar signs before quoting.
+        command = " ".join(json.dumps(word.replace("%", "%%").replace("$", "$$"),
+                                      ensure_ascii=False)
+                           for word in (str(executable), *arguments))
+        return (
+            f"[Unit]\nDescription={self.unit}\nAfter=network-online.target\n\n"
+            "[Service]\nType=notify\nNotifyAccess=main\n"
+            f"ExecStart={command}\nRestart=on-failure\n\n"
+            "[Install]\nWantedBy=default.target\n"
+        )
+
+    def install(self, arguments: tuple[str, ...]) -> None:
+        self.unit_file.parent.mkdir(parents=True, exist_ok=True)
+        self.unit_file.write_text(self.unit_text(arguments), encoding="utf-8")
+        subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
+        subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
+
+    @property
+    def pid(self) -> int:
+        return int(subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", "MainPID", "--value", self.unit),
+            text=True,
+        ))
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:
-        pid = int(subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
-            text=True,
-        ))
-        return () if pid == 0 else (cls(pid),)
+        instance = cls()
+        return () if instance.pid == 0 else (instance,)
 
     def runtime(self) -> Path:
         executable = Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]
@@ -115,7 +140,4 @@ class SystemdUserService(HostService, declared_name=None):
         return Path(os.fsdecode(executable))
 
     def restart(self) -> None:
-        self.readiness_file.parent.mkdir(parents=True, exist_ok=True)
-        self.readiness_file.write_text(self.readiness, encoding="utf-8")
-        subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)

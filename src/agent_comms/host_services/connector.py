@@ -12,7 +12,10 @@ from typing import Annotated
 from . import ServiceNotServingError, SystemdUserService
 from ..active_route import ActiveRoute
 from ..comms import client_wire
-from ..connector import CALLER, LOOPBACK, PORT, ConnectorVerb, ToolCall, ToolsCallMessage, ToolsCallReply
+from ..connector import (
+    CALLER, LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb,
+    ToolCall, ToolsCallMessage, ToolsCallReply,
+)
 from ..connector_store import ConnectorStore
 from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..errors import RelationViolationError, ToolRefusedError
@@ -68,7 +71,27 @@ class ConnectorService:
 class SystemdConnectorService(ConnectorService, SystemdUserService):
     """Systemd adds process lifetime to the same configured endpoint and serving proof."""
 
-    unit = "agent-comms-connector.service"
+    program = ConnectorVerb.program
+    unit = f"{program}.service"
+
+    def exec_arguments(self, issuer: str) -> tuple[str, ...]:
+        endpoint = ServeVerb(root=self.launch.path, port=self.port, issuer=issuer)
+        return (ServeVerb.declared_name, *endpoint.command_arguments())
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstallServiceVerb(ConnectorOptions, ConnectorVerb, declared_name="install-service"):
+    """Write and enable the connector's declared unit without starting it."""
+
+    help = "Install the complete user service unit through the current runtime"
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        service = SystemdConnectorService(
+            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
+        )
+        service.install(service.exec_arguments(self.issuer))
+        print(service.unit_file)
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)
