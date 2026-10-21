@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.build_identity import DeliveredCommitNotInstalledError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 
@@ -27,7 +28,7 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 
     @property
     def merged_line(self) -> str:
-        return "Merged and installed"
+        return "Merged, waiting on install"
 
     @abstractmethod
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
@@ -46,7 +47,10 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
     def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
-        return merged.closed_in(todo)
+        try:
+            return merged.closed_in(todo)
+        except DeliveredCommitNotInstalledError:
+            return merged.waiting_in(todo)
 
     def require_merge_close(self) -> None:
         pass
