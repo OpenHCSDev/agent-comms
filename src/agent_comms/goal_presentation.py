@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .field_codec import NullMember, RecordMember, SubclassUnion, WireValue
+from .declared_family import DeclaredFamily
+from .field_codec import NullMember, WireValue
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
@@ -39,7 +39,7 @@ class GoalWaitTarget(WireValue):
         return self.incarnation.to_wire()
 
     @classmethod
-    def from_wire(cls, data: Mapping) -> GoalWaitTarget:
+    def from_wire(cls, data: dict[str, object]) -> GoalWaitTarget:
         return cls(RecordedThreadIncarnation.from_wire(data))
 
     @classmethod
@@ -71,7 +71,7 @@ class GoalExecutionSource:
         return self.goal.state.execution(self)
 
 
-class GoalExecution(SubclassUnion, affix="Execution"):
+class GoalExecution(DeclaredFamily, affix="Execution"):
     """The complete execution family consumed by commands, views and the commander."""
 
     def details_heading(self, heading: str) -> str:
@@ -97,7 +97,7 @@ class GoalExecution(SubclassUnion, affix="Execution"):
 
 
 @dataclass(frozen=True)
-class IdleGoalExecution(NullMember, GoalExecution):
+class IdleGoalExecution(GoalExecution):
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         pass
 
@@ -106,7 +106,7 @@ class IdleGoalExecution(NullMember, GoalExecution):
 
 
 @dataclass(frozen=True)
-class BoundGoalExecution(RecordMember, GoalExecution, declared_name=None):
+class BoundGoalExecution(GoalExecution, declared_name=None):
     goal_id: str
     glyph: ClassVar[str] = "✓"
     @property
@@ -147,6 +147,15 @@ class ActiveExecution(ControlledExecution, declared_name=None):
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import PausedGoalAction
         return PausedGoalAction
+
+
+class RetryableExecution(ControlledExecution, declared_name=None):
+    toggle_label = "Retry"
+
+    @property
+    def toggle(self) -> type[GoalAction]:
+        from .goal_actions import RetryGoalAction
+        return RetryGoalAction
 
 
 @dataclass(frozen=True)
@@ -200,15 +209,9 @@ class StandbyExecution(ActiveExecution, WaitingExecution):
         return goal.id == self.goal_id and bool(goal.state.items_with(Active, goal))
 
 
-class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None):
+class BlockedExecution(WaitingExecution, declared_name=None):
     glyph = "!"
     label = "Blocked"
-    toggle_label = "Retry"
-
-    @property
-    def toggle(self) -> type[GoalAction]:
-        from .goal_actions import RetryGoalAction
-        return RetryGoalAction
 
     @property
     @abstractmethod
@@ -229,7 +232,7 @@ class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None
 
 
 @dataclass(frozen=True)
-class DecidedBlockExecution(BlockedExecution):
+class DecidedBlockExecution(BlockedExecution, RetryableExecution):
     block_reason: str
 
     @property
@@ -238,7 +241,7 @@ class DecidedBlockExecution(BlockedExecution):
 
 
 @dataclass(frozen=True)
-class UnrecordedBlockExecution(BlockedExecution):
+class UnrecordedBlockExecution(BlockedExecution, RetryableExecution):
     @property
     def reason(self) -> str:
         return "reason unavailable"
@@ -255,7 +258,7 @@ class AttemptUnresolvedExecution(BlockedExecution):
                 f"goal {self.goal_id} -> {self.reason}")
 
 @dataclass(frozen=True)
-class AttemptFailedExecution(BlockedExecution):
+class AttemptFailedExecution(BlockedExecution, RetryableExecution):
     evidence: FailedTurnEvidence
 
     @property
@@ -285,7 +288,7 @@ class GoalSnapshot(GoalPublicationSnapshot):
     execution: GoalExecution
 
     def changed_by(self, current: GoalSnapshot) -> bool:
-        return asdict(self) != asdict(current)
+        return self != current
 
     def standby(self) -> bool:
         return self.execution.standby()

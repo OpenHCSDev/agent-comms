@@ -12,6 +12,7 @@ from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
+import goal_owner_fixture
 from xdist import is_xdist_worker
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
@@ -26,6 +27,8 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+
+pytest_plugins = (goal_owner_fixture.__name__,)
 
 
 class TranscriptRecords:
