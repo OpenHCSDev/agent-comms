@@ -279,6 +279,55 @@ def root(tmp_path: Path) -> Iterator[Path]:
         yield root
 
 
+@pytest.fixture
+def configured_repository(durable_home):
+    """Own the temporary commander's config and its real plan-bearing checkout."""
+    from agent_comms.commander.config import CommanderConfig
+    from agent_comms.repo import Repo
+
+    repository = Repo.of(Path(__file__).resolve().parents[1])
+
+    def configure(bus: Comms, *check_repositories: Repo) -> CommanderConfig:
+        config = CommanderConfig.on_machine(
+            'lead', (*check_repositories, repository), bus.root, durable_home,
+        )
+        config.write(durable_home)
+        return config
+
+    return configure
+
+
+@pytest.fixture
+def installed_runtime(durable_home, tmp_path):
+    """A temporary installation record, executable and pointer, never the real home."""
+    from agent_comms.installer.runtime_resolution import (
+        CommitRecord, GitRecord, PackageRecord, RuntimePackage, RuntimeResolution,
+    )
+    from agent_comms.launch_runtime import LaunchRuntime
+    from agent_comms.repo import Repo
+
+    repository = Repo.of(Path(__file__).resolve().parents[1])
+    packages = {}
+    for member in RuntimePackage.members_with(RuntimePackage):
+        source = SourceRepository.create(tmp_path / 'runtime-sources', member.repository)
+        packages[member.distribution] = PackageRecord(
+            version='1', source=GitRecord(
+                url=str(source.remote), vcs_info=CommitRecord(commit_id=source.main_commit),
+            ),
+        )
+    runtime = tmp_path / 'installed-runtime'
+    (runtime / 'bin').mkdir(parents=True)
+    (runtime / 'bin/python').symlink_to(sys.executable)
+    RuntimeResolution(
+        core_commit=repository.git(repository.checkout, 'rev-parse', 'HEAD').strip(),
+        packages=packages,
+    ).save(runtime)
+    current = durable_home / '.local/share/agent-comms/current'
+    current.parent.mkdir(parents=True)
+    current.symlink_to(runtime, target_is_directory=True)
+    return LaunchRuntime.installed()
+
+
 def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
     """Declare exactly the test's named channels and members, never inferred ones."""
     for channel in channels:
