@@ -243,9 +243,9 @@ class ExternalEventRow(TypedTable):
         from .transcript_events import ToolStartTranscript
 
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
-        judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
+        judged = todo.judged_calls
         placeholders = lambda values: ",".join("?" for _ in values)
-        since = todo.order.at.recorded_at("An order")
+        since = todo.unjudged_since
         where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
                  'AND (e.timestamp>=? OR e.timestamp IS NULL)')
         parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
