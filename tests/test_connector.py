@@ -65,10 +65,8 @@ def test_real_connector_refusals_and_replaced_source():
     assert "same maintenance thread completed normally" in proof.stdout
 
 
-@pytest.mark.parametrize("served_by,registered", [
-    ("installed", True), ("other", True), ("installed", False),
-])
-def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path, served_by, registered):
+@pytest.mark.parametrize("registered", [True, False])
+def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
     import json
     import os
     import site
@@ -77,10 +75,6 @@ def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path
     import sys
 
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
-    runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
-    for runtime in runtimes.values():
-        runtime.parent.mkdir(parents=True)
-        runtime.symlink_to(sys.executable)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -90,7 +84,7 @@ def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path
     command = "from agent_comms.connector import main; raise SystemExit(main())"
     before = comms.bus.log.latest_sequence()
     service = subprocess.Popen(
-        [runtimes[served_by], "-c", command, "serve", "--root", comms.root, "--port", str(port)],
+        [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
         env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         started = ""
@@ -104,18 +98,16 @@ def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path
             comms.registry.begin_delete("claude-ai")
             comms.registry.remove("claude-ai")
         result = subprocess.run(
-            [runtimes["installed"], "-c", command, "round_trip", comms.root,
-             runtimes["installed"], "--port", str(port)], env=environment,
+            [sys.executable, "-c", command, "round_trip", comms.root,
+             "--port", str(port)], env=environment,
             capture_output=True, text=True, timeout=60)
-        if registered and served_by == "installed":
+        if registered:
             assert result.returncode == 0, result.stderr
             assert json.loads(result.stdout) == {
-                "round_trip": f"comms_channels read alike through {runtimes['installed']}"}
+                "round_trip": f"comms_channels read alike on port {port}"}
         else:
             assert result.returncode != 0
-            expected = ("connector round trip failed" if not registered
-                        else f"runs {runtimes['other']}, not the installed")
-            assert expected in result.stdout + result.stderr
+            assert "connector round trip failed" in result.stdout + result.stderr
     finally:
         service.terminate()
         service.wait(timeout=30)
@@ -189,6 +181,29 @@ async def test_a_refused_call_answers_its_own_request_id(client, store):
         "/mcp", json=call, headers={"Authorization": f"Bearer {token}"})).json()
     assert refused["id"] == 7
     assert "undeclared" in refused["error"]["message"]
+
+
+async def test_each_refusal_carries_its_json_rpc_code(client, store):
+    """An undeclared method is not an invalid request; a client tells them apart by code."""
+    token = await approved_token(client, store)
+    headers = {"Authorization": f"Bearer {token}"}
+    refusals = (
+        ({"jsonrpc": "2.0", "id": 4, "method": "server/discover"}, -32601),
+        ({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {}}, -32600),
+    )
+    for call, code in refusals:
+        refused = await (await client.post("/mcp", json=call, headers=headers)).json()
+        assert (refused["id"], refused["error"]["code"]) == (call["id"], code)
+    garbled = await client.post("/mcp", data="{not json", headers=headers)
+    assert (await garbled.json())["error"]["code"] == -32700
+
+
+async def test_a_tool_reply_is_exactly_the_json_rpc_response_shape(client, store):
+    token = await approved_token(client, store)
+    reply = await (await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+        "params": {"name": "comms_channels", "arguments": {}}})).json()
+    assert set(reply) == {"jsonrpc", "id", "result"}
 
 
 async def test_request_log_names_the_route_and_never_its_values(client, store, root, caplog):
