@@ -51,10 +51,10 @@ def retained_source(root, count, *, access=ArchivedAccess()):
 def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_path):
     empty = Comms(tmp_path / 'empty').bus
     assert empty.log.read_page(MessagePageRequest(AllChannelDisplayScope('#any'))).messages == ()
-    assert not (empty.log.path.parent / 'bus_page_index.sqlite3').exists()
+    assert not (empty.log.path.parent / BusPageIndex.filename).exists()
 
     bus = retained_source(tmp_path / 'owned', 9, access=WritableAccess())
-    path = bus.log.path.with_name('bus_page_index.sqlite3')
+    path = bus.log.path.with_name(BusPageIndex.filename)
     with closing(sqlite3.connect(path)) as db, db:
         db.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     with pytest.raises(StaleBusPageIndexError):
@@ -75,7 +75,7 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
-    path = archive.log.path.with_name('bus_page_index.sqlite3')
+    path = archive.log.path.with_name(BusPageIndex.filename)
     with closing(sqlite3.connect(path)) as db, db:
         db.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     original = (path.read_bytes(), archive.log.path.read_bytes())
@@ -93,7 +93,7 @@ def test_history_reader_repairs_both_derived_indexes(
     original = bus.log.path.read_bytes()
     for name, damage in (
         ('private_bus_checkpoint.sqlite3', checkpoint_damage),
-        ('bus_page_index.sqlite3', page_damage),
+        (BusPageIndex.filename, page_damage),
     ):
         path = bus.log.path.with_name(name)
         if damage == 'missing':

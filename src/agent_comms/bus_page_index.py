@@ -111,7 +111,7 @@ class LatestConversation(TypedRow):
 
 
 class BusPageIndex(DerivedStore):
-    filename = "bus_page_index.sqlite3"
+    stem = "bus_page_index"
     rows = tuple(TypedTable.members_with(PageIndexTable))
     schema_error = StaleBusPageIndexError
     batch_bytes = 4 * 1024 * 1024

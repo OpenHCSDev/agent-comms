@@ -270,7 +270,7 @@ class WakeCandidateIndex(DerivedStore):
     batch_bytes = 256 * 1024
     batch_seconds = 0.2
 
-    filename = "wake_candidates.sqlite3"
+    stem = "wake_candidates"
     rows = tuple(TypedTable.members_with(CandidateTable))
     schema_error = ProjectionRebuildRequiredError
 
