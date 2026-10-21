@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 

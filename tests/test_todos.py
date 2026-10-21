@@ -239,11 +239,22 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_repository):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     source = graph.repository
+    # This Core fixture owns one Git history. Borrow plan input, not a second
+    # unrelated checkout claiming the same repository and installed commit.
+    current = Path(__file__).resolve().parents[1]
+    shutil.copytree(current / 'plans', source.checkout / 'plans')
+    module = source.checkout / 'src' / 'agent_comms'
+    module.parent.mkdir(parents=True)
+    shutil.copytree(current / 'src' / 'agent_comms', module,
+                    ignore=shutil.ignore_patterns('__pycache__', 'skills', '_native'))
+    source.git(source.checkout, 'add', 'plans', 'src')
+    source.git(source.checkout, 'commit', '-qm', 'Declare current commander plans')
+    source.git(source.checkout, 'push', '-q', 'origin', 'HEAD:main')
     merged = graph.installed
     for number in (1, 2):
         source.git(source.checkout, 'push', 'origin', f'{merged}:refs/pull/{number}/head')
@@ -272,9 +283,8 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     Registration(tmp_path / "registry.json").register(lead)
     bus = Comms(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
-    configured = configured_repository(bus, source)
     return Commander(commander=lead.name, root=tmp_path, state=tmp_path / "state",
-                     repos=configured.repos, worktrees=source.checkout.parent,
+                     repos=(source,), worktrees=source.checkout.parent,
                      scratch=tmp_path, disk=tmp_path)
 
 

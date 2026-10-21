@@ -16,7 +16,7 @@ from typing import Annotated
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore, RequestHistory
+from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goals import Goal, UnorderedGoalOrder
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
@@ -79,15 +79,8 @@ def memory_copy(lifetime: ExitStack, path: Path) -> sqlite3.Connection:
 
 
 def historical(db: sqlite3.Connection, column: str, *, where: str = "1") -> list[HistoricalRequestGoal]:
-    # column is resolved from GoalHistoryEntry, never supplied by a caller.
-    selected = GoalHistoryEntry._column_list((column,))
-    return HistoricalRequestGoal.read(db.execute(
-        f'SELECT sequence, observed_at, owner_created_at, '
-        f"json_set({selected}, '$.order', json(?)) AS goal, "
-        f"coalesce(json_extract({selected}, '$.order.directives'), '[]') AS directives "
-        f'FROM "{GoalHistoryEntry.declared_name}" '
-        f"WHERE json_extract({selected}, '$.order.kind')='request' AND ({where}) "
-        'ORDER BY sequence', (UNORDERED,)))
+    return HistoricalRequestGoal.read(GoalHistoryEntry.orders_with_replacement(
+        db, column, UNORDERED, order_kind="request", where=where))
 
 
 class OwnerRequests(Carry):
@@ -193,9 +186,9 @@ class OwnerRequests(Carry):
                 if not old_links and "request" not in todo_columns:
                     raise RelationViolationError("Todo has neither the retired goal nor a request link.")
                 if not OwnerRequest.stored_columns(todos):
-                    OwnerRequest.create(todos)
+                    OwnerRequest.reconcile_schema(todos)
             elif requests:
-                TodoStore.create_schema(todos)
+                TodoStore.reconcile_schema(todos)
                 todo_changed = True
             for request in requests.values():
                 request.upsert(todos)
@@ -210,20 +203,13 @@ class OwnerRequests(Carry):
                 if list(todos.execute("PRAGMA foreign_key_check")):
                     raise RelationViolationError("Carried Todo request links violate their foreign keys.")
             history_columns = GoalHistoryEntry.stored_columns(history)
-            missing = set(RequestHistory.__dataclass_fields__) - set(history_columns)
-            history_changed = bool(history_columns and (missing or prefixes))
+            history_changed = bool(history_columns and (prefixes or GoalHistoryEntry.schema_differs(history)))
             if history_changed:
-                GoalHistoryEntry.rebuild(history, {name: "NULL" for name in missing})
+                GoalHistoryEntry.reconcile_schema(history)
                 for column, snapshots in sources.items():
                     for source in snapshots:
-                        goal_column = GoalHistoryEntry._column_list((column,))
-                        prefix_column = GoalHistoryEntry._column_list(("request_" + column,))
-                        history.execute(
-                            f'UPDATE "{GoalHistoryEntry.declared_name}" '
-                            f"SET {goal_column}=json_set({goal_column}, '$.order', json(?)), {prefix_column}=? "
-                            "WHERE sequence=?",
-                            (UNORDERED, json.dumps(FieldCodec.encode(prefixes[column, source.sequence])), source.sequence),
-                        )
+                        GoalHistoryEntry.move_request_order(
+                            history, column, source.sequence, prefixes[column, source.sequence], UNORDERED)
             if history_columns:
                 GoalHistoryEntry.require_schema(history)
                 for entry in GoalHistoryEntry.stream(history):

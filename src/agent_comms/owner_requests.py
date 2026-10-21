@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from agent_comms.wire_log import CheckedRead
     from agent_comms.messages import Message
     from agent_comms.registration import Registration
-    from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import OwnerRequest, Todo, TodoStore
 
 

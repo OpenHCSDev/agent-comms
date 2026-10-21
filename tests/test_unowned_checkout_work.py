@@ -103,7 +103,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
 
 
 @pytest.fixture
-def checkout_bus(tmp_path: Path) -> Comms:
+def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Comms:
     home = tmp_path / 'declared-project'
     home.mkdir()
     git(home, 'init', '-q', '--initial-branch=main')
@@ -167,7 +167,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
             'Ready for work', position='answer', timestamp=time.time()),))
     CommanderHeartbeat.register(c.registry)
     CommanderConfig(
-        commander='lead', root=root, state=tmp_path / 'state', repos=(),
+        commander='lead', root=root, state=tmp_path / 'state', repos=configured_repository(c).repos,
         worktrees=rule.checkout_base, scratch=rule.scratch_base, disk=tmp_path,
     ).write(tmp_path / 'config-home')
     return c

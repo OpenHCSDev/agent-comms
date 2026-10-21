@@ -106,9 +106,11 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
+    DurableTables,
     ExpressionIndex,
     Generated,
     Index,
+    SharedFileTables,
     TextStorage,
     TypedTable,
 )
@@ -2999,7 +3001,7 @@ class ChangeTodoState(TodoOperation):
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerRequest(TypedTable):
+class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
     indexes = (Index(("commander_created_at", "state", "created_at")),)

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.locked_store import DurableFile
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
@@ -70,7 +71,8 @@ class MemoryUse:
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation):
+class StorageRule(RoomAllocation, DurableFile):
+    filename: ClassVar[str] = 'storage.json'
     floor_gib: float = 5.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
@@ -93,7 +95,7 @@ class StorageRule(RoomAllocation):
 
     @classmethod
     def load(cls, root: Path):
-        path = root / 'storage.json'
+        path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
     def initial_roots(self, name):

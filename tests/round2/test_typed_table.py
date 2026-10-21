@@ -128,6 +128,31 @@ def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraint
         assert db.execute('PRAGMA foreign_key_check').fetchall() == []
         with pytest.raises(sqlite3.IntegrityError):
             replace(rows[0], key='invalid', parent='missing').insert(db)
+        db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" DROP COLUMN weight')
+        TableChildRow.rebuild(db)
+        assert TableChildRow.select(db, order_by=('key',)) == [replace(row, weight=None) for row in rows]
+
+
+def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
+    from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryError
+    from agent_comms.goals import NoGoal
+
+    entry = GoalHistoryEntry(1, 'baseline', 1.0, NoGoal(), NoGoal(),
+                             owner_created_at=1.0, state='committed')
+    with sqlite3.connect(':memory:') as db:
+        GoalHistoryEntry.create(db)
+        entry.insert(db)
+        for column in ('request_before', 'request_after'):
+            db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" DROP COLUMN {column}')
+        db.commit()
+        GoalHistoryEntry.reconcile_schema(db)
+        assert GoalHistoryEntry.require(db, sequence=1) == entry
+        db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" ADD COLUMN unclaimed TEXT')
+        db.execute(f'UPDATE "{GoalHistoryEntry.declared_name}" SET unclaimed=?', ('preserve this',))
+        db.commit()
+        with pytest.raises(GoalHistoryError):
+            GoalHistoryEntry.reconcile_schema(db)
+        assert db.execute(f'SELECT unclaimed FROM "{GoalHistoryEntry.declared_name}"').fetchall() == [('preserve this',)]
 
 
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():

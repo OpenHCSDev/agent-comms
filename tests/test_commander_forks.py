@@ -60,7 +60,7 @@ def fork_bus(tmp_path):
         comms.registry.require('lead').incarnation, 'Repair the commander workflow')
     core = Repo.of(Path(__file__).parents[1])
     config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
-    config.root_path(comms.root).write_text(config.model_dump_json())
+    config.path_in(comms.root).write_text(config.model_dump_json())
     now = time.time()
     order = PendingProblemOrder(
         id='first-order', owner=source.scope().shape.parents[0], scope=source.scope(),
@@ -129,7 +129,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     fork = comms.registry.require('fork-one')
     saved = store.get('P40')
     assert saved.creator_identity == parent.incarnation
-    assert saved.goal.owner == parent.name
+    assert store.owner_request(saved.request.require()).commander == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
     assert saved.messages[-1].actor == fork.incarnation
     assert fork.parent.named(parent.name)
