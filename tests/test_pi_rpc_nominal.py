@@ -49,7 +49,6 @@ class AuditPauseEnd(pi.PiEvent, ends=AuditPausePhase):
 class AuditFailure(failures.TurnFailure):
     code = "audit_failure"
     precedence = 110
-    input_uncertain = True
 
 
 def test_new_excursion_declares_both_transitions_without_dispatch_edits():
