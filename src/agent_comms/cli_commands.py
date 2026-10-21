@@ -633,7 +633,7 @@ class CliExecution(Command):
         expected, actual = (
             (iscoroutinefunction(method),
              tuple((parameter.kind, parameter.default)
-                   for parameter in signature(method).parameters.values()))
+                   for parameter in signature(method, follow_wrapped=False).parameters.values()))
             for method in (CliExecution.execute, cls.execute)
         )
         if actual != expected:

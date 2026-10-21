@@ -71,7 +71,7 @@ def execute(arguments: Sequence[str], output: TextIO) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
+        arguments = argv if isinstance(argv, Sequence) else sys.argv[1:]
         return execute(arguments, sys.stdout)
     except KeyboardInterrupt:
         return 130
