@@ -13,6 +13,32 @@ from .errors import ToolRefusedError
 from .repository_name import RepositoryName
 
 
+@dataclass(frozen=True)
+class PullRequestHead:
+    """A pull request head as its reviewer read it; a verdict goes only on the current head."""
+
+    repo: RepositoryName
+    pr: int
+    head: str
+
+    def current(self) -> str:
+        """The PR's full head commit, refused unless the reviewed head is still it."""
+        read = subprocess.run(
+            ("gh", "api", f"repos/{self.repo.to_wire()}/pulls/{self.pr}", "--jq", ".head.sha"),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if read.returncode:
+            raise ToolRefusedError(read.stderr.strip() or f"#{self.pr} could not be read.")
+        current = read.stdout.strip()
+        if not current.startswith(self.head):
+            raise ToolRefusedError(
+                f"#{self.pr} moved to {current[:9]} since {self.head} was reviewed; review again."
+            )
+        return current
+
+
 class HeadReview(DeclaredFamily, affix="HeadReview"):
     context: ClassVar[str] = "agent-comms/review"
     # GitHub's commit-status states, an external contract.

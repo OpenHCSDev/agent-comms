@@ -62,7 +62,7 @@ from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .service_passes import ServicePassStore
-from .head_review import HeadReview
+from .head_review import HeadReview, PullRequestHead
 from .repository_name import RepositoryName
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_result import ToolResult
@@ -131,12 +131,12 @@ class ConnectorHeadReviewTool(ConnectorTool, declared_name="comms_review_head"):
     )
     repo: Annotated[RepositoryName, *tool_field("Repository, owner/name")]
     pr: Annotated[int, *tool_field("Pull request number")]
-    head: Annotated[str, *tool_field("The exact head commit reviewed")]
+    head: Annotated[str, GitCommitText, *tool_field("The exact head commit reviewed")]
     review: Annotated[HeadReview, *tool_field("accepted, or sent_back with the reason")]
 
     def apply(self, comms: Comms, caller: DirectorCaller) -> HeadReviewed:
-        GitCommitText.decode(self.head)
-        self.review.post(self.repo, self.head, caller.name, f"#{self.pr}")
+        head = PullRequestHead(self.repo, self.pr, self.head).current()
+        self.review.post(self.repo, head, caller.name, f"#{self.pr}")
         return HeadReviewed(self.repo, self.pr, self.head, self.review)
 
 
