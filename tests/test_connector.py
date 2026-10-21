@@ -339,6 +339,36 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
+class FailingWatch(WatchPass):
+    def pass_body(self, comms: Comms) -> None:
+        raise RuntimeError("A real watch failure")
+
+
+async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
+    logged = asyncio.Event()
+
+    class ObservedError(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.levelno >= logging.ERROR:
+                logged.set()
+
+    handler = ObservedError()
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    pending = asyncio.create_task(Coordination.watch_worker(FailingWatch(), connector.opened_wire))
+    try:
+        await asyncio.wait_for(logged.wait(), 3)
+    finally:
+        pending.cancel()
+        with suppress(asyncio.CancelledError):
+            await pending
+        logger.removeHandler(handler)
+    error, = (record for record in caplog.records if record.levelno >= logging.ERROR)
+    assert error.exc_info[0] is RuntimeError
+    assert str(error.exc_info[1]) == "A real watch failure"
+    assert error.exc_info[2] is not None
+
+
 async def test_registration_accepts_only_the_claude_callback(client):
     refused = await client.post(
         "/register", json={"redirect_uris": ["https://elsewhere.example/cb"]}
