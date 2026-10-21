@@ -1311,7 +1311,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+        return ctx.views.retained_context(self.thread).export(
             self.output, overwrite=self.overwrite)
 
 

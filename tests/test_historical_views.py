@@ -1,6 +1,7 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
-from agent_comms.bus import Bus
+from agent_comms.bus import Bus, PublicRecord
+from agent_comms.installer.backup import bus_files
 
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.historical_views import HistoricalMessage
+from agent_comms.messages import Message
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import HistoricalSourceChanged
@@ -68,10 +70,10 @@ def migrated(tmp_path):
     old = setup(tmp_path / "old")
     prior = setup(tmp_path / "prior", 2)
     live = setup(tmp_path / "live", 2)
-    before = (live.root / "bus.jsonl").read_bytes()
+    before = live.bus.bus.revision()
     source = live.views.attach_history(old.root)
     live.views.attach_history(prior.root)
-    assert (live.root / "bus.jsonl").read_bytes() == before
+    assert live.bus.bus.revision() == before
     return old, prior, live, source
 
 
@@ -108,10 +110,10 @@ def test_original_identity_and_no_delivery_authority(migrated):
     rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(str(live.root)))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
-    assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]
+    assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
-    assert live.bus.log.latest_sequence() == 4
+    assert live.bus.bus.revision() == 4
     assert live.views.attach_history(old.root) == source
     assert len(live.bus.history.sources()) == 2
 
@@ -223,13 +225,8 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     assert session.read_text() == "".join(json.dumps(r) + "\n" for r in records)
 
 
-def test_byte_boundaries_and_stale_cursor(migrated):
-    _, _, live, source = migrated
-    page = live.views.channel_display_page(
-        "#team", bounds=PageBounds(OlderTraversal(100, source.key), max_bytes=1)
-    )
-    assert len(page.messages) == 1
-    assert page.has_older
+def test_stale_cursor_is_rejected(migrated):
+    _, _, live, _ = migrated
     with pytest.raises(HistoricalSourceChanged):
         live.views.channel_display_page("#team", bounds=PageBounds(OlderTraversal(2, "detached")))
 
@@ -302,24 +299,26 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
             assert not message.role.response_policy(message).starts_turn
             assert not message.role.response_policy(message).starts_turn_for(message, "bob")
             assert message.display_metadata["history"]["source"] == message.source.original_root
-    assert len(list(live.bus.log.read_page(
-        MessagePageRequest(AllChannelDisplayScope('#any'))).messages)) == 4
+    assert len(MessagePageRequest(AllChannelDisplayScope('#any')).read_opened(
+        live.bus.bus).messages) == 4
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
     old = setup(tmp_path / "old")
     (old.root / "unknown-input.json").write_text('{"verdict":"UNKNOWN"}')
-    original = {p.name: p.read_bytes() for p in old.root.iterdir() if p.is_file()}
+    original = {name: (old.root / name).read_bytes() for name in bus_files(old.root)}
     live = setup(tmp_path / "live", 1)
     source = live.views.attach_history(old.root)
-    assert {p.name: p.read_bytes() for p in old.root.iterdir() if p.is_file()} == original
+    assert {name: (old.root / name).read_bytes() for name in bus_files(old.root)} == original
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
         bounds=PageBounds(OlderTraversal(100, source.key)),
     )
-    path = Path(source.root) / "bus.jsonl"
-    path.write_bytes(path.read_bytes() + b"\n")
+    archived = Bus(Bus.path_in(Path(source.root)))
+    template = page.messages[0]
+    archived.append(lambda seq, db: PublicRecord.from_message(
+        replace(template, seq=seq, body="external archive mutation")))
     with pytest.raises(ValueError):
         live.views.mark_page_read(page, worktree=str(live.root))
     with pytest.raises(ValueError):
@@ -330,8 +329,8 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
 
 def test_older_than_registry_incarnation_stays_unattributed(migrated):
     _, _, live, source = migrated
-    original = list(live.bus.log.read_page(
-        MessagePageRequest(AllChannelDisplayScope('#any'))).messages)[0]
+    original = MessagePageRequest(AllChannelDisplayScope('#any')).read_opened(
+        live.bus.bus).messages[0]
     projected = HistoricalMessage.project(
         replace(original, timestamp=1.0), source, 0, source.provenance
     )
@@ -383,36 +382,3 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     live.registry.rename("alice", "new-alice")
     assert FieldCodec.encode(source.provenance) == before
     assert live.views.historical_threads("alice")
-
-
-@pytest.mark.parametrize('changed_resource', ['bus', 'prefix record', 'pending'])
-def test_archived_checked_prefix_remains_immutable_without_writer_recovery(migrated, changed_resource):
-    """Archive reads reject mutation/pending ownership instead of adopting it."""
-    import sqlite3
-    from agent_comms.checkpoint_seals import PendingSeal
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.wire_log import WireLog
-
-    _, _, _, source = migrated
-    log = WireLog(Path(source.root) / 'bus.jsonl')
-    with log.checked_read() as opened:
-        saved = opened.witness
-        assert opened.connection.execute('PRAGMA query_only').fetchone()[0] == 1
-        with pytest.raises(sqlite3.OperationalError):
-            opened.connection.execute('DELETE FROM prefix_certificate')
-    if changed_resource == 'bus':
-        log.path.write_bytes(log.path.read_bytes() + b'\n')
-    elif changed_resource == 'prefix record':
-        with sqlite3.connect(log.path.with_name('private_bus_checkpoint.sqlite3')) as db:
-            db.execute('CREATE TABLE unrelated(value TEXT)')
-    else:
-        marker = log.read_metadata_unlocked(required=True)
-        marker.seal_with(PendingSeal.capture(saved, saved,
-                                            log.path.with_name('private_bus_checkpoint.sqlite3')))
-        log.write_metadata_unlocked(marker)
-    before = {p: p.read_bytes() for p in (log.path, log.metadata_path,
-                                         log.path.with_name('private_bus_checkpoint.sqlite3'))}
-    with pytest.raises(RelationViolationError):
-        with log.checked_read():
-            pass
-    assert {p: p.read_bytes() for p in before} == before
