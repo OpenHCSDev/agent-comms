@@ -2,12 +2,10 @@
 
 import hashlib
 import os
-import sqlite3
-from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -15,21 +13,13 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
-from .locked_store import DurableFile
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
-from .store_files import _store_lock
-from .typed_table import Column, DurableTables, StoreWriter, TypedTable
-
-
-class RouteAnnotationTable(DurableTables):
-    """Annotations written by an owner, not a transcript-derived cache."""
-
-    schema_error = ValueError
+from .typed_table import Column, DurableStore, TypedTable
 
 
 @dataclass(frozen=True)
-class TranscriptRoute(RouteAnnotationTable, TypedTable):
+class TranscriptRoute(TypedTable):
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
@@ -41,7 +31,7 @@ class TranscriptRoute(RouteAnnotationTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class InputDisplay(RouteAnnotationTable, TypedTable):
+class InputDisplay(TypedTable):
     """Owner-authored presentation for one native input; None text means internal."""
 
     native_id: Annotated[str, Column(primary_key=True)]
@@ -61,8 +51,9 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
 class _SessionRoutes:
     """One indexed read snapshot; decode only entries used by the page."""
 
-    def __init__(self, path: Path | None, session_file: str):
-        self._connection = CoordinationStore.read_snapshot(path) if path else None
+    def __init__(self, store: "TranscriptRoutes", session_file: str):
+        self._lifetime = ExitStack()
+        self._connection = self._lifetime.enter_context(store.snapshot())
         self._session_file = session_file
         self._cache: dict[str, TurnRouting | None] = {}
         self._input_cache: dict[str, InputDisplay | None] = {}
@@ -85,9 +76,8 @@ class _SessionRoutes:
         return self._input_cache[native_id]
 
     def close(self) -> None:
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        self._connection = None
+        self._lifetime.close()
 
     def __enter__(self) -> "_SessionRoutes":
         return self
@@ -96,70 +86,34 @@ class _SessionRoutes:
         self.close()
 
 
-class TranscriptRoutes(StoreWriter, DurableFile):
-    filename = "transcript_routes.sqlite3"
+@dataclass(frozen=True, slots=True)
+class TranscriptRoutes(DurableStore):
+    """Annotations written by an owner, not a transcript-derived cache. Reads never write:
+    the store's snapshot refuses a schema that differs, and only its writer installs one."""
 
-    def __init__(self, root: Path):
-        super().__init__(self.path_in(root))
-        self._initialized = False
+    root: Path
+    filename: ClassVar[str] = "transcript_routes.sqlite3"
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (TranscriptRoute, InputDisplay)
 
     def revision(self) -> FileObservation:
-        return FileRevision.capture(self.source_paths(self.path.parent)[0])
+        return FileRevision.capture(self.source_paths(self.root)[0])
 
-    def snapshot(self, destination: Path) -> None:
+    def retain(self, destination: Path) -> None:
         """Retain a consistent current annotation store for attached history."""
         if not self.path.exists():
             return
         target = self.path_in(destination)
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
-        with (
-            closing(CoordinationStore.read_snapshot(self.path)) as source,
-            closing(CoordinationStore.writer(target)) as output,
-        ):
-            RouteAnnotationTable.require_schema(source)
+        with self.snapshot() as source, closing(CoordinationStore.writer(target)) as output:
             source.backup(output)
-            RouteAnnotationTable.require_schema(output)
-
-    def _ensure_database(self, *, create: bool = False) -> bool:
-        if self._initialized and self.path.is_file():
-            return True
-        if not create and not self.path.exists():
-            return False
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with (
-            _store_lock(self.path),
-            closing(CoordinationStore.writer(self.path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with self.transaction(connection):
-                if not RouteAnnotationTable.stored_schema(connection):
-                    RouteAnnotationTable.create_schema(connection)
-                RouteAnnotationTable.reconcile_schema(connection)
-        self._initialized = True
-        return True
-
-    @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
-        self._ensure_database(create=True)
-        with (
-            _store_lock(self.path),
-            closing(CoordinationStore.writer(self.path)) as connection,
-        ):
-            connection.execute("PRAGMA synchronous=FULL")
-            with self.transaction(connection):
-                yield connection
+            self.require_schema(output)
 
     def for_session(self, session_file: str) -> _SessionRoutes:
-        path = self.path if self._ensure_database() else None
-        return _SessionRoutes(path, session_file)
+        return _SessionRoutes(self, session_file)
 
     def input_bindings(self) -> dict[str, InputDisplay]:
-        """Read typed owner bindings without creating or upgrading a database."""
-        if not self.path.exists():
-            return {}
-        with closing(CoordinationStore.read_snapshot(self.path)) as connection:
-            RouteAnnotationTable.require_schema(connection)
+        with self.snapshot() as connection:
             return {
                 row.native_id: row
                 for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")
