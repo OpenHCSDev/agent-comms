@@ -3137,9 +3137,11 @@ class Todo(TypedTable):
         if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
-    def require_replacement(self) -> None:
+    @property
+    def latest_message(self) -> OrderMessage:
         if not self.messages:
             raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
+        return self.messages[-1]
 
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
@@ -3293,7 +3295,6 @@ class TodoStore(DurableStore):
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise ValueError('Only a live newer order to the same unit replaces an old one.')
-        newer.require_replacement()
         with self.writing() as db:
             current = self._current(db, old.id)
             current.require_result(old)
@@ -3301,7 +3302,7 @@ class TodoStore(DurableStore):
             result = replace(
                 current,
                 order=current.order.copy_as(
-                    DroppedProblemOrder, replacing_message=newer.messages[-1].message_id
+                    DroppedProblemOrder, replacing_message=newer.latest_message.message_id
                 ),
                 assignment=None,
                 released=(

@@ -126,6 +126,7 @@ class DesignReconciledPhase(CommanderNativePhase):
 
 class RecordPlanePhase(CommanderNativePhase):
     after = (RetainedStorePhase,)
+    evidence = CommitMerged("465a27988")
 
 
 class ReviewQueuePhase(CommanderNativePhase):
@@ -330,6 +331,7 @@ class DeadModulesPhase(RemainingSlopPhase):
 class TransitionScaffoldingPhase(RemainingSlopPhase):
     """0.4."""
 
+    after = (CutoverPhase,)
     evidence = PathsAbsent(
         (
             "src/agent_comms/commander_parity",

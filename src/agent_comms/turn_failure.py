@@ -20,7 +20,6 @@ class TurnFailure(DeclaredFamily):
     text: str
     code: ClassVar[str | None] = None
     precedence: ClassVar[int] = 0
-    input_uncertain: ClassVar[bool] = False
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
 
@@ -63,19 +62,16 @@ class InputIdUnavailable(TurnFailure):
 class IdentityUncertain(TurnFailure):
     code = FailureReason.IDENTITY_UNCERTAIN
     precedence = 80
-    input_uncertain = True
 
 
 class AuthorityChanged(TurnFailure):
     code = FailureReason.AUTHORITY_CHANGED
     precedence = 70
-    input_uncertain = True
 
 
 class FollowupUnrecognized(TurnFailure):
     code = FailureReason.FOLLOWUP_UNRECOGNIZED
     precedence = 60
-    input_uncertain = True
 
 
 class TerminalFailure(TurnFailure):
@@ -95,7 +91,6 @@ class TerminalFailure(TurnFailure):
 class InputMissing(TerminalFailure):
     code = FailureReason.INPUT_MISSING
     precedence = 50
-    input_uncertain = True
     default_text = "Pi RPC run ended without this prompt's user message start."
 
     @classmethod
@@ -108,7 +103,6 @@ class InputMissing(TerminalFailure):
 class FinalStopMissing(TerminalFailure):
     code = FailureReason.FINAL_STOP_MISSING
     precedence = 40
-    input_uncertain = True
     default_text = "Pi RPC run ended without an authoritative final assistant stop."
 
     @classmethod
@@ -170,7 +164,6 @@ class ProviderTransportFailed(RetryableProviderFailure, ModelRequestFailed):
 class QueuedInputMissing(TerminalFailure):
     code = FailureReason.QUEUED_INPUT_MISSING
     precedence = 30
-    input_uncertain = True
     default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
 
     @classmethod
@@ -179,7 +172,7 @@ class QueuedInputMissing(TerminalFailure):
 
 
 class ModelStalled(TurnFailure):
-    input_uncertain = True
+    pass
 
 
 class PromptSendFailed(TurnFailure):
