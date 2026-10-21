@@ -8,22 +8,35 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, replace
+from itertools import batched
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PrivateRecord, PublicRecord
+from agent_comms.bus_tables import BusRow
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.envelope_claim_transitions import ClaimTransition
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
-    FieldCodec, MalformedRecord, RecordMember, SubclassUnion, WireName, WireOrder,
+    FieldCodec,
+    MalformedRecord,
+    RecordMember,
+    SubclassUnion,
+    WireName,
+    WireOrder,
 )
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.typed_table import Column, DerivedTables, SharedFileTables, TypedTable
 from agent_comms.wake_policy import (
-    MessageAudience, NoWakeDecision, NoWakeReason, RecipientDecision, WakeDecision, WakePolicy,
+    MessageAudience,
+    NoWakeDecision,
+    NoWakeReason,
+    RecipientDecision,
+    WakeDecision,
+    WakePolicy,
 )
 
 
@@ -107,6 +120,8 @@ class ResponseHistorySideband(HistorySideband):
 class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
     """The unchanged public fields come from Message, not another field roster."""
 
+    ascii: ClassVar[bool] = True
+
     @abstractmethod
     def record(self) -> BusRecord: ...
 
@@ -117,7 +132,7 @@ class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
         # The old writer put the two envelope identities before the declared fields.
         return json.dumps(
             {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)},
-            allow_nan=False,
+            allow_nan=False, ensure_ascii=self.ascii,
         ).encode("utf-8") + b"\n"
 
     @classmethod
@@ -135,6 +150,9 @@ class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
 
 @dataclass(frozen=True)
 class PublicHistoryRow(RecordMember, HistoryRow):
+    # The old initializer wrote selected history with ensure_ascii=False.
+    ascii: ClassVar[bool] = False
+
     def record(self) -> PublicRecord:
         return PublicRecord.from_message(self)
 
@@ -161,8 +179,45 @@ class PrivateHistoryRow(RecordMember, HistoryRow):
         return replace(super().restored(record), private=self.private.restored(record))
 
 
+@dataclass(frozen=True)
+class HistoryOffset(TypedTable, SharedFileTables, DerivedTables):
+    """One-use address translation, dropped after B1 consumes it."""
+
+    offset: Annotated[int, Column(primary_key=True)]
+    seq: Annotated[int, Column(unique=True)]
+
+
+@dataclass(frozen=True)
+class HistoryLine:
+    number: int
+    offset: int
+    raw: bytes
+    row: HistoryRow
+
+    @classmethod
+    def rows(cls, source: Path):
+        previous = 0
+        number = 0
+        with source.open("rb") as stream:
+            while raw := stream.readline():
+                number += 1
+                row = HistoryRow.read(raw, number)
+                if row.seq <= 0 or (number > 1 and row.seq != previous + 1):
+                    raise RelationViolationError(
+                        f"Bus history line {number}: sequence gap/repeat at {row.seq}"
+                    )
+                yield cls(number, stream.tell() - len(raw), raw, row)
+                previous = row.seq
+
+    def verify(self, record: BusRecord) -> None:
+        if self.row.restored(record).line() != self.raw:
+            raise RelationViolationError(
+                f"Bus history seq {self.row.seq}: record round trip differs"
+            )
+
+
 class BusHistory(Carry):
-    """Validate the retired stream before the new bus can be published."""
+    """Validate and stream the retired history through the bus's one insert path."""
 
     filename = "bus.jsonl"
 
@@ -182,14 +237,59 @@ class BusHistory(Carry):
                 "before creating bus.sqlite3; Carry.carry currently receives only root/apply"
             )
         count = 0
-        previous = 0
-        with source.open("rb") as stream:
-            for count, raw in enumerate(stream, 1):
-                row = HistoryRow.read(raw, count)
-                if row.seq <= 0 or (count > 1 and row.seq != previous + 1):
-                    raise RelationViolationError(f"Bus history line {count}: sequence gap/repeat at {row.seq}")
-                record = row.record()
-                if row.restored(record).line() != raw:
-                    raise RelationViolationError(f"Bus history seq {row.seq}: record round trip differs")
-                previous = row.seq
+        for line in HistoryLine.rows(source):
+            line.verify(line.row.record())
+            count = line.number
         return Carried(0, detail=dict(rows=count, continuous=count, round_tripped=count))
+
+    @classmethod
+    def transfer(cls, source: Path, bus: Bus) -> Carried:
+        """The staged source stays immutable; interrupted batches resume by original seq.
+
+        Installer entry remains refused until HDD staging and activation are connected.
+        B2 owns the scoped bus schema; C's Claimed carry is not connected yet.
+        """
+        if source.resolve() != source or source.stat().st_mode & 0o222:
+            raise RelationViolationError(
+                "Bus history source must be a physical read-only staged file"
+            )
+        with bus.writing() as db:
+            if not HistoryOffset.present(db):
+                HistoryOffset.create(db)
+            HistoryOffset.require_schema(db)
+            committed = BusRow.last_seq(db)
+        count = 0
+        changed = 0
+        # File reads, field decoding and record construction happen outside the write lock.
+        for batch in batched(HistoryLine.rows(source), 1000, strict=False):
+            records = tuple(line.row.record() for line in batch)
+            for line in batch:
+                if line.row.seq <= committed:
+                    line.verify(bus.lookup(line.row.seq))
+            with bus.writing() as db:
+                for line, record in zip(batch, records, strict=True):
+                    if record.seq > committed:
+                        seq = record.append_to(db, record.seq)
+                        if seq != record.seq:
+                            raise RelationViolationError(
+                                f"Bus history seq {record.seq}: duplicate publication key "
+                                f"resolves to {seq}"
+                            )
+                        HistoryOffset(line.offset, seq).insert(db)
+                        changed += 1
+                    elif HistoryOffset.select(db, offset=line.offset) != [
+                        HistoryOffset(line.offset, record.seq)
+                    ]:
+                        raise RelationViolationError(
+                            f"Bus history seq {record.seq}: committed offset mapping differs"
+                        )
+            for line in batch:
+                line.verify(bus.lookup(line.row.seq))
+                count = line.number
+        with bus.observing() as db:
+            if BusRow.count(db) != count or HistoryOffset.count(db) != count:
+                raise RelationViolationError(
+                    f"Bus history line count {count} differs from stored rows/offsets"
+                )
+        return Carried(changed, detail=dict(rows=count, continuous=count, round_tripped=count),
+                       rewritten=(bus.path.name,))
