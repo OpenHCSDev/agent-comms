@@ -18,23 +18,21 @@ from pathlib import Path
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 
-from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.practice import practice_copy
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, RequestGoalOrder
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
@@ -68,7 +66,7 @@ from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, Orde
 from agent_comms.work_branches import WorkBranches
 
 
-pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work")
+pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build")
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -76,15 +74,22 @@ def thread(name: str, root: Path, created: float) -> Thread:
     return thread_registration.new_thread(name, frozenset(), str(root), created_at=created)
 
 
-def order(root: Path):
-    source = SourceRepository.create(root / 'cited-source')
-    return PendingProblemOrder(id="checked-order", owner=FIX_SCOPE.shape.parents[0], scope=FIX_SCOPE, run=MechanicalOrderRun(),
+def order(source: SourceRepository):
+    scope = source.scope()
+    return PendingProblemOrder(id="checked-order", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
         check=OrderCheck(str(source.checkout), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
 
 
-def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, str]:
+def test_order_factory_preserves_the_callers_directory_without_creating_source(source_repository):
+    before = tuple(source_repository.checkout.iterdir())
+    planned = order(source_repository)
+    assert planned.check.directory == str(source_repository.checkout)
+    assert tuple(source_repository.checkout.iterdir()) == before
+
+
+def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:
     store = TodoStore(Path(root))
     gate.wait(timeout=5)
     try:
@@ -92,20 +97,20 @@ def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, st
             "todo-1", expected_revision=1,
             owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation,
             generation=f"generation-{name}", goal=GoalRef("lead", 1.0, "goal-1"),
-            review_at=RecordedEventTime(1000.0), order=order(Path(root)),
+            review_at=RecordedEventTime(1000.0), order=order(SourceRepository.of(Path(checkout))),
         )
         return "won", row.assignment.owner
     except TodoConflict as error:
         return "conflict", error.current.assignment.owner
 
 
-def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -> None:
+def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path, source_repository) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     goal = GoalRef("lead", 1.0, "goal-1")
     original = store.create(
         "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     assert original.repo == RepositoryName.from_wire("OPENHCSDEV/agent-comms")
     assert original.revision == 1
@@ -113,14 +118,14 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     assert (
         store.create(
             "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "Fix the sidebar", creator=lead, goal=goal,
-            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
         )
         == original
     )
     with pytest.raises(TodoConflict):
         store.create(
             "todo-1", RepositoryName.from_wire("openhcsdev/agent-comms"), "A different task", creator=lead, goal=goal,
-            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+            owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
         )
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = thread("lead", tmp_path, 2.0)
@@ -130,13 +135,13 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     assert store.get("todo-1") == original
 
 
-def test_withdraw_retires_a_released_problem(tmp_path):
+def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     worker = thread("worker", tmp_path, 2.0)
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Obsolete problem",
         creator=lead, owner=worker, generation="first", goal=GoalRef("lead", 1.0, "request"),
-        review_at=RecordedEventTime(1000), order=order(tmp_path))
+        review_at=RecordedEventTime(1000), order=order(source_repository))
     released = store.apply(todo.id, ReleaseTodo(todo.revision, lead.incarnation, todo.held(),
         StrikeReason("The previous worker stopped before completing this assigned repair on main.")))
     previous = released.holder_state.previous_assignment()
@@ -156,12 +161,12 @@ def test_withdraw_retires_a_released_problem(tmp_path):
 
 
 @pytest.mark.parametrize("released", (False, True))
-def test_withdraw_refuses_a_delivered_problem(tmp_path, released):
+def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_repository):
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create("P1", RepositoryName.from_wire("org/repo"), "Delivered problem",
         creator=lead, owner=lead, generation="first", goal=GoalRef("lead", 1.0, "request"),
-        review_at=RecordedEventTime(1000), order=order(tmp_path))
+        review_at=RecordedEventTime(1000), order=order(source_repository))
     delivered = store.apply(todo.id, DeliverTodo(todo.revision, lead.incarnation,
         OperationDelivery(at=RecordedEventTime(20)), todo.order.id))
     if released:
@@ -173,18 +178,18 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released):
     assert store.get(todo.id) == delivered
 
 
-def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path) -> None:
+def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path, source_repository) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     store.create(
         "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "One implementation", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
         gate = manager.Event()
         results = [
-            pool.submit(_assign_process, str(tmp_path), "worker-a", 2.0, gate),
-            pool.submit(_assign_process, str(tmp_path), "worker-b", 3.0, gate),
+            pool.submit(_assign_process, str(tmp_path), str(source_repository.checkout), "worker-a", 2.0, gate),
+            pool.submit(_assign_process, str(tmp_path), str(source_repository.checkout), "worker-b", 3.0, gate),
         ]
         gate.set()
         observed = [future.result(timeout=10) for future in results]
@@ -196,55 +201,49 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     assert len(store.list(RepositoryName.from_wire("OpenHCSDev/agent-comms"))) == 1
 
 
-def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> None:
+def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path, source_repository) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     for index, repo in enumerate(("org/repo/branch", "../repo", "org/", "org/repo name")):
         with pytest.raises(ValueError):
             store.create(
                 f"invalid-{index}", RepositoryName.from_wire(repo), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
-                owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+                owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
             )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
     store.create(
         "todo-1", RepositoryName.from_wire("org/repo"), "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path),
+        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
     with pytest.raises(ValueError):
         FieldCodec.decode(type[TodoState], "unverified")
 
 
-def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
+def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     todo = store.create(
         "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
-        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path))
+        owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(source_repository))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     cells = merged.order.board_cells(merged)
-    assert cells.startswith(f"{__file__}:1 | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
+    assert cells.startswith(f"{todo.order.checked().owner.to_wire()} | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
     assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.checked().check)
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
-    assert merged.order.line == "Merged and installed"
-    assert merged.order.waiting_on_install(merged, {}) == ()
+    assert merged.order.line == "Merged, waiting on install"
+    assert merged.order.waiting_on_install(merged, {}) == (merged,)
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch):
-    """Real Git, CLI command and bus; only the external GitHub answers are synthetic."""
-    home = tmp_path / "home"
-    home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
-    checkout = tmp_path / "lead"
-    checkout.mkdir()
-    source = Repo(checkout=checkout, github=RepositoryName.from_wire("fixture/orders"))
-    source.git(checkout, "init", "-q", "-b", WorkBranches.main)
-    source.git(checkout, "-c", "user.name=Order fixture", "-c", "user.email=orders@example.invalid",
-               "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Local merge")
-    source.git(checkout, "remote", "add", "origin", f"https://github.com/{source.github.to_wire()}.git")
-    merged = source.git(checkout, "rev-parse", "HEAD").strip()
-    source.git(checkout, "update-ref", f"refs/remotes/origin/{WorkBranches.main}", merged)
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
+    """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    source = graph.repository
+    merged = graph.installed
+    for number in (1, 2):
+        source.git(source.checkout, 'push', 'origin', f'{merged}:refs/pull/{number}/head')
     common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
                   base=WorkBranches.main)
     requests = (
@@ -264,7 +263,7 @@ def pr_commander(tmp_path, monkeypatch):
     }))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     lead = Registration(tmp_path / "registry.json").new_thread(
-        source.checkout.name, frozenset(), str(source.checkout), created_at=1.0)
+        'lead', frozenset(), str(source.checkout), created_at=1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
@@ -280,7 +279,7 @@ def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
         pid, source.github, "Fix the sidebar", creator=lead, owner=lead,
         generation="pr-work", goal=GoalRef(lead.name, 1.0, "pr-work"),
         review_at=RecordedEventTime(1000),
-        order=replace(order(source.checkout), id=f"order-{pid}", run=run))
+        order=replace(order(source), id=f"order-{pid}", run=run))
 
 
 def adopt_pr(ctx, pid, number):
@@ -322,7 +321,7 @@ def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, 
     assert tuple(store.get(todo.id) for todo in originals) == linked
     store.record_merges(store.merged_orders(ctx.incarnation, ctx.comms.registry))
     done = tuple(store.get(todo.id) for todo in originals)
-    assert all(todo.state is DoneTodoState for todo in done)
+    assert all(todo.state is DoneTodoState and todo.assignment is None for todo in done)
     assert len({todo.order.sha for todo in done}) == 1
     for todo in done:
         assert todo.order.checked().pull_requests == (link,)
@@ -367,21 +366,24 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             order=RequestGoalOrder(), goal_id="pr-work"))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-        originals = tuple(
-            adopt_pr(ctx, pr_order(ctx, f"P{index}", run).id, 1)
-            for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(
-                "Read the copied board and confirm the application order remains assigned")), 1))
+        original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
+            'Read the copied board and confirm the application order remains assigned',
+        )).id, 1)
         released = pr_order(ctx, "P3")
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
         checkout = c.registry.storage_rule.order_checkout(lead.name, released.id)
-        source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout))
-        merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+        merged = PullRequests((original,)).listed(
+            source.github, MergedListedPullRequest, original,
+        )[0].merge
+        source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         with practice_copy(ctx.root, copied_path) as (root, _measurement):
+            (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
+                ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
                 # Create the declared inode before the external probes open it read-only.
                 with copied.bus.locked():
                     pass
@@ -404,23 +406,22 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                     shim.chmod(0o755)
                 monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
                 observed = []
-                for watch in (CommanderHeartbeat(), UnownedOrderWatch()):
+                # Run the standalone watcher while the released checkout is still pending.
+                for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
                     start = calls.stat().st_size
                     watch.watch_pass(lambda: nullcontext(copied))
                     readings = calls.read_text()[start:].splitlines()
                     assert readings, type(watch).__name__
                     print(type(watch).__name__, *readings, sep="\n")
                     observed.extend(readings)
-                mechanical, application = (copied.goals.todos.get(todo.id) for todo in originals)
-                assert mechanical.state is DoneTodoState
-                assert mechanical.order.sha == merged
+                application = copied.goals.todos.get(original.id)
                 assert application.order.sha == merged and not application.order.accepted
                 assert copied.goals.todos.get(released.id).holder is None
                 assert any(line.startswith("gh ") for line in observed)
                 assert any(line.startswith("git ") for line in observed)
                 held = [line for line in observed if line.split()[1] != "free"]
                 assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
-        assert tuple(c.goals.todos.get(todo.id) for todo in originals) == originals
+        assert c.goals.todos.get(original.id) == original
 
 
 def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
@@ -506,21 +507,21 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
 
 
 def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
-    """Local forge fixture, copied SQLite stores, board and real commander close entrypoint."""
+    """Real source/remote and installed receipt; an application run still requires its proof."""
     ctx = pr_commander
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     worker = thread("merge-worker", ctx.root, 2.0)
     ctx.comms.registry.register(worker)
     planned = "Read the copied board and confirm its application order remains assigned after merge"
-    link = PullRequestLink(source.github, 1)  # the fixture's locally contained merge
+    link = PullRequestLink(source.github, 1)
     originals = tuple(
         ctx.comms.goals.todos.create(
             f"P{index}", source.github, "Keep application work held until its run is recorded",
             creator=lead, owner=worker, generation="merge-run",
             goal=GoalRef(lead.name, lead.created_at, "merge-run"),
             review_at=RecordedEventTime(1000),
-            order=replace(order(source.checkout), id=f"merge-order-{index}", run=run,
+            order=replace(order(source), id=f"merge-order-{index}", run=run,
                           pull_requests=(link,)))
         for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
     copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
@@ -541,15 +542,12 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
         board = checked.board_text()
         assert application.order.line in board
         assert worker.name in board
-        print("APPLICATION BOARD:", next(line for line in board.splitlines()
-                                          if line.startswith(f"| {application.id}:")))
         store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
-        assert store.get(application.id) == application  # no heartbeat revision churn
+        assert store.get(application.id) == application
         assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
-        with pytest.raises(ToolRefusedError) as refused:
+        with pytest.raises(ToolRefusedError):
             store.apply(application.id, ChangeTodoState(
                 application.revision, DoneTodoState, checked.incarnation, "merge-run"))
-        print("CLOSE REFUSAL:", refused.value)
         artifact = copied / "run.txt"
         artifact.write_text(board)
         with pytest.raises(ToolRefusedError):

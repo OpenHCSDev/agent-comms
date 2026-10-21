@@ -92,6 +92,7 @@ from agent_comms.tools import (
     CommsFireTool,
     CommsOrderCheckTool,
     CommsOrderDoneTool,
+    CommsOrderDeliverTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -408,8 +409,8 @@ class Commander(CommanderContext):
             problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
         group = [new[0]] if new else list(document.problems)
         listed = {t.id: t for t in self.todos()}
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        problems.extend(order.phase.order_refusals(history, document.unplanned_reason))
+        reading = self.plan_reading(self.comms.goals.todos.history_for_commander(self.incarnation))
+        problems.extend(order.phase.order_refusals(reading, document.unplanned_reason))
         held = tuple(todo for todo in listed.values() if todo.holder)
         busy = tuple(todo for plan in PlanPhase.members_with(PlanPhase)
                      for todo in plan.serving(held) if todo.holder == unit and todo.id not in group)
@@ -651,8 +652,8 @@ class Commander(CommanderContext):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
         in the same revision; this posts the strikes Core recorded."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open or not todo.pending:
-            sys.exit(f'Refused: {pid} has no pending order')
+        todo.state.require_open(todo)
+        todo.order.checked().require_delivery(todo.order.id)
         unit = todo.held().owner
         repo = str(self.repo_directory(todo.order.check.directory))
         operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
@@ -752,7 +753,7 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         ThreadCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting commander's name"}
+            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
@@ -929,6 +930,29 @@ class WithdrawVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliverVerb(OrderVerb):
+    help = "record your delivery claim and answer the commander"
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
+    pull_request: Annotated[int, Argument(flags=("--pr",))]
+    head: Annotated[str, Argument(flags=("--sha",))]
+    report_file: Annotated[str, Argument(flags=("--report-file",))]
+
+    def gate(self, ctx: Commander) -> None:
+        ctx.comms.registry.require(self.who(ctx)).role.require_executable(
+            ValueError("A delivery claim requires a registered unit.")
+        )
+
+    def run(self, ctx: Commander) -> None:
+        ThreadCaller(self.who(ctx)).invoke(
+            CommsOrderDeliverTool(
+                problem=self.problem, pull_request=self.pull_request,
+                head=self.head, report=Path(self.report_file).read_text(),
+            ), ctx.comms,
+        )
+        print(f'{self.problem}: delivery claim recorded')
 
 
 @dataclass(frozen=True, kw_only=True)
