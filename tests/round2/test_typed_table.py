@@ -220,7 +220,7 @@ def test_null_member_column_stores_sql_null():
 
 def test_generated_column_is_declared_by_the_table_not_a_record_field():
     @dataclass(frozen=True)
-    class FieldGeneratedTableRow(TypedTable):
+    class FieldGeneratedTableRow(TypedTable, declared_name=None):
         label: str
         label_size: Annotated[int, Column(generated="length(label)")] = field(init=False)
 
