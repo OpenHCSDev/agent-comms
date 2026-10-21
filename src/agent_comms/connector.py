@@ -516,6 +516,15 @@ class Connector:
             comms.registry.require(CALLER.name)
             yield comms
 
+    @contextmanager
+    def service_wire(self) -> Iterator[Comms]:
+        """A service pass selects its explicit root without borrowing a request route.
+
+        Waiting with a client route borrowed would hold up its replacement. The
+        pass inherits bus admission; requests retain client_wire's fast refusal.
+        """
+        yield Comms.blocking_reads(self.root)
+
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
@@ -549,6 +558,13 @@ class Connector:
     async def log_route(self, request: web.Request, handler: Handler) -> web.StreamResponse:
         """One line per request naming its route template: paths and queries carry one-use secrets
         and OAuth values, and headers carry bearer tokens, so none of them is logged."""
+        match request.match_info.route:
+            case ResourceRoute(resource=AbstractResource(canonical=template)):
+                pass
+            case SystemRoute():
+                template = "unmatched"
+            case _:
+                raise TypeError("Unsupported aiohttp route")
         started = time.monotonic()
         status = web.HTTPInternalServerError.status_code
         try:
@@ -559,13 +575,6 @@ class Connector:
             status = refusal.status
             raise
         finally:
-            match request.match_info.route:
-                case ResourceRoute(resource=AbstractResource(canonical=template)):
-                    pass
-                case SystemRoute():
-                    template = "unmatched"
-                case _:
-                    raise TypeError("Unsupported aiohttp route")
             elapsed = time.monotonic() - started
             logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
@@ -573,9 +582,9 @@ class Connector:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
-                UnownedOrderWatch(), self.opened_wire)),
+                UnownedOrderWatch(), self.service_wire)),
             asyncio.create_task(Coordination.watch_worker(
-                CommanderHeartbeat(), self.opened_wire)),
+                CommanderHeartbeat(), self.service_wire)),
         )
         try:
             yield

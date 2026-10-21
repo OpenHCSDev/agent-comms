@@ -313,7 +313,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
 
     @contextmanager
     def opened_wire():
-        with connector.opened_wire() as wire:
+        with connector.service_wire() as wire:
             opened.set()
             yield wire
 
@@ -355,7 +355,7 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     handler = ObservedError()
     logger = logging.getLogger()
     logger.addHandler(handler)
-    pending = asyncio.create_task(Coordination.watch_worker(FailingWatch(), connector.opened_wire))
+    pending = asyncio.create_task(Coordination.watch_worker(FailingWatch(), connector.service_wire))
     try:
         await asyncio.wait_for(logged.wait(), 3)
     finally:
