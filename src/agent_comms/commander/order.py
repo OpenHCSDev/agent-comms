@@ -85,6 +85,7 @@ from ..tools import (
     TodoList,
 )
 from .config import CommanderConfig, CommanderRole
+from agent_comms.commander.standing import WheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -956,6 +957,14 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander):
             print(path)
+
+
+class IdleVerb(OrderVerb):
+    help = "print the units Core counts idle: a recent turn and no order"
+
+    def run(self, ctx: Commander) -> None:
+        for thread in WheelSpin.idle(ctx.comms, ctx.commander):
+            print(thread.name)
 
 
 class BoardVerb(OrderVerb):
