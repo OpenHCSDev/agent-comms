@@ -24,7 +24,7 @@ from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
-from .wire_log import WireLog
+from .bus import Bus
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
@@ -196,13 +196,16 @@ class RecordedGoalWait(GoalWait):
             return self.after_seq
         return super().review_after_seq(goal, owner, targets)
 
-    def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
+    def has_reply(self, bus: Bus, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):
             return False
-        return any(
-            self.matches(original, owner)
-            for original in bus.addressed_sources(owner.lookup, self.after_seq)
-        )
+        after = self.after_seq
+        while records := bus.inbox(owner.name, after, 1):
+            record, = records
+            if any(self.matches(original, owner) for original in record.deliveries()):
+                return True
+            after = record.seq
+        return False
 
 
 class InputExclusion(DeclaredFamily, affix="Exclusion"):

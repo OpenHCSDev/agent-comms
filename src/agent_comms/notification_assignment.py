@@ -263,12 +263,11 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .wire_log import WireLog
+        from .bus import Bus
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(WireLog.path_in(root)).checked_read() as source:
-            # Capture under the lock; decoding runs after it is released.
-            captured = source.replies(tuple({row.assignment.source for row in eligible}))
+        captured = Bus(Bus.path_in(root)).replies(
+            tuple({row.assignment.source for row in eligible}))
         replies: dict[MessageReference, list[CommittedDelivery]] = {}
         for reply in captured:
             for answered in reply.message.answers:

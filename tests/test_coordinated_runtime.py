@@ -29,7 +29,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
+    WakeCandidateIndex,
 )
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
@@ -79,7 +79,7 @@ def _root(
         assert accepted.value.member_count == len(initial.audience.recipients)
     # The global fixture deliberately disables background candidate workers.
     # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
+    assert WakeCandidateIndex(comms.bus.bus).rebuild()
     return root, root_id, comms, initial, people
 
 

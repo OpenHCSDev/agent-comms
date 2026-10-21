@@ -75,7 +75,7 @@ class SelectedPrompt:
             sent_outcomes=self.sent_outcomes(),
         )
         projection = OptionalAwarenessProjection.for_selected(
-            WakeCandidateIndex(participant.bus.log),
+            WakeCandidateIndex(participant.bus.bus),
             registry=participant.bus._registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
