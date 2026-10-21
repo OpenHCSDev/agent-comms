@@ -12,7 +12,7 @@ def test_capacity_reports_load_and_forks(unjudged):
     assert FieldCodec.encode(load)["total"] == load.total
     assert load.total == 24 + 2 * 14 + unjudged / 10
     assert str(load) == (
-        f"load {load.total:.0f} (24 open orders, 14 overdue, {unjudged} unjudged edits), "
+        f"load {load.total:.0f} (24 open orders, 14 review timers up, {unjudged} unjudged edits), "
         "1 live forks ['judge']"
     )
 

@@ -4,7 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
-from . import ParityRow
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander_parity import ParityRow
+from agent_comms.launch_root import LaunchRoot
 
 
 def main() -> None:
@@ -15,7 +17,9 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.verify:
-        comparisons = tuple((row, row.verify()) for row in ParityRow.rows())
+        config = CommanderConfig.read(CommanderConfig.path())
+        with LaunchRoot.from_path(config.root).selected():
+            comparisons = tuple((row, row.verify()) for row in ParityRow.rows())
         print(
             json.dumps(
                 {

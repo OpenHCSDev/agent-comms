@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from conftest import publish_initial
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -29,11 +28,9 @@ from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.fixture
-def tmp_path():
-    if os.name != "posix" or not Path("/var/tmp").is_dir() or Path("/var").is_symlink():
-        pytest.skip("sealed runtime requires a disposable /var/tmp")
-    with tempfile.TemporaryDirectory(prefix="ac-checkpoint-cursor-", dir="/var/tmp") as name:
-        yield Path(name)
+def tmp_path(private_directory):
+    """Share the physical private root's joined retirement."""
+    return private_directory
 
 
 def _root(tmp_path: Path):

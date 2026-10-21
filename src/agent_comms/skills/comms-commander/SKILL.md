@@ -39,7 +39,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none. Never soften an order because a unit did well yesterday.
 - **`order send` refuses an order with no blunt label unless `--clean`.** See `rules/blunt-reviews.md`.
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
-- **Every order goes through `order send UNIT ORDER.json [--due HH:MM]`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --where PATH:LINE [--due HH:MM]` creates a new problem from `defect`; omit `problems` for creation. Without `--due`, the deadline uses the median observed seconds per edit across distinct delivered orders, rounded up to a minute with a two-minute minimum. Every send prints the median and sample count; an explicit `--due` also prints the measured comparison. With no delivered orders, only the two-minute minimum applies. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
+- **Every order goes through `order send UNIT ORDER.json`.** The file contains `problems` (an array of existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order), and optional `slop` citations. `order problem ORDER.json --to UNIT --where PATH:LINE` creates a new problem from `defect`; omit `problems` for creation. Every order starts the commander's review timer: the median observed seconds per edit across distinct delivered orders times the order's edits, rounded up to a minute with a two-minute minimum (only the minimum with no delivered orders). Every send prints the median, sample count and review time. The unit never sees the timer; when it is up, the heartbeat says `TIMER UP: UNIT PID` once per window until delivery, and the commander reads the diff. No clock strikes a unit or takes its order. FieldCodec decodes the file once and lists all malformed or missing fields together. Wording checks read only `defect` and `why_stupid`, never paths, commands, edits or identifiers.
 
 ```json
 {
@@ -60,7 +60,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 
 The order declaration supplies its ID and first-call times when omitted. A mechanical order declares `"run": {"kind": "mechanical"}` instead of an application run. `serves`, `finding` and `deletes` use their declared Core family shapes; rendered instructions are never input.
 - **Strikes are `order strike UNIT PID FILE:LINE --why ...`; firing reassigns every board row the unit owns.** `order done UNIT` only after reading the diff that meets the order. See `rules/send-backs-and-strikes.md`.
-- **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
+- **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, review timer, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
 - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
@@ -68,7 +68,7 @@ The order declaration supplies its ID and first-call times when omitted. A mecha
 
 ## The board
 
-Core's Todo store is the only record of fixes and their history. `order board` renders its current rows without saving a file. Orders, deadlines, owners, delivery and installed evidence are changed through Core's Todo operations, never a committed board or narrative. A defect with no owner gets one the same tick.
+Core's Todo store is the only record of fixes and their history. `order board` renders its current rows without saving a file. Orders, review timers, owners, delivery and installed evidence are changed through Core's Todo operations, never a committed board or narrative. A defect with no owner gets one the same tick.
 
 Priority: the user's latest request; crashes, lost or replayed input, wrong messages; things blocking other units; latency in the real app; slop deletion with no visible bug.
 

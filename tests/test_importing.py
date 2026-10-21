@@ -68,7 +68,11 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, ti
     renamed = replace(thread, name="renamed")
     assert renamed.title == title
     assert renamed.display_title == renamed_display
-    assert "display_title" not in thread.to_wire()
+    encoded = thread.to_wire()
+    assert "display_title" not in encoded
+    assert encoded["title"] == FieldCodec.encode(title)
+    assert FieldCodec.decode(type(thread), encoded).title == title
+    assert FieldCodec.encode(NoThreadText()) is None
 
 
 def test_every_harness_has_one_offline_family_and_one_online_reader():
@@ -167,7 +171,7 @@ def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path):
         claude_result("o", "b1", "42 passed"),
         claude_reply("d", "Fixed."),
     ])
-    events = [event for update in OfflineHistory.of(ClaudeCodeHarness, source, None).read()
+    events = [event for update in OfflineHistory.of(ClaudeCodeHarness, source, AnySession()).read()
               if isinstance(update, FinishedItem) for event in update.events
               if isinstance(event, TextTranscript)]
     assert [(event.text, event.category) for event in events] == [

@@ -38,7 +38,6 @@ class StoryCase(LifecycleCase):
         sent_back = run.commander.comms.goals.todos.get(created.id)
         run.commander.send(
             run.worker,
-            run.due,
             document,
             clean=True,
             replaces=ReplacedMessage(sent_back.messages[-1].message_id),
@@ -55,7 +54,7 @@ class StoryCase(LifecycleCase):
                     request=run.commander.comms.registry.require(run.commander.commander)
                     .goal.require()
                     .id,
-                    deadline=saved.deadline,
+                    review_at=saved.review_at,
                     commander=run.commander.commander,
                     repo=saved.repo,
                     text="The second problem shares the same real sent order.",

@@ -88,9 +88,8 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
         """Readers holding the shared lock accept only a final seal; repair needs the exclusive lock."""
 
     @abstractmethod
-    def require_sealed_index(self, saved: private_bus_checkpoint.PrefixWitness,
-                             db_path: Path) -> None:
-        """Before a schema rebuild: the index file is the one this seal names, copied or not."""
+    def rebuild_source(self) -> PrefixSeal:
+        """The canonical byte cut that must be proved before rebuilding derived rows."""
 
 
 @dataclass(frozen=True)
@@ -151,12 +150,8 @@ class FinalSeal(CheckpointSeal):
     def require_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         self.check_final(saved, db_path)
 
-    def require_sealed_index(self, saved: private_bus_checkpoint.PrefixWitness,
-                             db_path: Path) -> None:
-        current = FileRevision.from_stat(db_path.stat())
-        if (self.witness != saved.seal()
-                or (current.size, current.mtime_ns) != (self.db_revision.size, self.db_revision.mtime_ns)):
-            raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
+    def rebuild_source(self) -> PrefixSeal:
+        return self.witness
 
 
 @dataclass(frozen=True)
@@ -212,7 +207,6 @@ class PendingSeal(CheckpointSeal):
     def require_final(self, saved: private_bus_checkpoint.PrefixWitness, db_path: Path) -> None:
         raise CheckpointNeedsRepairError("Private bus checkpoint has an unfinished write.")
 
-    def require_sealed_index(self, saved: private_bus_checkpoint.PrefixWitness,
-                             db_path: Path) -> None:
-        # The index file changes after this seal is captured, so nothing here names it.
-        raise RelationViolationError("Private bus checkpoint with an unfinished write changed its schema.")
+    def rebuild_source(self) -> PrefixSeal:
+        # An interrupted append may complete only after its entire intended cut is proved.
+        return self.expected

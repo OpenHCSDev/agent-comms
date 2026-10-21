@@ -66,12 +66,11 @@ class FinishedHandoffCase:
         return run.invoke(
             "import sys; from agent_comms.change_report import FileLine; "
             "from agent_comms.commander.order import Commander, OrderFile, ReassignReason; "
-            "Commander.model_validate_json(sys.argv[1]).send(sys.argv[2], sys.argv[3], "
-            "OrderFile.read(sys.argv[4]), reassign=ReassignReason(sys.argv[5]), "
-            "traced=FileLine.from_wire(sys.argv[6]))",
+            "Commander.model_validate_json(sys.argv[1]).send(sys.argv[2], "
+            "OrderFile.read(sys.argv[3]), reassign=ReassignReason(sys.argv[4]), "
+            "traced=FileLine.from_wire(sys.argv[5]))",
             run.commander.model_dump_json(),
             receiver,
-            run.due,
             json.dumps(FieldCodec.encode(document)),
             "Compare the actual refusal to hand completed checked work to another real unit.",
             f"{Path(__file__).resolve()}:1",
@@ -88,7 +87,7 @@ class FinishedHandoffCase:
                 expected_revision=todo.revision,
                 assigner=context.incarnation,
                 order=document.order,
-                deadline=RecordedEventTime(time.time()).at_clock(run.due),
+                review_at=RecordedEventTime(time.time() + 3600),
                 commander=context.commander,
                 request=document.order.request(
                     context.comms.registry.require(context.commander), (pid,)

@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sqlite3
+import stat
 import time
 from contextlib import closing
 from pathlib import Path
@@ -21,6 +22,7 @@ from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError
 from agent_comms.messages import Message, InfoKind
+from agent_comms.installer.backup import StoreBackup
 from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
@@ -233,8 +235,6 @@ def test_claim_and_keyed_response_append_share_checked_prefix(tmp_path: Path) ->
     [
         "shrink",
         "partial",
-        "missing",
-        "schema",
         "ahead",
         "root",
         "tail",
@@ -256,8 +256,6 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
             stream.write(b'{"seq":')
             stream.flush()
             os.fsync(stream.fileno())
-    elif fault == "missing":
-        db_path.unlink()
     elif fault == "corrupt":
         db_path.write_bytes(b"broken sqlite database")
     elif fault == "replace_db":
@@ -267,9 +265,7 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
         os.replace(replacement, db_path)
     else:
         with sqlite3.connect(db_path) as db:
-            if fault == "schema":
-                db.execute("DROP TABLE addressed")
-            elif fault == "ahead":
+            if fault == "ahead":
                 db.execute("UPDATE prefix_certificate SET offset=offset+10")
             elif fault == "root":
                 db.execute("UPDATE prefix_certificate SET root_id=?", ("0" * 32,))
@@ -277,7 +273,7 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
                 db.execute("UPDATE prefix_certificate SET tail=?", ("0" * 64,))
     with pytest.raises(RelationViolationError):
         _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
-    if fault not in {"schema", "ahead", "root", "tail", "corrupt", "missing"}:
+    if fault not in {"ahead", "root", "tail", "corrupt"}:
         assert db_path.read_bytes() == original
 
 
@@ -325,7 +321,10 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
         _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
-def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("changed_bus", [False, True])
+def test_pending_checkpoint_rebuild_requires_its_entire_intended_prefix(
+    tmp_path: Path, monkeypatch, changed_bus: bool,
+) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
 
     comms, _ = _root(tmp_path)
@@ -339,8 +338,88 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
             publish_initial(comms, "sender", "Alice", "pending")
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DROP TABLE addressed")
+    lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
+    if changed_bus:
+        original = comms.bus.log.path.read_bytes()
+        comms.bus.log.path.write_bytes(original.replace(b"pending", b"changed"))
+        with pytest.raises(RelationViolationError):
+            _page(comms, lookup)
+    else:
+        assert [row.message.body for row in _page(comms, lookup)[1]] == ["pending"]
+
+
+@pytest.mark.parametrize("damage", ["missing", "schema"])
+@pytest.mark.parametrize("async_reader", [False, True])
+def test_reader_rebuilds_derived_checkpoint_from_canonical_seal(
+    tmp_path: Path, damage: str, async_reader: bool,
+) -> None:
+    comms, _ = _root(tmp_path)
+    first = publish_initial(comms, "sender", "Alice", "canonical original")
+    log = comms.bus.log
+    path = comms.root / "private_bus_checkpoint.sqlite3"
+    original = log.path.read_bytes()
+    if damage == "missing":
+        path.unlink()
+    else:
+        with sqlite3.connect(path) as db:
+            db.execute("DROP TABLE prefix_certificate")
+            db.execute("DELETE FROM addressed")
+    request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
+    if async_reader:
+        witness, rows, _ = asyncio.run(log.read_checked_async(
+            lambda source: source.addressed_page(log, request)
+        ))
+    else:
+        with log.checked_read() as source:
+            witness, rows, _ = source.addressed_page(log, request)
+    assert witness.through_seq == first.seq
+    assert [(row.message.seq, row.message.body) for row in rows] == [(first.seq, "canonical original")]
+    assert log.path.read_bytes() == original
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    second = publish_initial(comms, "sender", "Alice", "after rebuild")
+    assert second.seq == first.seq + 1
+
+
+@pytest.mark.parametrize("copied", [False, True])
+def test_interrupted_rebuild_keeps_a_durable_resumable_intent(
+    tmp_path: Path, monkeypatch, copied: bool,
+) -> None:
+    import agent_comms.private_bus_checkpoint as checkpoint
+
+    comms, _ = _root(tmp_path)
+    first = publish_initial(comms, "sender", "Alice", "durable original")
+    if copied:
+        StoreBackup.copy_tree(comms.root, tmp_path / "copied")
+        comms = Comms(tmp_path / "copied")
+    (comms.root / "private_bus_checkpoint.sqlite3").unlink()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            checkpoint.PrefixWitness, "index_tail",
+            lambda *_: (_ for _ in ()).throw(OSError("after empty index commit")),
+        )
+        with pytest.raises(RelationViolationError):
+            asyncio.run(comms.bus.log.read_checked_async(lambda source: source.witness))
+    assert isinstance(comms.bus.log.private_marker_unlocked().seal, checkpoint.PendingSeal)
+    assert [row.message.seq for row in _page(
+        comms, RecordedThreadIncarnation("fixture", 17002.0).lookup,
+    )[1]] == [first.seq]
+
+
+@pytest.mark.parametrize("damage", ["symlink", "mode"])
+def test_reader_does_not_rebuild_untrusted_checkpoint_path(tmp_path: Path, damage: str) -> None:
+    comms, _ = _root(tmp_path)
+    publish_initial(comms, "sender", "Alice", "original")
+    path = comms.root / "private_bus_checkpoint.sqlite3"
+    if damage == "symlink":
+        retained = path.with_name("untrusted-target.sqlite3")
+        path.rename(retained)
+        path.symlink_to(retained)
+    else:
+        path.chmod(0o644)
+    before = path.read_bytes()
     with pytest.raises(RelationViolationError):
-        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
+        asyncio.run(comms.bus.log.read_checked_async(lambda source: source.witness))
+    assert path.read_bytes() == before
 
 
 def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path) -> None:

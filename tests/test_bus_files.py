@@ -38,7 +38,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path) -> None:
         "declared-files", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
         "Keep declared bus files", creator=owner, owner=owner,
         generation="declared-files", goal=GoalRef(owner.name, owner.created_at, "goal-1"),
-        deadline=RecordedEventTime(1000.0), order=order(comms.root),
+        review_at=RecordedEventTime(1000.0), order=order(comms.root),
     )
     assert todo.id == "declared-files"
     drain_candidate_catchup(comms.root)

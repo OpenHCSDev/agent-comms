@@ -898,6 +898,19 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
+    def stored_columns(cls, db: sqlite3.Connection) -> tuple[str, ...]:
+        """The columns the stored table has now, which a carry compares with the declaration."""
+        return tuple(name for (name,) in db.execute(
+            "SELECT name FROM pragma_table_info(?)", (cls.declared_name,)))
+
+    @classmethod
+    def rename_stored_column(cls, db: sqlite3.Connection, stored: str, field_name: str) -> None:
+        """A carry renames a stored column to the declared field's column."""
+        (declared,) = cls._fields_named((field_name,))
+        db.execute(f"ALTER TABLE {_identifier(cls.declared_name)} RENAME COLUMN "
+                   f"{_identifier(stored)} TO {_identifier(declared.wire_name)}")
+
+    @classmethod
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:

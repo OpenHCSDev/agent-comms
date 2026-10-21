@@ -6,17 +6,18 @@ import contextlib
 import io
 import json
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..child_process import ChildOutcome, ChildResult, ExitedOutcome
-from ..commander.order import OrderFile
-from ..field_codec import FieldCodec
-from ..progress_claims import MergedClaim
-from ..todos import CommitDelivery, FileDeliveryEvidence, Todo
-from ..tools import CommsOrderDoneTool
-from . import ParityComparison
-from .lifecycle import LifecycleRun
+from agent_comms.child_process import ChildOutcome, ChildResult, ExitedOutcome
+from agent_comms.commander.order import OrderFile
+from agent_comms.commander_parity import ParityComparison
+from agent_comms.commander_parity.lifecycle import LifecycleRun
+from agent_comms.field_codec import FieldCodec
+from agent_comms.progress_claims import MergedClaim
+from agent_comms.todos import CommitDelivery, FileDeliveryEvidence, Todo
+from agent_comms.tools import CommsOrderDoneTool
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,7 @@ class DeliveredCommitCase:
             for todo in run.commander.comms.goals.todos.for_commander(run.commander.incarnation)
         }
         run.commander.problem(
-            str(run.document), run.worker, run.due, f"{Path(__file__).resolve()}:1"
+            str(run.document), run.worker, f"{Path(__file__).resolve()}:1"
         )
         (created,) = (
             todo
@@ -157,55 +158,75 @@ class DeliveredCommitCase:
         run.decisions.write_text("[]")
         return created
 
+    @staticmethod
+    def current(
+        run: LifecycleRun, repository: DeliveryRepository, order: Todo, commit: str
+    ) -> ChildResult:
+        return run.invoke(
+            "from agent_comms.commander.order import Commander; import sys; "
+            "Commander.model_validate_json(sys.argv[1]).done("
+            "sys.argv[2],sys.argv[3],seen=sys.argv[4])",
+            run.commander.model_dump_json(),
+            order.id,
+            commit,
+            str(run.artifact),
+        )
+
+    @staticmethod
+    def native(
+        run: LifecycleRun, repository: DeliveryRepository, order: Todo, commit: str
+    ) -> ChildResult:
+        tool = CommsOrderDoneTool(
+            problem=order.id,
+            order_id=order.order.checked().id,
+            delivery=CommitDelivery(
+                commit=repository.git("rev-parse", "HEAD"),
+                delivered_commit=commit,
+                evidence=FileDeliveryEvidence(str(run.artifact)),
+            ),
+            claims=(MergedClaim(commit),),
+        )
+        return run.invoke(
+            "from pathlib import Path; import sys; "
+            "from agent_comms.comms import Comms; "
+            "from agent_comms.field_codec import FieldCodec; "
+            "from agent_comms.tool_caller import ThreadCaller; "
+            "from agent_comms.tools import CommsOrderDoneTool; "
+            "ThreadCaller(sys.argv[2]).invoke(FieldCodec.decode(CommsOrderDoneTool, "
+            "FieldCodec.parse(sys.argv[3])),Comms(Path(sys.argv[1])))",
+            str(run.commander.root),
+            run.commander.commander,
+            json.dumps(FieldCodec.encode(tool)),
+        )
+
     @classmethod
-    def read(cls) -> ParityComparison:
-        cases = []
+    def capture(
+        cls,
+        repository: DeliveryRepository,
+        commit: str,
+        invoke: Callable[[LifecycleRun, DeliveryRepository, Todo, str], ChildResult],
+    ) -> DeliveryOutcome:
+        # One native order per copied bus, for both paths and every commit case.
+        # The immutable Git history is shared; Todo recurrence history is not.
         with LifecycleRun.open() as run, contextlib.redirect_stdout(io.StringIO()):
-            repository = DeliveryRepository.create(run.commander.root)
-            run.decisions.write_text("[]")
             run.artifact.write_text(
                 "Copied-bus delivered-commit comparison; no source input executed."
             )
-            for name, commit in repository.cases():
-                current_order = cls.create_order(run, repository)
-                process = run.invoke(
-                    "from agent_comms.commander.order import Commander; import sys; "
-                    "Commander.model_validate_json(sys.argv[1]).done("
-                    "sys.argv[2],sys.argv[3],seen=sys.argv[4])",
-                    run.commander.model_dump_json(),
-                    current_order.id,
+            order = cls.create_order(run, repository)
+            process = invoke(run, repository, order, commit)
+            return DeliveryOutcome.saved(run.commander.comms.goals.todos.get(order.id), process)
+
+    @classmethod
+    def read(cls) -> ParityComparison:
+        with LifecycleRun.open() as run, contextlib.redirect_stdout(io.StringIO()):
+            repository = DeliveryRepository.create(run.commander.root)
+            cases = tuple(
+                (
+                    name,
                     commit,
-                    str(run.artifact),
+                    cls.capture(repository, commit, cls.current),
+                    cls.capture(repository, commit, cls.native),
                 )
-                current = DeliveryOutcome.saved(
-                    run.commander.comms.goals.todos.get(current_order.id), process
-                )
-                native_order = cls.create_order(run, repository)
-                tool = CommsOrderDoneTool(
-                    problem=native_order.id,
-                    order_id=native_order.order.checked().id,
-                    delivery=CommitDelivery(
-                        commit=repository.git("rev-parse", "HEAD"),
-                        delivered_commit=commit,
-                        evidence=FileDeliveryEvidence(str(run.artifact)),
-                    ),
-                    claims=(MergedClaim(commit),),
-                )
-                process = run.invoke(
-                    "from pathlib import Path; import sys; "
-                    "from agent_comms.comms import Comms; "
-                    "from agent_comms.field_codec import FieldCodec; "
-                    "from agent_comms.tool_caller import ThreadCaller; "
-                    "from agent_comms.tools import CommsOrderDoneTool; "
-                    "ThreadCaller(sys.argv[2]).invoke(FieldCodec.decode(CommsOrderDoneTool, "
-                    "FieldCodec.parse(sys.argv[3])),Comms(Path(sys.argv[1])))",
-                    str(run.commander.root),
-                    run.commander.commander,
-                    json.dumps(FieldCodec.encode(tool)),
-                )
-                native = DeliveryOutcome.saved(
-                    run.commander.comms.goals.todos.get(native_order.id), process
-                )
-                cases.append((name, commit, current, native))
-            checked_commit = repository.git("rev-parse", "HEAD")
-        return DeliveryComparison(checked_commit, tuple(cases))
+                for name, commit in repository.cases()
+            )
+            return DeliveryComparison(repository.git("rev-parse", "HEAD"), cases)

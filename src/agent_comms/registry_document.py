@@ -88,6 +88,10 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         thread = self.require(name)
         return self.statuses[thread.name].registered(thread)
 
+    def receiving(self, name: str) -> bool:
+        """Whether a message sent now is read now; an unregistered name reads nothing."""
+        return name in self.threads and self.status(name).receiving
+
     def require_active(self, name: str) -> Thread:
         try:
             thread = self.require(name)

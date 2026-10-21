@@ -10,7 +10,6 @@ import os
 import shlex
 import subprocess
 import sys
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
@@ -31,14 +30,10 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
 from agent_comms.progress_claims import WorkingClaim
-from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ApplicationOrderRun,
     DeliveredProblemOrder,
     FileDeliveryEvidence,
-    MergedProgress,
-    Moving,
-    NoCommitProgress,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
@@ -54,7 +49,6 @@ from agent_comms.tools import (
     CommsTodoCreateTool,
     CommsTodoListTool,
     ProblemOrdered,
-    TodoChanged,
     TodoList,
     ToolRequest,
 )
@@ -181,6 +175,10 @@ class LifecycleRun:
                             "from reaching zero.",
                             "This is stupid because an unfinished copied decision must not count "
                             "as delivered work.",
+                            unplanned_reason=(
+                                "This disposable parity workflow measures native ownership rather "
+                                "than advancing the production plan."
+                            ),
                         )
                     )
                 )
@@ -202,13 +200,9 @@ class LifecycleRun:
         """BoundedRun.run owns the process options and their absent defaults."""
         return asyncio.run(BoundedRun.run(command, timeout=120, **options))
 
-    @property
-    def due(self) -> str:
-        return time.strftime("%H:%M", time.localtime(time.time() + 3600))
-
     def create(self) -> Todo:
         self.commander.problem(
-            str(self.document), self.worker, self.due, f"{Path(__file__).resolve()}:1"
+            str(self.document), self.worker, f"{Path(__file__).resolve()}:1"
         )
         rows = tuple(self.commander.comms.goals.todos.for_commander(self.commander.incarnation))
         if len(rows) != 1:
@@ -238,7 +232,7 @@ class LifecycleCase(ABC):
     ) -> tuple[tuple[str, bool], ...]: ...
 
     @classmethod
-    def read(cls) -> ParityComparison:
+    def read(cls) -> LifecycleObservation:
         owners = (cls.native_owner, *cls.additional_owners)
         with LifecycleRun.open() as run:
             output = io.StringIO()
@@ -298,7 +292,7 @@ class AssignOrderCase(CreateProblemCase):
             run.worker, "The copied workflow is released before its next native assignment."
         )
         document = replace(OrderFile.read(run.document.read_text()), problems=(before.id,))
-        run.commander.send(run.worker, RecordedEventTime.from_clock(run.due), document, clean=True)
+        run.commander.send(run.worker, document, clean=True)
         return before, run.commander.comms.goals.todos.get(before.id)
 
     @classmethod
@@ -324,13 +318,18 @@ class InstalledEvidenceCase(LifecycleCase):
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
         created = run.create()
         delivered = run.complete(created)
+        observed = cls.before_close(run, delivered)
         run.commander.close(
             created.id,
             "Read the copied native goal and confirm its recorded source location "
             "and assigned worker.",
             str(run.artifact),
         )
-        return delivered, run.commander.comms.goals.todos.get(created.id)
+        return delivered, run.commander.comms.goals.todos.get(created.id), *observed
+
+    @classmethod
+    def before_close(cls, run: LifecycleRun, delivered: Todo) -> tuple[Todo, ...]:
+        return ()
 
     @classmethod
     def checks(
@@ -345,61 +344,66 @@ class InstalledEvidenceCase(LifecycleCase):
         )
 
 
-class BuildBoundProofCase(InstalledEvidenceCase):
+class BuildBoundProofCase(LifecycleCase):
+    native_owner = CommsOrderDoneTool
+
+    @classmethod
+    def read(cls) -> LifecycleObservation:
+        current = InstalledEvidenceCase.read()
+        stale = super().read()
+        return LifecycleObservation(
+            f"{current.owner}; {stale.owner}",
+            current.invocations + stale.invocations,
+            (("installed proof case", current.passed), ("older proof case", stale.passed)),
+            f"{current.describe()}\n{stale.describe()}",
+        )
+
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
-        delivered, closed = super().exercise(run)
-        stale_run = replace(run, artifact=run.artifact.with_name("older-build-proof.json"))
-        stale_run.decisions.write_text(json.dumps([stale_run.worker]))
-        created = stale_run.create()
+        created = run.create()
         installed = RecordedBuildIdentity.installed()
         older = subprocess.check_output(
             ("git", "rev-parse", f"{installed.core}^"),
             cwd=created.order.checked().check.directory,
             text=True,
         ).strip()
-        stale_run.artifact.write_text(
-            json.dumps(
-                FieldCodec.encode(stale_run.commander.comms.registry.require(stale_run.worker).goal)
-            )
+        run.artifact.write_text(
+            json.dumps(FieldCodec.encode(run.commander.comms.registry.require(run.worker).goal))
         )
-        stale_run.decisions.write_text("[]")
-        stale_run.commander.call(
+        run.decisions.write_text("[]")
+        run.commander.call(
             CommsOrderDoneTool(
                 problem=created.id,
                 order_id=created.order.checked().id,
                 delivery=OperationDelivery(
-                    evidence=FileDeliveryEvidence(str(stale_run.artifact)),
+                    evidence=FileDeliveryEvidence(str(run.artifact)),
                     proof_build=replace(installed, core=older),
                 ),
-                claims=(WorkingClaim(str(stale_run.artifact)),),
+                claims=(WorkingClaim(str(run.artifact)),),
             )
         )
-        stale = stale_run.commander.comms.goals.todos.get(created.id)
+        stale = run.commander.comms.goals.todos.get(created.id)
         try:
-            stale_run.commander.close(
+            run.commander.close(
                 stale.id,
                 "Read the copied native goal and confirm its recorded source location "
                 "and assigned worker.",
-                str(stale_run.artifact),
+                str(run.artifact),
             )
         except ProofBuildMismatchError as error:
             print(error)
-        return delivered, closed, stale, stale_run.commander.comms.goals.todos.get(stale.id)
+        return stale, run.commander.comms.goals.todos.get(stale.id)
 
     @classmethod
     def checks(
         cls, run: LifecycleRun, rows: tuple[Todo, ...], native: tuple[ToolResult, ...], output: str
     ) -> tuple[tuple[str, bool], ...]:
-        delivered, closed, stale, after = rows
-        assert isinstance(delivered.order, DeliveredProblemOrder)
+        stale, after = rows
         assert isinstance(stale.order, DeliveredProblemOrder)
-        current_build = delivered.order.delivery.proof_build
+        current_build = RecordedBuildIdentity.installed()
         older_build = stale.order.delivery.proof_build
-        assert isinstance(current_build, RecordedBuildIdentity)
         assert isinstance(older_build, RecordedBuildIdentity)
         return (
-            ("installed proof closes", closed.order.accepted and not closed.state.open),
             (
                 "build recorded durably",
                 FieldCodec.decode(Todo, FieldCodec.encode(stale)) == stale,
@@ -417,7 +421,7 @@ class BuildBoundProofCase(InstalledEvidenceCase):
                     )
                 ),
             ),
-            ("native close returned", bool(native)),
+            ("native delivered proof returned", bool(native)),
         )
 
 
@@ -463,55 +467,27 @@ class StrikeLimitCase(LifecycleCase):
         )
 
 
-class OrderProgressMutationCase(LifecycleCase):
-    native_owner = CommsChangeProblemTool
-
-    @classmethod
-    def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
-        before = run.create()
-        moved = time.strftime("%H:%M", time.localtime(time.time() + 7200))
-        run.commander.due(
-            before.id,
-            moved,
-            "The copied workflow needs time to record its actual native application evidence.",
-        )
-        return before, run.commander.comms.goals.todos.get(before.id)
+class ReviewTimerCase(CreateProblemCase):
+    """The commander's review timer starts with the order; the unit never sees it."""
 
     @classmethod
     def checks(
         cls, run: LifecycleRun, rows: tuple[Todo, ...], native: tuple[ToolResult, ...], output: str
     ) -> tuple[tuple[str, bool], ...]:
-        before, after = rows
+        saved = rows[-1]
         messages = run.commander.comms.bus.inbox(run.worker)
         unit = run.commander.comms.registry.require(run.worker)
         goal = unit.goal.require()
         instructions = goal.order.instructions(
             goal.order.todos(run.commander.comms.goals, unit.incarnation, goal.id)
         )
-        native_deadlines = tuple(
-            result.todo.deadline for result in native if isinstance(result, TodoChanged)
-        )
+        clock = saved.review_at.clock()
         return (
-            (
-                "native deadline retained",
-                bool(native_deadlines) and native_deadlines[-1] == after.deadline,
-            ),
-            ("deadline actually changed", before.deadline != after.deadline),
-            ("assignment unchanged", before.assignment == after.assignment),
-            ("unit got the actual update", bool(messages)),
-            (
-                "unit messages hide clocks",
-                all(
-                    clock.clock() not in message.body
-                    for clock in (before.deadline, after.deadline)
-                    for message in messages
-                ),
-            ),
-            (
-                "unit goal hides deadline",
-                "Deadline:" not in instructions and after.deadline.clock() not in instructions,
-            ),
-            ("commander still sees deadline", f"due {after.deadline.clock()}" in output),
+            ("unit got the order", bool(messages)),
+            ("unit messages hide the review timer",
+             all(clock not in message.body for message in messages)),
+            ("unit goal hides the review timer", clock not in instructions),
+            ("commander sees the review timer", f"review timer {clock}" in output),
         )
 
 
@@ -519,31 +495,16 @@ class OrderProgressMutationCase(LifecycleCase):
 class ProgressComparison(ParityComparison):
     current: dict[str, str]
     native: dict[str, str]
-    first_seconds: int
-    later_seconds: int
-    merged_no_strikes: tuple[bool, ...]
     workflow: ParityComparison
 
     @property
     def passed(self) -> bool:
-        return all(
-            (
-                self.workflow.passed,
-                bool(self.native),
-                self.current == self.native,
-                self.first_seconds == 600,
-                self.later_seconds == 900,
-                bool(self.merged_no_strikes),
-                all(self.merged_no_strikes),
-            )
-        )
+        return self.workflow.passed and bool(self.native) and self.current == self.native
 
     def describe(self) -> str:
         return (
             f"{self.workflow.describe()}; live_progress={len(self.native)}; "
-            f"read_equal={self.current == self.native}; "
-            f"intervals={self.first_seconds}/{self.later_seconds}; "
-            f"live_merged_no_strikes={self.merged_no_strikes}"
+            f"read_equal={self.current == self.native}"
         )
 
 
@@ -559,17 +520,4 @@ def verify_order_progress() -> ParityComparison:
         return UnverifiedParity("Current progress did not return one native TodoList measurement")
     result = results[0]
     observed = {key: value.line for key, value in result.progress.items()}
-    todos = {todo.id: todo for todo in result.todos}
-    merged = tuple(
-        not progress.stalled(todos[pid].order.checked().at.recorded_at("An order"), time.time())
-        for pid, progress in result.progress.items()
-        if isinstance(progress, MergedProgress)
-    )
-    return ProgressComparison(
-        current,
-        observed,
-        NoCommitProgress.seconds,
-        Moving.seconds,
-        merged,
-        OrderProgressMutationCase.read(),
-    )
+    return ProgressComparison(current, observed, ReviewTimerCase.read())

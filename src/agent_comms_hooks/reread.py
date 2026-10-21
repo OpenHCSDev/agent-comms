@@ -1,13 +1,16 @@
-"""Order the commander to reread its sources once context has grown since the last reread.
+"""Remind the commander of its sources and its voice as context grows.
 
 Claude Code runs this after every tool call, so like every hook it imports only
 the standard library. The session start hook writes the sources into parts
-beside the transcript; this hook orders them read again every `every` tokens.
+beside the transcript; each reminder fires every `every` tokens of its own, and
+all due reminders go out in one hook output.
 """
 
 from __future__ import annotations
 
 import json
+import sys
+from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -49,59 +52,92 @@ class RereadMark(HookRecord):
 
 
 @dataclass(frozen=True)
-class CommanderReread(ClaudeTranscriptHook):
-    """A reread is due once context grew `every` tokens past the last one."""
+class ContextCadence(ClaudeTranscriptHook, ABC):
+    """A reminder due once context grew `every` tokens past its own mark, or shrank below it."""
 
-    every: ClassVar[int] = 100_000
-    window: ClassVar[int] = 1_000_000
-    """Transcript bytes searched from the end for the latest model reply."""
+    every: ClassVar[int]
+    mark_suffix: ClassVar[str]
 
     @property
     def mark(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".reread.json")
+        return Path(self.transcript_path).with_suffix(self.mark_suffix)
 
     @property
-    def parts(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".reread")
+    def voice(self) -> Path:
+        """The commander's voice, written by the session start hook beside the transcript."""
+        return Path(self.transcript_path).with_suffix(".voice.md")
 
     def context_tokens(self) -> int:
         """The prompt size of the latest model reply; zero before the first one."""
-        with open(self.transcript_path, "rb") as transcript:
-            start = max(0, transcript.seek(0, 2) - self.window)
-            transcript.seek(start)
-            lines = transcript.read().splitlines()[1 if start else 0 :]
-        for line in reversed(lines):
+        for line in reversed(self.tail()):
             if ModelReply.marker in line:
                 return ModelReply.decode(json.loads(line)).message.usage.context
         return 0
 
     def due(self, tokens: int) -> bool:
-        """Before the session start hook wrote the parts there is nothing to reread.
+        """Only a commander session, whose start hook wrote the parts, is reminded.
 
         Context smaller than the mark means a compaction dropped what was read, so the
-        reread is due at once; otherwise a mark set before compaction is never reached.
+        reminder is due at once; otherwise a mark set before compaction is never reached.
         """
-        if not self.mark.exists():
+        if not self.parts.exists():
             return False
+        if not self.mark.exists():
+            return True
         last = RereadMark.decode(json.loads(self.mark.read_text()))
         return tokens < last.tokens or tokens - last.tokens >= self.every
 
-    def write_parts(self) -> None:
-        """The parts the session start hook wrote stay current for the session."""
+    def prepare(self) -> None:
+        """Nothing to write before the message unless a member needs it."""
 
-    def reread(self) -> None:
-        tokens = self.context_tokens()
+    @abstractmethod
+    def message(self) -> str: ...
+
+    def take(self, tokens: int) -> tuple[str, ...]:
+        """The member's message when due, marking the context size it was given at."""
         if not self.due(tokens):
-            return
-        self.write_parts()
-        paths = sorted(self.parts.iterdir())
+            return ()
+        self.prepare()
         self.mark.write_text(json.dumps(asdict(RereadMark(tokens))))
-        self.warn(
+        return (self.message(),)
+
+    @staticmethod
+    def remind(*members: type[ContextCadence]) -> None:
+        """One hook output carrying every due member's message."""
+        record = json.load(sys.stdin)
+        hooks = [member.decode(record) for member in members]
+        tokens = hooks[0].context_tokens()
+        messages = [message for hook in hooks for message in hook.take(tokens)]
+        if messages:
+            hooks[0].warn("\n\n".join(messages))
+
+
+@dataclass(frozen=True)
+class CommanderReread(ContextCadence):
+    """Orders the commander's sources read again."""
+
+    every: ClassVar[int] = 100_000
+    mark_suffix: ClassVar[str] = ".reread.json"
+
+    def message(self) -> str:
+        paths = sorted(self.parts.iterdir())
+        return (
             f"Read each of these {len(paths)} files in full with the Read tool before any other"
             " action: they are the indictment, the recorded failures, the commander skill, every"
             " packaged rule and the refactor-audit pattern catalog. A summary or memory of them"
             " does not count as reading them.\n" + "\n".join(map(str, paths))
         )
+
+
+@dataclass(frozen=True)
+class VoiceReminder(ContextCadence):
+    """Puts the commander's voice back in fresh context, inline, far more often than a reread."""
+
+    every: ClassVar[int] = 25_000
+    mark_suffix: ClassVar[str] = ".voice.json"
+
+    def message(self) -> str:
+        return self.voice.read_text(encoding="utf-8")
 
 
 class RereadProgram(ClaudeHookProgram):
@@ -113,7 +149,7 @@ class RereadProgram(ClaudeHookProgram):
 
 
 def main() -> None:
-    CommanderReread.read().reread()
+    ContextCadence.remind(CommanderReread, VoiceReminder)
 
 
 if __name__ == "__main__":

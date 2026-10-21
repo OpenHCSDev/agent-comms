@@ -69,6 +69,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_spine() -> Path:
         return Path(str(files(__package__) / 'spine.md'))
 
+    @staticmethod
+    def packaged_voice() -> Path:
+        return Path(str(files(__package__) / 'voice.md'))
+
     @field_validator('root')
     @classmethod
     def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
