@@ -22,29 +22,30 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.commander.config import CommanderConfig, CommanderRole
+from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
+    Argument,
     FieldCodec,
     MalformedRecord,
+    Normalize,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
-    Argument,
-    Normalize,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
@@ -86,13 +87,13 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
-    CommsOrderDoneTool,
     CommsOrderDeliverTool,
+    CommsOrderDoneTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -100,8 +101,6 @@ from agent_comms.tools import (
     CommsTodoListTool,
     TodoList,
 )
-from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -236,9 +235,11 @@ class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
     _comms: Comms = PrivateAttr()
+    _caller: ThreadCaller = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+        self._caller = ThreadCaller(self.commander)
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -268,7 +269,15 @@ class CommanderContext(CommanderConfig):
         return published.message.message_id
 
     def call(self, tool):
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
+        return self._caller.invoke(tool, self.comms)
+
+    def commanding(self, caller: ThreadCaller) -> Self:
+        bound = self.model_copy(update={'commander': caller.name})
+        bound._caller = caller
+        return bound
+
+    def retire(self) -> None:
+        self._caller.retire(self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -557,8 +566,7 @@ class Commander(CommanderContext):
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
+        pid = self.comms.goals.todos.allocate_problem()
         self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
@@ -738,10 +746,10 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
-        ThreadCaller | NoThreadCaller,
+        CommanderForkCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting thread's name"}
+            flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
@@ -749,6 +757,8 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         return self.fork.acting_name(ctx.commander)
 
     def apply(self, ctx: Commander) -> None:
+        self.require_commander(ctx.comms.registry.require(ctx.commander))
+        ctx = ctx.commanding(self.fork.commanding(ctx.comms, ctx.commander))
         self.gate(ctx)
         self.run(ctx)
 
@@ -1093,6 +1103,15 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(OrderVerb):
+    help = "stop a commander fork without discarding its open orders"
+
+    def run(self, ctx: Commander) -> None:
+        ctx.retire()
+        print(f'{ctx.commander} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

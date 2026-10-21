@@ -26,7 +26,7 @@ class Load(ToolResult):
         owed = tuple(t for t in held if t.pending)
         forks = tuple(sorted(
             thread.name for thread in snapshot.threads.values()
-            if thread.parent == owner.name and snapshot.status(thread.name).receiving
+            if thread.parent.named(owner.name) and snapshot.status(thread.name).receiving
             and todos.held_for_commander(thread.incarnation)
         ))
         unjudged = sum(
