@@ -76,7 +76,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 
     retained = captured(owner.name)
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (pin,)
-    assert retained.original_text_source(pin) == subject
+    assert retained.original_text_source(pin.reference) == Message.from_message(subject)
     assert sum(f.source.reference == subject.reference for f in retained.facts) == 1
     assert sum(f.source.reference == pin.reference for f in retained.facts) == 1
     assert any(isinstance(f, CurrentHumanConstraintTaskFact) for f in retained.facts)
@@ -106,11 +106,11 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     second = comms.messaging.send_user_message(renamed.name, exact, worktree=owner.worktree)
     new_pin = comms.messaging.pin_user_constraint(renamed.name, second.reference, worktree=owner.worktree)
     current = captured(renamed.name)
-    assert current.original_text_source(new_pin) == second and second.reference != subject.reference
+    assert current.original_text_source(new_pin.reference) == Message.from_message(second) and second.reference != subject.reference
     assert current.current_authored_sources(renamed, comms.registry.snapshot()) == (new_pin,)
     repeated_pin = comms.messaging.pin_user_constraint(renamed.name, second.reference, worktree=owner.worktree)
     assert captured(renamed.name).current_authored_sources(renamed, comms.registry.snapshot()) == (repeated_pin,)
-    assert current.original_text_source(new_pin) == second
+    assert current.original_text_source(new_pin.reference) == Message.from_message(second)
     comms.registry.register(replace(renamed, worktree=str(comms.root / "new-project")))
     assert captured(renamed.name).current_authored_sources(comms.registry.require(renamed.name),
                                                         comms.registry.snapshot()) == ()
@@ -147,9 +147,9 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     retained = RetainedTaskFacts(facts)
     current_owner = comms.registry.require(owner.name)
     assert retained.current_authored_sources(current_owner, comms.registry.snapshot()) == ()
-    assert retained.original_text_source(pin) == subject
+    assert retained.original_text_source(pin.reference) == Message.from_message(subject)
     with pytest.raises(RelationViolationError):
-        retained.original_text_source(replace(pin, body="altered source"))
+        retained.original_text_source(replace(pin, body="altered source").reference)
 
 
 def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):

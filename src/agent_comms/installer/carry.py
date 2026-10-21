@@ -3,30 +3,25 @@
 A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Carry``
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
-idempotent: data it already carried reports no change. Pending steps run in the order
-the main line added them. A finished step is retired by deleting its file once every
-bus has run it; a ledger keeps the names of the steps it ran, deleted or not.
-
-Each bus records the steps applied to it in its ``CarryLedger``. Only this family
-reads or writes that file; nothing else in ``src/`` depends on it.
+idempotent: data it already carried reports no change, so a step's own dry run is the
+one owner of whether a bus still needs it. Steps run in the order the main line added
+them, from the first whose dry run reports a change. An edited step is judged by what
+it does now, never by its name. A finished step is retired by deleting its file once
+every bus has run it.
 """
 from __future__ import annotations
 
 import inspect
-import json
-import os
 import subprocess
-import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.locked_store import BusFile
+from agent_comms.field_codec import PathText
 
 STEPS = Path("tools/cutover")
 
@@ -74,7 +69,7 @@ class Carry(ABC):
 
     @abstractmethod
     def carry(self) -> Carried:
-        """Carry this root with its wire lock held; on a dry run, write nothing."""
+        """Carry this root; on a dry run, write nothing."""
 
     @staticmethod
     def require_confined(root: Path, path: Path) -> None:
@@ -88,7 +83,7 @@ class Carry(ABC):
 
     def before_stop(self) -> Carried:
         """What the running installation needs before its own stop command can read the bus.
-        It records nothing in the ledger."""
+        The installer runs this before stopping owners."""
         return Carried(0)
 
 
@@ -116,66 +111,31 @@ class CarryChain:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
         return cls(tuple(sorted(steps, key=lambda step: added[step.name()])))
 
-    def pending(self, applied: tuple[str, ...]) -> tuple[type[Carry], ...]:
-        """A recorded name with no declared step is a finished step whose file was deleted."""
-        return tuple(step for step in self.steps if step.name() not in applied)
+    def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
+        """Every step from the first whose dry run reports a change. A later step's dry run
+        reads what the earlier ones leave, so it is not asked before they have run; it runs
+        after them and reports no change if it has none."""
+        for position, step in enumerate(self.steps):
+            if dry_run(step).changed:
+                return self.steps[position:]
+        return ()
 
 
-@dataclass(frozen=True)
-class LedgerRecord:
-    """What the ledger file holds."""
+class RetiredFiles(Carry):
+    """A step that deletes files the bus no longer reads."""
 
-    applied: tuple[str, ...]
+    @classmethod
+    @abstractmethod
+    def retired(cls) -> tuple[str, ...]:
+        """The files' names relative to the bus root."""
 
+    def backup_files(self) -> tuple[Path, ...]:
+        return tuple(self.root / name for name in self.retired())
 
-@dataclass(frozen=True)
-class CarryLedger(BusFile):
-    """The steps applied to one bus, oldest first."""
-
-    root: Path
-
-    filename = "carries.json"
-
-    @property
-    def path(self) -> Path:
-        return self.path_in(self.root)
-
-    def applied(self) -> tuple[str, ...]:
-        if not self.path.exists():
-            return ()
-        return FieldCodec.decode(LedgerRecord, FieldCodec.parse(self.path.read_text())).applied
-
-    def apply(self, name: str, operation: Callable[[], Carried]) -> Carried:
-        """The caller holds the wire lock across conversion and recording."""
-        if name in self.applied():
-            return Carried(0)
-        result = operation()
-        self.record(name)
-        return replace(result, rewritten=(*result.rewritten, self.filename))
-
-    def record(self, name: str) -> None:
-        """Called with the bus's wire lock held."""
-        applied = self.applied()
-        if name not in applied:
-            self.write((*applied, name))
-
-    def start(self, chain: CarryChain) -> None:
-        """A bus this chain's revision created is already in its format: every step it
-        declares counts as applied, so none runs on it."""
-        self.write(tuple(step.name() for step in chain.steps))
-
-    def write(self, applied: tuple[str, ...]) -> None:
-        payload = json.dumps(FieldCodec.encode(LedgerRecord(applied)), indent=2) + "\n"
-        descriptor, stage = tempfile.mkstemp(dir=self.root, prefix=".carries.", suffix=".json")
-        try:
-            os.fchmod(descriptor, 0o600)
-            os.write(descriptor, payload.encode())
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        os.replace(stage, self.path)
-        directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+    def carry(self) -> Carried:
+        paths = tuple(path for path in self.backup_files() if path.exists())
+        for path in paths:
+            self.require_confined(self.root, path)
+            if self.apply:
+                path.unlink()
+        return Carried(len(paths), {}, tuple(path.name for path in paths) if self.apply else ())

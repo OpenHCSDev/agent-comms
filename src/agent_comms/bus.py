@@ -205,13 +205,13 @@ class BusReader(RouteCounts, ABC):
             )
 
     def messages_for_references(self, references):
-        with self.observing() as db:
-            headers = (BusRow.require(db, seq=ref.seq) for ref in references)
-            records = tuple(header.kind.read_from(db, header.seq) for header in headers)
-        for reference, record in zip(references, records, strict=True):
-            if record.reference != reference:
-                raise RelationViolationError("Message reference does not match its bus record")
-        return records
+        references = tuple(references)
+        with self.reading() as source:
+            records = tuple(source.lookup(reference.seq) for reference in references)
+            messages = tuple(message for record in records for message in record.messages())
+        if tuple(message.reference for message in messages) != references:
+            raise RelationViolationError("Message reference does not match its bus record")
+        return messages
 
     def deliveries_for_references(self, references):
         return tuple(delivery for record in self.messages_for_references(references)
@@ -272,6 +272,10 @@ class BusReader(RouteCounts, ABC):
     def latest_answer(self, requesters: frozenset[str], responders: frozenset[str], *, since: float):
         with self.observing() as db:
             return AnsweredSource.latest_answer(db, requesters, responders, since)
+
+    def answer_timestamp(self, requesters: frozenset[str], responders: frozenset[str], *, since: float):
+        with self.observing() as db:
+            return AnsweredSource.answer_timestamp(db, requesters, responders, since)
 
     def replies(self, references: tuple[MessageReference, ...]):
         with self.observing() as db:

@@ -126,7 +126,8 @@ def held(tmp_path):
         text='Repair the worker', goal_id='request', order=RequestGoalOrder()))
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem='P1', order=order(source), request='request', review_at=RecordedEventTime(1000),
-        commander='lead', repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
+        commander='lead', assigner=comms.registry.require('lead').incarnation,
+        repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
 
 

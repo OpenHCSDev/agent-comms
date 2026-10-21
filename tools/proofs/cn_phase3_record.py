@@ -107,6 +107,7 @@ def create_order(problem: str = "P1") -> None:
                 text="Show the real verdict and strike records without a second source",
                 request="record-request",
                 commander="record-lead",
+                assigner=Comms(ROOT).registry.require("record-lead").incarnation,
                 review_at=RecordedEventTime(now + 3600),
                 order=PendingProblemOrder(
                     id=f"record-order-{problem}",

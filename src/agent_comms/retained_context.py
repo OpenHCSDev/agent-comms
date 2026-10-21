@@ -20,7 +20,7 @@ class RetainedFormat(WireExportFormat):
                 f"# metadata: {self.json_record(metadata)}\n\n").encode()
 
     def row(self, message: Message) -> bytes:
-        original = self.segment.original_text_source(message)
+        original = self.segment.retained.original_text_source(message.reference)
         provenance = dict(declaration=FieldCodec.encode(message.reference),
                           **message.task.original_wording_provenance(original),
                           task=FieldCodec.encode(message.task))

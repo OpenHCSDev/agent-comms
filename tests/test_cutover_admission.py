@@ -22,5 +22,14 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     assert [message.reference for message in snapshot.views.history_page(AnyChannel.target()).messages] == [sent]
     with pytest.raises(RelationViolationError):
         snapshot.messaging.send("alice", "bob", "must never append")
+    with pytest.raises(RelationViolationError):
+        snapshot.registry.rename("alice", "changed-history")
+    with pytest.raises(RelationViolationError):
+        snapshot.registry.prepare_native_root()
+    with snapshot.registry.store.locked():
+        document = snapshot.registry.store.read_revision_unlocked().document.copy()
+        document.purpose = source.registry.snapshot().purpose
+        with pytest.raises(RelationViolationError):
+            snapshot.registry.store.save_unlocked(document)
     assert snapshot.bus.bus.revision() == before
     attached.validate()
