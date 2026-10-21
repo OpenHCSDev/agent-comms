@@ -1288,7 +1288,7 @@ def sql_intent_envelope(*, body="hello", target="requester", expected_id=None, m
     return (
         "e",
         target,
-        message_json if message_json is not None else JsonStorage.to_sql(message),
+        message_json if message_json is not None else JsonStorage.to_sql(FieldCodec.encode(message)),
         canonical_publication_key("e", "requester"),
         expected_id if expected_id is not None else message.message_id,
     )
