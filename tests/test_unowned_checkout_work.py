@@ -12,7 +12,6 @@ import pytest
 
 from order_scope_fixture import FIX_SCOPE
 
-from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
@@ -199,7 +198,6 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert c.registry.require('idle').goal.require().text
             review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
                         StandingRule.broken(c, 'lead'))
-        drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
              '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),
