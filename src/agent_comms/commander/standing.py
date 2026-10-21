@@ -50,7 +50,8 @@ class InstallDue(UndatedStandingRule):
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
             if not installed.contains(main, repo.checkout):
                 recorded = installed.for_repository(repo)
-                due.append(cls(f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
+                due.append(cls(
+                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
         return tuple(due)
 
     def line(self) -> str:

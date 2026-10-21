@@ -31,6 +31,7 @@ from agent_comms.installer.runtime_resolution import (
     RuntimePackage,
     RuntimeResolution,
 )
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
@@ -329,6 +330,15 @@ def test_install_due_compares_fetched_main_to_installed_build(
         assert graph.newer in alarm.why
         assert graph.installed in alarm.why
         assert alarm.line() in changes[0]
+
+    # An install advances the canonical manifest, not a clock or bus schedule.
+    runtime = LaunchRuntime.installed().prefix
+    resolution = RuntimeResolution.at(runtime)
+    RuntimeResolution(core_commit=graph.newer, packages=resolution.packages).save(runtime)
+    after_install = InstallDue.violations(bus, "lead")
+    assert after_install == ()
+    assert len(StandingRule.heartbeat_changes(due, after_install)) == int(advance_main)
+    assert Repo.git(checkout, "rev-parse", "HEAD") == before
 
 
 def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path):
