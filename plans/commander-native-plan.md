@@ -148,26 +148,35 @@ P360 deleted the operation-delivery silent failure default and the duplicate com
 
 **Done when** both stories render from Core and the channel shows each send-back once.
 
-### Phase 6: the commander page in Toad
+### Phase 6: the HUD (engine, screen, context feed) — revised 2026-10-21
 
-Toad is a view of Core, so the commander's page is one more view over Core's answers, with no logic of its own.
+Commanding is a high-tempo RTS. The fleet loses information because Core hands the commander raw events and long prose and leaves it to classify every unit in its head. On 2026-10-20/21 all ten units sat blocked with no alarm, a unit's alert waited about seven hours, four orders went out twice, and work was reassigned away from the unit holding it. Every one of those had a rule in prose and nothing in Core that derived it. The reread alone is about 125K characters (46K of skill, rules and indictment plus a 76K pattern catalog), injected again every 100K tokens.
 
-**Changes.**
-- **A commander model in agent-comms' `ui_model`,** served by the observation process like the sidebar model: the board, strikes, the unjudged queue, the fleet story and, once phase 7 lands, the alarms. It is computed from the native tools' answers and holds no state of its own.
-- **One page in Toad, with five panes:**
-  - **Board:** each unit with its open order, deadline and delivery state, overdue orders first.
-  - **Strikes:** per unit, each with its cause and where it was caught; units at the limit marked.
-  - **Unjudged queue:** the commander's backlog from `comms_unjudged`, which is also the load signal.
-  - **Fleet story:** send-backs and strikes as a live stream, the same lines the channel shows.
-  - **Alarms:** growth, storage and standing-rule violations. The pane exists from this phase and fills when phase 7 lands.
-- **Two small additions elsewhere:** each unit's open order and strike count beside its thread in the sidebar, and an order's story one keypress away from its thread.
-- **Unit cards and levels of detail.** Level 0 is one line per unit: open orders and due times, whether the files edited match the files the order named, commits and lines since the order, the mix of recent calls by tool kind, the unit's last claim beside the git fact, whether anything is new since the last look, and the unit's largest wait since its order with its class (row 32). Level 1 expands one unit into its recent turns, one line each. Level 2 expands a turn or file into the diff and single calls. The same levels are commands for any harness (`look`, `look UNIT`, `look UNIT diff FILE`). Sketch with real data: `commander-game.md`, "The screen" and "Distilled looking".
-- **Momentum.** Every look at a unit with new activity ends in a recorded prediction: would I do what it did and why, will it land on time given its pace, and what steer changes its course. The next look shows the previous call beside what happened, so the commander's accuracy is visible. `commander-game.md`, "Momentum".
-- Toad reads only through `ui_model`. It never reads the Todo store's tables or the old state directory, and it computes nothing about orders, strikes or alarms.
+The fix is one derived model with three renderers. **Core is the engine, Toad is the screen, the commander's context is the HUD feed.** Nothing computes fleet state twice.
 
-**Deletes:** `order.py board` as a rendering path, and any terminal rendering in `rotate.py` and `judge.py` that only displayed state.
+**Engine: `CommanderHud` in `ui_model`, derived on read, holding no state but one cursor.**
+- **`UnitState` family.** The rotation tick's classification moves out of SKILL prose into Core: `Blocked` (goal execution blocked while holding an order), `Detached` (not receiving), `AwaitingCommander` (a question, alert or handoff with no commander answer, from `Message.answers`), `Stuck` (no tool call while holding an order), `Spinning` (send-backs or reruns with no new commit), `StalledOnNothing` (turn ended holding an order with nothing pending), `DeliveredUnclosed` (merged or installed, order open), `Moving` (fresh commit on the order's surface), `Idle` (no order). Each member derives itself from turn digests, git, goal execution and messages; owns its card line, its ping and its default action. Urgency order is the MRO, never a rank field.
+- **Pings are decisions, each once.** A unit entering an urgent state, a review timer up, a check failed, a merge, an install, a run seen working, an owner message. Keyed by unit, state and order revision, so nothing re-fires. The `StandingRule` family is the ping source; `HolderCannotRun` (with `Detached` and `Blocked` as members) and `UnitAskUnanswered` join it.
+- **Frames.** `CommanderHud.frame()` is a snapshot; `frame.since(cursor)` is the delta: only changed cards and new pings, like a netcode delta. The one stored fact is each reader's cursor.
+- **Kill feed:** `comms_fleet_story` plus merges and installs, newest first. **Economy bar:** free disk against floor, merge-queue depth, units busy, idle and blocked, unjudged edits, model budget where the provider reports it. **Scoreboard:** per unit, delivered and installed orders, strikes, and self-inflicted wait minutes (`UnitTime`, row 32).
 
-**Done when** the page shows the real fleet from Core alone, every unit has a card with its latest prediction and the previous one beside its outcome, its board matches the native list and fleet tools exactly, and the sidebar shows open orders and strikes per unit.
+**Screen: the commander page in Toad, a pure view of `CommanderHud`.**
+- Top: economy bar. Left: the board, one level-0 card per unit sorted by state, colored by state, with its order, its P-numbers in plain words, last call in plain words and lines since the order. Right: the ping lane (unhandled pings, oldest first) above the kill feed. Bottom: the zoomed panel.
+- Zoom: Enter expands a card to level 1 (recent turns, one line each), `d` to level 2 (diff and single calls). Every level ends with what it left out.
+- Hotkeys are Core tool requests, one keystroke each: strike, send-back, correction, resume a blocked unit, approve to the queue, close with artifact, open the order editor. The page computes nothing about orders, strikes or states.
+- Frame pacing: rendering reads frames only; nothing scales with history; keypress-to-paint p99 under one frame at 144 Hz.
+- The sidebar shows each unit's state glyph and open order beside its thread.
+
+**Context feed: what lands in the commander's context, tiered like a HUD.**
+- **Every tool call:** new pings only, at most five lines, each with its default action. This replaces the bus heartbeat's message text; the heartbeat keeps only the job of waking an idle commander.
+- **Every 8K tokens:** the frame delta (changed cards since the last injection, at most 25 lines) plus two drift tells. The tells are derived from each rule file's `drift:` line, not a hand-kept copy.
+- **Every 25K tokens:** the voice.
+- **Session start and compaction:** skill, indictment, rules and the pattern catalog's index (ID plus one line each). Full rung files are read when an order or roast cites them. This cuts the standing reread from about 125K characters.
+- **Units:** on every wake, their own card line and their order, plus the fleet rules they already carry. No due times.
+
+**Deletes:** `order.py board` as a rendering path, terminal rendering in `rotate.py` and `judge.py`, the heartbeat's free-text violation lists, `drift.md` (done: tells derive from rule frontmatter), and any SKILL prose a `UnitState` member now derives.
+
+**Done when** the installed Toad page shows the live fleet from `CommanderHud` alone; on a replayed hour of the live bus, the commander's injected context contains every decision event exactly once and no repeats; a unit forced into each `UnitState` shows up on the card and in the ping lane within one frame; and every hotkey round-trips through its Core tool.
 
 ### Phase 7: the control plane
 
@@ -175,7 +184,7 @@ Toad is a view of Core, so the commander's page is one more view over Core's ans
 - **Heartbeat.** A scheduled commander wake owned by Core, firing every minute with the next unit to review and the standing rules broken now. It replaces `rotate.py`'s loop and stops when the commander thread stops.
 - **Standing rules.** A `StandingRule` family; each member derives its current violations on read (an order without a deadline, an overdue order, a unit over its storage limit, an unjudged queue older than its bound, and the others `rotate.py` checks today).
 - **Rule review.** The commander's rules enter its turn context as instruction segments with provenance, present on every turn, which removes the need for a review log. If a review step is kept, it is a typed record on the commander thread.
-- **Alerts carry only decisions.** The commander's wake receives a reply addressed to it, a deadline crossing, a merge, a failed check and a works-in-app close, each once. A thread's messages to itself never reach another thread's feed; overdue is a state entered once and then shown on the page; disk pressure is raised when a threshold is crossed; unjudged counts are a column, not events. Measured before: about 700 of 1,136 feed lines were self-posts and OVERDUE repeated 150-170 times per order (`commander-game.md`).
+- **Alerts carry only decisions** (phase 6's pings own the event set). The commander's wake receives a reply addressed to it, a deadline crossing, a merge, a failed check and a works-in-app close, each once. A thread's messages to itself never reach another thread's feed; overdue is a state entered once and then shown on the page; disk pressure is raised when a threshold is crossed; unjudged counts are a column, not events. Measured before: about 700 of 1,136 feed lines were self-posts and OVERDUE repeated 150-170 times per order (`commander-game.md`).
 - **Load and forking.** `CommanderLoad` derived per commander from look debt (units with new activity and no current prediction, and the oldest age), judge debt (the unjudged queue and its oldest age), decision inflow, prediction calibration and context used, plus a one-word self-report (`sharp`, `stretched`, `skimming`) recorded each heartbeat and compared with the measures. Over a limit, the commander forks through the existing fork operation for the oldest debt and new orders are refused until it is back under; forks are ordinary registered threads that report on their own thread names.
 - **Where the time goes.** `UnitTime` (row 32) derived from Core's turn records: per unit and fleet, minutes in model time, tool runs by declared kind (build, check, test, other shell), waiting on a named owner, waiting on the commander, and idle. Each wait over a bound asks the commander one question on its card: does this need to take this long, or is it self-inflicted (a rerun, a handoff, a broken merge, a wrong order)? The answer is recorded on the wait, and a daily rollup ranks self-inflicted minutes by cause and by who caused them, the commander included. 2026-10-18 example: about 75 of 110 minutes of the install were self-inflicted (a merge never run, a converter proven on a partial copy, a reversed order, a needless handoff, two commanders).
 - **Growth alarm.** A growth check derived on read from git for each configured repository: any merge to `main` that grows the source root by more than the limit (40 net lines today) appears as a fleet signal, and a verdict accepting such a delivery must state why the growth is necessary.

@@ -21,7 +21,7 @@ Arm two Monitors: `agent-comms-claude-bridge watch` (messages to the commander; 
 The failure this breaks is the mega-corp equilibrium: nobody changes anyone else's code, workarounds pile on workarounds, nothing gets deleted. **Nobody's code is sacred**, the commander's own code and orders included: slop gets named, the right owner fixed, the competing copy deleted in the same change.
 
 - **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none; never soften an order because a unit did well yesterday.
-- **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
+- **Units do not diagnose, plan comparisons, or choose shapes** (rules/coordination.md). Read the profile, diff and code, then order the exact edits.
 - **Judged against what the commander would have done.** Any unit action that differs, given what it knew, gets why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
@@ -97,6 +97,6 @@ One line per unit touched, then the next unit.
 - **The PR owns its state.** Ready is out of draft with the proof in the body; sent back is a review requesting changes with the defect at file:line; merged is merged. Read state from the PR, never from a message about it.
 - **Each PR's owner enqueues it with `gh pr merge N --auto`; the queue groups them.** rules/fork-orders.md and rules/ship-and-install.md own the steps and the gate.
 - **Conflicting PRs land as one batch, never one by one.** A merge fork merges every conflicting head into one branch from fresh main, resolves each conflict once, and enqueues one PR; a lone conflict is resolved by whoever holds it, never sent back. A failing PR drops out and the rest land; every landing and drop is posted to #comms with time and reason. Tristan, 2026-10-20: "why in order? why not batch?"
-- **The two commanders exchange PRs needed and PRs held every 15 minutes** over the relay until one shared record replaces it.
+- **claude-ai reads both buses** and carries what one commander needs from the other; there is no timed exchange.
 
-Never replay unknown or failed inputs, edit another unit's worktree, or wait on one unit while others need orders.
+Never wait on one unit while others need orders.

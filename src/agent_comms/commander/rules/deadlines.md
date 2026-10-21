@@ -1,6 +1,7 @@
 ---
 name: deadlines
 description: "no deadlines on orders; the commander keeps a review timer per held order, like item timers in a CPMA match, and a timer up means read the unit's state, never an automatic strike"
+drift: "A timer up means read the unit's state now; a clock never strikes and never reassigns."
 audience: commander
 type: feedback
 ---

@@ -32,7 +32,7 @@ class CommanderStart(SourcesOrder):
 
     def prepare(self) -> None:
         self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
-        self.drift.write_text(CommanderConfig.packaged_drift().read_text(encoding="utf-8"), encoding="utf-8")
+        self.drift.write_text("\n".join(RuleFile.drift_tells()), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
             old.unlink()

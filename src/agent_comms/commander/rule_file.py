@@ -43,6 +43,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     family_discriminator = "type"
     name: str
     description: str
+    drift: str
     audience: type[RuleAudience]
     why: str
     body: str
@@ -103,6 +104,11 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
     def unit_rules(self) -> tuple[str, ...]:
         return self.audience.unit_rules(self)
+
+    @classmethod
+    def drift_tells(cls) -> tuple[str, ...]:
+        """The reminder hook's one-line tells, one declared by each packaged rule."""
+        return tuple(rule.drift for rule in cls.packaged())
 
     @abstractmethod
     def review_rules(self) -> tuple[str, ...]: ...
