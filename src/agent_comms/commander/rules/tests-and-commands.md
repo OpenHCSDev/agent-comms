@@ -1,6 +1,7 @@
 ---
 name: tests-and-commands
 description: "every command over a few seconds runs in the background, tests under timeout; tests are de-slopped in the same change, never preserved against a refactor; order checks scan the whole tree"
+audience: fleet
 type: feedback
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: send-backs-and-strikes
 description: "every send-back, false claim or turn ended stalled on nothing is a strike at once, in public and plain words, and two take the task away; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
+audience: commander
 type: hard-rule
 ---
 

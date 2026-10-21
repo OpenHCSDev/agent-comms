@@ -24,7 +24,7 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
 from .native_input_record import NativeInputCommit, NativeInputLocation
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
+from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
 from .native_session_files import NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
@@ -438,9 +438,9 @@ class NativePiRpcLaunch:
     ):
         """Encode the held launch configuration at the native process boundary."""
         try:
-            instructions = OWNER_INSTRUCTIONS.resolve(strict=True)
+            instructions = UNIT_INSTRUCTIONS.resolve(strict=True)
         except OSError as error:
-            raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
+            raise NativePiUnavailable("Unit instructions were not prepared with the native package") from error
         env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
