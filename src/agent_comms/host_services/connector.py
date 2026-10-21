@@ -6,13 +6,15 @@ import json
 import sys
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Annotated
 
 from . import ServiceNotServingError, SystemdUserService
 from ..active_route import ActiveRoute
 from ..comms import client_wire
-from ..connector import CALLER, LOOPBACK, PORT, ToolCall, ToolsCallMessage, ToolsCallReply
+from ..connector import CALLER, LOOPBACK, PORT, ConnectorVerb, ToolCall, ToolsCallMessage, ToolsCallReply
 from ..connector_store import ConnectorStore
-from ..field_codec import FieldCodec, MalformedRecord
+from ..field_codec import FieldCodec, MalformedRecord, PathText, option
 from ..errors import RelationViolationError, ToolRefusedError
 from ..launch_root import LaunchRoot
 from ..tools import CommsChannelsTool
@@ -67,3 +69,21 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
     """Systemd adds process lifetime to the same configured endpoint and serving proof."""
 
     unit = "agent-comms-connector.service"
+
+
+@dataclass(frozen=True, kw_only=True)
+class RoundTripVerb(ConnectorVerb):
+    """The same serving proof required after an install restarts the connector."""
+
+    help = "Read the bus through the running connector service and compare"
+    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
+    port: int = option("--port", default=PORT, help="The service's loopback port")
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        service = ConnectorService(launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port)
+        try:
+            service.serves()
+        except ServiceNotServingError as error:
+            return str(error)
+        print(json.dumps(FieldCodec.encode(service.result)))
+        return 0

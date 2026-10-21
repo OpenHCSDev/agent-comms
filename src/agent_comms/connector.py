@@ -44,6 +44,7 @@ from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
+from .host_services import HostService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
@@ -767,7 +768,10 @@ class Connector:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
+class ConnectorVerb(
+    DeclaredFamily, DeclaredOptions, Command,
+    affix="Verb", discovery_package=HostService.__module__,
+):
     """One connector command: its options are its fields, and its parser comes from them."""
 
     @abstractmethod
@@ -806,28 +810,6 @@ class ServeVerb(ConnectorVerb):
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
         web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
-        return 0
-
-
-@dataclass(frozen=True, kw_only=True)
-class RoundTripVerb(ConnectorVerb):
-    """The same serving proof required after an install restarts the connector."""
-
-    help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
-    port: int = option("--port", default=PORT, help="The service's loopback port")
-
-    def apply(self, ctx: ConnectorStore) -> int | str:
-        from .host_services import ServiceNotServingError
-        from .host_services.connector import ConnectorService
-        from .launch_root import LaunchRoot
-
-        service = ConnectorService(launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port)
-        try:
-            service.serves()
-        except ServiceNotServingError as error:
-            return str(error)
-        print(json.dumps(FieldCodec.encode(service.result)))
         return 0
 
 
