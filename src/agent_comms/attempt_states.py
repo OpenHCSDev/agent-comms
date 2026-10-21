@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
@@ -24,7 +25,6 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     def permits_retry(self) -> bool:
         return False
 
-    terminal: ClassVar[bool] = False
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
@@ -96,7 +96,7 @@ class LiveAttempt(AttemptState):
         return cls(lease, done, dead)
 
 
-class TerminalAttempt(AttemptState):
+class TerminalAttempt(Terminal, AttemptState):
     @property
     def replay_contribution(self) -> ReplayFact:
         from .coordination_tables.attempts import ReplayFact
@@ -110,7 +110,6 @@ class TerminalAttempt(AttemptState):
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
 
-    terminal = True
     preserve_check = False
 
     @property
@@ -283,10 +282,6 @@ class SucceededAttempt(TerminalAttempt):
 
     succeeded = True
 
-    @classmethod
-    def successors(cls):
-        return ()
-
 
 class UnsuccessfulTerminal(TerminalAttempt):
     """A terminal attempt that did not succeed, irrespective of retry authority."""
@@ -298,10 +293,6 @@ class UnsuccessfulTerminal(TerminalAttempt):
         from .obligation_states import FailedResponse
 
         return FailedExecution(attempt.attempt_ordinal), FailedResponse()
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 class RetryPredecessor:
