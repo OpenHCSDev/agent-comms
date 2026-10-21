@@ -8,14 +8,14 @@ import sqlite3
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.typed_table import DurableTables, SharedFileTables, TypedTable
+from agent_comms.typed_table import DurableTables, SharedFileTables
 from tools.cutover.declared_schema import _subclasses, carry
 
 
 def _file_rows():
     """Each durable file's rows: the shared coordinator file is one file of many kinds."""
     kinds = {kind for kind in _subclasses(DurableTables)
-             if not issubclass(kind, TypedTable) or kind.schema_rows() == (kind,)}
+             if not any(issubclass(base, DurableTables) for base in kind.__bases__ if base is not DurableTables)}
     shared = tuple({row for kind in kinds if issubclass(kind, SharedFileTables)
                     for row in kind.schema_rows()})
     files = {kind.__name__: kind.schema_rows() for kind in kinds
