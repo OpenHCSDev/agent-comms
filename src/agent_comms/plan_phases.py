@@ -97,9 +97,13 @@ class PlanPhase(OrderPhase, declared_name=None):
 
     @classmethod
     def ordered_since(cls, reading: PlanReading) -> float:
-        """When the oldest order still holding this phase was given."""
-        return min(todo.order.checked().at.recorded_at("A plan order")
-                   for todo in cls.holding(reading))
+        """When the phase was first ordered to its current holders; a re-sent order keeps the
+        time of the first, so re-sending never restarts the clock."""
+        return min(
+            order.at.recorded_at("A plan order")
+            for todo in cls.holding(reading)
+            for order in (*todo.prior_orders, todo.order.checked())
+        )
 
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
