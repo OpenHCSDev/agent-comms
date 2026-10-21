@@ -149,12 +149,10 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
         if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
-            with closing(self._connect()) as connection:
-                connection.execute("BEGIN IMMEDIATE")
+            with closing(self._connect()) as connection, self.write_transaction(connection):
                 if not GoalHistoryEntry.stored_schema(connection):
                     GoalHistoryEntry.create_schema(connection)
                 GoalHistoryEntry.reconcile_schema(connection)
-                connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error
@@ -163,10 +161,8 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
     def _transaction(self) -> Iterator[sqlite3.Connection]:
         """Share durable commit mechanics without inventing an operation result."""
         try:
-            with closing(self._connect()) as connection:
-                connection.execute("BEGIN IMMEDIATE")
+            with closing(self._connect()) as connection, self.write_transaction(connection):
                 yield connection
-                connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history write durability is uncertain.") from error

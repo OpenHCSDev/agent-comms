@@ -344,14 +344,10 @@ class NativeReplyPreparation(ReplyPreparation):
         # Publication stays under the existing deletion and SQLite owners.
         # A busy writer leaves these exact completed readers for the next observation.
         try:
-            with (
-                _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False),
-                CoordinationReadUnavailable.checking(),
-                database,
-            ):
-                database.execute("BEGIN IMMEDIATE")
-                for source in completed:
-                    self.readers[source].commit(database)
+            with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
+                with CoordinationReadUnavailable.checking(), SQLiteFile.write_transaction(database):
+                    for source in completed:
+                        self.readers[source].commit(database)
         except (BlockingIOError, CoordinationReadUnavailable):
             return self
         for source in completed:
@@ -468,17 +464,16 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
                 # needs a writer; recheck after taking it because another
                 # process may have initialized the file since this read.
                 if version.user_version != _INDEX_VERSION:
-                    connection.execute("BEGIN IMMEDIATE")
-                    (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
-                    if version.user_version == 0:
-                        if SQLiteTableName.stored(connection):
+                    with SQLiteFile.write_transaction(connection):
+                        (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+                        if version.user_version == 0:
+                            if SQLiteTableName.stored(connection):
+                                raise ValueError("Reply index requires the quiet runtime reset")
+                            for table in TypedTable.members_with(ReplyIndexTable):
+                                table.create(connection)
+                            connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
+                        elif version.user_version != _INDEX_VERSION:
                             raise ValueError("Reply index requires the quiet runtime reset")
-                        for table in TypedTable.members_with(ReplyIndexTable):
-                            table.create(connection)
-                        connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
-                    elif version.user_version != _INDEX_VERSION:
-                        raise ValueError("Reply index requires the quiet runtime reset")
-                    connection.commit()
             except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise

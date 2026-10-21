@@ -21,7 +21,7 @@ from .typed_table import (
     DurableTables,
     ForeignKey,
     Index,
-    PrefixedTables,
+    SharedFileTables,
     SQLiteForeignKeys,
     SQLiteJournalMode,
     TypedTable,
@@ -31,19 +31,17 @@ COHORT_SCHEMA_VERSION = 2
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(PrefixedTables, DurableTables):
+class CohortTable(SharedFileTables, DurableTables):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
-    name_prefixes = ("cohort_", "claim_batch_")
     schema_error = SchemaVersionError
 
 
-class AwarenessTable(PrefixedTables, DurableTables):
+class AwarenessTable(SharedFileTables, DurableTables):
     """Optional provenance captured only during the unsealed acceptance transaction."""
 
     __slots__ = ()
-    name_prefixes = ("awareness_",)
     schema_error = SchemaVersionError
 
 

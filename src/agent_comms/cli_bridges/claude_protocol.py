@@ -38,7 +38,6 @@ from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
-    ThinkingTranscript,
     TranscriptEvent,
     UserTranscript,
 )
@@ -347,7 +346,11 @@ class RedactedThinking(AssistantBlock):
         return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
 
 
-class ThinkingBlock(RedactedThinking):
+class NarrationBlock(RedactedThinking):
+    """Claude Code saves its reasoning under this tag with empty text, and the
+    narration it shows before a tool call under the same tag with the text
+    filled in. The text is a message to the reader, never hidden reasoning."""
+
     wire_tag = 'thinking'
     thinking: str
 
@@ -356,7 +359,7 @@ class ThinkingBlock(RedactedThinking):
         if not self.thinking:
             return activity
         return (*activity, *session.finished(
-            record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
+            record.uuid, (AssistantTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
 
 
 class ToolUse(AssistantBlock):

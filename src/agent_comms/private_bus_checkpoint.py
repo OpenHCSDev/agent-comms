@@ -165,8 +165,7 @@ class PrefixWitness(PrefixSeal):
         marker.seal_with(PendingSeal.capture(empty, self, path))
         # The emptied index is committed with its own prefix record before indexing, so a bus
         # with nothing to index is sealed over the file as written, with the record it names.
-        with db:
-            db.execute("BEGIN IMMEDIATE")
+        with SQLiteFile.write_transaction(db):
             CheckpointTable.reset_schema(db)
             CheckedPrefix.from_witness(empty).upsert(db)
         return empty.index_tail(bus, marker, db, path, info)

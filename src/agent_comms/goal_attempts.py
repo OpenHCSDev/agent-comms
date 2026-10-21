@@ -694,7 +694,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
-    non-launching setup step. Each change uses BEGIN IMMEDIATE, SQLite's
+    non-launching setup step. Each change uses SQLiteFile.write_transaction, SQLite's
     synchronous=EXTRA rollback journal, an explicit file fsync (plus directory
     fsync where supported), and a fresh-connection readback. Failure at any
     stage returns no permit.
@@ -744,10 +744,9 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
                 conn.execute("PRAGMA journal_mode=DELETE")
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
-                conn.execute("BEGIN IMMEDIATE")
-                GoalLedgerTable.create_schema(conn)
-                GoalAttemptSchema.current().insert(conn)
-                conn.commit()
+                with cls.write_transaction(conn):
+                    GoalLedgerTable.create_schema(conn)
+                    GoalAttemptSchema.current().insert(conn)
             cls._sync_paths(staging, directory)
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
@@ -808,28 +807,18 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
     def _sync(self) -> None:
         self._sync_paths(self.path, self.root)
 
-    @staticmethod
-    def _commit(conn: sqlite3.Connection) -> None:
-        conn.commit()
-
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
     ) -> _T:
         """A failed commit, sync, or readback is never a launch authorization."""
         with closing(self._connect()) as conn:
             try:
-                conn.execute("BEGIN IMMEDIATE")
-                result = operation(conn)
-                self._commit(conn)
+                with self.write_transaction(conn):
+                    result = operation(conn)
                 self._sync()
             except GoalAttemptError:
-                if conn.in_transaction:
-                    conn.rollback()
                 raise
             except (sqlite3.Error, OSError) as error:
-                if conn.in_transaction:
-                    with suppress(sqlite3.Error):
-                        conn.rollback()
                 raise StorageUncertainError(
                     "Goal attempt write durability is uncertain."
                 ) from error

@@ -12,6 +12,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
 
+from agent_comms.bus_tables import Addressed, BusCapability
+from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
+from agent_comms.typed_table import Column
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget
@@ -331,15 +334,13 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class Message:
+class Message(Addressed, BusCapability):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    sender: Annotated[str, WireName("from"), WireOrder(2)]
-    target: Annotated[str, WireName("to"), WireOrder(3)]
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
     timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
@@ -364,7 +365,7 @@ class Message:
         TaskAttachment, WireOmitDefault(), WireOrder(12)
     ] = field(default_factory=NoTaskAttachment)
     report: Annotated[
-        ReportEvidence, WireOmitDefault(), WireOrder(13)
+        ReportEvidence, WireOmitDefault(), WireOrder(13), Column(nullable=True)
     ] = NoChangeReport()
     answers: Annotated[
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
@@ -490,7 +491,7 @@ class Message:
     def from_committed_wire(cls, record: Mapping) -> Message:
         """One strict public-envelope boundary for full, indexed and cohort readers."""
         from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import PRIVATE_WIRE_FIELD, _canonical, public_envelope_digest
+        from .bus_publication import PRIVATE_WIRE_FIELD
 
         if not isinstance(record, Mapping):
             raise MalformedRecord("Bus row is not an object.")

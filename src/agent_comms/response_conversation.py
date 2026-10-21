@@ -3,6 +3,8 @@
 import hashlib
 from dataclasses import dataclass
 
+from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement, public_envelope_digest
+
 from .audience_manifest import FrozenRecipient, freeze_audience
 from .bus_publication import CommittedDelivery
 from .channel_targets import CommandTarget
@@ -90,8 +92,8 @@ class ResponseConversation:
         )
 
     def record(self, root_id, message, intent):
-        from .bus_publication import PRIVATE_WIRE_FIELD, initial_sideband, public_envelope_digest
-        from .delivery_policy import KeyedResponseAcknowledgement, ResponseDeliveryPolicy
+        from .bus_publication import PRIVATE_WIRE_FIELD, initial_sideband
+        from .delivery_policy import ResponseDeliveryPolicy
         from .field_codec import FieldCodec
         from .wake import ControlClassification
 

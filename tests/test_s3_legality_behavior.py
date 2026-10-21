@@ -15,7 +15,6 @@ from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationEvidence,
-    canonical_publication_key,
 )
 from agent_comms.execution_states import (
     AttemptExecution,
@@ -24,6 +23,7 @@ from agent_comms.execution_states import (
     FailedExecution,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import PublishedResponse, ResponseState
 from agent_comms.wake_policy import WakePolicy

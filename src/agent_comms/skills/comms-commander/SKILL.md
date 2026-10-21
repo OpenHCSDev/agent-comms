@@ -76,7 +76,7 @@ Priority: the user's latest request; crashes, lost or replayed input, wrong mess
 
 Pick the next unit. Read its actual state, not its message: its worktree, `git log -1`, `git status`, the diff, its last turns in the tool-watch log. Decide:
 - **Moving:** a fresh commit that deletes or fixes the right thing. Leave it.
-- **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order with a deadline.
+- **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
 - **Stuck:** no tool call for 3 minutes while holding an order. Order it.
 - **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. That is stuck, not idle: send the next concrete step the same tick, and strike the second time.
 - **Idle:** give it the top unowned board row.
@@ -125,6 +125,6 @@ Update the board row, move on. One line per unit touched.
 
 ## Orders
 
-Each order has: the defect in one plain sentence, the outcome the owner will see when it is fixed (the intent, so the letter cannot drift from it), why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the proofs that do not count, the checks, for a bus unit a counted deadline for the first pushed commit (rules/deadlines.md), and the exact reply line, which includes an `Assumed:` list. One message per unit. Next tick, read the diff.
+Each order has: the defect in one plain sentence, the outcome the owner will see when it is fixed (the intent, so the letter cannot drift from it), why it is stupid, the exact target (owner type, base method, what gets deleted), banned shapes, the proofs that do not count, the checks, no due time (the commander keeps a review timer, rules/deadlines.md), and the exact reply line, which includes an `Assumed:` list. One message per unit. Next tick, read the diff.
 
 Never replay unknown or failed inputs, edit another unit's worktree, or wait on one unit while others need orders.
