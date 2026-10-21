@@ -24,7 +24,7 @@ from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb
-from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.commander.standing import HeartbeatSilent, UnownedWheelSpin
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander, Blocked, Detached, UnitState, RetryableUnitBlock, UnresolvedUnitBlock,
 )
@@ -44,7 +44,7 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HeartbeatSilent, StandingRule
+from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity

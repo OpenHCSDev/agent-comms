@@ -145,6 +145,8 @@ class VerdictCase(ABC):
                 ("same Goal state", after.state == goal.state),
                 ("native result retained", result == TodoChanged(saved, saved.strike_count)),
                 ("native verdict retained", request.operation in saved.verdicts),
+                ("reviewed native edit no longer unjudged",
+                 not Edit.unjudged(run.commander.comms, run.commander.commander)),
                 (
                     "strike is the verdict event",
                     all(
