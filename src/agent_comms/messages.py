@@ -10,7 +10,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast
 
 from agent_comms.bus_tables import Addressed, BusCapability
 from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
@@ -371,6 +371,11 @@ class Message(Addressed, BusCapability):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
+    @classmethod
+    def of(cls, message: Message, **capabilities: object) -> Self:
+        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
+                   **capabilities)
+
     @property
     def text_size(self) -> int:
         return len(self.body)
@@ -541,8 +546,7 @@ class ClaimMessage(Message):
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
-                   claim_transition=transition)
+        return super().of(message, claim_transition=transition)
 
     def __post_init__(self) -> None:
         super().__post_init__()

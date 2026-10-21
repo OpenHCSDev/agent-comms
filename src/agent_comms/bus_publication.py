@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Annotated
 
@@ -17,20 +17,19 @@ from agent_comms.response_acknowledgement import (
 )
 
 from .delivery_policy import DeliveryPolicy
-from .errors import HumanInitialUnknownError, RelationViolationError
+from agent_comms.errors import HumanSendRefusedError, RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .messages import Message
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
 
 if TYPE_CHECKING:
+    from agent_comms.bus import Bus, PrivateRecord
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
     from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .wire_log import WireLog
-    from .wire_metadata import WireMetadata
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -245,10 +244,8 @@ class InitialOrigin(ABC):
         """Check the sender and message ID against the bus before appending."""
 
     @abstractmethod
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
-        """Append the reserved row, reporting a failure as this origin requires."""
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> PrivateRecord:
+        """Commit the record, reporting failure as this origin requires."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,10 +262,8 @@ class AgentOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
-        log.append_private_unlocked(metadata, row)
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> PrivateRecord:
+        return bus.append(build)
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,17 +288,15 @@ class HumanOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         source.require_new_human_message(sender, message_id)
 
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> PrivateRecord:
+        from agent_comms.bus import MessageNotificationError
+
         try:
-            log.append_private_unlocked(metadata, row)
-        except BaseException as error:
-            # Even cancellation/interrupt after entry can follow a durable
-            # reservation or row. Never claim absence or retry this ID.
-            raise HumanInitialUnknownError(
-                metadata.root_id, stored.seq, stored.message_id
-            ) from error
+            return bus.append(build)
+        except MessageNotificationError:
+            raise
+        except Exception as error:
+            raise HumanSendRefusedError(f"Message was not sent: {error}") from error
 
     def require_registered(self, snapshot: RegistrySnapshot) -> None:
         """Check the determining USER declaration, never a transport or prose role."""

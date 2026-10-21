@@ -1125,6 +1125,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
+class StoreNotificationError(OSError):
+    """The transaction committed, but its change signal could not be written."""
+
+
 class StoreWriter(SQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
@@ -1164,7 +1168,12 @@ class StoreWriter(SQLiteFile, FileStore):
         with self.write_transaction(connection):
             yield connection
         if connection.total_changes != before:
-            self._source_paths(self.store.path)[0].write_bytes(b'')
+            try:
+                self._source_paths(self.store.path)[0].write_bytes(b'')
+            except OSError as error:
+                raise StoreNotificationError(
+                    f"Committed {self.store.path}, but change notification failed: {error}"
+                ) from error
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:

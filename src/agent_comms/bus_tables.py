@@ -29,6 +29,13 @@ class BusRow(TypedTable, BusTables):
     kind: type[BusRecord]
     at: float
 
+    @classmethod
+    def next_seq(cls, db: sqlite3.Connection) -> int:
+        return FieldCodec.decode(int, db.execute(
+            "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0) + 1",
+            (cls.declared_name,),
+        ).fetchone()[0])
+
 
 class _CapabilityTable:
     """A class's table is derived once, after its dataclass decorator has run."""
@@ -79,10 +86,10 @@ class BusCapability(BusTables):
                 key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
             for table in self.tables())
 
-    def append_to(self, db: sqlite3.Connection) -> int:
-        """Write the header, then this record's rows under the sequence the header got."""
-        cursor = BusRow.insert_values(db, kind=type(self), at=time.time())
-        stored = replace(self, seq=FieldCodec.decode(int, cursor.lastrowid))
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        """The caller's transaction owns the sequence, including preserved history."""
+        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
+        stored = replace(self, seq=seq)
         for row in stored.rows():
             row.insert(db)
         return stored.seq
@@ -98,7 +105,7 @@ class Addressed(BusCapability):
 class KeyedPublication(BusCapability):
     acknowledgement: Annotated[KeyedResponseAcknowledgement, Column(unique=True)]
 
-    def append_to(self, db: sqlite3.Connection) -> int:
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """A keyed publication appended again answers with the sequence it first got."""
         prior = KeyedPublication.table.select(db, acknowledgement=self.acknowledgement)
-        return prior[0].seq if prior else super().append_to(db)
+        return prior[0].seq if prior else super().append_to(db, seq)
