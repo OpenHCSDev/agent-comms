@@ -233,7 +233,10 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             await ready(original)
             originals.append(original)
         # The original process launch name remains valid through registry rename.
-        comms.registry.rename("batch-b", "batch-renamed")
+        await Coordination.run_worker(partial(
+            comms.threads.rename_managed_thread, "batch-b", "batch-renamed",
+            owner_pid=originals[-1].require_process().pid,
+        ))
         selected = ["batch-a", "batch-renamed"]
         before = comms.registry.snapshot()
         last = before.require_active("batch-renamed")

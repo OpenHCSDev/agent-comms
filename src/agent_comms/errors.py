@@ -20,7 +20,7 @@ class RelationViolationError(ValueError):
 
 
 class ThreadNotStoppedError(ToolRefusedError, RelationViolationError):
-    """A stopped-thread precondition refused an operation before any write."""
+    """A stopped-thread precondition failed, not an unknown write outcome."""
 
 
 class StoredHistoryUnreadable(RelationViolationError):  # noqa: N818 - nominal read failure

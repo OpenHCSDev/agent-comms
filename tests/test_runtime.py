@@ -203,7 +203,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.registry.rename("worker", "renamed")
+        comms.threads.rename_managed_thread("worker", "renamed", owner_pid=old_pid)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:
