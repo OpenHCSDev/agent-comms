@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import types
 from abc import ABC, abstractmethod
@@ -263,6 +264,9 @@ class Column:
         return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
 
 
+_NAME_SEPARATORS = re.compile(r"\W+")
+
+
 @dataclass(frozen=True)
 class Index:
     """An index over the row's columns, named by field."""
@@ -274,11 +278,20 @@ class Index:
     def term_sql(self, owner: type[TypedTable]) -> str:
         return owner._column_list(self.terms)
 
-    def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
+    def name(self, owner: type[TypedTable]) -> str:
+        """Derived from what the index covers, so adding another never renames this one."""
+        parts = [owner.declared_name, self.term_sql(owner)]
+        if self.where:
+            parts += ["where", owner._sql(self.where)]
+        if self.unique:
+            parts.append("unique")
+        return "_".join(_NAME_SEPARATORS.sub("_", part).strip("_").lower() for part in (*parts, "idx"))
+
+    def sql(self, owner: type[TypedTable], *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
-            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
+            f"{existence}{_identifier(self.name(owner))} ON {_identifier(owner.declared_name)} "
             f"({self.term_sql(owner)})"
             + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
@@ -715,9 +728,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
-        for ordinal, index in enumerate(indexes):
-            index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
+        for index in indexes:
+            if index.name(cls) in statements:
+                raise TypeError(f"{cls.__name__} declares two indexes named {index.name(cls)}")
+            statements[index.name(cls)] = index.sql(cls, if_not_exists=if_not_exists)
         statements.update(cls.triggers(if_not_exists=if_not_exists))
         return statements
 

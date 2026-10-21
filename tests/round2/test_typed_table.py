@@ -110,7 +110,7 @@ def test_index_owns_unique_partial_creation():
     with sqlite3.connect(':memory:') as db:
         TableParentRow.create(db)
         index = Index(('count',), unique=True, where='count > 0')
-        statement = index.sql(TableParentRow, 'positive_counts', if_not_exists=True)
+        statement = index.sql(TableParentRow, if_not_exists=True)
         db.execute(statement)
         db.execute(statement)
         TableParentRow('first', 1).insert(db)
@@ -119,7 +119,29 @@ def test_index_owns_unique_partial_creation():
         TableParentRow('zero-one', 0).insert(db)
         TableParentRow('zero-two', 0).insert(db)
         with pytest.raises(sqlite3.OperationalError):
-            db.execute(index.sql(TableParentRow, 'positive_counts'))
+            db.execute(index.sql(TableParentRow))
+
+
+def test_adding_an_index_renames_no_other_index():
+    @dataclass(frozen=True)
+    class IndexedRow(TypedTable):
+        name: str = field(metadata={'sql': Column(primary_key=True)})
+        count: int
+        indexes = (Index(('count',)), Index(('name', 'count'), where='count > 0'))
+
+    @dataclass(frozen=True)
+    class MoreIndexedRow(TypedTable, declared_name=IndexedRow.declared_name + '_more'):
+        name: str = field(metadata={'sql': Column(primary_key=True)})
+        count: int
+        indexes = (Index(('name',), unique=True), *IndexedRow.indexes)
+
+    def names(row):
+        return {index.term_sql(row): index.name(row) for index in row.indexes}
+
+    before, after = names(IndexedRow), names(MoreIndexedRow)
+    assert {sql: name.replace(IndexedRow.declared_name, '', 1) for sql, name in before.items()} == {
+        sql: after[sql].replace(MoreIndexedRow.declared_name, '', 1) for sql in before}
+    assert len(set(after.values())) == len(MoreIndexedRow.indexes)
 
 
 def test_new_row_declaration_needs_no_other_edit():

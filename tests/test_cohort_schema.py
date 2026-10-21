@@ -470,7 +470,7 @@ def test_reopen_rejects_partial_unsupported_or_drifted_schema(tmp_path: Path, pr
                 finally:
                     store.session._connection.execute("PRAGMA ignore_check_constraints=OFF")
             else:
-                store.session._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
+                store.session._connection.execute("DROP INDEX cohort_delivery_receipts_recipient_lookup_wire_seq_idx")
         before = set(_tables(store))
         with pytest.raises(SchemaVersionError):
             install_private_cohort_schema(store)
