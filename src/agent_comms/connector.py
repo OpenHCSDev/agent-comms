@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import base64
 import hashlib
+import html
 import json
 import logging
 import secrets
@@ -45,7 +46,8 @@ from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
-    CODE_SECONDS, AuthorizationQuery, AuthorizationRequest, ClaudeCallback,
+    CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
+    AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
 from .messages import Message, QuestionKind
@@ -128,6 +130,7 @@ class ApprovalLink:
 
     request_id: str
     secret: str = field(repr=False)
+    route: ClassVar[str] = "/approve/{request_id}/{secret}"
 
 
 @dataclass(frozen=True)
@@ -339,7 +342,6 @@ class McpMessage(DeclaredFamily, affix="Message"):
 
     family_discriminator: ClassVar[str] = "method"
     jsonrpc: Literal["2.0"]
-
     @classmethod
     def received(cls, data: object) -> Self:
         return FieldCodec.decode(cls, data)
@@ -513,9 +515,10 @@ class Connector:
                 web.post("/register", self.register),
                 web.get("/authorize", self.authorize, allow_head=False),
                 web.get(
-                    "/approve/{request_id}/{secret}", self.approve,
+                    ApprovalLink.route, self.approve,
                     name=self.approve.__name__, allow_head=False,
                 ),
+                web.post(ApprovalLink.route, self.confirm),
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),
             ]
@@ -607,14 +610,16 @@ class Connector:
             if grants.trusts(browser):
                 return grants.code_issued(query, code, now)
             if query.request_id not in grants.requests:
-                pending = AuthorizationRequest(
-                    query, digest(approval), expires_at=now + CODE_SECONDS
-                )
-                notices.append(pending)
-                return replace(grants, requests=grants.requests | {query.request_id: pending})
+                grants = grants.waiting(query, digest(approval), now)
+                notices.append(grants.requests[query.request_id])
             return grants
 
-        grants = await asyncio.to_thread(self.store.update, decided)
+        try:
+            grants = await asyncio.to_thread(self.store.update, decided)
+        except ApprovalQueueFull as refusal:
+            raise web.HTTPTooManyRequests(
+                text=str(refusal), headers={"Retry-After": str(CODE_SECONDS)}
+            ) from refusal
         for pending in notices:
             path = request.app.router[self.approve.__name__].url_for(
                 **FieldCodec.encode(ApprovalLink(pending.query.request_id, approval))
@@ -629,7 +634,7 @@ class Connector:
                 text=(
                     "<!doctype html><title>Approve connector</title>"
                     "<p>An approval link was sent to the owner on comms.</p>"
-                    "<p>Open that link in your browser to connect and remember this browser.</p>"
+                    "<p>Open that link and confirm to connect and remember this browser.</p>"
                 ),
             )
         raise web.HTTPFound(query.redirect(code), headers={"Cache-Control": "no-store"})
@@ -641,31 +646,51 @@ class Connector:
             comms.messaging.send(
                 CALLER.name, owner.name,
                 f"Connector sign-in requested by {json.dumps(client)}. "
-                f"Approve only if you started this connection; the link expires in "
+                f"Open the link and confirm only if you started this connection; it expires in "
                 f"{CODE_SECONDS} seconds and remembers this browser.\n{link}",
                 QuestionKind,
             )
 
     async def approve(self, request: web.Request) -> web.Response:
-        """Consume the owner's link and establish browser trust in the same store update."""
+        """A preview is read-only; only the form's POST can establish browser trust."""
+        link = FieldCodec.decode(ApprovalLink, dict(request.match_info))
+        grants = await asyncio.to_thread(self.store.read)
+        try:
+            held = grants.require_approval(link.request_id, link.secret, time.time())
+        except ApprovalRefused as refusal:
+            raise web.HTTPBadRequest(text=str(refusal)) from refusal
+        client = html.escape(grants.clients[held.query.client_id].name)
+        return web.Response(
+            content_type="text/html",
+            headers={
+                "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": (
+                    "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+                ),
+            },
+            text=(f"<!doctype html><title>Approve connector</title><p>Connect {client}?</p>"
+                  '<form method="post"><button type="submit">Approve and connect</button></form>'),
+        )
+
+    async def confirm(self, request: web.Request) -> web.Response:
+        """Consume the owner's POST and establish browser trust in the same update."""
         link = FieldCodec.decode(ApprovalLink, dict(request.match_info))
         code, browser = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         approved: list[AuthorizationQuery] = []
 
         def consumed(grants: ConnectorGrants) -> ConnectorGrants:
             now = time.time()
-            held = grants.requests.get(link.request_id)
-            if held is None or not held.live(now) or not secrets.compare_digest(
-                held.approval_digest, digest(link.secret)
-            ):
-                raise web.HTTPBadRequest(text="This approval link is unknown, expired or used.")
+            held = grants.require_approval(link.request_id, link.secret, now)
             approved.append(held.query)
             return replace(
                 grants.unexpired(now).code_issued(held.query, code, now),
                 trusted_browsers=grants.trusted_browsers | {digest(browser): TrustedBrowser(now)},
             )
 
-        await asyncio.to_thread(self.store.update, consumed)
+        try:
+            await asyncio.to_thread(self.store.update, consumed)
+        except ApprovalRefused as refusal:
+            raise web.HTTPBadRequest(text=str(refusal)) from refusal
         response = web.HTTPFound(
             approved[0].redirect(code),
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},

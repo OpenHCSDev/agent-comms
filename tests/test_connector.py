@@ -10,7 +10,7 @@ import json
 import logging
 import time
 from contextlib import ExitStack
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -22,13 +22,15 @@ from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
+    AuthorizationCodeGrant,
     Connector,
     ConnectorVerb,
     ServeVerb,
     RevokeVerb,
 )
 from agent_comms.connector_store import (
-    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorStore, IssuedCode, TrustedBrowser, digest,
+    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
+    IssuedCode, TrustedBrowser, digest,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import StoreBackup
@@ -140,49 +142,53 @@ async def client(store: ConnectorStore, root: Path, comms: Comms):
             yield client
 
 
-async def approved_token(client: TestClient, comms: Comms) -> str:
-    """Register, open the real owner-message link, and redeem its PKCE-bound code."""
-    registered = await (
-        await client.post(
+@dataclass(frozen=True)
+class ClientLogin:
+    query: AuthorizationQuery
+    verifier: str
+
+    @classmethod
+    async def register(cls, client: TestClient):
+        registered = await (await client.post(
             "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
+        )).json()
+        verifier = secrets.token_urlsafe(48)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        return cls(AuthorizationQuery(
+            "code", registered["client_id"], CALLBACK, challenge.decode().rstrip("="), "S256", "s"
+        ), verifier)
+
+    async def redeem(self, client: TestClient, code: str) -> str:
+        grant = AuthorizationCodeGrant(
+            code=code, code_verifier=self.verifier, client_id=self.query.client_id,
+            redirect_uri=self.query.redirect_uri,
         )
-    ).json()
-    verifier = secrets.token_urlsafe(48)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=")
-    query = {
-        "response_type": "code",
-        "client_id": registered["client_id"],
-        "redirect_uri": CALLBACK,
-        "code_challenge": challenge.decode(),
-        "code_challenge_method": "S256",
-        "state": "s",
-    }
-    assert (await client.head("/authorize", params=query, allow_redirects=False)).status == 405
-    waiting = await client.get("/authorize", params=query, allow_redirects=False)
+        issued = await client.post("/token", data=FieldCodec.encode(grant))
+        assert issued.status == 200
+        return (await issued.json())["access_token"]
+
+
+async def approved_token(client: TestClient, comms: Comms) -> str:
+    """Register, confirm the real owner-message link, and redeem its PKCE-bound code."""
+    login = await ClientLogin.register(client)
+    parameters = FieldCodec.encode(login.query)
+    assert (await client.head("/authorize", params=parameters, allow_redirects=False)).status == 405
+    waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
     assert waiting.status == 200
     owner = comms.messaging.user_identity(str(comms.root))
     notice = comms.bus.inbox(owner.name)[-1]
     link = urlsplit(notice.body.splitlines()[-1])
     assert (await client.head(link.path, allow_redirects=False)).status == 405
-    redirected = await client.get(link.path, allow_redirects=False)
+    preview = await client.get(link.path, allow_redirects=False)
+    assert preview.status == 200 and not preview.cookies
+    redirected = await client.post(link.path, allow_redirects=False)
     assert redirected.status == 302
     cookie = redirected.cookies[TrustedBrowser.cookie_name]
     assert cookie["secure"] and cookie["httponly"] and cookie["samesite"] == "Lax"
     assert cookie["path"] == "/" and not cookie["domain"]
     assert redirected.headers["Cache-Control"] == "no-store"
     code = parse_qs(urlsplit(redirected.headers["Location"]).query)["code"][0]
-    issued = await client.post(
-        "/token",
-        data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "code_verifier": verifier,
-            "client_id": registered["client_id"],
-            "redirect_uri": CALLBACK,
-        },
-    )
-    assert issued.status == 200
-    return (await issued.json())["access_token"]
+    return await login.redeem(client, code)
 
 
 async def test_a_request_without_an_approved_token_is_refused(client, store):
@@ -382,6 +388,65 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             assert (copied_root / "bus.jsonl").read_bytes() == before
     assert comms.bus.log.latest_sequence() == original.seq
     assert comms.owners.maintenance.read().turn_pending is False
+
+
+async def test_approval_previews_do_not_grant_browser_trust(client, store, comms):
+    login = await ClientLogin.register(client)
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+    )).status == 200
+    owner = comms.messaging.user_identity(str(comms.root))
+    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    before = store.path.read_bytes()
+    for _ in range(2):
+        preview = await client.get(link.path, allow_redirects=False)
+        assert preview.status == 200 and not preview.cookies
+        page = await preview.text()
+        assert page.count("<button ") == 1 and '<form method="post">' in page
+        assert "frame-ancestors 'none'" in preview.headers["Content-Security-Policy"]
+        assert store.path.read_bytes() == before
+        assert not store.read().trusted_browsers and not store.read().codes
+    approved = await client.post(link.path, allow_redirects=False)
+    assert approved.status == 302 and TrustedBrowser.cookie_name in approved.cookies
+    assert not store.read().requests and store.read().trusted_browsers
+    assert (await client.post(link.path, allow_redirects=False)).status == 400
+    code = parse_qs(urlsplit(approved.headers["Location"]).query)["code"][0]
+    assert store.read().holds(await login.redeem(client, code))
+
+
+async def test_pending_authorizations_are_bounded(client, store, comms):
+    login = await ClientLogin.register(client)
+    for number in range(ConnectorGrants.waiting_limit):
+        query = replace(login.query, state=str(number))
+        assert (await client.get(
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+        )).status == 200
+    owner = comms.messaging.user_identity(str(comms.root))
+    before = len(comms.bus.inbox(owner.name))
+    assert before == ConnectorGrants.waiting_limit
+    blocked = replace(login.query, state="overflow")
+    for _ in range(2):
+        refused = await client.get(
+            "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+        )
+        assert refused.status == 429 and int(refused.headers["Retry-After"]) == CODE_SECONDS
+    assert len(store.read().requests) == ConnectorGrants.waiting_limit
+    assert blocked.request_id not in store.read().requests
+    assert len(comms.bus.inbox(owner.name)) == before
+    repeated = replace(login.query, state="0")
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False
+    )).status == 200
+    assert len(comms.bus.inbox(owner.name)) == before
+    held = store.read().requests[repeated.request_id]
+    store.update(lambda grants: replace(grants, requests=grants.requests | {
+        repeated.request_id: replace(held, expires_at=time.time() - 1)
+    }))
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
+    )).status == 200
+    assert len(store.read().requests) == ConnectorGrants.waiting_limit
+    assert len(comms.bus.inbox(owner.name)) == before + 1
 
 
 async def test_owner_browser_approval_lifecycle(client, store, comms):

@@ -25,6 +25,17 @@ def digest(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
 
 
+class ApprovalRefused(ValueError):
+    """A one-time approval is missing, expired or already consumed."""
+
+    def __init__(self) -> None:
+        super().__init__("This approval link is unknown, expired or used.")
+
+
+class ApprovalQueueFull(ValueError):
+    """Unknown browsers have filled the bounded waiting queue."""
+
+
 @dataclass(frozen=True)
 class RegisteredClient:
     name: str
@@ -108,6 +119,26 @@ class ConnectorGrants:
     access: dict[str, IssuedAccess] = field(default_factory=dict)
     refresh: dict[str, str] = field(default_factory=dict)
     trusted_browsers: dict[str, TrustedBrowser] = field(default_factory=dict)
+    waiting_limit: ClassVar[int] = 8
+
+    def waiting(
+        self, query: AuthorizationQuery, approval_digest: str, now: float
+    ) -> ConnectorGrants:
+        current = self.unexpired(now)
+        if query.request_id in current.requests:
+            return current
+        if len(current.requests) >= self.waiting_limit:
+            raise ApprovalQueueFull("The owner approval queue is full; try again later.")
+        pending = AuthorizationRequest(query, approval_digest, expires_at=now + CODE_SECONDS)
+        return replace(current, requests=current.requests | {query.request_id: pending})
+
+    def require_approval(self, request_id: str, secret: str, now: float) -> AuthorizationRequest:
+        if request_id not in self.requests:
+            raise ApprovalRefused()
+        held = self.requests[request_id]
+        if not held.live(now) or not secrets.compare_digest(held.approval_digest, digest(secret)):
+            raise ApprovalRefused()
+        return held
 
     def unexpired(self, now: float) -> ConnectorGrants:
         return replace(
@@ -145,8 +176,8 @@ class ConnectorGrants:
         return grants, IssuedTokens(access, refresh)
 
     def holds(self, token: str) -> bool:
-        held = self.access.get(digest(token))
-        return held is not None and held.live(time.time())
+        key = digest(token)
+        return key in self.access and self.access[key].live(time.time())
 
 
 @dataclass(frozen=True, slots=True)
