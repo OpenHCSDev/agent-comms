@@ -227,10 +227,6 @@ class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
     bypasses_goal_permit = True
 
 
-class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
-    pass
-
-
 @dataclass(frozen=True, kw_only=True)
 class DeliveredFollowingInput(AcceptedFollowingInput):
     """A pending bus message handed to the recipient's running turn."""
