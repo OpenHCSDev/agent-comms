@@ -27,7 +27,9 @@ from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .following_inputs import FollowingInputs
 from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .native_pi import NativePiRpcLaunch
+from .native_failures import NativePiUnavailable
+from agent_comms.native_session_files import NativeSessionFiles
 from .pi_native_backend import PersistentPiSession
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
@@ -95,17 +97,17 @@ class SelectedExecution(NativeExecution):
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         try:
-            _private_session_dir(self.root)
+            NativeSessionFiles.require_private_directory(self.root)
             owner = Comms(self.root).registry.require(self.owner_name)
             if not Path(owner.worktree).is_dir():
                 raise ValueError("registered participant worktree is unavailable")
             directory = owner.native_session_directory(self.root)
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
-            _private_session_dir(directory)
+            NativeSessionFiles.require_private_directory(directory)
             paths = ((self.session_file,) if self.session_file is not None
                      else owner.runtime.read_keys())
             for path in paths:
-                _private_session_dir(Path(path).absolute().parent)
+                NativeSessionFiles.require_private_directory(Path(path).absolute().parent)
         except NativePiUnavailable as error:
             raise SessionSetupFailed(f"Native session setup failed: {error}") from error
         self.session_directory = directory

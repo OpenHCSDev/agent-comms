@@ -8,6 +8,8 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 
 from __future__ import annotations
 
+from agent_comms.native_session_files import NativeSessionFiles
+
 from dataclasses import dataclass, field
 from abc import abstractmethod
 from pathlib import Path
@@ -168,6 +170,8 @@ def read_historical_native_inputs(
                 # this check only corroborates its message-bearing context facts.
                 corroborated = recorded.corroborates_input(
                     row.input_id, evidence=source_reads.for_source(session_file),
+                    files=NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
+                                             owner=row.owner_identity),
                 )
             except (OSError, ValueError) as error:
                 raise IdentityConflict("historical native context evidence is unavailable") from error

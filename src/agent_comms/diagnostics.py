@@ -259,7 +259,7 @@ def _source_error_evidence(source_error: BaseException | None) -> dict:
     document = {"source_error": "".join(
         TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
     )}
-    from .native_pi import NativePiUnavailable
+    from .native_failures import NativePiUnavailable
 
     if isinstance(source_error, NativePiUnavailable):
         document["native"] = source_error.diagnostic_evidence

@@ -189,6 +189,10 @@ class SessionDirArgument(SessionSelectionArgument, NamedOption, ValueArgument):
     pass
 
 
+class NativeInputProofArgument(SessionSelectionArgument, NamedOption, ValueArgument):
+    """Only the captured bus owner supplies native proof storage."""
+
+
 class SessionIdArgument(SessionSelectionArgument, NamedOption, ValueArgument):
     pass
 

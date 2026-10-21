@@ -5,7 +5,7 @@ import json
 import pytest
 
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 

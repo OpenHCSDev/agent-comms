@@ -1,11 +1,11 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-648c74b12e1f48c3619cc85032700c2b8e593be4c15ef2f1c35c640eb6bc0392  dist/core/agent-session.js
+eca50755ac75e4074966c0ef88f36ddf604f6ec4e9d353fd33003de5c426db58  dist/core/agent-session.js
 84430c2d0604cf86a53003ba2d68ec2ee27bd7acbd782fe32cb703de97681ac8  dist/core/compaction/compaction.js
 117da12529fbbd66a5f8c19aae82a19db24b3aff58fccbe740427040ae6202b3  dist/core/compaction/compaction.d.ts
-c83ee46448aea1185b3d3f93482a6a350a9a47c903e4ad3d5220d4934ef2df19  dist/core/session-manager.js
-db49d9d9cc1ca0ab3f162cba3d34a77991d023231364f1100c2085674f7c5df6  dist/modes/rpc/rpc-mode.js
-fcdb48c59a992353066ce98c3fd12be7e12c1aafcf75cd29b0e800f9f322806f  dist/core/agent-session.d.ts
-79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
+218e0f0450479f4e88f190ccb7596fd074019a3e11bcfee1317bea9647eeb26a  dist/core/session-manager.js
+0da3a510c9d75c2ab48aa9d9479696dba2abfe0a139dc80a5671d496e146a289  dist/modes/rpc/rpc-mode.js
+ac52652495785bb0bd20a3469b527b5815bc3b54e3907738e9045fc5424aace1  dist/core/agent-session.d.ts
+317463b70aaeb401056dd0711291fcabc7d77c53a79266f98d42ca834f1a2cfe  dist/core/session-manager.d.ts
 72c670ea423a3a71524ddf6a9fa5a06943676f4a70123881fbef2191698da8b3  dist/modes/rpc/rpc-types.d.ts
 6b22850eca4a77319b4fd28b73dc9f56995b49c28073d86717cfed4c3073ba60  node_modules/@earendil-works/pi-agent-core/dist/agent.js
 97c1ab4b6eeb2ceef2b20d2b439109c316fae3aa96e4ee1519cc68d02bd06a06  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
@@ -15,13 +15,13 @@ e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799  node_modules/@
 46ba1c3418aef6bc171be183ad0032c746a5f08206c92d2c2feadad384175613  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5  dist/core/extensions/loader.js
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
-4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6  dist/core/agent-session-services.js
+a65f12cbbfcdc0326b024fb91d9c1e28ec2c11111e333b58da0f2e016233c264  dist/core/agent-session-services.js
 b2bcdb519a67ab87c4516be6b90202744a21738f42c47a7d5a08be44b73bd3da  dist/core/settings-manager.js
 fef47246f4ce18621bae844a940e7d009cefc7df7cdf00ccb98198d9c407a696  dist/core/session-entry-store.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
-498cec2fd963cd6f693fa653af947607d2faf9de1510dc56c7301a50311bd49e  dist/core/sdk.js
-f2ef42f5e0c70fff5cdb36e760f02195348ff8284093d9a87e51e812e47e48e6  dist/core/native-proof-journal.js
+d7ad93bcb341424fa79014ce2fec4226326cfab1e8d5fee27c1859138e120161  dist/core/sdk.js
+37ae95f1f0ca7c88a75f3c83101e3d7b621c15afced8ac8ec287f958f150cb30  dist/core/native-proof-journal.js
 b382dd789961aa8d9954239a1ce869ee8baa1388bf4d37c4d812ac9a2dbb76e7  dist/core/native-proof-schema.js
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 bd6cfc604781d55db4dc34a0463544c1f323611429ac8d5fc5ebde31642132fb  agent-comms-extensions/global-agent-comms/index.mjs
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 cc4b59d2f756ca9e99282f18b75603b8fb33c200c70745246ef9c63ba46f3375
-# agent-comms-native-inputs-v1 7c7807a18dd9341e19b178a83572b9eac9a5fbc3c467de68e0925131d1bf3125
+# agent-comms-native-tree-v1 0b7dbc9e7da3c7720cda1b4c55d1fb990bca7a0d65735e5f1cd7d892ef4c5327
+# agent-comms-native-inputs-v1 1ca2487a67c78e66d59122328a19105a43d4ae1ab1562f796ca607c6223de1a5

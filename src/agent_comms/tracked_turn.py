@@ -27,11 +27,11 @@ from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_package import VerifiedNativePackage
+from .native_failures import NativePiUnavailable
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
     NativePiPromptRejected,
-    NativePiUnavailable,
     NativeTurnResult,
     _verify_context,
 )
@@ -536,7 +536,7 @@ class TrackedTurnSession(TurnSession):
         # Cancellation joins the worker before its borrowed scope is released.
         async with self.cursor_delivery.reading() as source_reads:
             return await Coordination.run_worker(lambda: _verify_context(
-                self.active_session_file,
+                self.launch.session.files(self.launch.root),
                 self.command.input_id,
                 self.native.attestation.identity.session_id,
                 self.input_commit.require(),

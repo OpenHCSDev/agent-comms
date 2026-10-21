@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from .native_session_files import NativeSessionFiles
+from agent_comms.native_session_files import NativeSessionLocks
 
 
 def _try_lock(fd: int) -> None:
@@ -54,7 +54,7 @@ async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
     if session_file is None:
         yield
         return
-    path = NativeSessionFiles.of(session_file).writer_lock
+    path = NativeSessionLocks.of(session_file).writer_lock
     fd = _open_lock(path)
     locked = False
     try:

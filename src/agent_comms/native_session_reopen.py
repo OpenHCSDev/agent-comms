@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_failures import NativePiUnavailable
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +15,7 @@ from .private_path import FileRevision
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_entries import NativeEvidenceRead
+    from agent_comms.native_pi import NativeContextProof
     from .pi_native_backend import PersistentPiSession
 
 
@@ -59,8 +62,12 @@ class NativeSessionIdentity(SessionRetention):
         if not self.same_session(other):
             raise NativeReopenError("Native saved source identity changed")
 
+    @staticmethod
+    def from_context(context: NativeContextProof) -> NativeSessionIdentity:
+        return NativeSessionIdentity(context.session_id, str(context.session_file))
+
     def require_context(self, context) -> None:
-        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))
+        self.require_same_session(self.from_context(context))
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""
@@ -92,8 +99,6 @@ class NativeSessionIdentity(SessionRetention):
     @classmethod
     def from_evidence(cls, evidence: NativeEvidenceRead) -> NativeSessionIdentity:
         """Derive selected identity from its recipient's already verified source."""
-        from .native_pi import NativePiUnavailable
-
         file = evidence.source.path
         try:
             header = evidence.header()
@@ -106,7 +111,6 @@ class NativeSessionIdentity(SessionRetention):
     def locate(cls, session_file: str) -> NativeSessionIdentity:
         """One-shot callers own a bounded scope; selected callers borrow theirs."""
         from .native_entries import NativeEvidenceScope
-        from .native_pi import NativePiUnavailable
 
         try:
             with NativeEvidenceScope() as scope:

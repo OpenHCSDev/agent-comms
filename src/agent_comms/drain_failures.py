@@ -19,7 +19,7 @@ from .activity import (
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_pi import NativeRequestFailure
+from .native_failures import NativeRequestFailure
 
 UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError, RelationViolationError)
 DEFERRED_DRAIN_ERRORS = (NativeRequestFailure, *UNAVAILABLE_DRAIN_ERRORS)

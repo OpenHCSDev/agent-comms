@@ -6,6 +6,8 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
+from agent_comms.participant_identity import ParticipantIdentity
+
 import os
 import re
 import shutil
@@ -19,7 +21,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, boundary_decoder
+from .native_failures import NativeRequestFailure, NativePiUnavailable
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
@@ -32,9 +35,7 @@ from .private_path import (
     FileIdentity,
     FileRevision,
     NativeSessionFileRole,
-    PrivateDirectoryRole,
     TrustedAncestorRole,
-    fsync_directory,
 )
 from .typed_table import Column, DurableTables, Index, TypedTable
 
@@ -45,32 +46,6 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
-
-
-class NativeRequestFailure(RuntimeError):  # noqa: N818 - nominal request outcome
-    """A failed input is reported and settled without authorizing a retry."""
-
-    @property
-    def public_failure(self) -> str:
-        return str(self)
-
-    @property
-    def rejected_response(self) -> pi.Response | None:
-        return None
-
-
-class NativePiUnavailable(NativeRequestFailure):  # noqa: N818 - nominal fail-closed outcome
-    """Tracked execution failed closed without committing a coordinator fact."""
-
-    native_stderr = ""
-
-    @property
-    def diagnostic_evidence(self):
-        return {"stderr": self.native_stderr}
-
-    @property
-    def public_failure(self):
-        return f"{self}; the input is uncertain."
 
 
 class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model outcome
@@ -134,9 +109,8 @@ class NativePiPromptRejected(NativePiUnavailable):
         self.response = response
         super().__init__("Native Pi rejected the tracked prompt (see diagnostic)")
 
-    @property
-    def rejected_response(self) -> pi.Response:
-        return self.response
+    def publish(self, publisher):
+        return publisher(self.public_failure, native_response=self.response, source_error=self)
 
 
 class NativePiOperationFailed(NativePiUnavailable):
@@ -278,7 +252,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
 
     @classmethod
     @contextmanager
-    def open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:
+    def open_evidence(cls, files: NativeSessionFiles) -> Iterator[sqlite3.Connection]:
         """Read an indexed snapshot after SQLite's bounded hot-journal recovery.
 
         A read is corroboration, never a fresh acknowledgement. Keep the private inode
@@ -286,7 +260,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
         Open existing storage read/write for SQLite rollback, then forbid SQL
         writes. A cold history view can recover without a model turn or acknowledgement.
         """
-        path = NativeSessionFiles(Path(session_file)).input_proof
+        path = files.input_proof
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
@@ -342,34 +316,35 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Path
 
     def corroborates_input(
-        self, input_id: str, *, evidence: NativeEvidenceRead | None = None
+        self, input_id: str, *, files: NativeSessionFiles,
+        evidence: NativeEvidenceRead,
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
         This grants neither replay nor recovery authority. History IO occurs
         before the coordinator read transaction, as on the native return path.
         """
-        if self.input_id != input_id:
+        if self.input_id != input_id or files.session != self.session_file:
             return False
         return self.read_evidence(
-            self.session_file, input_id,
+            files, input_id,
             request_generation=self.request_generation, evidence=evidence,
             session_entry_start=self.session_entry_start,
         ) == self
 
     @classmethod
+    @boundary_decoder
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
+        cls, files: NativeSessionFiles, input_id: str, *, request_generation: int | None = None,
         evidence: NativeEvidenceRead | None = None,
         session_entry_start: int,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         Id128Text.decode(input_id)
-        session_file = Path(session_file).absolute()
+        session_file = files.session.absolute()
         from .native_entries import NativeInputEvidenceRead
-
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            with NativeContextJournal.open_evidence(session_file) as db:
+            with NativeContextJournal.open_evidence(files) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
             if row is None:
                 raise NativePiUnavailable("The input has no assembled-context proof")
@@ -526,6 +501,7 @@ class NativePiRpcLaunch:
         package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
+        owner: ParticipantIdentity,
         directory: Path,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
@@ -543,8 +519,8 @@ class NativePiRpcLaunch:
         from .selected_session import SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
-        _durable_private_session_dir(directory)
-        session = SelectedSession.for_launch(directory, saved)
+        NativeSessionFiles.prepare_private_directory(directory)
+        session = SelectedSession.for_launch(directory, saved, root=root, worktree=cwd, owner=owner)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
@@ -557,13 +533,14 @@ class NativePiRpcLaunch:
         env.update(environment or {})
         arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
+        arguments += session.proof_arguments(root)
         if session.path is not None:
             arguments += ("--session", str(session.path))
         return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        directory: Path,
+        directory: Path, owner: ParticipantIdentity,
         environment: dict[str, str] | None, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
@@ -574,7 +551,8 @@ class NativePiRpcLaunch:
         """
         self._command_selection(command, self.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if (saved, directory) != (self.session.path, self.session.directory):
+        if ((saved, directory) != (self.session.path, self.session.directory)
+                or self.session.files(root).owner.lookup != owner.lookup):
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
@@ -609,13 +587,13 @@ class NativePiRpcLaunch:
         session_dir, session_file = session.directory, session.path
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
-        _durable_private_session_dir(session_dir)
+        NativeSessionFiles.prepare_private_directory(session_dir)
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
         agent_dir = session_dir / ".native-pi-agent"
-        _durable_private_session_dir(agent_dir)
+        NativeSessionFiles.prepare_private_directory(agent_dir)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
@@ -627,6 +605,7 @@ class NativePiRpcLaunch:
             *model.argv,
         ]
         arguments.extend(session.launch_arguments(thinking_level))
+        arguments.extend(session.proof_arguments(root))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
@@ -894,51 +873,6 @@ class PrivateEvidenceRead:
         return revision
 
 
-def _private_session_dir(directory: Path) -> None:
-    if ".." in directory.parts:
-        raise NativePiUnavailable("Native Pi session directory is not lexical")
-    try:
-        TrustedAncestorRole.require_path(directory)
-    except ValueError as error:
-        raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
-    if PrivateDirectoryRole.violation(directory.lstat()) is not None:
-        raise NativePiUnavailable("Native Pi session directory must be owner-only")
-
-
-def _durable_private_session_dir(directory: Path) -> None:
-    """Commit each new directory entry before a Pi launch can be returned.
-
-    Re-sync the private ancestor chain even on reuse: a visible directory may
-    have survived a failed parent fsync on the previous preparation. Stop at
-    the parent of the highest owner-only directory, not at the filesystem root.
-    """
-    missing: list[Path] = []
-    current = directory
-    while True:
-        try:
-            current.lstat()
-        except FileNotFoundError:
-            missing.append(current)
-            current = current.parent
-        else:
-            break
-    try:
-        for path in reversed(missing):
-            path.mkdir(mode=0o700, exist_ok=True)
-            _private_session_dir(path)
-            fsync_directory(path.parent)
-        _private_session_dir(directory)
-        parent = directory.parent
-        while True:
-            fsync_directory(parent)
-            info = parent.lstat()
-            if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
-                break
-            parent = parent.parent
-    except OSError as error:
-        raise NativePiUnavailable("Native Pi session directory could not be committed") from error
-
-
 def _session_location(directory: Path, candidate: str) -> Path:
     if not isinstance(candidate, str) or not candidate:
         raise NativePiUnavailable("Native Pi omitted its session file")
@@ -968,7 +902,7 @@ def read_tracked_input_commitment(
 
 
 def _verify_context(
-    session_file: Path,
+    files: NativeSessionFiles,
     input_id: str,
     session_id: str,
     input_event: pi.InputCommitted,
@@ -977,12 +911,13 @@ def _verify_context(
 ) -> NativeContextProof:
     from .native_entries import NativeInputEvidenceRead
 
+    session_file = files.session
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(
             session_file, session_entry_start=input_event.session_entry_start)
     except MalformedRecord as error:
         raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        if not emitted.corroborates_input(input_id, evidence=evidence):
+        if not emitted.corroborates_input(input_id, files=files, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
         return emitted

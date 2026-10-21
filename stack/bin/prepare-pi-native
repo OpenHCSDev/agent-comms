@@ -152,6 +152,8 @@ patch --batch --fuzz=0 --no-backup-if-mismatch -p1 -d "$native_package" < "$stac
 cp -- "$stack_root/native-session-entry-store.mjs" "$native_package/dist/core/session-entry-store.js"
 cp -- "$stack_root/native-session-entry-store.d.ts" "$native_package/dist/core/session-entry-store.d.ts"
 cp -- "$stack_root/native-proof-journal.mjs" "$native_package/dist/core/native-proof-journal.js"
+cp -- "$stack_root/native-proof-journal.d.ts" "$native_package/dist/core/native-proof-journal.d.ts"
+cp -- "$stack_root/native-private-file.mjs" "$native_package/dist/core/native-private-file.js"
 PYTHONPATH="$repo_root/src" "$python" "$stack_root/render-native-proof-schema.py" \
     "$native_package/dist/core/native-proof-schema.js"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \

@@ -5,9 +5,9 @@ import hashlib
 import sys
 from pathlib import Path
 
-SESSION_SHA = "9c2d9e99e3a179b5c733fcb51b6225c5e76e4a3cc5faa1a92d107d054bc920fc"
+SESSION_SHA = "55476990885e28aaf6137a8df914494095bcdb4a34fd9ac732fd134c3c9ada27"
 AGENT_SHA = "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
-RPC_SHA = "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
+RPC_SHA = "d8eecb3d5bbffd5c516dc14a3675b39b227a6eda5cf1e506945dab3d76107927"
 LOOP_SHA = "7469aebae3badc125087c55843130fe44c2ea3b68ea1b757c884469dd355d5f4"
 ABORT_AFTER_TOOLS = """\
             // Aborting a tool ends this run before queued inputs can be consumed.

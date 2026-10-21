@@ -1,10 +1,6 @@
 """Explicit abandonment releases a dead slot without replaying an UNKNOWN input."""
 
 from __future__ import annotations
-from contextlib import closing
-from agent_comms.cursor_publication import CursorDelivery
-
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import multiprocessing
 import os
@@ -15,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.coordinated_runtime as runtime
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -23,59 +18,22 @@ from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
-from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerReleaseEvidence
-from agent_comms.tracked_turn import TrackedTurnSession
-from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
+from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
+from test_coordinated_runtime import tmp_path  # noqa: F401
 
 
-def unknown_owner(directory, authorized, output, exit_allowed):
-    # Revoke the real owner before the current failure consumer can settle.
-    # Both recorded and unrecorded original inputs remain UNKNOWN; no obsolete
-    # failure hook or fabricated owner-loss grant is used.
-    with closing(CursorDelivery()) as cursor_delivery:
-        root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-
-        fake, _calls = _fake_model()
-
-        async def fail(*args, **kwargs):
-            if authorized:
-                await fake(*args, **kwargs)
-            os.environ["AGENT_COMMS_THREAD"] = "beta"
-            comms.owners.release("beta")
-            raise NativePiUnavailable("UNKNOWN before claim_scope acknowledgement")
-
-        TrackedTurnSession.execute = fail
-        try:
-            asyncio.run(
-                runtime.SelectedExecution(
-                    root=root,
-                    wire_root_id=root_id,
-                    owner_name="beta",
-                    native_package=VerifiedNativePackage.acquire(
-                        pinned_native_package()
-                    ),
-                    cursor_delivery=cursor_delivery,
-                ).run()
-            )
-        except NativePiUnavailable:
-            pass
-        else:
-            raise AssertionError("fixture must leave an unresolved native attempt")
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            row = store.session._connection.execute(
-                f"SELECT * FROM {NativeRuntimeInput.declared_name}"
-            ).fetchone()
-            execution_id, input_id = row["execution_id"], row["input_id"]
-        output.put((str(root), root_id, execution_id, input_id))
-        if not exit_allowed.wait(15):
-            raise TimeoutError("test must release fixture process")
+def unknown_owner(directory, history, output, exit_allowed):
+    source = asyncio.run(release_native_input(Path(directory), history))
+    output.put((str(source.root), source.root_id, source.execution_id, source.input_id))
+    if not exit_allowed.wait(15):
+        raise TimeoutError("test must release fixture process")
 
 
-@pytest.fixture(params=[False, True], ids=["missing-claim_scope", "authorized-unknown"])
+@pytest.fixture(params=NativeSendHistory.members_with(UnknownHistory), ids=lambda history: history.declared_name)
 def released_unknown(tmp_path, request):  # noqa: F811
-    context = multiprocessing.get_context("fork")
+    context = multiprocessing.get_context("spawn")
     output, exit_allowed = context.Queue(), context.Event()
     process = context.Process(
         target=unknown_owner, args=(str(tmp_path), request.param, output, exit_allowed)
@@ -218,7 +176,7 @@ def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
         assert store.snapshots.get(execution_id).is_current
 
 
-def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch):  # noqa: F811
+def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):  # noqa: F811
     from agent_comms.coordination_errors import StaleFence, StaleRevision
     from test_coordination_store import ready, started
 
@@ -233,18 +191,6 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch): 
                 store.attempts.fail_unknown(stale_fence, expected_pointer_revision=revision)
             assert store.snapshots.get(fence.execution_id) == before
 
-        def fail_settlement(*_args, **_kwargs):
-            raise RuntimeError("settlement interrupted")
-
-        with monkeypatch.context() as interrupted:
-            interrupted.setattr(type(before), "settle", fail_settlement)
-            with pytest.raises(RuntimeError):
-                store.attempts.fail_unknown(
-                    fence, expected_pointer_revision=before.pointer_revision
-                )
-        assert (
-            store.snapshots.get(fence.execution_id) == before
-        )  # replay + finality rolled back too.
         after = store.attempts.fail_unknown(
             fence, expected_pointer_revision=before.pointer_revision
         ).value

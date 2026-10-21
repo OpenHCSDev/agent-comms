@@ -146,9 +146,13 @@ class RootFile:
         return Path(root) / cls.filename.format(**parts)
 
     @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        path = cls.path_in(root)
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        """The resources composed onto one declared primary file."""
         return frozenset((path, store_lock_path(path)))
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return cls.member_paths(cls.path_in(root))
 
     @classmethod
     def matching_in(cls, root: Path) -> frozenset[Path]:
@@ -207,7 +211,8 @@ class PatternFile(RootFile):
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
-        return cls.matching_in(root) | frozenset(
+        return frozenset(member for path in cls.matching_in(root)
+                         for member in cls.member_paths(path)) | frozenset(
             path for path in root.glob(str(store_lock_path(cls.pattern()))) if path.is_file())
 
 
@@ -247,9 +252,8 @@ class SQLiteFile(RootFile):
         return (path, *(path.with_name(path.name + suffix) for suffix in companions))
 
     @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        path = cls.path_in(root)
-        return super().files_in(root) | frozenset((
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return super().member_paths(path) | frozenset((
             *cls.files(path), StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path),
         ))
 
