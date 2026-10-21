@@ -11,7 +11,7 @@ from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
-from agent_comms.goal_attempts import NoLaunchPermit
+from agent_comms.goal_turn_permit import NoLaunchPermit
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import NoGoal
 from agent_comms.thread_identity import TurnId

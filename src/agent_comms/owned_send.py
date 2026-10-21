@@ -35,7 +35,8 @@ from .turn_input_source import (
 )
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, GoalTurnPermit
+    from .goal_attempts import GoalAttemptStore
+    from .goal_turn_permit import GoalTurnPermit
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot

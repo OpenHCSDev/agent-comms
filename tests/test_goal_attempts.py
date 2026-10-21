@@ -5,13 +5,27 @@ from __future__ import annotations
 import multiprocessing
 import os
 import sqlite3
+import subprocess
+import sys
 from collections.abc import Iterator
+from contextlib import closing
+from dataclasses import replace
 from queue import Empty
 
 import pytest
 
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_commands import StopCliCommand
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.field_codec import MalformedRecord
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
+from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_attempts import (
+    AttemptRecord,
+    Generation,
     GoalAttemptStore,
     ProviderUsageTotal,
     ReservationConflictError,
@@ -413,6 +427,87 @@ def test_one_human_decision_id_cannot_authorize_two_attempts(store):
         user_decision_id="different-human-decision",
     )
     assert store.reserve("goal", 3).generation == 3
+
+
+@pytest.fixture
+def claimed_owner(comms):
+    # This process cannot run turn cleanup. Only the real stop/recovery path
+    # can settle the durable claim left behind by its exited owner.
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=True,
+    )
+    try:
+        owner = comms.registry.new_thread(
+            "stopped-goal", frozenset(), str(comms.root),
+            process_identity=ProcessIdentity.capture(child.pid),
+        )
+        comms.registry.declare(owner)
+        comms.goals.update_goal(owner.name, SetGoalAction(text="Continue the stopped order."))
+        owner = comms.registry.require(owner.name)
+        store = comms.goals.open_goal_store()
+        generation = store.require_generation(owner.goal.require().id)
+        store.claim_launch(store.reserve(generation.goal_id, generation.number))
+        yield owner
+    finally:
+        comms.owners.stop("stopped-goal")
+        child.wait(timeout=5)
+
+
+def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claimed_owner):
+    store = comms.goals.open_goal_store()
+    goal_id = claimed_owner.goal.require().id
+    before = store.require_generation(goal_id)
+    assert before.attempt_id is not None
+    permit = store.stopped_permit(goal_id).claims[0]
+    assert store.read_attempt(before.attempt_id).holds(permit.reservation, ClaimedAttempt())
+    assert not CoordinationStore.path_in(comms.root).exists()
+    # Even without native coordination, a foreign release cannot settle a goal.
+    substituted = replace(claimed_owner, created_at=claimed_owner.created_at + 1)
+    with pytest.raises(RecoveryBlocked):
+        RecoveryMonitorCapability.settle_stopped_owner(comms.root, substituted)
+    assert store.require_generation(goal_id) == before
+
+    StopCliCommand(name=claimed_owner.name).apply(comms)
+
+    stopped = comms.registry.require(claimed_owner.name)
+    assert not stopped.process_alive
+    assert comms.owners.releases.get(stopped.name).matches(claimed_owner)
+    successor = store.require_generation(goal_id)
+    assert successor.number == before.number + 1
+    assert successor.lifecycle == ReadyGeneration()
+    with closing(store._connect()) as conn:
+        attempt = AttemptRecord.one(conn, attempt_id=before.attempt_id)
+        assert attempt.phase == FailedAttempt()
+        assert attempt.resolution == "Operator stopped goal turn."
+        assert attempt.progress_witness is None
+        assert FailedTurnEvidence.count(conn) == 0
+    assert stopped.goal == claimed_owner.goal
+    assert stopped.goal.require().state.active
+    # Repeated recovery is a no-op; it never creates another ready generation.
+    RecoveryMonitorCapability.settle_stopped_owner(comms.root, stopped)
+    assert store.require_generation(goal_id) == successor
+
+
+def test_stop_preserves_already_verified_goal_progress(comms, claimed_owner):
+    store = comms.goals.open_goal_store()
+    goal_id = claimed_owner.goal.require().id
+    before = store.require_generation(goal_id)
+    assert before.attempt_id is not None
+    permit = store.stopped_permit(goal_id).claims[0]
+    successor = permit.record_verified_progress(store, "completed-native-turn")
+
+    StopCliCommand(name=claimed_owner.name).apply(comms)
+
+    assert store.require_generation(goal_id) == successor
+    assert store.read_attempt(before.attempt_id).holds(permit.reservation, SucceededAttempt())
+    assert comms.registry.require(claimed_owner.name).goal == claimed_owner.goal
+
+
+def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
+    attempt_id = "a" * 32
+    generation = Generation("goal", 1, ReservedGeneration(), attempt_id)
+    with pytest.raises(StorageUncertainError, match=attempt_id):
+        generation.lifecycle.stopped_permit(store, generation)
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
