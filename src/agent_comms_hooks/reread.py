@@ -67,6 +67,11 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
         """The commander's voice, written by the session start hook beside the transcript."""
         return Path(self.transcript_path).with_suffix(".voice.md")
 
+    @property
+    def drift(self) -> Path:
+        """The commander's drift tells, one per line, written beside the transcript at start."""
+        return Path(self.transcript_path).with_suffix(".drift.md")
+
     def context_tokens(self) -> int:
         """The prompt size of the latest model reply; zero before the first one."""
         for line in reversed(self.tail()):
@@ -91,7 +96,7 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
         """Nothing to write before the message unless a member needs it."""
 
     @abstractmethod
-    def message(self) -> str: ...
+    def message(self, tokens: int) -> str: ...
 
     def take(self, tokens: int) -> tuple[str, ...]:
         """The member's message when due, marking the context size it was given at."""
@@ -99,7 +104,7 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
             return ()
         self.prepare()
         self.mark.write_text(json.dumps(asdict(RereadMark(tokens))))
-        return (self.message(),)
+        return (self.message(tokens),)
 
     @staticmethod
     def remind(*members: type[ContextCadence]) -> None:
@@ -113,13 +118,17 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
 
 
 @dataclass(frozen=True)
-class CommanderReread(ContextCadence):
-    """Orders the commander's sources read again."""
+class ToolUseReminder(ContextCadence, ABC):
+    """A reminder checked after every tool call; each direct subclass is one reminder."""
 
-    every: ClassVar[int] = 100_000
+
+@dataclass(frozen=True)
+class SourcesOrder(ContextCadence, ABC):
+    """The order to read every source part; session start and the reread share its mark."""
+
     mark_suffix: ClassVar[str] = ".reread.json"
 
-    def message(self) -> str:
+    def message(self, tokens: int) -> str:
         paths = sorted(self.parts.iterdir())
         return (
             f"Read each of these {len(paths)} files in full with the Read tool before any other"
@@ -130,14 +139,36 @@ class CommanderReread(ContextCadence):
 
 
 @dataclass(frozen=True)
-class VoiceReminder(ContextCadence):
+class CommanderReread(SourcesOrder, ToolUseReminder):
+    """Orders the commander's sources read again."""
+
+    every: ClassVar[int] = 100_000
+
+
+@dataclass(frozen=True)
+class VoiceReminder(ToolUseReminder):
     """Puts the commander's voice back in fresh context, inline, far more often than a reread."""
 
     every: ClassVar[int] = 25_000
     mark_suffix: ClassVar[str] = ".voice.json"
 
-    def message(self) -> str:
+    def message(self, tokens: int) -> str:
         return self.voice.read_text(encoding="utf-8")
+
+
+@dataclass(frozen=True)
+class DriftCheck(ToolUseReminder):
+    """Two one-line drift tells, rotating with context size, far more often than the voice."""
+
+    every: ClassVar[int] = 8_000
+    mark_suffix: ClassVar[str] = ".drift.json"
+    shown: ClassVar[int] = 2
+
+    def message(self, tokens: int) -> str:
+        tells = [line for line in self.drift.read_text(encoding="utf-8").splitlines() if line.strip()]
+        start = tokens // self.every * self.shown
+        return "Drift check:\n" + "\n".join(
+            tells[(start + offset) % len(tells)] for offset in range(self.shown))
 
 
 class RereadProgram(ClaudeHookProgram):
@@ -149,7 +180,7 @@ class RereadProgram(ClaudeHookProgram):
 
 
 def main() -> None:
-    ContextCadence.remind(CommanderReread, VoiceReminder)
+    ContextCadence.remind(*ToolUseReminder.__subclasses__())
 
 
 if __name__ == "__main__":
