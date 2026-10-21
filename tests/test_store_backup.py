@@ -34,7 +34,9 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
         writer.execute('CREATE TABLE events (body TEXT)')
         writer.execute("INSERT INTO events VALUES ('retained')")
         writer.commit()
-        backup = StoreBackup.take(root, route, (store, ledger), tmp_path / 'backup')
+        spill_dir = tmp_path / 'spill'
+        backup = StoreBackup.take(root, route, (store, ledger), spill_dir)
+        assert backup.path.parent == spill_dir
         assert backup.original()
         writer.execute("UPDATE events SET body='changed'")
         writer.commit()
@@ -50,6 +52,32 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
     archived = backup.retire()
     assert not backup.path.exists()
     assert archived.exists()
+
+
+def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
+    root = tmp_path / 'ROOT'
+    spill_dir = tmp_path / 'spill'
+    spill_dir.mkdir()
+    backups = tuple(spill_dir / f'ROOT.upgrade-20260101T00000{n}' for n in range(4))
+    for backup in backups:
+        backup.mkdir()
+        (backup / 'saved').write_text('retained store')
+    unrelated = spill_dir / 'unrelated'
+    other_root = spill_dir / 'OTHER.upgrade-20260101T000000'
+    retired_run = spill_dir / 'ROOT.retired-20260101T000000'
+    for directory in (unrelated, other_root, retired_run):
+        directory.mkdir()
+        (directory / 'saved').write_text('untouched')
+    ordinary_file = spill_dir / 'ROOT.upgrade-not-a-directory'
+    ordinary_file.write_text('untouched')
+
+    assert StoreBackup.retain(spill_dir, root) == backups[:2]
+    assert not any(path.exists() for path in backups[:2])
+    assert all((path / 'saved').read_text() == 'retained store' for path in backups[2:])
+    assert all((path / 'saved').read_text() == 'untouched'
+               for path in (unrelated, other_root, retired_run))
+    assert ordinary_file.read_text() == 'untouched'
+    assert StoreBackup.retain(spill_dir, root) == ()
 
 
 def test_ledger_does_not_repeat_a_recorded_conversion(tmp_path):
