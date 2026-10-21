@@ -429,7 +429,8 @@ class TestSelectedTargetActions:
         assert tuple(outcome.target for outcome in result.outcomes) == selected
         assert result.outcomes[0].items_with(Successful, result.outcomes[0])
         assert not any(outcome.items_with(Successful, outcome) for outcome in result.outcomes[1:])
-        assert not comms.registry.status('alpha').visible
+        with pytest.raises(ValueError, match="Initial direct target must be visible"):
+            comms.registry.status('alpha').require_visible()
         assert comms.registry.status('beta').active
         assert comms.registry.require('alpha').tags == frozenset({'team'})
         assert comms.registry.require('beta').tags == frozenset({'other'})
@@ -469,7 +470,8 @@ class TestSelectedTargetActions:
         assert result["outcomes"][1]["error_type"] == CommandSelectionChanged.__name__
         assert "no longer available" in result["outcomes"][1]["error"]
         assert result["outcomes"][2]["result"]["archived"] is True
-        assert not comms.registry.status("alpha").visible
+        with pytest.raises(ValueError, match="Initial direct target must be visible"):
+            comms.registry.status("alpha").require_visible()
         assert comms.registry.status("active").active
         assert comms.bus.require_channel("#team").archived
 

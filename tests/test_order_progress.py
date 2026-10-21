@@ -19,6 +19,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
+from agent_comms.work_branches import WorkBranches
 from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
 
 
@@ -94,14 +95,18 @@ def test_a_deleted_file_is_no_edit_time(tmp_path):
 
 def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
     """10:09 on 2026-10-21: one unit checkout whose submodule pointed at a removed git directory
-    failed every commander heartbeat pass for half an hour."""
+    failed every commander heartbeat pass, and comms_todo_list for every caller, for half an hour.
+    Both readers of a unit's uncommitted files ask the one owner."""
     package = unit_checkout(tmp_path / 'package')
     worktree = unit_checkout(tmp_path / 'worker--P1')
     git(worktree, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(package), 'pinned')
     git(worktree, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'pin')
     (worktree / 'pinned' / '.git').write_text('gitdir: ../.git/modules/removed\n')
+    assert WorkBranches(worktree).uncommitted() == ()
     edited(worktree, 'owner.py', 700.0)
+    assert WorkBranches(worktree).uncommitted() == (worktree / 'owner.py',)
     assert tuple(PresentCheckout(worktree).edits()) == (700.0,)
+    assert WorkBranches(worktree).local_work
 
 
 @pytest.fixture

@@ -65,6 +65,7 @@ from agent_comms.field_codec import (
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.build_identity import (
     BuildIdentity,
+    CommitInstallation,
     RecordedBuildIdentity,
     UnrecordedBuildIdentity,
 )
@@ -785,13 +786,9 @@ class PresentCheckout(ProgressCheckout):
         return self.commits(pattern, self.origin_refs, *self.default_refs)
 
     def edits(self) -> Iterator[float]:
-        """When each uncommitted change in this checkout was last written; a deletion has none.
-
-        A submodule is pinned package data, never a unit's edit, so its git state is not read."""
-        changed = (*self.git("diff", "--name-only", "-z", "--ignore-submodules=all",
-                             "HEAD").split("\0"),
-                   *self.git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
-        return (path.stat().st_mtime for path in (self.path / name for name in changed if name)
+        """When each uncommitted change in this checkout was last written; a deletion has none."""
+        return (path.stat().st_mtime
+                for path in WorkBranches(self.path).read_checkout().uncommitted()
                 if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
@@ -1621,10 +1618,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def installation_build(self) -> BuildIdentity:
         return RecordedBuildIdentity.installed()
 
-    def require_installation(self) -> None:
-        self.installation_build.require_installed(
+    def installation(self) -> CommitInstallation:
+        return self.installation_build.installation(
             self.installation_commits, Path(self.check.directory)
         )
+
+    def require_installation(self) -> None:
+        self.installation().require()
 
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         raise TodoError("Only a pending order can be claimed by its holder.")
@@ -1826,7 +1826,6 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
         return self.run.merged_line
 
     def closed_in(self, todo: Todo) -> Todo:
-        self.require_installation()
         return DoneTodoState.closed(todo, self)
 
     def waiting_in(self, todo: Todo) -> Todo:
@@ -3123,9 +3122,11 @@ class Todo(TypedTable):
         if self.holder_state.owned_by(owner, goal_id):
             raise TodoConflict(self)
 
-    def require_replacement(self) -> None:
+    @property
+    def latest_message(self) -> OrderMessage:
         if not self.messages:
             raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
+        return self.messages[-1]
 
     def require_fold(self, target: Todo, why: str) -> None:
         self.state.require_open(self)
@@ -3237,7 +3238,6 @@ class TodoStore(DurableStore):
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise ValueError('Only a live newer order to the same unit replaces an old one.')
-        newer.require_replacement()
         with self.writing() as db:
             current = self._current(db, old.id)
             current.require_result(old)
@@ -3245,7 +3245,7 @@ class TodoStore(DurableStore):
             result = replace(
                 current,
                 order=current.order.copy_as(
-                    DroppedProblemOrder, replacing_message=newer.messages[-1].message_id
+                    DroppedProblemOrder, replacing_message=newer.latest_message.message_id
                 ),
                 assignment=None,
                 released=(

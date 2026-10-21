@@ -1055,13 +1055,12 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
 
     def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.todos.get(self.problem)
-        todo.require_replacement()
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
         with comms.bus.log.checked_read() as source:
             original = PublicMessages.require(
-                source.connection, message_id=todo.messages[-1].message_id
+                source.connection, message_id=todo.latest_message.message_id
             )
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
