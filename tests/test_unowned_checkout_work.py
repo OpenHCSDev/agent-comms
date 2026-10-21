@@ -17,6 +17,7 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
+    CheckoutUnreadable,
     ReassignedWheelSpin,
     UnownedOrderWatch,
     UnownedWheelSpin,
@@ -38,7 +39,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.work_branches import WorkBranchError
+from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from order_scope_fixture import FIX_SCOPE
 
 
@@ -198,12 +199,19 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     assert original.registry.require('idle').goal == idle_goal
 
 
-def test_unreadable_checkout_is_not_clean(checkout_bus: Comms, tmp_path: Path):
+def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
+        checkout_bus: Comms, tmp_path: Path):
+    """10:08 on 2026-10-21: one unit's unreadable checkout failed the whole pass for every unit."""
     with practice_copy(checkout_bus.root, tmp_path / 'practice') as (root, _measurement):
         c = Comms(root)
         checkout = c.registry.storage_rule.order_checkout('worker', 'P1')
-        (checkout / '.git').unlink()
+        (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
         before = c.goals.todos.get('P2')
-        with pytest.raises(WorkBranchError):
+        with LaunchRoot.from_path(root).selected():
+            read = WorkBranches(checkout).read_checkout()
+            assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-        assert c.goals.todos.get('P2') == before
+            assert c.goals.todos.get('P2') == before
+            unreadable, = CheckoutUnreadable.violations(c, 'lead')
+            assert (unreadable.unit, unreadable.checkout) == ('worker', checkout)
+            assert 'not a git repository' in unreadable.line()

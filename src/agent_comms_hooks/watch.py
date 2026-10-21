@@ -135,6 +135,10 @@ class WatchState:
     def serving_claims(self) -> tuple[WatchClaim, ...]:
         return ()
 
+    def may_serve(self, bus: str) -> bool:
+        """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
+        return True
+
 
 class UnclaimedWatch(WatchState):
     pass
@@ -162,6 +166,9 @@ class RecordedWatch(WatchState):
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         serve.launch_record(self.claim, self.record, request)
+
+    def may_serve(self, bus: str) -> bool:
+        return self.record.bus == bus
 
 
 class LiveWatch(RecordedWatch):

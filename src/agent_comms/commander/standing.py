@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
@@ -23,6 +23,12 @@ from agent_comms.todos import PullRequest, PullRequests, Todo, UnmergedListedPul
 from agent_comms.turn_digests import TurnDigestRead, TurnsSince
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.message_page import PageBounds
+from agent_comms.read_basis import NamedViewer
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.work_branches import WorkBranches
 from agent_comms.ui_model.unit_state import UnitState
 
 
@@ -202,6 +208,55 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
 
+
+
+@dataclass(frozen=True)
+class CheckoutUnreadable(UndatedStandingRule):
+    """A holder's checkout git cannot open, without hiding every other unit."""
+    unit: str
+    checkout: Path
+    error: str = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        storage = comms.registry.storage_rule
+        holders = sorted({todo.held().owner for todo in cls.pending_todos(comms, commander)})
+        return tuple(cls(holder, path, error) for holder in holders
+                     for path in storage.checkout_paths(comms.registry.require(holder))
+                     for error in WorkBranches(path).read_checkout().errors())
+
+    def line(self) -> str:
+        return (f"CHECKOUT UNREADABLE: {self.unit} {self.checkout}: {self.error}"
+                " -> order the unit to repair its checkout; its work stays retained")
+
+
+@dataclass(frozen=True)
+class HeartbeatSilent(DatedStandingRule):
+    """Main's liveness check; P433 must move this read to non-waking pass observations."""
+    seconds: ClassVar[int] = 180
+    beat: int
+    since: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        served = {thread.incarnation
+                  for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+        if CommanderHeartbeat.sender not in comms.registry or (
+                comms.registry.require(commander).incarnation not in served):
+            return ()
+        page = comms.views.history_page(ThreadTarget(CommanderHeartbeat.sender),
+                                        PageBounds(limit=1), viewer=NamedViewer(commander))
+        return tuple(cls(beat.seq, beat.timestamp + cls.seconds) for beat in page.messages[-1:]
+                     if beat.sender == CommanderHeartbeat.sender
+                     and beat.timestamp + cls.seconds < time.time())
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"HEARTBEAT SILENT: no beat since seq {self.beat}, silent past "
+                f"{RecordedEventTime(self.since).clock()}"
+                " -> read the connector journal for the failing pass and fix its owner")
 
 
 @dataclass(frozen=True)
