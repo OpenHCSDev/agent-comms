@@ -12,7 +12,7 @@ from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TextIO, cast
 
 from .locked_store import DurableFile
 from .native_session_files import SavedSessionFile
@@ -32,7 +32,7 @@ from .field_codec import (
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import PiMessage, PiOmitted, PiPayload
+from .pi_payloads import Opaque, PiMessage, PiOmitted, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
@@ -626,9 +626,8 @@ class ImportedMetadataEntry(CustomEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownEntry(NativeEntry):
-    payload: dict[str, Any]
-    opaque = True
+class UnknownEntry(Opaque, NativeEntry):
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
