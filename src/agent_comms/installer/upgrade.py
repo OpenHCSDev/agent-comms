@@ -20,7 +20,6 @@ start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -65,7 +64,7 @@ from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, Ma
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses, RuntimeRetirement
+from agent_comms.runtime_processes import RuntimeProcesses, RuntimeProcessOutcome
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
@@ -258,12 +257,8 @@ class RetiringRehearsal(FreshRehearsal):
 class LiveRun(DeclaredFamily, affix="Run"):
     """What a live install changed, including every bridge and old-runtime process."""
 
-    processes: tuple[RuntimeRetirement, ...] = ()
+    processes: tuple[RuntimeProcessOutcome, ...] = ()
     bridges: tuple[BridgeResume, ...] = ()
-
-    @property
-    def successful(self) -> bool:
-        return all(process.successful for process in self.processes)
 
     def lines(self) -> tuple[str, ...]:
         return (
@@ -700,9 +695,9 @@ class Install[Rehearsed: Rehearsal](ABC):
             finally:
                 # A failed live pass has restored the outgoing runtime; resume onto it too.
                 resumed = tuple(bridge.resume() for bridge in paused)
-        # Bridges have exec'd before discovery. The installer must also have
-        # transferred to the target runtime; it is not exempted from the sweep.
-        processes = asyncio.run(RuntimeProcesses.observe(self.staged.runtime).retire(10))
+        # Observe after bridge transfer. Discovery never grants stop authority
+        # over another app; installer-started children keep their launch handles.
+        processes = RuntimeProcesses.observe(self.staged.runtime).outcomes
         return replace(result, bridges=resumed, processes=processes)
 
     @abstractmethod
@@ -722,7 +717,7 @@ class ChangedInstall(Install[CarriedRehearsal]):
 
 class UnchangedInstall(Install[UnchangedRehearsal]):
     """The checkout already sits at the target and the relocked lock is the installed one:
-    nothing to rehearse, hold or restart. It only plans the next install."""
+    nothing to rehearse, hold or restart."""
 
     def rehearsal(self) -> UnchangedRehearsal:
         return UnchangedRehearsal()
@@ -730,7 +725,6 @@ class UnchangedInstall(Install[UnchangedRehearsal]):
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
         self.installed.publish()
         RootRuntime.publish(self.root, self.installed.runtime)
-        self.installer.plan_next(self.root, time.time())
         return UnchangedRun()
 
 
@@ -763,7 +757,6 @@ class FreshInstall(Install[FreshRehearsal]):
         RootRuntime.publish(self.root, self.staged.runtime)
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
-        self.installer.plan_next(self.root, time.time())
         return CreatedRun(services, route)
 
 
@@ -826,7 +819,6 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         RootRuntime.publish(root, staged.runtime)
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
-        installer.plan_next(root, time.time())
     except BaseException as error:
         print(f"install: install failed ({type(error).__name__}: {error}); "
               "restoring original installation", file=sys.stderr)

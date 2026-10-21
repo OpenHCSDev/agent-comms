@@ -1,13 +1,21 @@
-"""A fake runtimes tree with real process identities, no live runtime signals."""
+"""A fake runtimes tree with real applications; observations never signal them."""
 
-import asyncio
 import os
 import subprocess
 import sys
 from contextlib import ExitStack
+from pathlib import Path
 
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.upgrade import LiveRun, UnchangedRun
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_processes import RuntimeProcess, RuntimeProcesses, UnreadableRuntimeProcess
+from agent_comms.runtime_processes import (
+    RuntimeProcessOutcome,
+    RuntimeProcesses,
+    UnreadableRuntimeProcess,
+    UnretiredRuntimeProcess,
+)
 
 
 def stop(child):
@@ -29,24 +37,34 @@ def test_runtime_process_family(tmp_path):
             cleanup.callback(stop, child)
             children.append(child)
         snapshot = RuntimeProcesses.observe(target)
-        (candidate,) = snapshot.candidates
-        assert isinstance(candidate, RuntimeProcess)
-        assert candidate.pid == children[0].pid
-        assert candidate.prefix == old.prefix
+        (outcome,) = snapshot.outcomes
+        assert isinstance(outcome, UnretiredRuntimeProcess)
+        assert outcome.process == ProcessIdentity.capture(children[0].pid)
+        assert outcome.process.prefix == old.prefix
+        assert outcome.process.application.process == ProcessIdentity.capture(os.getpid())
+        assert outcome.process.application.name == Path(f"/proc/{os.getpid()}/comm").read_text().strip()
         # Resolving the interpreter would collapse both runtimes onto the shared Python.
         assert old.interpreter.resolve() == target.interpreter.resolve()
-        (outcome,) = asyncio.run(snapshot.retire(5))
-        assert outcome.successful, outcome.line()
         assert str(children[0].pid) in outcome.line()
-        children[0].wait(timeout=10)
+        assert outcome.process.application.describe() in outcome.line()
+        # Neither discovery nor rendering gains the right to terminate an application.
+        assert all(child.poll() is None for child in children)
+        run = UnchangedRun(processes=snapshot.outcomes)
+        decoded = FieldCodec.decode(LiveRun, FieldCodec.encode(run))
+        assert decoded == run
+        assert outcome.line() in decoded.lines()
+        assert FieldCodec.decode(RuntimeProcessOutcome, FieldCodec.encode(outcome)) == outcome
+        stop(children[0])  # Only its actual launcher closes this child.
+        assert not RuntimeProcesses.observe(target).outcomes
         assert children[1].poll() is None
-        assert not RuntimeProcesses.observe(target).candidates
 
     # A named process whose command line cannot be read is not silently discarded.
     proc = tmp_path / "proc"
     entry = proc / str(os.getpid())
     (entry / "cmdline").mkdir(parents=True)
-    (unknown,) = RuntimeProcesses.observe(target, proc).candidates
+    (unknown,) = RuntimeProcesses.observe(target, proc).outcomes
     assert isinstance(unknown, UnreadableRuntimeProcess)
     assert unknown.pid == os.getpid()
-    assert not asyncio.run(unknown.retire(0)).successful
+    assert str(unknown.pid) in unknown.line()
+    assert unknown.reason
+    assert FieldCodec.decode(RuntimeProcessOutcome, FieldCodec.encode(unknown)) == unknown

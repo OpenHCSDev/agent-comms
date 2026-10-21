@@ -70,4 +70,4 @@ class RequestListVerb(RequestVerb, declared_name="list"):
 
 
 def main(a: list[str], ctx: Commander) -> None:
-    RequestVerb.parse(a, __doc__).apply(ctx)
+    RequestVerb.parse(a).apply(ctx)
