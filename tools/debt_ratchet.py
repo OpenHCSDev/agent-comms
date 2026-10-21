@@ -496,6 +496,26 @@ class ChangedSource:
         return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines), base_source)
 
 
+class ScopeNames(ast.NodeVisitor):
+    """Each node's enclosing class and function names, dotted, through the AST's own dispatch."""
+
+    def __init__(self) -> None:
+        self.found: dict[ast.AST, str] = {}
+        self.scope = ""
+
+    def generic_visit(self, node: ast.AST) -> None:
+        self.found[node] = self.scope
+        super().generic_visit(node)
+
+    def visit_named(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
+        self.found[node] = outer = self.scope
+        self.scope = f"{outer}.{node.name}"
+        super().generic_visit(node)
+        self.scope = outer
+
+    visit_FunctionDef = visit_AsyncFunctionDef = visit_ClassDef = visit_named
+
+
 class CleanChangedLines(OccurrenceMeasure):
     """No occurrence may be written, even when another occurrence is deleted.
 
@@ -518,16 +538,9 @@ class CleanChangedLines(OccurrenceMeasure):
     @staticmethod
     def scopes(tree: ast.AST) -> dict[ast.AST, str]:
         """Each node's enclosing class and function names, dotted; the module is empty."""
-        found: dict[ast.AST, str] = {}
-        pending: list[tuple[ast.AST, str]] = [(tree, "")]
-        while pending:
-            node, scope = pending.pop()
-            found[node] = scope
-            match node:
-                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
-                    scope = f"{scope}.{name}"
-            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
-        return found
+        names = ScopeNames()
+        names.visit(tree)
+        return names.found
 
     @classmethod
     def identities(cls, tree: ast.AST, filename: str) -> Counter[tuple[str, str]]:
@@ -541,7 +554,7 @@ class CleanChangedLines(OccurrenceMeasure):
 
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The first changed line of each occurrence written on a changed line that the base lacks."""
+        """The first changed line of each occurrence written there that the base lacks."""
         scopes = cls.scopes(source.tree)
         unwritten = cls.identities(source.tree, source.path)
         unwritten.subtract(cls.identities(source.base_tree, source.path))
