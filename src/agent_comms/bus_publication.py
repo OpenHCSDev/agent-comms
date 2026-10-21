@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Final, Self
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.errors import (
     HumanSendRefusedError,
-    MessageNotificationError,
+    CommittedMessageError,
     RelationViolationError,
 )
 from agent_comms.messages import BusRecord, Message
@@ -311,7 +311,7 @@ class HumanOrigin(InitialOrigin):
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         try:
             return bus.append(build)
-        except MessageNotificationError:
+        except CommittedMessageError:
             raise
         except Exception as error:
             raise HumanSendRefusedError(f"Message was not sent: {error}") from error

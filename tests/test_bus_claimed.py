@@ -5,16 +5,16 @@ import pytest
 
 from agent_comms.bus import Bus, ClaimRecord, PublicRecord
 from agent_comms.bus_tables import BusRow
-from agent_comms.envelope_claim_transitions import ClaimRelease, ReleasedClaims
+from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.errors import UnclaimedError
 from agent_comms.messages import Claimed, InfoKind, Message
 
 
 def claim_record(seq):
     message = Message("author", "worker", f"claim {seq}", InfoKind, seq=seq)
-    transition = ReleasedClaims(
+    transition = UnscopedClaims(
         owner=message.sender, incarnation="1", seq=seq, message_id=message.message_id,
-        releases=(ClaimRelease("/owned/resource", "f" * 32),),
+        claims=("/owned/resource",), generation="f" * 32,
     )
     return ClaimRecord.of(message, transition)
 

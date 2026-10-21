@@ -17,10 +17,10 @@ from agent_comms.bus import (
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin
 from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource, KeyedPublication
-from agent_comms.envelope_claim_transitions import ClaimRelease, ReleasedClaims
+from agent_comms.envelope_claim_transitions import UnscopedClaims
 from agent_comms.errors import (
     HumanSendRefusedError,
-    MessageNotificationError,
+    CommittedMessageError,
     RelationViolationError,
 )
 from agent_comms.messages import (
@@ -67,12 +67,13 @@ def record_from(declaration, message):
     if issubclass(declaration, ClaimMessage):
         return declaration.of(
             message,
-            ReleasedClaims(
+            UnscopedClaims(
                 owner=message.sender,
                 incarnation="1",
                 seq=message.seq,
                 message_id=message.message_id,
-                releases=(ClaimRelease("/owned/resource", "f" * 32),),
+                claims=("/owned/resource",),
+                generation="f" * 32,
             ),
         )
     return declaration.from_message(message, **capabilities)
@@ -263,7 +264,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     bus.path.with_suffix(".changed").mkdir()
     origin = HumanOrigin("author", 1, str(tmp_path))
-    with pytest.raises(MessageNotificationError) as failed:
+    with pytest.raises(CommittedMessageError) as failed:
         origin.append(
             bus,
             lambda seq, db: record_from(
@@ -274,7 +275,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
     assert bus.lookup(1) == failed.value.record
     assert failed.value.record.body == "sent"
     print(
-        "Change notification failure: committed message returned on MessageNotificationError.record"
+        "Change notification failure: committed message returned on CommittedMessageError.record"
     )
 
 

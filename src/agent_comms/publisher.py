@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-from agent_comms.bus import Bus, ClaimRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import Bus, BusSnapshot, ClaimRecord, PrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -144,9 +144,8 @@ class ClaimWrites(PrivateWrites):
         delayed retirement cannot release a successor's generation or a manual
         claim absent from that lifetime. The caller holds the native boundary.
         """
-        metadata = self.log.private_marker_unlocked()
-        with boundary.bus_lock.current_source(self.log, metadata) as source:
-            owned = tuple(claim for claim in claims if source.claim(claim.resource) == claim)
+        with self.bus.reading() as source:
+            owned = tuple(claim for claim in claims if source.resource_owner(claim.resource) == claim)
         ordered = sorted(owned, key=lambda claim: claim.incarnation)
         for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
             recorded = tuple(records)
@@ -158,50 +157,55 @@ class ClaimWrites(PrivateWrites):
                 names = ", ".join(str(path.relative_to(worktree) if path.is_relative_to(worktree)
                                       else path) for path in paths)
                 self._publish_claim_transition_unlocked(
-                    boundary.bus_lock, boundary.registry,
+                    boundary.registry,
                     Message(owner.name, owner.name, f"{wording}: {names}", ClaimNoticeKind),
                     partial(ReleasedClaims, incarnation=incarnation,
                             releases=tuple(ClaimRelease(claim.resource, claim.generation)
                                            for claim in released)), activity=boundary.activity)
 
+    def _claim_builder(
+        self, snapshot: RegistrySnapshot, message: Message,
+        make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
+    ) -> RecordBuilder:
+        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
+
+        def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
+            stored = self._prepare_message_unlocked(
+                message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
+                original_source=BusSnapshot(db),
+            )
+            transition = make_transition(owner=stored.sender, seq=seq,
+                                         message_id=stored.message_id)
+            return ClaimRecord.of(stored, self.bus.prepare_claim(db, transition, snapshot))
+
+        return build
+
+    def _claim_result[Result](self, publish: Callable[[], Result]) -> Result:
+        try:
+            return publish()
+        except (OSError, RelationViolationError) as error:
+            raise ClaimEnvelopeUnknownError(
+                "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
+            ) from error
+
     def _publish_acquisition_unlocked(
-        self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, owner: Thread,
+        self, snapshot: RegistrySnapshot, owner: Thread,
         resource: str, claim: RecordedScope, *, activity: ActivityClocks,
     ) -> ClaimOwner:
-        def publish() -> ClaimOwner:
-            transition = self._publish_claim_transition_unlocked(
-                bus_lock, snapshot, ClaimNoticeKind.claimed(owner),
-                partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
-                        generation=Id128Text.mint(), claim_scope=claim), activity=activity)
-            return transition.claimed(resource)
-        with bus_lock.current_source(self.log, self.log.private_marker_unlocked()) as source:
-            previous = source.claim(resource)
-        return previous.acquire(claim, snapshot, publish)
+        build = self._claim_builder(
+            snapshot, ClaimNoticeKind.claimed(owner),
+            partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
+                    generation=Id128Text.mint(), claim_scope=claim), activity=activity,
+        )
+        return self._claim_result(lambda: self.bus.acquire_resource_claim(resource, claim, snapshot, build))
 
     def _publish_claim_transition_unlocked(
-        self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, message: Message,
+        self, snapshot: RegistrySnapshot, message: Message,
         make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
     ) -> ClaimTransition:
-        """One typed transition, checked before append under the registry cut."""
-        metadata = self.log.private_marker_unlocked()
-        if not metadata.claims:
-            raise RelationViolationError("Claim read barrier is unavailable.")
-        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
-        with bus_lock.current_source(self.log, metadata) as source:
-            def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
-                stored = self._prepare_message_unlocked(
-                    message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
-                )
-                transition = make_transition(owner=stored.sender, seq=seq,
-                                             message_id=stored.message_id)
-                return ClaimRecord.of(stored, source.prepare_claim(transition, snapshot))
-
-            try:
-                return self.bus.append(build).require_claim_transition()
-            except (OSError, RelationViolationError) as error:
-                raise ClaimEnvelopeUnknownError(
-                    "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
-                ) from error
+        """One typed transition, checked and appended under the registry cut."""
+        build = self._claim_builder(snapshot, message, make_transition, activity=activity)
+        return self._claim_result(lambda: self.bus.append(build).require_claim_transition())
 
 
 class InitialWrites(PrivateWrites):
