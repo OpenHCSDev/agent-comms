@@ -107,7 +107,7 @@ def run(*command: str | Path, cwd: Path = Path(), env: Mapping[str, str] = os.en
     completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
                                capture_output=True, text=True)
     if completed.returncode:
-        raise UpgradeRefused(f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}")
+        raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n{completed.stderr.strip()}")
     return completed.stdout
 
 
