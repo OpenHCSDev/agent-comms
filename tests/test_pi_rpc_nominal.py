@@ -231,7 +231,8 @@ def test_turn_runner_and_duplicate_pi_decoders_are_retired():
                         decoders.append((name, method.name))
     assert decoders == [("pi_rpc.py", "decode_record")]
 
-    from agent_comms.native_pi import NativePiUnavailable, PrivateEvidenceRead
+    from agent_comms.native_pi import PrivateEvidenceRead
+    from agent_comms.native_failures import NativePiUnavailable
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

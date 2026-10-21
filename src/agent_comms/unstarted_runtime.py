@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
-from .selected_session import SelectedSession
 
 
 @dataclass(frozen=True)
@@ -48,8 +47,10 @@ class UnstartedRuntime(RuntimeLocation):
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)
 
-    def select_session(self, directory, execution, source_reads):
-        return SelectedSession(directory)
+    def select_session(self, directory, execution, source_reads, *, root, thread):
+        return self.owner.new_location(root, thread.worktree).select_session(
+            directory, execution, source_reads, root=root, thread=thread,
+        )
 
     def history_source(self, root, incarnation):
         return ExternalTranscript(root, incarnation)

@@ -31,7 +31,8 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import NativeArguments
 from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_failures import NativePiUnavailable
 from .pi_vocabulary import ThinkingChoice
 from .threads import Thread
 from .wire_watch import WatchSource, WireWatch

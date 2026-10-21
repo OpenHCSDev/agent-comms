@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
@@ -22,7 +23,7 @@ from .external_transcript import RequestedEarlierPage
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
-    from .cli_bridges.shared import CliBridge
+    from .cli_bridges.shared import CliBridge, DeliveryRow
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
@@ -119,16 +120,16 @@ class Outcome(DeclaredFamily, affix='Outcome'):
         """Pending transport outcomes cannot advance Core's read state."""
 
     @classmethod
-    def followed_by(cls, observation: type[Outcome]) -> type[Outcome]:
-        return observation
+    async def finish(cls, bridge: CliBridge, delivery: DeliveryRow, observation: type[Outcome]) -> None:
+        await observation.acknowledge(bridge, delivery.message)
+        with bridge.db:
+            replace(delivery, outcome=observation).upsert(bridge.db)
 
 
 class FilteredOutcome(Outcome):
     @classmethod
-    def followed_by(cls, observation: type[Outcome]) -> type[Outcome]:
-        # Transcript confirmation may race the final socket drain. An emission
-        # report cannot turn an already confirmed attempt back into pending.
-        return cls
+    async def finish(cls, bridge: CliBridge, delivery: DeliveryRow, observation: type[Outcome]) -> None:
+        """Core already confirmed this row; a later emission cannot acknowledge it twice."""
 
     @classmethod
     async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:

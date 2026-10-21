@@ -1,8 +1,9 @@
 --- a/dist/core/session-manager.js
 +++ b/dist/core/session-manager.js
-@@ -1,6 +1,10 @@
+@@ -1,7 +1,11 @@
 +import { DiskEntryStore, MemoryEntryStore } from "./session-entry-store.js";
  import { uuidv7 } from "@earendil-works/pi-ai";
+ import { NativeFileUnavailable, PrivateNativeFile } from "./native-private-file.js";
  import { randomUUID } from "crypto";
  import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
 +import { fstatSync, linkSync, readFileSync, realpathSync, unlinkSync } from "fs";
@@ -260,7 +261,7 @@
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -580,22 +372,107 @@
+@@ -580,23 +372,108 @@
   * Branching moves the leaf to an earlier entry, allowing new branches without
   * modifying history.
   *
@@ -338,7 +339,7 @@
 +    }
 +}
 +
- export class SessionManager {
+ export class SessionManager extends PrivateNativeFile(Object) {
 +    // Irreversible for this instance. Never reset by newSession or setSessionFile.
 +    #acAssertUsable() {
 +        this.entryStore?.assertUsable();
@@ -371,6 +372,7 @@
 -    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
 +    _pr48LoadedRevision = null;
 +    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions) {
+         super();
          this.cwd = resolvePath(cwd);
          this.sessionDir = normalizePath(sessionDir);
          this.persist = persist;
@@ -523,7 +525,7 @@
      isPersisted() {
          return this.persist;
      }
-@@ -737,43 +552,40 @@
+@@ -737,44 +552,41 @@
          return this.sessionFile;
      }
      _persist(entry) {
@@ -586,12 +588,13 @@
 +        });
 +        });
      }
-     /** Tracked metadata is private even if this Pi session began with an untracked turn. */
+     get file() { return this.sessionFile; }
+     /** A proof and its transcript share privacy policy, not physical placement. */
      assertNativeInputSafe() {
 +        this.#acAssertUsable();
-         if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
-             throw new Error("Native input proof requires a persisted owner-controlled session");
-         }
+         if (!this.persist || !this.sessionFile)
+             throw new NativeFileUnavailable("Native input requires a persisted owner-controlled session");
+         return this.requirePrivateNativeFile();
 @@ -812,22 +624,21 @@
      }
      /** Find exactly one durable or pending native tracked input, including old branches. */
@@ -2386,20 +2389,6 @@
              // Commands (available for invocation via prompt)
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -238,12 +238,3 @@
-     _loadNativeInputState() {
--        // SessionManager's historical index owns durable claims on every branch.
--        // This map holds only newly admitted, not-yet-committed live requests.
--        for (const entry of this.sessionManager.entryStore.trackedMetadata()) {
--            const { inputId, inputDigest } = entry;
--            if (entry.role !== "user" || typeof inputId !== "string" || typeof inputDigest !== "string" ||
--                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
--                this.sessionManager.entryStore.trackedInputMetadata(inputId)?.id !== entry.id) {
--                throw new Error("Invalid or duplicate native input in persisted Pi session");
--            }
--        }
-+        // Core's input ledger owns whether an input was sent; recover committed journal records.
-         if (!this.sessionManager.isPersisted()) return;
 @@ -261,4 +252,3 @@
          const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
 -        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest

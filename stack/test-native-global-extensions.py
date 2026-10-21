@@ -24,7 +24,7 @@ from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.native_pi import CAPABILITY
+from agent_comms.native_pi import CAPABILITY, NativePiRpcLaunch
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import ExtensionError
 from agent_comms.pi_rpc import PiRpcChannel
@@ -37,7 +37,7 @@ def main(fixture: Path):
     parser.add_argument("--session", type=Path)
     args = parser.parse_args()
     package, root = args.package.resolve(), args.fixture.resolve()
-    VerifiedNativePackage.acquire(package)
+    verified = VerifiedNativePackage.acquire(package)
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     agent, project, commands = (root / name for name in ("agent", "project", "bin"))
     for directory in (agent, project, commands):
@@ -104,15 +104,8 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     assert any("tool_call" in item["handlers"] for item in registered["extensions"]), registered
     session = root / "session.jsonl"
     if args.session:
-        for suffix in ("", ".input-proof"):
-            source = Path(str(args.session) + suffix)
-            # A native fork has historical messages but no child's committed
-            # context journal until its first original input. Copy an existing
-            # journal exactly; absence never grants input or replay authority.
-            if suffix == ".input-proof" and not source.exists():
-                continue
-            subprocess.run(["cp", "--reflink=auto", str(source), str(session) + suffix], check=True)
-            Path(str(session) + suffix).chmod(0o600)
+        subprocess.run(["cp", "--reflink=auto", str(args.session), str(session)], check=True)
+        session.chmod(0o600)
     else:
         session.write_text(json.dumps({"type":"session", "version":3,
             "id":"00000000-0000-4000-8000-000000000001", "timestamp":"2026-09-28T00:00:00.000Z",
@@ -121,12 +114,14 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     saved_source_sha256 = hashlib.sha256(session.read_bytes()).hexdigest()
     settings_sha256 = hashlib.sha256((agent / "settings.json").read_bytes()).hexdigest()
     started = time.monotonic()
-    arguments = thread.native_launch_arguments(NativeArguments.parse(
-        ("--offline", "--mode", "rpc", "--session-dir", str(root), "--session", str(session))),
-        package, comms.root)
-    child = subprocess.Popen(prefix + ["--import", str(package / "dist/agent-comms-project-bootstrap.mjs"),
-        str(package / "dist/cli.js"), *arguments],
-        cwd=project, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    arguments = thread.native_launch_arguments(NativeArguments.parse(("--offline",)), package, comms.root)
+    launch = NativePiRpcLaunch.managed(
+        "pi", arguments, package=verified, worktree=project,
+        root=comms.root, owner=thread.incarnation.require_recorded(),
+        directory=root, session_file=str(session), environment=environment,
+    )
+    child = subprocess.Popen(launch.argv,
+        cwd=launch.cwd, env=launch.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True, preexec_fn=deny)
     reply = None
     request = GetState()

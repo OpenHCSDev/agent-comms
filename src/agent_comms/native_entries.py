@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_failures import NativePiUnavailable
+
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
@@ -263,8 +265,6 @@ class NativeEvidenceRead:
         self._forget()
 
     def require_path(self, session_file):
-        from .native_pi import NativePiUnavailable
-
         if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
 
@@ -342,8 +342,6 @@ class NativeEvidenceRead:
 
     def header(self) -> SessionEntry:
         """Read and decode record one without discarding an existing input index."""
-        from .native_pi import NativePiUnavailable
-
         try:
             return self.state.read(self)
         except MalformedRecord as error:
@@ -389,10 +387,7 @@ class NativeEvidenceRead:
         return acquired.reobserve(self)
 
     def _observe(self, *, reverified: bool) -> tuple[SessionEntry, tuple[NativeEntry, ...]]:
-        from .native_pi import (
-            NativeEvidencePrefixChanged,
-            NativePiUnavailable,
-        )
+        from .native_pi import NativeEvidencePrefixChanged
 
         try:
             header = self.header()

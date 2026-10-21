@@ -1,5 +1,8 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
+from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.native_session_reopen import NativeSessionIdentity
+
 import hashlib
 import os
 import sqlite3
@@ -192,7 +195,11 @@ class TranscriptRoutes(StoreWriter):
         reader = NativeTranscript(path)
         floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
         try:
-            final, user = reader.publication_input(after=floor, through=revision.size)
+            final, user = reader.publication_input(
+                after=floor, through=revision.size,
+                files=NativeSessionFiles.for_identity(NativeSessionIdentity.locate(str(path)),
+                                                      root=log.path.parent, owner=incarnation),
+            )
         except MalformedRecord as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)

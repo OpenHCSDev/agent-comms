@@ -24,7 +24,8 @@ from .native_package import (
     VerifiedNativePackage,
     pinned_native_package,
 )
-from .native_pi import NativePiUnavailable, _private_session_dir
+from .native_failures import NativePiUnavailable
+from agent_comms.native_session_files import NativeSessionFiles
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
@@ -204,7 +205,7 @@ class PrivateNkLaunch(RootLaunch):
         If the private directory or checked bus root is missing, create no
         directory, registry or database and make no provider request.
         """
-        _private_session_dir(self.validated_root)
+        NativeSessionFiles.require_private_directory(self.validated_root)
         with WireLog(WireLog.path_in(self.validated_root)).checked_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:

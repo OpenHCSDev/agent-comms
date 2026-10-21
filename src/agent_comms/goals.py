@@ -582,6 +582,18 @@ class ProblemGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
+class GoalAuthority:
+    """What an owner input was granted: this goal in this state.
+
+    Assigning or replacing a problem order revises the goal but keeps its authority;
+    pausing, completing, blocking, clearing or replacing the goal changes it.
+    """
+
+    goal_id: str
+    state: GoalState
+
+
+@dataclass(frozen=True)
 class GoalPeerChange:
     goal: GoalRevision | NoGoal
     state: type[GoalState] | NoGoal
@@ -606,6 +618,10 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @abstractmethod
     def following_permission(self) -> GoalPermission: ...
+
+    @property
+    @abstractmethod
+    def authority(self) -> GoalAuthority | NoGoal: ...
 
     @abstractmethod
     def task_scope(self, scope: TaskScope) -> TaskScope: ...
@@ -745,6 +761,10 @@ class NoGoal(NullMember, GoalDeclaration):
     def following_permission(self) -> GoalPermission:
         return InactiveGoalPermission()
 
+    @property
+    def authority(self) -> NoGoal:
+        return self
+
     def task_scope(self, scope: TaskScope) -> TaskScope:
         return scope
 
@@ -858,6 +878,10 @@ class Goal(RecordMember, GoalDeclaration):
 
     def following_permission(self) -> GoalPermission:
         return ContinuationGoalPermission(self)
+
+    @property
+    def authority(self) -> GoalAuthority:
+        return GoalAuthority(self.id, self.state)
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
         return scope.with_goal(self.revision_key)

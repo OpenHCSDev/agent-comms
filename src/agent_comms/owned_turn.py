@@ -24,7 +24,7 @@ from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
 from .owned_send import OwnedSend
 from .native_input_owner import RegistryOwner
-from .native_pi import NativeRequestFailure
+from .native_failures import NativeRequestFailure
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
+from agent_comms.participant_identity import ParticipantIdentity
+
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
 from .coordinator import Coordination
@@ -34,11 +35,8 @@ class PreparedSession(UnwrittenPrompt):
         self, inputs: FollowingInputs, session: backend.NativeSession,
     ) -> bool:
         session.native.forget_context()
-        state = session.native.attestation.state
-        assert state is not None
-        identity = session.native.attestation.identity
-        if identity is None:
-            raise NativePiUnavailable("Native preparation did not attest the saved session")
+        state = session.native.attestation.require_state()
+        identity = session.native.attestation.require_identity()
         session.launch.session.attest(identity)
         if (
             state.is_streaming is not False
@@ -75,6 +73,7 @@ class NativeSessionPreparation(backend.NativeSession):
         package: VerifiedNativePackage,
         worktree: str,
         root: Path,
+        owner: ParticipantIdentity,
         session_directory: Path,
         environment: dict[str, str],
         session_file: str,
@@ -82,36 +81,30 @@ class NativeSessionPreparation(backend.NativeSession):
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
-                package=package, worktree=worktree, root=root, session_directory=session_directory, environment=environment,
+                package=package, worktree=worktree, root=root, owner=owner, session_directory=session_directory, environment=environment,
                 session_file=session_file, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
-        package: VerifiedNativePackage, worktree: str, root: Path, session_directory: Path,
+        package: VerifiedNativePackage, worktree: str, root: Path, owner: ParticipantIdentity, session_directory: Path,
         environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
-        owner = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
-            package=package, root=root, directory=session_directory,
+            package=package, root=root, owner=owner, directory=session_directory,
             environment=environment, session_file=session_file,
         ))
         preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))
         async with session_writer_fence(launch.session.session_file):
-            try:
-                async with aclosing(preparation.run()) as stream:
-                    async for event in stream:
-                        if isinstance(event, events.Done) and not event.ok:
-                            raise NativePiUnavailable(event.text)
-                state = preparation.native.attestation.state
-                assert state is not None
-                await observe(state, state.agent_info(preparation))
-                return state
-            finally:
-                if owner is not None:
-                    await backend.terminate_task_process(owner)
+            async with aclosing(preparation.run()) as stream:
+                async for event in stream:
+                    if isinstance(event, events.Done) and not event.ok:
+                        raise NativePiUnavailable(event.text)
+            state = preparation.native.attestation.require_state()
+            await observe(state, state.agent_info(preparation))
+            return state

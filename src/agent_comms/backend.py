@@ -15,6 +15,8 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.participant_identity import ParticipantIdentity
+
 import asyncio
 import json
 import secrets
@@ -50,7 +52,8 @@ from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_failures import NativePiUnavailable
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
@@ -123,6 +126,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession,
     package: VerifiedNativePackage,
     root: Path,
+    owner: ParticipantIdentity,
     session_directory: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
@@ -137,55 +141,51 @@ async def stream_agent_events(
     durable tool-liveness policy. Durable retry decisions belong to the
     coordinator, never this transport adapter.
     """
-    owner = asyncio.current_task()
-    try:
-        async with persistent_session.lock:
-            try:
-                launch = await Coordination.run_worker(partial(
-                    persistent_session.child_state.managed_launch,
-                    agent_bin,
-                    tuple(agent_args),
-                    package=package,
-                    root=root,
-                    directory=session_directory,
-                    worktree=Path(cwd),
-                    environment=env_extra,
-                    session_file=session_file,
-                ))
-            except NativePiUnavailable as error:
-                yield events.Error(text=str(error), reason_code="native_launch_invalid")
-                yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
-                return
-            from .session_fence import session_writer_fence
+    async with persistent_session.lock:
+        try:
+            launch = await Coordination.run_worker(partial(
+                persistent_session.child_state.managed_launch,
+                agent_bin,
+                tuple(agent_args),
+                package=package,
+                root=root,
+                owner=owner,
+                directory=session_directory,
+                worktree=Path(cwd),
+                environment=env_extra,
+                session_file=session_file,
+            ))
+        except NativePiUnavailable as error:
+            yield events.Error(text=str(error), reason_code="native_launch_invalid")
+            yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
+            return
+        from .session_fence import session_writer_fence
 
-            async with session_writer_fence(launch.session.session_file):
-                async with aclosing(
-                    TurnSession(
-                        launch,
-                        partial(commands.Prompt,
-                            id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-                            input_id=Id128Text.mint(), message=task, images=tuple(images) or None,
-                            context_contributions=context_contributions,
-                        ),
-                        tool_mode=tool_mode,
-                        steering_queue=steering_queue,
-                        finish_signal=FinishSignal.from_event(finish_event),
-                        model_wait=model_wait,
-                        rpc_abort_grace=rpc_abort_grace,
-                        send_boundary=send_boundary,
-                        input_start=InputStartListener.from_callback(native_start),
-                        interrupt_boundary=interrupt_boundary,
-                        native_session=persistent_session,
-                        ui_request=ui_request,
-                        request_observer=request_observer,
-                        startup=NativeStartup.for_launch(launch),
-                    ).run()
-                ) as stream:
-                    async for event in stream:
-                        yield event
-    finally:
-        if owner is not None:
-            await terminate_task_process(owner)
+        async with session_writer_fence(launch.session.session_file):
+            async with aclosing(
+                TurnSession(
+                    launch,
+                    partial(commands.Prompt,
+                        id=f"agent-comms-prompt-{secrets.token_hex(16)}",
+                        input_id=Id128Text.mint(), message=task, images=tuple(images) or None,
+                        context_contributions=context_contributions,
+                    ),
+                    tool_mode=tool_mode,
+                    steering_queue=steering_queue,
+                    finish_signal=FinishSignal.from_event(finish_event),
+                    model_wait=model_wait,
+                    rpc_abort_grace=rpc_abort_grace,
+                    send_boundary=send_boundary,
+                    input_start=InputStartListener.from_callback(native_start),
+                    interrupt_boundary=interrupt_boundary,
+                    native_session=persistent_session,
+                    ui_request=ui_request,
+                    request_observer=request_observer,
+                    startup=NativeStartup.for_launch(launch),
+                ).run()
+            ) as stream:
+                async for event in stream:
+                    yield event
 
 
 class InputStartListener(ABC):

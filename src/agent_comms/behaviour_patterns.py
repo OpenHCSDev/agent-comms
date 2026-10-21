@@ -244,6 +244,64 @@ class DeletedLiveStateFailure(PostmortemFailure):
     )
 
 
+class BlockedFleetUnalarmedFailure(PostmortemFailure):
+    number = 17
+    title = "It left every unit blocked with no alarm"
+    evidence = (
+        "October 21, 02:13: Core showed all ten units' goals blocked as backend failures, written "
+        "when install 16 stopped them at 01:56; claude-ai found it, and no standing rule fired."
+    )
+
+
+class SkippedCutoverFailure(PostmortemFailure):
+    number = 18
+    title = "It installed a change without the cutover the change required"
+    evidence = (
+        "October 21: every claude.ai connector call answered 500 from install 16 until 02:06, "
+        "because grants.json still held five old-shape requests; the commander ran "
+        "tools/cutover/connector_browser_trust.py only after the outage."
+    )
+
+
+class DelegatedDiagnosisFailure(PostmortemFailure):
+    number = 19
+    title = "It ordered units to diagnose and choose the shape"
+    evidence = (
+        "October 20: orders P362, P377, P378 and P379 asked units to find the defect and pick its "
+        "fix, against the skill's rule that units do not diagnose or choose shapes."
+    )
+
+
+class OrdersKilledTurnsFailure(PostmortemFailure):
+    number = 20
+    title = "Its own orders stopped the units they were sent to"
+    evidence = (
+        "October 21, about 02:40: orders P392, P393 and P394 each changed the receiving unit's goal "
+        "mid-turn; the turn's permission compared the whole goal declaration "
+        "(turn_goal_permission.py:34), so all three units' next tool calls were denied and their "
+        "goals blocked."
+    )
+
+
+class StatusBeforeEvidenceFailure(PostmortemFailure):
+    number = 21
+    title = "It reported a state its evidence did not show"
+    evidence = (
+        "October 20-21: 'Deadlines are dead (PR 2356)' went out at merge, before any install "
+        "(claude-ai review fde6168a1262); the commander told #comms the 200 open directives were "
+        "445 bridge-unacknowledged inbox messages (012fe7271b3c) when they are requests on its own goal."
+    )
+
+
+class UnansweredAskFailure(PostmortemFailure):
+    number = 22
+    title = "It left a unit's question unanswered for hours"
+    evidence = (
+        "October 20-21: fork-boundaries' alert at bus seq 8122 held its finished work blocked, "
+        "about seven hours by claude-ai's count, until the commander decided it (884bd56ece2a)."
+    )
+
+
 @dataclass(frozen=True)
 class CommanderRule(PatternSource):
     lead: str

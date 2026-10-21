@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.native_session_reopen import NativeSessionIdentity
+
 import asyncio
 import sqlite3
 from abc import ABC, abstractmethod
@@ -147,7 +150,12 @@ class NativeSendStage(ABC):
         # Disk evidence corroborates those events, never authorizes recovery.
         with source_reads.borrow():
             evidence = source_reads.for_source(context.session_file)
-            if not context.corroborates_input(input_id, evidence=evidence):
+            if not context.corroborates_input(
+                input_id, evidence=evidence,
+                files=NativeSessionFiles.for_identity(NativeSessionIdentity.from_context(context),
+                                         root=store.session.path.parent,
+                                         owner=owner.thread.incarnation.require_recorded()),
+            ):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
