@@ -2569,6 +2569,8 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def line(self) -> str: ...
 
     def apply(self, current: Todo) -> Todo:
+        # A verdict's time bounds which edits it judges, so the write refuses one it cannot date.
+        self.at.require_recorded("A verdict")
         current.require_revision(self.expected_revision)
         current.require_assignment(self.previous)
         judged = self.judged(current)
@@ -2638,7 +2640,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
 
     def judged_through(self, since: float) -> float:
         """Accepting a head judges the whole diff, so every edit made before it is judged."""
-        return max(since, self.at.recorded_at("A head review"))
+        return self.at.latest_with(since)
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
