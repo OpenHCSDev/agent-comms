@@ -529,12 +529,13 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Core replaces a wrong check of an open order. The new check must already pass on main, so a
+        """Core replaces a wrong check of an open order, pending or claimed; the order family refuses
+        one whose delivery already passed its check. The new check must already pass on main, so a
         correction fixes the commander's check and never passes undelivered work: done still runs it on
         the --sha it is given."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open or not todo.pending:
-            sys.exit(f'Refused: {pid} has no pending order')
+        if not todo.state.open:
+            sys.exit(f'Refused: {pid} is not open')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')

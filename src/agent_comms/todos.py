@@ -1816,6 +1816,9 @@ class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        raise ValueError("A delivered order keeps the check its delivery passed.")
+
 
 @dataclass(frozen=True, kw_only=True)
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
@@ -1967,9 +1970,6 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def closing_artifact(self) -> str:
         return self.delivery.closing_artifact()
-
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     @property
     def installation_commits(self) -> tuple[str, ...]:

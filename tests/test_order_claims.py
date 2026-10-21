@@ -86,3 +86,33 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(delivered.order, DeliveredProblemOrder)
     assert delivered.order.delivery.delivered == sha
     assert not delivered.pending
+
+
+def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
+    ctx = held_commander
+    comms = ctx.comms
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    repo = ctx.repos[0]
+    sha = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
+    repo.git(repo.checkout, "push", "--force", "origin", f"{sha}:refs/heads/main")
+    repo.git(repo.checkout, "fetch", "origin")
+    report = ctx.root / "report.txt"
+    report.write_text("The source change is published; inspect its actual diff before accepting it.")
+    main(["deliver", "P1", "--fork", "worker", "--pr", "1", "--sha", sha,
+          "--report-file", str(report)], ctx)
+    claimed = comms.goals.todos.get("P1")
+    assert isinstance(claimed.order, ClaimedProblemOrder)
+
+    main(["check", "P1", "--check", f"{repo.checkout} :: printf 0 -> 0",
+          "--why", "the recorded check also counted lines the order never asked to remove"], ctx)
+    corrected = comms.goals.todos.get("P1")
+    assert isinstance(corrected.order, ClaimedProblemOrder)
+    assert corrected.order.check.command == "printf 0"
+    assert corrected.order.check_corrections[-1].previous == claimed.order.check
+    assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
+    assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
+        claimed.holder, claimed.review_at, claimed.strike_count)
