@@ -18,6 +18,8 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import RequestGoalOrder
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.carry import Carried, CarryChain
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
@@ -26,7 +28,7 @@ from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixScope, FixShape, FoldedProblemOrder, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
-from cutover.order_scope import TRIAGE_PROBLEMS, convert
+from cutover.carry_order_scopes import TRIAGE_PROBLEMS, OrderScopes
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
@@ -125,7 +127,8 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
     assert comms.goals.todos.get('P1').order.pending
 
 
-def test_one_shot_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path):
+def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path):
+    assert OrderScopes in CarryChain.at(Path(__file__).resolve().parents[1]).pending(())
     _, original = assigned(comms, FIX_SCOPE)
     store = comms.goals.todos
     lead = comms.registry.require('lead')
@@ -145,11 +148,17 @@ def test_one_shot_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_pa
         folded = FoldedProblemOrder(original=original.order, into='P9', why='Merged findings')
         db.execute('UPDATE todo SET "order"=json_remove(?, ?) WHERE id=?',
                    (json.dumps(FieldCodec.encode(folded)), '$.original.scope', original.id))
-    assert convert(copied) == len(TRIAGE_PROBLEMS) + 2
+    before = {file: file.read_bytes() for file in OrderScopes.backup_files(copied)}
+    dry_run = OrderScopes.carry(copied, apply=False)
+    assert dry_run == Carried(len(TRIAGE_PROBLEMS) + 2)
+    assert {file: file.read_bytes() for file in OrderScopes.backup_files(copied)} == before
+    applied = OrderScopes.carry(copied, apply=True)
+    assert applied == Carried(len(TRIAGE_PROBLEMS) + 2, rewritten=tuple(
+        str(file.relative_to(copied)) for file in SQLiteFile.files(path)))
     converted = TodoStore(copied)
     for problem in TRIAGE_PROBLEMS:
         assert converted.get(problem).order.checked().scope == TriageScope()
     for declaration in converted.get(original.id).order_history:
         assert declaration.scope == FixScope(FixShape(parents=(declaration.owner,), members=()))
-    assert convert(copied) == 0
+    assert OrderScopes.carry(copied, apply=True) == Carried(0)
     assert comms.goals.todos.get(original.id) == original
