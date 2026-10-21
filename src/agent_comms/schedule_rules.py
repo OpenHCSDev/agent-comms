@@ -2,7 +2,6 @@
 
 import asyncio
 from dataclasses import dataclass
-from functools import partial
 from typing import TYPE_CHECKING
 
 from acp import RequestError

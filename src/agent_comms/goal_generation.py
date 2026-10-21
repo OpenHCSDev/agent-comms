@@ -2,36 +2,36 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+
 from .declared_family import DeclaredFamily
-from .goal_attempt_identity import FailureNotObserved
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
 )
 from .lifecycle import LifecycleState
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+from .lifecycle_capability import Complete, Failed, Terminal
 
 if TYPE_CHECKING:
+    from .goal_actions import GoalActionContext
     from .goal_attempts import Generation, GoalAttemptStore
     from .goal_failure_observation import GoalFailureEvidence
-    from .goal_presentation import GoalExecution, GoalExecutionSource
     from .goal_management import Goals
+    from .goal_presentation import GoalExecution, GoalExecutionSource
+    from .goals import Goal
     from .threads import Thread
 
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
-    terminal: ClassVar[bool] = False
     ready: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
 
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]: ...
+    def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
+        if not self.allows_resume(ctx.thread.executing):
+            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.turn.execution(source)
@@ -68,9 +68,6 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         from .goal_attempts import UnresolvedAttemptError
 
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
-
-    def require_failure(self) -> None:
-        raise FailureNotObserved("missing_binding")
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return False
@@ -151,8 +148,15 @@ class ReservedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(GenerationState):
-    failed = True
+class BlockedGeneration(Failed, GenerationState):
+    def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
+        """A status-only Resume cannot authorize an uncertain attempt."""
+        if generation.attempt_id:
+            raise ValueError(
+                "The interrupted goal attempt is unresolved. Inspect it, then use "
+                "Retry to authorize a new attempt. Your messages can still be sent."
+            )
+        super().resume_status(generation, goal, ctx)
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         return store.failure_evidence(generation)
@@ -163,8 +167,6 @@ class BlockedGeneration(GenerationState):
     def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
         store.authorize_current_retry(generation.goal_id, witness)
 
-    def require_failure(self) -> None:
-        return None
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return isinstance(phase, FailedAttempt)
@@ -186,27 +188,15 @@ class BlockedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class CompletedGeneration(GenerationState):
-    terminal = True
-
+class CompletedGeneration(Complete, Terminal, GenerationState):
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution
 
         return CompletedExecution(source.goal.id)
 
-    @classmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]:
-        return ()
-
 
 @dataclass(frozen=True)
-class CancelledGeneration(GenerationState):
-    terminal = True
-
+class CancelledGeneration(Terminal, GenerationState):
     def validate_attempt(self, attempt_id: str | None) -> None:
         if attempt_id is not None and not attempt_id:
             raise ValueError("A retired attempt identity must be nonempty.")
-
-    @classmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]:
-        return ()

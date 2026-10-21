@@ -6,7 +6,7 @@ import time
 from collections.abc import Iterable, Sequence
 from abc import abstractmethod
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Self
 
@@ -44,22 +44,35 @@ from agent_comms.plan_phases import PlanPhase
 
 @dataclass(frozen=True)
 class InstallDue(UndatedStandingRule):
-    """Each configured main not contained in the installed build needs an install."""
+    """A configured main not contained in the installed build needs an install once its
+    oldest uninstalled merge has stood for the settle window.
+
+    Every install stops every running unit, so merges batch into one install instead of
+    one install each. The window is read from the merges' own git times, not a schedule.
+    """
 
     why: str
+    settle: ClassVar[float] = 30 * 60
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         config = CommanderConfig.read_root(comms.root)
         installed = RecordedBuildIdentity.installed()
+        now = time.time()
         due: list[Self] = []
         for repo in config.repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
-            if not installed.contains(main, repo.checkout):
-                recorded = installed.for_repository(repo)
+            if installed.contains(main, repo.checkout):
+                continue
+            recorded = installed.for_repository(repo)
+            merged = repo.git(repo.checkout, "log", "--first-parent", "--format=%ct",
+                              f"{recorded.commit}..{main}").split()
+            waited = now - min(map(int, merged), default=now - cls.settle)
+            if waited >= cls.settle:
                 due.append(cls(
-                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}"))
+                    f"{repo.github.to_wire()}: main {main}, installed {recorded.commit}, "
+                    f"{len(merged)} commits, oldest {int(waited // 60)} min"))
         return tuple(due)
 
     def line(self) -> str:

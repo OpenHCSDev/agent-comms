@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
 from .declared_family import DeclaredFamily
+from .lifecycle_capability import LifecycleCapability, Unresolved
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -85,12 +86,11 @@ class UnchangedInput(InputTransition):
 
 
 @dataclass(frozen=True)
-class InputAttempt(DeclaredFamily, affix="Input"):
+class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
     exists: ClassVar[bool] = False
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
-    unresolved: ClassVar[bool] = False
     cancellation_feedback: ClassVar[str] = (
         "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
     )
@@ -107,6 +107,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def matches_claim(self, claim_scope: int) -> bool:
         return False
+
+    def unresolved_claim(self, claim_scope: int) -> bool:
+        return any(row.matches_claim(claim_scope) for row in self.items_with(Unresolved, self))
 
     def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return False
@@ -303,8 +306,7 @@ class StoredInput(InputAttempt):
         return goal_id in self.goal_reviews
 
     def review(self, goal_id: str, decision: GoalInputDecision) -> StoredInput:
-        if not self.unresolved:
-            raise ValueError("Reviewed inputs changed; inspect them again.")
+        self.require(Unresolved, ValueError("Reviewed inputs changed; inspect them again."))
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
     @property
@@ -317,8 +319,7 @@ class RecoverableUnboundInput(StoredInput):
         return self.origin.delivery_reference(root_id)
 
 
-class ReservedInput(RecoverableUnboundInput):
-    unresolved = True
+class ReservedInput(Unresolved, RecoverableUnboundInput):
     public_status = "unknown"
 
     accepts_reservation = True
@@ -372,8 +373,7 @@ class SentInput(StoredInput):
         return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
 
 
-class BoundUnknownInput(SentInput):
-    unresolved = True
+class BoundUnknownInput(Unresolved, SentInput):
     public_status = "unknown"
 
     def clear_native(self, native_id: str, text: str) -> InputTransition:
@@ -435,8 +435,7 @@ class StartedInput(SentInput):
             turn_id=lease.turn_id, native_id=native_id, text=sent_text)
 
 
-class NotSentInput(RecoverableUnboundInput):
-    unresolved = True
+class NotSentInput(Unresolved, RecoverableUnboundInput):
     public_status = "not_sent"
     cancellation_feedback = (
         "Not sent — cancellation completed before native delivery."

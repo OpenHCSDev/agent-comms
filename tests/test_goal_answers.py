@@ -72,7 +72,7 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
         comms.goals.update_goal("worker", ClearGoalAction())
         account.finish(terminal)
         assert comms.registry.require("worker").goal == NoGoal()
-        assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle.terminal
+        assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle.successors() == ()
         assert not account.pending_origins
 
 

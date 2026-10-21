@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
     from .goal_actions import GoalActionContext, ProblemOrderGoalAction
@@ -57,8 +58,6 @@ class ChokeholdPause(PauseSource):
 
 @dataclass(frozen=True)
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
-    active: ClassVar[bool] = False
-    terminal: ClassVar[bool] = False
     acp_plan_status: ClassVar[str] = "in_progress"
 
     @abstractmethod
@@ -70,10 +69,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
 
-    def require_active(self) -> None:
-        from .errors import RelationViolationError
-        raise RelationViolationError(self.activity_refusal())
-
     def activity_refusal(self) -> str:
         pause = self.pause_source
         return ((pause.instruction() if pause else None)
@@ -84,10 +79,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return {"kind": cls.declared_name}
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GoalState], ...]: ...
 
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         if not self.may_become(nxt):
@@ -129,11 +120,7 @@ class OpenGoal(GoalState):
 
 
 @dataclass(frozen=True)
-class ActiveGoal(OpenGoal, FromOpenGoal):
-    active = True
-
-    def require_active(self) -> None:
-        pass
+class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.wait.execution(source)
@@ -226,8 +213,7 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(GoalState, FromOpenGoal):
-    terminal = True
+class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution

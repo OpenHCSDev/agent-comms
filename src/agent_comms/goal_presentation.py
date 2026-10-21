@@ -12,6 +12,7 @@ from .field_codec import NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
+from .lifecycle_capability import Active
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
@@ -197,7 +198,7 @@ class StandbyExecution(ActiveExecution, WaitingExecution):
         return True
 
     def waiting_for(self, goal: Goal) -> bool:
-        return goal.id == self.goal_id and goal.state.active
+        return goal.id == self.goal_id and bool(goal.state.items_with(Active, goal))
 
 
 class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None):

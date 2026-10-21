@@ -15,7 +15,6 @@ from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .cli_result import CliResult
 from .field_codec import FieldCodec, WireForm
-from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
