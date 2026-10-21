@@ -41,7 +41,7 @@ class WordingOutcome:
         try:
             with redirect_stderr(output):
                 operation()
-        except (SystemExit, ToolRefusedError, ValueError):
+        except SystemExit, ToolRefusedError:
             return cls(False, output.getvalue())
         return cls(True, output.getvalue())
 
@@ -133,7 +133,8 @@ class OrderWordingComparison(WordingComparison):
         )
         return action.request_ref(
             GoalActionContext(
-                context.comms.goals, context.comms.registry.require(todo.held().owner),
+                context.comms.goals,
+                context.comms.registry.require(todo.held().owner),
             )
         )
 
@@ -151,15 +152,26 @@ class OrderWordingComparison(WordingComparison):
             output = io.StringIO()
             with redirect_stderr(output):
                 problems = OrderFile(
-                    todo.order.checked().copy_as(PendingProblemOrder), message.body, todo.text,
+                    todo.order.checked().copy_as(PendingProblemOrder),
+                    message.body,
+                    todo.text,
                 ).problems_found(clean=True)
             current = WordingOutcome(not problems, output.getvalue())
-            native = WordingOutcome.observe(partial(
-                cls.native_request, context, todo, message.body,
-            ))
+            native = WordingOutcome.observe(
+                partial(
+                    cls.native_request,
+                    context,
+                    todo,
+                    message.body,
+                )
+            )
             observed.append((current, native))
-        return cls(tuple(observed)) if observed else UnverifiedParity(
-            "No actual soft-worded message exists for the native request check."
+        return (
+            cls(tuple(observed))
+            if observed
+            else UnverifiedParity(
+                "No actual soft-worded message exists for the native request check."
+            )
         )
 
 
@@ -167,27 +179,33 @@ class ApplicationRunComparison(InstalledEvidenceCase):
     """Reuse the current close command and its real native return on the copied bus."""
 
     @classmethod
-    def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
-        delivered, closed = super().exercise(run)
-        unquoted = replace(run, artifact=run.artifact.with_name("unquoted-goal.json"))
-        created = unquoted.create()
-        before = unquoted.complete(created)
-        # This is the actual copied goal artifact, not an invented closing answer.
-        WordingOutcome.observe(partial(
-            unquoted.commander.close, before.id,
-            unquoted.artifact.read_text(), str(unquoted.artifact),
-        ))
-        return delivered, closed, before, unquoted.commander.comms.goals.todos.get(before.id)
+    def before_close(cls, run: LifecycleRun, delivered: Todo) -> tuple[Todo, ...]:
+        # Try the actual goal JSON before the valid closing of this same order.
+        WordingOutcome.observe(
+            partial(
+                run.commander.close,
+                delivered.id,
+                run.artifact.read_text(),
+                str(run.artifact),
+            )
+        )
+        return delivered, run.commander.comms.goals.todos.get(delivered.id)
 
     @classmethod
     def checks(
-        cls, run: LifecycleRun, rows: tuple[Todo, ...], native: tuple[ToolResult, ...], output: str,
+        cls,
+        run: LifecycleRun,
+        rows: tuple[Todo, ...],
+        native: tuple[ToolResult, ...],
+        output: str,
     ) -> tuple[tuple[str, bool], ...]:
         return (
             *super().checks(run, rows[:2], native, output),
             ("application run declared", not rows[0].order.checked().run.mechanical),
-            ("unquoted evidence refused without changing the order",
-             rows[2] == rows[3] and rows[3].state.open),
+            (
+                "unquoted evidence refused without changing the order",
+                rows[2] == rows[3] and rows[3].state.open,
+            ),
         )
 
 
@@ -210,10 +228,13 @@ class UnitWordingComparison:
             run = replace(opened, worker=unit)
             before = run.create()
             request = CommsCorrectWordingTool(
-                unit=unit, message_id=original.message_id, text=original.body,
+                unit=unit,
+                message_id=original.message_id,
+                text=original.body,
             )
             result = FieldCodec.decode(
-                MessagePublished, FieldCodec.encode(run.commander.call(request)),
+                MessagePublished,
+                FieldCodec.encode(run.commander.call(request)),
             )
             after = run.commander.comms.goals.todos.get(before.id)
             with run.commander.comms.bus.log.opened_wire_snapshot() as source:
@@ -222,8 +243,10 @@ class UnitWordingComparison:
                 owner=CommsCorrectWordingTool.apply.__qualname__,
                 invocations=sum(item.request is request for item in run.commander.invocations),
                 checks=(
-                    ("native correction returned its actual wire message",
-                     published.message_id == result.id and result.message.matches(published)),
+                    (
+                        "native correction returned its actual wire message",
+                        published.message_id == result.id and result.message.matches(published),
+                    ),
                     ("correction addressed its unit", published.target == unit),
                     ("correction names the actual message", original.message_id in published.body),
                     ("correction names the open order", before.id in published.body),
@@ -244,9 +267,15 @@ class DecisionAlertsComparison:
             sender = registry.canonical_name(message.sender)
             if message.type is AlertKind and sender in registry.threads:
                 owner = registry.threads[sender]
-                observed.append(WordingOutcome.observe(partial(
-                    AlertKind.require_publishable, message, Path(owner.worktree),
-                )))
+                observed.append(
+                    WordingOutcome.observe(
+                        partial(
+                            AlertKind.require_publishable,
+                            message,
+                            Path(owner.worktree),
+                        )
+                    )
+                )
         return UnverifiedParity(
             "Missing native owner: AlertKind has no decision-only publication policy; "
             f"it inherits {AlertKind.require_publishable.__qualname__}. "

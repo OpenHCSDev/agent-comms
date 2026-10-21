@@ -318,13 +318,18 @@ class InstalledEvidenceCase(LifecycleCase):
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
         created = run.create()
         delivered = run.complete(created)
+        observed = cls.before_close(run, delivered)
         run.commander.close(
             created.id,
             "Read the copied native goal and confirm its recorded source location "
             "and assigned worker.",
             str(run.artifact),
         )
-        return delivered, run.commander.comms.goals.todos.get(created.id)
+        return delivered, run.commander.comms.goals.todos.get(created.id), *observed
+
+    @classmethod
+    def before_close(cls, run: LifecycleRun, delivered: Todo) -> tuple[Todo, ...]:
+        return ()
 
     @classmethod
     def checks(

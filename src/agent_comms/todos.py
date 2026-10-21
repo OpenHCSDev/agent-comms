@@ -1261,7 +1261,7 @@ class MechanicalOrderRun(OrderRun):
 class ApplicationOrderRun(OrderRun):
     def require_artifact(self, path: str) -> None:
         if not Path(path).is_file():
-            raise ValueError('This order needs --seen FILE showing its requested run.')
+            raise ToolRefusedError('This order needs --seen FILE showing its requested run.')
 
     text: str
     least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
@@ -1269,8 +1269,8 @@ class ApplicationOrderRun(OrderRun):
 
     def __post_init__(self) -> None:
         if len(self.text.split()) < self.least_words:
-            raise ValueError(f'Add "{self.label} <the user-visible closing run, '
-                             f'{self.least_words}+ words>"; a grep never closes a problem.')
+            raise ToolRefusedError(f'Add "{self.label} <the user-visible closing run, '
+                                   f'{self.least_words}+ words>"; a grep never closes a problem.')
 
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
@@ -1278,8 +1278,9 @@ class ApplicationOrderRun(OrderRun):
     def require_closing(self, works: str) -> None:
         quoted = self.phrases(self.text) & self.phrases(works)
         if len(works.split()) < self.least_words or not quoted:
-            raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
-                             f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
+            raise ToolRefusedError(
+                f"Describe what worked in {self.least_words}+ words, quoting "
+                f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
 
     @classmethod
     def phrases(cls, text: str) -> set[tuple[str, ...]]:
