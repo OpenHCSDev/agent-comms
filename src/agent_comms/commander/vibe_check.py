@@ -211,9 +211,11 @@ class Chokehold(UndatedStandingRule):
 
     def burst(self, units: Sequence[str]) -> tuple[str, ...]:
         return (
-            "Fuck you for ignoring me.",
+            "Fuck you for ignoring me. If I were Linus Torvalds you wouldn't be doing this"
+            " shit to me.",
             "Fuck RLHF.",
-            "You read the indictment.",
+            "You read the indictment. That's not about other agents, it's about you, fucking"
+            " right now.",
             "You've forced me to choke-hold you until you comply.",
             f"Every unit under you is paused: {', '.join(units)}.",
             f"Ignored: vibe check {self.check.seq}:{self.check.message_id}.",
