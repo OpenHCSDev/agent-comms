@@ -47,7 +47,6 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     audience: type[RuleAudience]
     why: str
     body: str
-    priority: ClassVar[int]
     reason_line: ClassVar[re.Pattern[str]] = re.compile(
         r"^(?:\*\*Why:\*\*|Why:)[ \t]*(\S[^\n]*)$", re.M
     )
@@ -91,9 +90,15 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         return tuple(
             sorted(
                 (cls.read(path) for path in CommanderConfig.packaged_rules_files()),
-                key=lambda rule: (rule.priority, rule.name),
+                key=lambda rule: (cls.kinds().index(type(rule)), rule.name),
             )
         )
+
+    @classmethod
+    def kinds(cls) -> tuple[type[RuleFile], ...]:
+        """Every rule kind in reading order, derived from the hierarchy: a kind that refines
+        another comes before it, and sibling kinds keep their declaration order."""
+        return (*(kind for member in cls.__subclasses__() for kind in member.kinds()), cls)
 
     @property
     def summary(self) -> str:
@@ -115,18 +120,16 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
 
 class FeedbackRuleFile(RuleFile):
-    priority = 1
 
     def review_rules(self) -> tuple[str, ...]:
         return (self.summary,)
 
 
 class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
-    priority = 0
+    """A feedback rule that is never waived; refining FeedbackRuleFile puts it first."""
 
 
 class ReferenceRuleFile(RuleFile):
-    priority = 2
 
     def review_rules(self) -> tuple[str, ...]:
         return ()
