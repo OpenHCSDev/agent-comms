@@ -52,10 +52,10 @@ from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFa
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    canonical_publication_key,
 )
 from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
 from agent_comms.coordinator import StandaloneCoordination
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,

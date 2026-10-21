@@ -37,9 +37,9 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
     PublicationEvidence,
     PublicationIntents,
-    canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole

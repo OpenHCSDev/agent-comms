@@ -45,9 +45,9 @@ from agent_comms.coordination_tables.executions import (
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
