@@ -26,11 +26,10 @@ from .ordinary_turn_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from .send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend, SendOutcome
+from .send_outcome import AuthorityChangedSend, DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .thread_identity import TurnId
 from .turn_input_source import (
     OriginalTurnInput,
-    RoutedFollowingInput,
     TurnInputSource,
 )
 
@@ -59,14 +58,7 @@ class OwnedSend(CodingToolOwner):
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
             return self.original
-        source = self.inputs.state(self.session_id).following.get(public_id)
-        return (
-            source
-            if source is not None
-            else RoutedFollowingInput(
-                keys=(), accepted_id=public_id, goal_permission=self.original.goal_permission
-            )
-        )
+        return self.inputs.state(self.session_id).following[public_id]
 
     def _check_owner(
         self,
@@ -97,13 +89,9 @@ class OwnedSend(CodingToolOwner):
         if not source.bypasses_goal_permit:
             self.goal_permit.check_grant(self.goal_store)
 
-    def _refusal(self, rule: ReservationRule, defer: bool) -> SendOutcome:
-        _LOG.info(
-            "Ordinary input %s: %s",
-            "deferred" if defer else "refused",
-            ReservationViolationError(rule),
-        )
-        return RefusedSend() if defer else AuthorityChangedSend()
+    def _refusal(self, rule: ReservationRule) -> SendOutcome:
+        _LOG.info("Ordinary input refused: %s", ReservationViolationError(rule))
+        return AuthorityChangedSend()
 
     def _prepare(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
@@ -133,13 +121,14 @@ class OwnedSend(CodingToolOwner):
                     session_id=self.session_id,
                 ).require_valid()
         except ReservationViolationError as error:
-            return self._refusal(error.rule, False)
+            return self._refusal(error.rule)
+        if source.defers_for_goal(self.original.goal_permission, current.goal):
+            return DeferredSend()
         wait = self.comms.goals.goal_wait(canonical)
-        defer = source.defers_for_goal(self.thread.goal, current.goal)
         try:
             self._require_context(source, current, wait)
         except ReservationViolationError as error:
-            return self._refusal(error.rule, defer)
+            return self._refusal(error.rule)
         # Binding failures may be uncertain. Exceptions here still propagate;
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not self.inputs.dispositions.bind_turn_input(
@@ -150,9 +139,9 @@ class OwnedSend(CodingToolOwner):
             text=sent_text,
             already_bound=already_bound,
         ):
-            return self._refusal(UnboundOrdinaryInputRule(), defer)
+            return self._refusal(UnboundOrdinaryInputRule())
         if not source.consume_wait(self.comms, canonical, wait):
-            return self._refusal(UnconsumedDependencyRule(), defer)
+            return self._refusal(UnconsumedDependencyRule())
         self.comms.transcripts.routes.record_input_display(
             native_id,
             source.display(self.inputs.dispositions, sent_text),

@@ -644,9 +644,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def accepts_following_handoff(self) -> bool:
         return False
 
-    def defers_following_to(self, current: GoalDeclaration) -> bool:
-        return current.accepts_following_handoff()
-
     @property
     def snapshot(self) -> GoalDeclaration:
         return self
@@ -885,9 +882,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def accepts_following_handoff(self) -> bool:
         return self.state.active
-
-    def defers_following_to(self, current: GoalDeclaration) -> bool:
-        return not self.state.active and super().defers_following_to(current)
 
     @property
     def objective(self) -> str:

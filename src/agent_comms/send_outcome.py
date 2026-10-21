@@ -34,6 +34,13 @@ class HeldSend(SendOutcome):
         return asyncio.sleep(0, result=True)
 
 
+class DeferredSend(SendOutcome):
+    """Leave an unwritten input with its live acceptance, outside this native turn."""
+
+    def dispatch(self, inputs, session, item, write):
+        return asyncio.sleep(0, result=True)
+
+
 class RefusedSend(SendOutcome):
     def dispatch(self, inputs, session, item, write):
         item.refuse(inputs, session)

@@ -31,6 +31,9 @@ class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
+    def following_original(self, prompt: str):
+        raise RuntimeError("An unowned prompt cannot authorize following input")
+
 
 class UnguardedPrompt(PromptBoundary):
     async def send_prompt(self, turn: TrackedTurnSession) -> None:

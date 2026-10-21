@@ -13,7 +13,7 @@ from .owned_send import OwnedSend
 from .goal_attempts import NoLaunchPermit
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity, TurnId
-from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
+from .turn_input_source import AcceptedFollowingInput
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -61,11 +61,9 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
-        while not self.inbox.empty():
-            # A send-now control carries no input of its own.
-            for carried in self.inbox.get_nowait().carried_inputs:
-                if await self.pass_on(turns, carried.value):
-                    return  # The next turn's forwarder reads the rest of the live inbox.
+        for input_id in tuple(self.inputs.state(self.session_id).queued):
+            if await self.pass_on(turns, input_id):
+                return  # The next turn owns the remaining live acceptances.
 
     async def pass_on(self, turns: TurnRunner, input_id: str) -> bool:
         inputs, session_id = self.inputs, self.session_id
@@ -83,7 +81,7 @@ class OwnerFollowingInputs(FollowingInputs):
         inputs = self.inputs
         thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
-        original = SelectedOriginalInput.answering(session.command.message)
+        original = session.prompt_send_boundary.following_original(session.command.message)
         sender = OwnedSend(
             comms=inputs.comms,
             owner_name=thread.name,

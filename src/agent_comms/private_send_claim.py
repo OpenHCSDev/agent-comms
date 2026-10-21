@@ -61,6 +61,11 @@ class PrivateSendClaim(PromptBoundary):
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
+    def following_original(self, prompt: str):
+        from .turn_input_source import SelectedOriginalInput
+
+        return SelectedOriginalInput.answering(prompt, self.selected.goal_permission)
+
     @property
     def bus(self) -> MessageBus:
         return self.selected.bus

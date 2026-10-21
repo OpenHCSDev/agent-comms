@@ -415,7 +415,6 @@ class TurnRunner:
                     pi_session=self.backend_for(session_id, owner),
                     following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
                 )
-                await following.pass_on_unread(self)
                 return result
             finally:
                 try:

@@ -141,6 +141,8 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
+        self.input_cleanup = AsyncExitStack()
+        resources.push_async_callback(self.input_cleanup.aclose)
         self.lease_cleanup = AsyncExitStack()
         resources.push_async_callback(self.lease_cleanup.aclose)
         self.registry_owner = self.runner.acquire_turn(
@@ -151,8 +153,6 @@ class OwnedTurn:
         prepared_goal = any(self._prepare_goal_permit(goal, permits) for goal in active_goal)
         if self.autonomous_goal and not prepared_goal:
             return False
-        self.input_cleanup = AsyncExitStack()
-        resources.push_async_callback(self.input_cleanup.aclose)
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
@@ -235,11 +235,10 @@ class OwnedTurn:
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
-        goal = self.runner.comms.registry.require(self.thread_name).goal
         if self.original_owner_input:
-            permission = OwnerGoalPermission(goal)
+            permission = OwnerGoalPermission(self.thread.goal)
         else:
-            permission = goal.active().following_permission()
+            permission = self.thread.goal.active().following_permission()
         if self.original_owner_input:
             source_type = OwnerOriginalInput
         elif not self.origins:
@@ -276,9 +275,6 @@ class OwnedTurn:
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
         self.backend_inbox = self.runner.inputs.bind_native_turn(self.session_id, self.thread)
-        resources.push_async_callback(
-            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
-        )
         self.finish_event = asyncio.Event()
         self.controller = (
             self.runner.inputs.state(self.session_id).queued[self.accepted_input_id].controller
@@ -289,6 +285,9 @@ class OwnedTurn:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
         self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()
+        self.input_cleanup.push_async_callback(
+            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
+        )
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)
         self.progress = TurnProgress(
