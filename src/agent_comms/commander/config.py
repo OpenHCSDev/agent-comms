@@ -231,6 +231,10 @@ class RepoChoice(SubclassUnion, affix="Repos"):
     def without_commander(self) -> None:
         """Refuse repositories given to a bus that records no commander to hold them."""
 
+    @abstractmethod
+    def resolved(self) -> Self:
+        """This choice with its paths absolute, for an install child that runs elsewhere."""
+
 
 @dataclass(frozen=True, slots=True)
 class GivenRepos(RepoChoice):
@@ -256,6 +260,9 @@ class GivenRepos(RepoChoice):
         raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
                              "commander, so name one with --commander")
 
+    def resolved(self) -> Self:
+        return type(self)(tuple(checkout.resolve() for checkout in self.checkouts))
+
 
 @dataclass(frozen=True, slots=True)
 class KeptRepos(NullMember, RepoChoice):
@@ -268,6 +275,9 @@ class KeptRepos(NullMember, RepoChoice):
 
     def without_commander(self) -> None:
         pass
+
+    def resolved(self) -> Self:
+        return self
 
 
 class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
