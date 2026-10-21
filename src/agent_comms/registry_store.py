@@ -300,6 +300,13 @@ class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
         """The files every write replaces together, as ``revision_unlocked`` reads them."""
         return self.path, self.guard_path
 
+    @property
+    def cut_paths(self) -> tuple[Path, ...]:
+        """The files one hold of the registry lock keeps consistent: every write replaces
+        ``written`` together, and a turn claim publishes its turn file in the same
+        transaction. Read under that lock, so a claim cannot fall between them."""
+        return (*self.written, *sorted(StoredTurnRecord.matching_in(self.path.parent)))
+
     def revision_unlocked(self) -> tuple[FileObservation, FileObservation]:
         """The registry file and its owner guard, which every write replaces together."""
         return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
