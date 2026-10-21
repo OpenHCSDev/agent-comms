@@ -1,8 +1,16 @@
+"""Watcher digests retain native calls without treating triage replies as speech."""
+
 import json
 
 from agent_comms.commander.tool_watch import emit
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tool_call import CodingCall
 from agent_comms.selected_triage import FullSelectedTriage, SelectedTriage
+
+
+def test_coordination_call_digests_its_arguments():
+    call = CodingCall.decode('coordination-1', 'comms_threads', {})
+    assert call.digest() == 'comms_threads {}'
 
 
 def test_emit_suppresses_triage_speech_but_keeps_calls(capsys):
