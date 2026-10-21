@@ -32,6 +32,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.routing import DeliveryScope
 
+
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
@@ -48,7 +49,7 @@ class HeldBusWrite:
 
 
 class WatchPass[Observed](HeldBusWrite, ABC):
-    """Observe before entering maintenance; apply only the captured result."""
+    """Observe before entering maintenance to apply the result."""
 
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
@@ -99,10 +100,6 @@ class MessageBus[Writes: Publisher]:
         ) as basis:
             yield basis, self.bus
 
-    def page(self, *, before_seq: int, limit: int = 100):
-        """Newest-first public history follows the bus's exclusive sequence keyset."""
-        return self.bus.page(before_seq, limit)
-
     def inbox(
         self, name: str, target: CommandTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
@@ -139,11 +136,11 @@ class MessageBus[Writes: Publisher]:
         self, name: str, *, acknowledgment: type[WatchAcknowledgment],
         after: InboxStart = FirstUnreadStart(),
     ) -> AsyncIterator[Message]:
-        from .watched import Watched
+        from .watched import FileSource
 
         reader = self._registry.require(name).incarnation
         maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(Watched.observations(self.bus.path, maintenance.state_path)) as changes:
+        async with aclosing(self.bus.watch(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
                 maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
@@ -173,10 +170,10 @@ class MessageBus[Writes: Publisher]:
                 await self.resumed()
 
     async def resumed(self) -> None:
-        from .watched import Watched
+        from .watched import FileSource
 
         maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(Watched.observations(maintenance.state_path)) as changes:
+        async with aclosing(Bus.watch_sources(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
                 if not maintenance.read().turn_pending:
                     return
@@ -247,7 +244,13 @@ class MessageBus[Writes: Publisher]:
             )
             self.reads.mark_displayed(canonical, displayed)
 
-    def awareness_segments(self, owner: Thread, relations: Sequence[PeerRelation], *, blocking=False):
+    def awareness_segments(
+        self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
+    ):
+        """Bounded frozen-recipient pointers, independent of UI read state.
+
+        Peer relevance orders the selected rows, never changes their window.
+        """
         from agent_comms.context_segments.awareness import AwarenessSegment
         from agent_comms.peer_relevance import Prioritized
 

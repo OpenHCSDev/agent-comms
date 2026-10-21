@@ -1000,7 +1000,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
         """At most one row is stored for a key; a repeated key is corruption."""
-        stored = cls.select(db, **key)
+        stored = cls.select(db, limit=2, **key)
         if len(stored) > 1:
             raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return stored

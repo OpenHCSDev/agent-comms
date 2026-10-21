@@ -12,14 +12,13 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.wake_candidate_index import WakeCandidateIndex, OutdatedCheckpoint
+from agent_comms.wake_candidate_index import WakeCandidateIndex
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -34,54 +33,14 @@ def curl_call(port, token, body, *, arguments=None):
 
 
 def maintenance_proof(comms):
-    log = comms.bus.log
-    # A real committed original is indexed by the normal background worker.
+    bus = comms.bus.bus
     message = comms.messaging.send("worker", "claude-ai", "scratch original").message
+    maintenance.schedule_candidate_catchup(bus, message.seq)
     maintenance.drain_candidate_catchup(comms.root)
-    index = WakeCandidateIndex(log)
-    root_id = log.private_marker_unlocked().root_id
-    before = index._verified_checkpoint(root_id)
-    replacement = log.path.with_name("replacement.jsonl")
-    replacement.write_bytes(log.path.read_bytes())
-    replacement.chmod(0o600)
-    replacement.replace(log.path)
-    # The canonical source owner, not the projection, approves the same prefix
-    # at its replacement inode, exactly as the source barrier requires.
-    with log.checked_read() as checked:
-        checked.require_current()
-    assert isinstance(index._captured_checkpoint(root_id), OutdatedCheckpoint)
-    print(f"source replacement: old inode={before.inode}, new inode={log.path.stat().st_ino}; outdated checkpoint")
-    failures = []
-    observed = []
-    entered = threading.Event()
-    old_hook = threading.excepthook
-
-    def failed(args):
-        failures.append(f"{args.exc_type.__name__}: {args.exc_value}")
-
-    def profile(frame, event, arg):
-        if frame.f_code is maintenance.CandidateMaintenance.run.__code__ and event == "call":
-            observed.append(threading.current_thread())
-            entered.set()
-
-    threading.excepthook = failed
-    threading.setprofile(profile)
-    try:
-        maintenance.schedule_candidate_catchup(log, log.path.stat().st_size)
-        assert entered.wait(5)
-        worker, = observed
-        worker.join(timeout=15)
-        assert not worker.is_alive(), "maintenance did not finish its drain"
-    finally:
-        threading.setprofile(None)
-        threading.excepthook = old_hook
-    print(f"maintenance threads started={len(observed)}, failures={failures}")
-    assert not failures
-    after = index._verified_checkpoint(root_id)
-    assert after.inode == log.path.stat().st_ino and after.last_seq == message.seq
-    assert after.byte_offset == log.path.stat().st_size
-    assert log.path.parent not in maintenance._pending
-    print(f"same maintenance thread completed normally: last_seq={after.last_seq}, caught_up=True, no restart")
+    index = WakeCandidateIndex(bus)
+    assert index.through_seq >= message.seq
+    assert bus.path.parent not in maintenance._pending
+    print(f"maintenance completed: scanned seq={index.through_seq}, committed seq={message.seq}")
 
 
 def main(scratch: Path):

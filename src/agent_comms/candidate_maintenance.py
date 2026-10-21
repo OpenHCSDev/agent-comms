@@ -7,11 +7,9 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from .bus_route_counts import BusRouteCounts
+from .bus import Bus
 from .coordination_errors import CoordinationError
-from .routing import DeliveryMessage
-from .wake_candidate_index import FirstBuild, ProjectionUnavailableError, WakeCandidateIndex
-from .wire_log import CurrentSnapshotOpening, WireLog
+from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
@@ -30,36 +28,21 @@ class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker fai
 class CandidateMaintenance(threading.Thread):
     """One root's coalesced cursor and actual worker; retirement joins this owner."""
 
-    def __init__(self, log: WireLog, through_bytes: int) -> None:
+    def __init__(self, bus: Bus, seq: int) -> None:
         super().__init__(name="agent-comms-candidate-maintenance", daemon=True)
-        self.log = log
-        self.through_bytes = through_bytes
+        self.bus = bus
+        self.seq = seq
 
     def run(self) -> None:
-        root = self.log.path.parent
+        root = self.bus.path.parent
         try:
-            with self.log.checked_read() as source:
-                metadata = source.marker
-            root_id = metadata.root_id
-            index = WakeCandidateIndex(self.log)
-            routes = BusRouteCounts(self.log.path)
+            index = WakeCandidateIndex(self.bus)
             while True:
+                through = index.maintain()
                 with _guard:
-                    target = self.through_bytes
-                hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
-                result = index.catch_up_committed_append(hint, start=FirstBuild())
-                with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
-                    route_result = routes.sync(
-                        snapshot,
-                        lambda record: DeliveryMessage.from_wire(
-                            record, root_id=snapshot.metadata.root_id
-                        ),
-                    )
-                if result.caught_up and route_result.complete:
-                    with _guard:
-                        if self.through_bytes <= result.checkpoint_bytes:
-                            _pending.pop(root)
-                            return
+                    if self.seq <= through:
+                        _pending.pop(root)
+                        return
         except (
             OSError,
             ValueError,
@@ -76,20 +59,19 @@ class CandidateMaintenance(threading.Thread):
                     _pending.pop(root)
 
 
-def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
-    """Prepare writer indexes, then coalesce into the root's actual worker."""
-    if through_bytes <= 0:
-        raise ValueError("candidate notification needs an actual committed byte position")
-    BusRouteCounts(log.path).prepare()
-    root = log.path.parent
+def schedule_candidate_catchup(bus: Bus, seq: int) -> None:
+    """Coalesce committed sequences into the root's one bounded scan worker."""
+    if seq <= 0:
+        raise ValueError("candidate notification needs an actual committed sequence")
+    root = bus.path.parent
     with _guard:
         if root in _pending:
             worker = _pending[root]
-            worker.through_bytes = max(worker.through_bytes, through_bytes)
+            worker.seq = max(worker.seq, seq)
             return
         if len(_pending) >= _MAX_ACTIVE_ROOTS:
             raise CandidateMaintenanceFailed(root)
-        worker = CandidateMaintenance(log, through_bytes)
+        worker = CandidateMaintenance(bus, seq)
         _pending[root] = worker
         try:
             worker.start()

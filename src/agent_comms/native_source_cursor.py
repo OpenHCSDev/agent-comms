@@ -8,11 +8,10 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
-from .cursor_owner import CursorOwner
+from .cursor_owner import CursorOwner, CursorState
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
-from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import SourceCoverage
 from .store_files import StoreLockContention
 from .threads import Thread
@@ -71,7 +70,7 @@ class NativeSourceCursor:
                               recipient_lookup=lookup, contention=contention)
 
     def advance(self, *, owner: Thread, owner_claimed_generation: int, owner_generation: int,
-                committed_input_id: str | None, source_reads: NativeEvidenceScope) -> CurrentNativeCursor | None:
+                committed_input_id: str | None, source_reads: NativeEvidenceScope) -> CursorState:
         committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         identity = CursorOwner(wire_root_id=self.wire_root_id, thread=owner,
                                generation=owner_generation, claimed_generation=owner_claimed_generation)
@@ -83,8 +82,7 @@ class NativeSourceCursor:
         sources = self._coverage(identity.lookup, contention)
         with self.store.session.boundary(self.bus, blocking=False, contention=contention):
             with self.store.session.read():
-                state = identity.state(self.store.session._connection,
-                                       self.bus.log.private_marker_unlocked().claimed_after_seq)
+                state = identity.state(self.store.session._connection)
         coverage = sources.since(state, source_reads=source_reads)
         proof = coverage.proof
         with (self.store.session.boundary(self.bus, blocking=False, contention=contention) as boundary,
@@ -102,9 +100,9 @@ class NativeSourceCursor:
             ):
                 state = state.publish(db, identity, coverage, proof)
             state.require_coverage(identity, db, coverage, proof)
-            return state.cursor
+            return state
 
-    def read(self, *, owner_name, source_reads):
+    def read(self, *, owner_name, source_reads) -> CursorState:
         with self.store.session.boundary(self.bus, blocking=False) as boundary:
             reason = 'current native cursor has no matching live owner'
             marker = self.bus.log.private_marker_unlocked()
@@ -120,7 +118,7 @@ class NativeSourceCursor:
                 identity = CursorOwner(wire_root_id=self.wire_root_id, thread=captured.thread,
                                        generation=person.participant_generation,
                                        claimed_generation=captured.claimed_generation)
-                state = identity.state(db, marker.claimed_after_seq)
+                state = identity.state(db)
         sources = self._coverage(identity.lookup)
         with source_reads.borrow():
             witness = state.source_witness(identity, sources, source_reads)
@@ -132,4 +130,4 @@ class NativeSourceCursor:
                 identity.require_participant(self.store, 'current native cursor participant generation changed')
                 if identity.cursor(self.store.session._connection) != state.cursor:
                     raise StaleFence('current native cursor SQL row changed while reading')
-        return state.cursor
+        return state

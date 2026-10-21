@@ -275,7 +275,7 @@ class Goals:
         if not closed:
             return ()
         # An unreadable bus remains a drain diagnostic, never evidence of silence.
-        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
             return ()
         names = ", ".join(f"@{member}" for member in closed)
         note = (
@@ -335,7 +335,7 @@ class Goals:
             return False
         if any(self.agents.is_working(target.incarnation, snapshot) for target in wait.targets):
             return False
-        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
             return False
         diagnostic = (
             f"Declared dependency @{canonical} finished without a qualifying direct "

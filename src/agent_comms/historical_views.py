@@ -237,6 +237,7 @@ class HistorySource:
     root: str
     original_root: str
     bus_identity: RecordedBusIdentity
+    snapshot_bus_identity: RecordedBusIdentity
     snapshot_bus_revision: int
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
@@ -248,7 +249,8 @@ class HistorySource:
     def validate(self) -> None:
         root = Path(self.root)
         if (
-            Bus(Bus.path_in(root)).revision() != self.snapshot_bus_revision
+            not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root)))
+            or Bus(Bus.path_in(root)).revision() != self.snapshot_bus_revision
             or FileRevision.capture(RegistryFile.path_in(root)) != self.snapshot_registry_revision
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
@@ -441,6 +443,7 @@ class HistoryArchive(DurableFile):
                 revisions = tuple(FileRevision.capture(path) for path in paths)
                 original_bus = Bus(Bus.path_in(source_root))
                 bus_revision = original_bus.revision()
+                original_identity = RecordedBusIdentity.capture(original_bus.path)
                 if source_read is None:
                     with Registration(RegistryFile.path_in(source_root)).store.reading() as original:
                         provenance = RegistryProvenance.capture(original)
@@ -454,6 +457,7 @@ class HistoryArchive(DurableFile):
                         shutil.copy2(path, stage / path.name)
                 TranscriptRoutes(source_root).snapshot(stage)
                 if (revisions != tuple(FileRevision.capture(path) for path in paths)
+                        or not original_identity.matches(ObservedPath.at(original_bus.path))
                         or original_bus.revision() != bus_revision
                         or archived.revision() != bus_revision):
                     raise ValueError("Historical source changed during snapshot; retry")
@@ -461,7 +465,7 @@ class HistoryArchive(DurableFile):
                     source_read.require_original(source_root)
                 source = HistorySource(
                     str(stage.resolve()), str(source_root),
-                    RecordedBusIdentity.capture(original_bus.path), bus_revision,
+                    original_identity, RecordedBusIdentity.capture(archived.path), bus_revision,
                     FileRevision.capture(RegistryFile.path_in(stage)), provenance,
                 )
                 if not source.provenance.threads:
