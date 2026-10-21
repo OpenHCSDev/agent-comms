@@ -217,7 +217,8 @@ class ApplicationRunComparison(InstalledEvidenceCase):
     ) -> tuple[tuple[str, bool], ...]:
         return (
             *super().checks(run, rows[:2], native, output),
-            ("application run declared", not rows[0].order.checked().run.mechanical),
+            ("declared application run retained",
+             rows[0].order.checked().run == OrderFile.read(run.document.read_text()).order.run),
             (
                 "unquoted evidence refused without changing the order",
                 rows[2] == rows[3] and rows[3].state.open,

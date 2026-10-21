@@ -16,7 +16,9 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
+from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.practice import practice_copy
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -46,7 +48,7 @@ from agent_comms.todos import (
     TodoStore,
     WithdrawTodo,
 )
-from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 
 
 
@@ -306,6 +308,71 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     store = TodoStore(ctx.root)
     store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
     assert store.get(original.id) == linked
+
+
+def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
+    """Real forge observations, copied SQLite stores, board and commander close entrypoint."""
+    ctx = pr_commander
+    source = ctx.repos[0]
+    lead = ctx.comms.registry.require(ctx.commander)
+    worker = thread("merge-worker", ctx.root, 2.0)
+    ctx.comms.registry.register(worker)
+    planned = "Read the copied board and confirm its application order remains assigned after merge"
+    link = PullRequestLink(source.github, 2347)  # retained real merge, already in this checkout
+    originals = tuple(
+        ctx.comms.goals.todos.create(
+            f"P{index}", source.github, "Keep application work held until its run is recorded",
+            creator=lead, owner=worker, generation="merge-run",
+            goal=GoalRef(lead.name, lead.created_at, "merge-run"),
+            review_at=RecordedEventTime(1000),
+            order=replace(order(source.checkout), id=f"merge-order-{index}", run=run,
+                          pull_requests=(link,)))
+        for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
+    copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
+    with practice_copy(ctx.root, copied_path) as (copied, measurement):
+        checked = ctx.model_copy(update={"root": copied, "state": copied / "state"})
+        store = checked.comms.goals.todos
+        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        mechanical, application = tuple(store.get(todo.id) for todo in originals)
+        assert mechanical.state is DoneTodoState
+        assert mechanical.assignment is None
+        assert source.contains(mechanical.order.sha)
+        assert application.state is originals[1].state
+        assert application.assignment == originals[1].assignment
+        assert application.holder == worker.name
+        assert application.order.sha == mechanical.order.sha
+        assert not application.order.accepted
+        assert application.order.line == application.order.checked().run.merged_line
+        board = checked.board_text()
+        assert application.order.line in board
+        assert worker.name in board
+        print("APPLICATION BOARD:", next(line for line in board.splitlines()
+                                          if line.startswith(f"| {application.id}:")))
+        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        assert store.get(application.id) == application  # no heartbeat revision churn
+        assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
+        with pytest.raises(ToolRefusedError) as refused:
+            store.apply(application.id, ChangeTodoState(
+                application.revision, DoneTodoState, checked.incarnation, "merge-run"))
+        print("CLOSE REFUSAL:", refused.value)
+        artifact = copied / "run.txt"
+        artifact.write_text(board)
+        with pytest.raises(ToolRefusedError):
+            checked.close(application.id,
+                          "The source grep passed and the merge commit exists in main.",
+                          str(artifact))
+        assert store.get(application.id) == application
+        works = f"{planned}; the copied store and board both retained {worker.name}."
+        checked.close(application.id, works, str(artifact))
+        installed = store.get(application.id)
+        assert installed.state is DoneTodoState
+        assert installed.assignment is None
+        assert installed.order.accepted
+        assert installed.order.works == works
+        assert installed.order.artifact == str(artifact)
+        assert installed.order.installed(works, str(artifact)) is installed.order
+        assert FieldCodec.decode(Todo, FieldCodec.encode(installed)) == installed
+        assert tuple(ctx.comms.goals.todos.get(todo.id) for todo in originals) == originals
 
 
 @pytest.mark.parametrize("number", (0, -1))
