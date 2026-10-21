@@ -12,6 +12,7 @@ from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..message_bus import WatchPass
 from ..standing_rules import ReasonedStandingRule, UndatedStandingRule
+from agent_comms.storage_rules import OrderCheckoutWork
 from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import Todo
@@ -64,7 +65,6 @@ class UnownedWheelSpin(UndatedStandingRule):
     without a commander turn, restarting the row's review window at the handoff."""
 
     todo: Todo
-    dispatch: WorkDispatch
 
     recent: ClassVar[int] = 10 * 60
 
@@ -88,19 +88,9 @@ class UnownedWheelSpin(UndatedStandingRule):
             review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
             traced=todo.order.owner)
 
-    def enforce(self, comms: Comms, commander: str) -> None:
-        unit = self.dispatch.start(comms)
-        comms.messaging.send(commander, unit.name,
-            f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
-
-    @property
-    def unit(self) -> str:
-        return self.dispatch.name
-
-    def _identity(self) -> str:
-        # The dispatch carries an order reissued at observation time, enforcing it bumps the
-        # row's revision, and the proposed unit moves as units go idle: the violation is the row.
-        return self.todo.id
+    def _identity(self) -> tuple[object, ...]:
+        # Observation times and proposed idle units change; the row and its disposition do not.
+        return type(self), self.todo.id
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, UnownedWheelSpin) and self._identity() == other._identity()
@@ -112,30 +102,65 @@ class UnownedWheelSpin(UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
-                     if todo.pending and not todo.holder)
+                     if not todo.holder_state.current_assignments())
         paired = cls.paired(comms, commander, rows, actor)
         assigned = {rule.todo.id for rule in paired}
-        return paired + tuple(WaitingUnownedWheelSpin(todo, WorkDispatch(
-            cls.order_for(todo, commander, actor), todo.revision))
-            for todo in rows if todo.id not in assigned)
+        return paired + tuple(WaitingUnownedWheelSpin(todo)
+            for todo in rows if todo.pending and todo.id not in assigned)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
                assigner: ThreadIncarnation) -> tuple[UnownedWheelSpin, ...]:
-        """Each pending row with the first idle unit not struck on it."""
+        """Both the heartbeat and automatic watcher preserve work before any dispatch."""
+        rows = tuple(todo for todo in todos if todo.pending)
+        retained = tuple(CheckoutHeldWheelSpin(todo, work)
+                         for todo in rows
+                         for work in comms.registry.storage_rule.work_for_problem(
+                             todo, comms.registry, comms.goals.todos))
+        protected = {rule.todo.id for rule in retained}
         idle, found = cls.idle(comms, commander), []
-        for todo in (todo for todo in todos if todo.pending):
+        for todo in (todo for todo in rows if todo.id not in protected):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(cls(todo, ReusedWorkDispatch(
+                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch(
                         cls.order_for(todo, commander, assigner), todo.revision, unit)))
                     break
-        return tuple(found)
+        return (*retained, *found)
+
+    def line(self) -> str:
+        return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
+
+
+@dataclass(frozen=True, eq=False)
+class ReassignedWheelSpin(UnownedWheelSpin, declared_name=None):
+    dispatch: WorkDispatch
+
+    @property
+    def unit(self) -> str:
+        return self.dispatch.name
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        unit = self.dispatch.start(comms)
+        comms.messaging.send(commander, unit.name,
+            f"{self.line()}\n{self.dispatch.action.order.instructions(self.todo)}")
 
     def line(self) -> str:
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
+
+
+@dataclass(frozen=True, eq=False)
+class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
+    work: OrderCheckoutWork
+
+    def _identity(self) -> tuple[object, ...]:
+        return (*super()._identity(), self.work.owner.incarnation, self.work.checkout)
+
+    def line(self) -> str:
+        return (f"WORK HELD: {self.todo.id} {self.work.owner.name} retains work in "
+                f"{self.work.checkout} -> restore its holder; do not hand the row away")
+
 
 class UnownedOrderWatch(WatchPass):
     """Hand released work to idle units after the scheduled pass enters the bus."""
@@ -152,9 +177,6 @@ class UnownedOrderWatch(WatchPass):
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
     """A row needs a new unit; a proposed dispatch name is not an idle thread."""
-
-    def line(self) -> str:
-        return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
 
     def heartbeat_group(self) -> object:
         return type(self)
