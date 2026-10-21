@@ -394,9 +394,9 @@ class OrderCheck:
             result = self.run_at(sha, repository, checkout_base)
         except subprocess.TimeoutExpired:
             return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
-        CheckedCommit(self.command, result.outcome, result.stdout.decode(errors="replace")).store(
-            repository, sha)
-        return result
+        checked = CheckedCommit(self.command, result.outcome, result.stdout.decode(errors="replace"))
+        checked.store(repository, sha)
+        return checked.result
 
     def run_at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
         """Run in a fresh detached tree, never in the configured checkout."""

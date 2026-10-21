@@ -1042,7 +1042,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
-    help = "replace an open order's wrong check with one passing on main; keeps its review timer and strikes"
+    help = "replace an open order's wrong check using send's rule; keeps its review timer and strikes"
     pid: Annotated[str, Argument(flags=("pid",))]
     check: Annotated[
         str,
