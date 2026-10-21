@@ -232,7 +232,7 @@ class LifecycleCase(ABC):
     ) -> tuple[tuple[str, bool], ...]: ...
 
     @classmethod
-    def read(cls) -> ParityComparison:
+    def read(cls) -> LifecycleObservation:
         owners = (cls.native_owner, *cls.additional_owners)
         with LifecycleRun.open() as run:
             output = io.StringIO()
@@ -344,61 +344,66 @@ class InstalledEvidenceCase(LifecycleCase):
         )
 
 
-class BuildBoundProofCase(InstalledEvidenceCase):
+class BuildBoundProofCase(LifecycleCase):
+    native_owner = CommsOrderDoneTool
+
+    @classmethod
+    def read(cls) -> LifecycleObservation:
+        current = InstalledEvidenceCase.read()
+        stale = super().read()
+        return LifecycleObservation(
+            f"{current.owner}; {stale.owner}",
+            current.invocations + stale.invocations,
+            (("installed proof case", current.passed), ("older proof case", stale.passed)),
+            f"{current.describe()}\n{stale.describe()}",
+        )
+
     @classmethod
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
-        delivered, closed = super().exercise(run)
-        stale_run = replace(run, artifact=run.artifact.with_name("older-build-proof.json"))
-        stale_run.decisions.write_text(json.dumps([stale_run.worker]))
-        created = stale_run.create()
+        created = run.create()
         installed = RecordedBuildIdentity.installed()
         older = subprocess.check_output(
             ("git", "rev-parse", f"{installed.core}^"),
             cwd=created.order.checked().check.directory,
             text=True,
         ).strip()
-        stale_run.artifact.write_text(
-            json.dumps(
-                FieldCodec.encode(stale_run.commander.comms.registry.require(stale_run.worker).goal)
-            )
+        run.artifact.write_text(
+            json.dumps(FieldCodec.encode(run.commander.comms.registry.require(run.worker).goal))
         )
-        stale_run.decisions.write_text("[]")
-        stale_run.commander.call(
+        run.decisions.write_text("[]")
+        run.commander.call(
             CommsOrderDoneTool(
                 problem=created.id,
                 order_id=created.order.checked().id,
                 delivery=OperationDelivery(
-                    evidence=FileDeliveryEvidence(str(stale_run.artifact)),
+                    evidence=FileDeliveryEvidence(str(run.artifact)),
                     proof_build=replace(installed, core=older),
                 ),
-                claims=(WorkingClaim(str(stale_run.artifact)),),
+                claims=(WorkingClaim(str(run.artifact)),),
             )
         )
-        stale = stale_run.commander.comms.goals.todos.get(created.id)
+        stale = run.commander.comms.goals.todos.get(created.id)
         try:
-            stale_run.commander.close(
+            run.commander.close(
                 stale.id,
                 "Read the copied native goal and confirm its recorded source location "
                 "and assigned worker.",
-                str(stale_run.artifact),
+                str(run.artifact),
             )
         except ProofBuildMismatchError as error:
             print(error)
-        return delivered, closed, stale, stale_run.commander.comms.goals.todos.get(stale.id)
+        return stale, run.commander.comms.goals.todos.get(stale.id)
 
     @classmethod
     def checks(
         cls, run: LifecycleRun, rows: tuple[Todo, ...], native: tuple[ToolResult, ...], output: str
     ) -> tuple[tuple[str, bool], ...]:
-        delivered, closed, stale, after = rows
-        assert isinstance(delivered.order, DeliveredProblemOrder)
+        stale, after = rows
         assert isinstance(stale.order, DeliveredProblemOrder)
-        current_build = delivered.order.delivery.proof_build
+        current_build = RecordedBuildIdentity.installed()
         older_build = stale.order.delivery.proof_build
-        assert isinstance(current_build, RecordedBuildIdentity)
         assert isinstance(older_build, RecordedBuildIdentity)
         return (
-            ("installed proof closes", closed.order.accepted and not closed.state.open),
             (
                 "build recorded durably",
                 FieldCodec.decode(Todo, FieldCodec.encode(stale)) == stale,
@@ -416,7 +421,7 @@ class BuildBoundProofCase(InstalledEvidenceCase):
                     )
                 ),
             ),
-            ("native close returned", bool(native)),
+            ("native delivered proof returned", bool(native)),
         )
 
 

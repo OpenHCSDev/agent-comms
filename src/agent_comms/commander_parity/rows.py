@@ -263,9 +263,12 @@ class UnitWordingParityRow(ParityRow):
 
 class DecisionAlertsParityRow(ParityRow):
     number = 26
-    capability = "Alerts carry only decisions"
-    current = "none; every line interrupts"
-    native = "`messages.AlertKind.require_publishable`, `tools.CommsDecisionTool`"
+    capability = "Authored decisions are validated; alerts stay open"
+    current = "`CommsAuthoredTaskTool.apply` publishes authored decisions as info notices"
+    native = (
+        "`Message.require_decision`; publisher validates author, turn and scope; "
+        "bare `AlertKind` publication remains allowed"
+    )
     phases = (ControlPlanePhase,)
 
     @classmethod

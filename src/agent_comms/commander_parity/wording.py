@@ -1,8 +1,10 @@
-"""Observe wording checks at the current and native entry points without publishing."""
+"""Compare wording and authored messages through real owners and disposable buses."""
 
 from __future__ import annotations
 
 import io
+import json
+import os
 from collections.abc import Callable, Iterable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
@@ -10,24 +12,38 @@ from functools import partial
 from itertools import islice
 from pathlib import Path
 from typing import ClassVar
+from uuid import uuid4
 
-from ..commander.config import CommanderConfig
-from ..commander.order import CommanderContext, OrderFile, refuse
-from ..errors import ToolRefusedError
-from ..field_codec import FieldCodec
-from ..goal_actions import GoalActionContext, OrderGoalAction
-from ..messages import AlertKind, Message
-from ..todos import (
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import CommanderContext, OrderFile, refuse
+from agent_comms.commander_parity import ParityComparison, UnverifiedParity
+from agent_comms.commander_parity.lifecycle import (
+    InstalledEvidenceCase,
+    LifecycleObservation,
+    LifecycleRun,
+)
+from agent_comms.comms import Comms
+from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_actions import GoalActionContext, OrderGoalAction
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.task_sources import ExplicitTaskScopeSelection, NoTaskAttachment, ProjectTaskScope
+from agent_comms.todos import (
     OrderText,
     OrderWords,
     PendingProblemOrder,
     PlainText,
     Todo,
 )
-from ..tool_result import ToolResult
-from ..tools import CommsCorrectWordingTool, MessagePublished
-from . import ParityComparison, UnverifiedParity
-from .lifecycle import InstalledEvidenceCase, LifecycleObservation, LifecycleRun
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_result import ToolResult
+from agent_comms.tools import (
+    CommsCorrectWordingTool,
+    CommsDecisionTool,
+    MessagePublished,
+    TaskPublished,
+)
 
 
 @dataclass(frozen=True)
@@ -258,29 +274,94 @@ class UnitWordingComparison:
 
 
 class DecisionAlertsComparison:
+    @staticmethod
+    def publish(root: str, sender: str, target: str) -> None:
+        # This child owns a real process and registry turn on the copied bus.
+        # The tool derives authorship from that lease, never constructed turn fields.
+        comms = Comms(Path(root))
+        owner = comms.registry.require(sender)
+        comms.registry.register(
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
+        )
+        leased, _ = comms.registry.lease_local_turn(sender, uuid4().hex)
+        lease = leased.require_turn_lease()
+        scope = ProjectTaskScope(project=leased.worktree)
+        try:
+            request = CommsDecisionTool(
+                target=target,
+                scope=ExplicitTaskScopeSelection(scope),
+                chosen="Keep alerts open.",
+                rejected=("Require every alert to carry a declared choice.",),
+            )
+            result = FieldCodec.decode(
+                TaskPublished,
+                CommsDecisionTool.invoke(comms, request.arguments, caller=ThreadCaller(sender)),
+            )
+            with comms.bus.log.opened_wire_snapshot() as source:
+                (decision_message,) = source.messages_for_references((result.reference,))
+            decision = decision_message.require_decision()
+            with comms.bus.log.checked_read() as checked:
+                decision_message.require_task_publication(sender, comms.registry.snapshot(), checked)
+            alert = comms.messaging.send(
+                sender,
+                target,
+                "Copied-bus failure notice: alerts stay open.",
+                AlertKind,
+                role=NoticeRole(),
+            ).message
+            with comms.bus.log.opened_wire_snapshot() as source:
+                saved = source.messages_for_references((result.reference, alert.reference))
+            observation = LifecycleObservation(
+                owner=(
+                    f"{CommsDecisionTool.apply.__qualname__}; "
+                    f"{Message.require_decision.__qualname__}; "
+                    f"{Message.require_task_publication.__qualname__}; "
+                    f"{AlertKind.require_publishable.__qualname__}({AlertKind.__qualname__})"
+                ),
+                invocations=len(saved),
+                checks=(
+                    ("decision tool returns its published task", result.task == decision),
+                    ("decision keeps its actual sender", decision.author == leased.incarnation),
+                    (
+                        "decision keeps its original turn",
+                        decision.source_turn == lease.identity
+                        and decision.source_turn_id.value == lease.turn_id,
+                    ),
+                    ("decision keeps its declared project", decision.scope == scope),
+                    (
+                        "authored decision remains an info notice",
+                        decision_message.type is InfoKind
+                        and decision_message.role == NoticeRole(),
+                    ),
+                    (
+                        "bare alert publishes without a decision",
+                        alert.type is AlertKind and alert.task == NoTaskAttachment(),
+                    ),
+                    (
+                        "failure notice never starts a turn",
+                        not alert.role.response_policy(alert).starts_turn,
+                    ),
+                    ("both actual wire messages retained", saved == (decision_message, alert)),
+                ),
+                output=f"decision={result.reference}; bare alert={alert.reference}",
+            )
+        finally:
+            comms.registry.release_turn(lease)
+        print(json.dumps(FieldCodec.encode(observation)))
+
     @classmethod
     def read(cls) -> ParityComparison:
-        context = selected_context()
-        registry = context.comms.registry.snapshot()
-        observed = []
-        for message in messages(context):
-            sender = registry.canonical_name(message.sender)
-            if message.type is AlertKind and sender in registry.threads:
-                owner = registry.threads[sender]
-                observed.append(
-                    WordingOutcome.observe(
-                        partial(
-                            AlertKind.require_publishable,
-                            message,
-                            Path(owner.worktree),
-                        )
-                    )
+        with LifecycleRun.open() as run:
+            child = run.invoke(
+                "import sys; from agent_comms.commander_parity.wording import "
+                "DecisionAlertsComparison; DecisionAlertsComparison.publish(*sys.argv[1:])",
+                str(run.commander.root),
+                run.worker,
+                run.commander.commander,
+            )
+            if not child.outcome.successful:
+                raise RuntimeError(
+                    f"Copied decision publication {child.outcome.summary}: "
+                    f"{child.stderr.decode(errors='replace')}"
                 )
-        return UnverifiedParity(
-            "Missing native owner: AlertKind has no decision-only publication policy; "
-            f"it inherits {AlertKind.require_publishable.__qualname__}. "
-            f"Called that real validator on {len(observed)} actual alerts with live senders; "
-            f"allowed={sum(result.accepted for result in observed)}. "
-            "CommsDecisionTool records authored choices separately, not alert permission. "
-            "No alert, decision or input was published."
-        )
+            return FieldCodec.decode(LifecycleObservation, FieldCodec.parse(child.stdout.decode()))
