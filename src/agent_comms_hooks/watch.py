@@ -10,11 +10,12 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -35,6 +36,25 @@ class WatchRecord:
     def decode(cls, bus: str, root: str, command: Sequence[str]) -> WatchRecord:
         """Normalize the saved JSON array before constructing the immutable record."""
         return cls(bus, root, tuple(command))
+
+
+@dataclass(frozen=True)
+class HeldClaim:
+    """The open lock description that keeps a claim live. The kernel ties the flock to this
+    description, so a duplicate inherited through exec keeps the claim held."""
+
+    lock: TextIO
+
+    def record(self, record: WatchRecord) -> HeldClaim:
+        self.lock.truncate(0)
+        self.lock.write(json.dumps(asdict(record)))
+        self.lock.flush()
+        return self
+
+    def inheritable(self) -> int:
+        descriptor = os.dup(self.lock.fileno())
+        os.set_inheritable(descriptor, True)
+        return descriptor
 
 
 @dataclass(frozen=True)
@@ -70,15 +90,24 @@ class WatchClaim:
             yield
 
     @contextmanager
-    def held(self, record: WatchRecord) -> Iterator[None]:
+    def held(self, record: WatchRecord) -> Iterator[HeldClaim]:
         """One watch per conversation, independent of --state and bus aliases."""
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.path.open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock.truncate(0)
-            lock.write(json.dumps(asdict(record)))
-            lock.flush()
-            yield
+            yield HeldClaim(lock).record(record)
+
+    @contextmanager
+    def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
+        """A replaced bridge's successor takes over the description its predecessor kept
+        locked through exec, so the claim never reads as lapsed, and records its own command."""
+        if not os.path.samestat(os.fstat(descriptor), os.stat(self.path)):
+            raise ValueError(f'Inherited descriptor {descriptor} is not the claim {self.path}')
+        os.set_inheritable(descriptor, False)
+        with os.fdopen(descriptor, "a") as lock:
+            # Same open description: the flock is already this process's, so this cannot block.
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield HeldClaim(lock).record(record)
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
@@ -174,7 +203,8 @@ class RecordedWatch(WatchState):
 class LiveWatch(RecordedWatch):
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(
-            'An older watch still owns this session. Stop that Monitor once, then connect.')
+            'An older watch still owns this session, or an install is replacing it. '
+            'No second bridge launched. Stop that Monitor once, then connect.')
 
     def end(self, request: Callable[[], SessionRequest]) -> None:
         request().exchange(self.claim)
