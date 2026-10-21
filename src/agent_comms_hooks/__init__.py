@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from importlib import import_module
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import ClassVar, Self, get_type_hints
 
 
@@ -71,6 +72,21 @@ class ClaudeTranscriptHook(ClaudeHook):
     """A hook that reads the session's transcript, which Claude Code names on every event."""
 
     transcript_path: str
+    window: ClassVar[int] = 1_000_000
+    """Transcript bytes read from the end."""
+
+    @property
+    def parts(self) -> Path:
+        """The commander's sources, written by the session start hook beside the transcript;
+        they exist only in a commander session."""
+        return Path(self.transcript_path).with_suffix(".reread")
+
+    def tail(self) -> list[bytes]:
+        """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
+        with open(self.transcript_path, "rb") as transcript:
+            start = max(0, transcript.seek(0, 2) - self.window)
+            transcript.seek(start)
+            return transcript.read().splitlines()[1 if start else 0 :]
 
 
 class ClaudeHookProgram(ABC):
