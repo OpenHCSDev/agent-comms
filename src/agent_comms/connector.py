@@ -511,9 +511,10 @@ class Connector:
                 web.get("/.well-known/oauth-protected-resource/mcp", self.resource_metadata),
                 web.get("/.well-known/oauth-authorization-server", self.server_metadata),
                 web.post("/register", self.register),
-                web.get("/authorize", self.authorize),
+                web.get("/authorize", self.authorize, allow_head=False),
                 web.get(
-                    "/approve/{request_id}/{secret}", self.approve, name=self.approve.__name__
+                    "/approve/{request_id}/{secret}", self.approve,
+                    name=self.approve.__name__, allow_head=False,
                 ),
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),

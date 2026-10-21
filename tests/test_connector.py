@@ -156,11 +156,13 @@ async def approved_token(client: TestClient, comms: Comms) -> str:
         "code_challenge_method": "S256",
         "state": "s",
     }
+    assert (await client.head("/authorize", params=query, allow_redirects=False)).status == 405
     waiting = await client.get("/authorize", params=query, allow_redirects=False)
     assert waiting.status == 200
     owner = comms.messaging.user_identity(str(comms.root))
     notice = comms.bus.inbox(owner.name)[-1]
     link = urlsplit(notice.body.splitlines()[-1])
+    assert (await client.head(link.path, allow_redirects=False)).status == 405
     redirected = await client.get(link.path, allow_redirects=False)
     assert redirected.status == 302
     cookie = redirected.cookies[TrustedBrowser.cookie_name]
