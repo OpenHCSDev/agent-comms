@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from ..comms import Comms
-from ..goal_actions import OrderGoalAction
+from ..goal_actions import ReissuedOrderGoalAction
 from ..goals import Goal, GoalRevision
 from ..goal_states import BlockedState
 from ..goal_history import GoalHistoryStore
@@ -201,9 +201,9 @@ class UnownedWheelSpin(UndatedStandingRule):
                       key=lambda thread: thread.name)
 
     @staticmethod
-    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> OrderGoalAction:
+    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> ReissuedOrderGoalAction:
         now = time.time()
-        return OrderGoalAction(
+        return ReissuedOrderGoalAction(
             problem=todo.id, expected_revision=todo.revision,
             order=todo.order.reissued(now), request=todo.goal.request(),
             review_at=todo.reissued_review(now), commander=commander, assigner=assigner,

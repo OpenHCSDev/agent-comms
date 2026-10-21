@@ -40,7 +40,7 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.todos import DeliverTodo, OperationDelivery, PendingProblemOrder, TodoConflict
+from agent_comms.todos import DeliverTodo, FixScope, FixShape, OperationDelivery, PendingProblemOrder, TodoConflict
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
@@ -136,6 +136,32 @@ def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
     assert violation.orders == ("P1",)
     violation.enforce(held_bus, "lead")
     assert held_bus.goals.todos.get("P2") == delivered
+
+
+def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(held_bus, tmp_path):
+    owner = tmp_path / "owner.py"
+    owner.write_text("class Owner:\n    pass\n")
+    now = time.time()
+    held_bus.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P3", commander="lead", request="request",
+        repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text="Repair P3",
+        review_at=RecordedEventTime(now + 3600),
+        order=PendingProblemOrder(
+            id="order-P3", owner=FileLine(str(owner), 1),
+            scope=FixScope(FixShape(parents=(FileLine(str(owner), 1),), members=())),
+            run=MechanicalOrderRun(), check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
+            edits=("Repair the existing owner",), banned=("No second store",),
+            report="Report the result", at=RecordedEventTime(now - 3600),
+            first_call_deadline=RecordedEventTime(now + 3600),
+        ),
+    ))
+    accepted = held_bus.goals.todos.get("P3").order.checked().id
+    owner.write_text('"""The unit moved its class while working the order."""\n\n\nclass Owner:\n    pass\n')
+    blocked_holder(held_bus)
+    violation, = Blocked.violations(held_bus, "lead")
+    violation.enforce(held_bus, "lead")
+    assert held_bus.goals.todos.get("P3").order.checked().id != accepted
+    assert Blocked.violations(held_bus, "lead") == ()
 
 
 def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):
