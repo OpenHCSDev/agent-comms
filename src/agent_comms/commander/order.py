@@ -648,16 +648,14 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def done(self, pid, sha, screenshot='', seen='', repo=''):
+    def done(self, pid, sha, screenshot='', seen=''):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
         in the same revision; this posts the strikes Core recorded."""
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         unit = todo.held().owner
-        if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
-            sys.exit('Refused: --repo must name the recorded order check directory.')
-        repo = todo.order.check.directory
+        repo = str(self.repo_directory(todo.order.check.directory))
         operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
         if not operation:
             diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent',
@@ -982,7 +980,7 @@ class DoneVerb(OrderVerb):
     sha: Annotated[
         str,
         Argument(
-            flags=("--sha",), options={"help": "the delivered commit in --repo HEAD, or op"}
+            flags=("--sha",), options={"help": "commit in the recorded checkout, or op"}
         ),
     ]
     screenshot: Annotated[
@@ -997,16 +995,10 @@ class DoneVerb(OrderVerb):
     ] = ""
 
     seen: Annotated[str, Argument(flags=("--seen",))] = ""
-    repo: Annotated[
-        str,
-        Argument(
-            flags=("--repo",), options={"help": "the recorded order check directory"}
-        ),
-    ] = ""
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
-        ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
+        ctx.done(todo.id, self.sha, self.screenshot, self.seen)
 
 
 @dataclass(frozen=True)
