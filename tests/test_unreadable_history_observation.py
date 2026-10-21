@@ -209,7 +209,7 @@ def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     assert reading.published is completed[0]
 
 
-async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
+async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms, durable_home):
     saved_row(comms)
     corrupt_context_kind(comms, "saved", "unavailable_future_segment")
     original = comms.contexts.path.read_bytes()
