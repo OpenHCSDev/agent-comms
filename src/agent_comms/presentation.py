@@ -16,7 +16,6 @@ from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import BusDisplayIndex
 from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -397,7 +396,7 @@ class ReadAll(ChannelReadMark):
         source = presentation.bus.bus
         with CapturedSelection.reading(
             presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer), presentation.bus.activity_index.snapshot(source),
+            NamedViewer(viewer), source.activity_clocks(),
         ) as basis:
             scope = basis.scope(target)
             yield scope.capture_all(
@@ -436,19 +435,10 @@ class BusPresentation:
         self.catalog = catalog
         self.agents = agents
         self._path = bus.bus.path
-        self._display_indexes: dict[str, BusDisplayIndex] = {}
-
-    def display_index(self, viewer: str) -> BusDisplayIndex:
-        index = self._display_indexes.get(viewer)
-        if index is None:
-            index = BusDisplayIndex(self._path, viewer)
-            self._display_indexes[viewer] = index
-        return index
 
     @contextmanager
     def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, Bus]]:
-        """Check the display index before borrowing the bus-owned source cut."""
-        self.display_index(viewer.name)
+        """Borrow the bus-owned source cut without preparing a second store."""
         with self.bus.snapshot(viewer) as selected:
             yield selected
 
@@ -500,12 +490,14 @@ class BusPresentation:
 
         The captured basis owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
-        The index reads the captured complete-line cut; read and write errors propagate.
+        Derived maxima are committed by the append, never prepared by this reader.
         """
-        snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
-        unread = source.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen(source), basis.registry)
-        return snapshot.activity, unread
+        seen = basis.seen(source)
+        with source.reading() as captured:
+            activity = {scope.channel: scope.activity(captured) for scope in basis.scopes}
+            unread = captured.display_unread(
+                basis.scopes, basis.viewer_names, seen, basis.registry)
+        return activity, unread
 
 
 @dataclass(frozen=True, slots=True)

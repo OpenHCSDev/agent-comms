@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus_publication import Delivered
+from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     Addressed,
     BusRow,
@@ -61,7 +64,7 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
-class BusReader(ABC):
+class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and an admitted read snapshot."""
 
     @abstractmethod
@@ -70,6 +73,19 @@ class BusReader(ABC):
     def revision(self) -> int:
         with self.observing() as db:
             return BusRow.last_seq(db)
+
+    def activity_clocks(self):
+        with self.observing() as db:
+            return BusActivityIndex.clocks(db)
+
+    def target_activity(self, predicate: str, parameters: tuple):
+        with self.observing() as db:
+            return BusActivityIndex.aggregate(db, predicate, parameters)
+
+    def participant_activity(self, names: frozenset[str]):
+        marks = ','.join('?' for _ in names)
+        with self.observing() as db:
+            return BusDisplayIndex.aggregate(db, f'participant IN ({marks})', tuple(names))
 
     def claim_projection(self) -> ClaimProjection:
         with self.observing() as db:

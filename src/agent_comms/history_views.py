@@ -364,7 +364,7 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
-            clocks = self.bus.activity_index.snapshot(source)
+            clocks = source.activity_clocks()
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
@@ -409,7 +409,7 @@ class HistoryViews:
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
-        return self.bus.log.latest_sequence()
+        return self.bus.bus.revision()
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""

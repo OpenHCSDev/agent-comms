@@ -66,6 +66,10 @@ class Delivered(BusRecord, declared_name=None):
     decisions: tuple[RecipientDecision, ...]
     control: str
 
+    @property
+    def sender_lookup(self) -> str:
+        return self.audience.sender_lookup
+
     def projections(self):
         from .bus_tables import DirectReplySource, ReceivedSource, SentSource
 
