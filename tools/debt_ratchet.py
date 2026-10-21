@@ -740,6 +740,57 @@ class ModuleDeclarations:
     classes: tuple[tuple[str, tuple[str, ...]], ...]
 
 
+class TypePositions(MroDispatch):
+    """The expressions where a type is expected, each position declared by the node owning it."""
+
+    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
+    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
+
+    def __init__(self) -> None:
+        self.types: list[ast.expr] = []
+        self.metadata: list[ast.expr] = []
+
+    @staticmethod
+    def called(node: ast.expr) -> str:
+        return ast.unparse(node).rpartition(".")[2]
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def signature(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        arguments = node.args
+        self.types.extend(filter(None, (node.returns, *(argument.annotation for argument in (
+            *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+            *filter(None, (arguments.vararg, arguments.kwarg)))))))
+
+    @handles(ast.AnnAssign)
+    def annotation(self, node: ast.AnnAssign) -> None:
+        self.types.append(node.annotation)
+
+    @handles(ast.ClassDef)
+    def bases(self, node: ast.ClassDef) -> None:
+        self.types.extend(node.bases)
+
+    @handles(ast.Call)
+    def type_variable_bound(self, node: ast.Call) -> None:
+        if self.called(node.func) == self.type_variable:
+            self.types.extend((*node.args[1:], *(keyword.value for keyword in node.keywords)))
+
+    @handles(ast.Subscript)
+    def annotated_metadata(self, node: ast.Subscript) -> None:
+        """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
+        if self.called(node.value) == self.annotated:
+            self.metadata.extend(typing.cast(ast.Tuple, node.slice).elts[1:])
+
+    @classmethod
+    def literals(cls, tree: ast.AST) -> Iterator[ast.AST]:
+        """The nodes inside a type position, so a one-word class name there names its class."""
+        positions = cls()
+        for node in ast.walk(tree):
+            positions.dispatch_sync(node)
+        metadata = {id(part) for expression in positions.metadata for part in ast.walk(expression)}
+        return (part for expression in positions.types for part in ast.walk(expression)
+                if id(part) not in metadata)
+
+
 @dataclass(frozen=True)
 class DeclaredSpellings:
     """Every spelling a revision's production Python declares as a name.
@@ -755,7 +806,8 @@ class DeclaredSpellings:
 
     names: dict[str, str]
     enums: frozenset[str]
-    ordinary: frozenset[str]
+    unmistakable: dict[str, str]
+    """The names a literal names wherever it appears: all but the one-word class names."""
 
     boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
         kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
@@ -766,8 +818,6 @@ class DeclaredSpellings:
         call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
     class_word: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+")
-    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
-    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
     entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
@@ -808,7 +858,6 @@ class DeclaredSpellings:
         """The spellings declared by the modules, taken in the dictionary's order."""
         names: dict[str, str] = {}
         bases: dict[str, set[str]] = {}
-        ordinary: set[str] = set()
         packages = {Path(path).parent for path in modules if Path(path).name == cls.package_marker}
         for path, declared in modules.items():
             module = Path(path).with_suffix("")
@@ -821,47 +870,13 @@ class DeclaredSpellings:
             for name, parents in declared.classes:
                 names[name] = f"class {path}:{name}"
                 bases.setdefault(name, set()).update(parents)
-                if cls.one_word_class(name):
-                    ordinary.add(name)
         enums = set(cls.boundary_enums)
         while grown := {name for name, parents in bases.items() if parents & enums} - enums:
             enums |= grown
-        return cls(names, frozenset(enums), frozenset(ordinary - {
-            name for name, target in names.items() if not target.startswith("class ")}))
-
-    def typed(self, tree: ast.AST) -> set[int]:
-        """Literals sitting where a type is expected, so a one-word class name there names it."""
-        expressions: list[ast.AST | None] = []
-        for node in ast.walk(tree):
-            match node:
-                case ast.FunctionDef(args=arguments, returns=returns) | ast.AsyncFunctionDef(
-                        args=arguments, returns=returns):
-                    expressions.append(returns)
-                    expressions.extend(argument.annotation for argument in (
-                        *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
-                        *filter(None, (arguments.vararg, arguments.kwarg))))
-                case ast.AnnAssign(annotation=annotation):
-                    expressions.append(annotation)
-                case ast.ClassDef(bases=parents):
-                    expressions.extend(parents)
-                case ast.Call(func=ast.Name(id=call) | ast.Attribute(attr=call), args=arguments,
-                              keywords=keywords) if call == self.type_variable:
-                    expressions.extend(arguments[1:])
-                    expressions.extend(keyword.value for keyword in keywords)
-        typed = {id(part) for expression in filter(None, expressions)
-                 for part in ast.walk(expression)}
-        metadata = {id(part) for node in ast.walk(tree) if id(node) in typed
-                    for part in self.annotated_metadata(node)}
-        return typed - metadata
-
-    @classmethod
-    def annotated_metadata(cls, node: ast.AST) -> Iterator[ast.AST]:
-        """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
-        match node:
-            case ast.Subscript(value=ast.Name(id=name) | ast.Attribute(attr=name),
-                               slice=ast.Tuple(elts=[_, *extras])) if name == cls.annotated:
-                for extra in extras:
-                    yield from ast.walk(extra)
+        ordinary = set(filter(cls.one_word_class, (
+            name for name, target in names.items() if target.startswith("class "))))
+        return cls(names, frozenset(enums),
+                   {name: target for name, target in names.items() if name not in ordinary})
 
     def exempt(self, tree: ast.AST) -> set[int]:
         """Literals no reader takes as identity: prose, interpolation pieces, class-header
@@ -919,12 +934,11 @@ class DeclaredSpellings:
                         left = right
                 case ast.MatchValue(value=value) if self.kind(value):
                     record(value, ComparedKind, "kind matched by spelling")
-        typed = self.typed(tree)
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
-                    and node.value in self.names
-                    and (node.value not in self.ordinary or id(node) in typed)):
-                record(node, NamedDeclaration, self.names[node.value])
+        for spellings, nodes in ((self.unmistakable, ast.walk(tree)),
+                                 (self.names, TypePositions.literals(tree))):
+            for node in nodes:
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in spellings:
+                    record(node, NamedDeclaration, spellings[node.value])
         return sorted(found.values(), key=lambda site: site.line)
 
     def kind(self, node: ast.AST) -> bool:
