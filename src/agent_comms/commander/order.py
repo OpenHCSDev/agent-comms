@@ -62,6 +62,8 @@ from ..todos import (
     OrderProgress,
     PendingProblemOrder,
     PlannedInstallDeadline,
+    PullRequestLink,
+    RecordPullRequest,
     Slop,
     StrikeReason,
     StrikeTodo,
@@ -826,13 +828,51 @@ class DoneVerb(OrderVerb):
         ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
 
 
+@dataclass(frozen=True)
+class PullRequestSelection(DeclaredFamily, affix="PullRequestSelection"):
+    @abstractmethod
+    def run(self, ctx: Commander, todo: Todo, source: Repo,
+            title: str, body_file: str) -> str: ...
+
+
+class NewPullRequestSelection(PullRequestSelection):
+    def run(self, ctx: Commander, todo: Todo, source: Repo,
+            title: str, body_file: str) -> str:
+        if not title or not body_file:
+            raise ValueError("Creating a PR requires --title and --body-file.")
+        return todo.order.checked().open_pull_request(
+            todo, source.checkout, title, Path(body_file).read_text(),
+            ctx.comms.goals.todos, ctx.incarnation)
+
+
+@dataclass(frozen=True)
+class ExistingPullRequestSelection(PullRequestSelection):
+    number: int
+
+    @classmethod
+    def from_text(cls, text: str) -> Self:
+        return cls(int(text))
+
+    def run(self, ctx: Commander, todo: Todo, source: Repo,
+            title: str, body_file: str) -> str:
+        if title or body_file:
+            raise ValueError("--existing does not create or edit the PR; omit title and body.")
+        link = PullRequestLink.existing(todo.repo, self.number)
+        ctx.comms.goals.todos.apply(todo.id, RecordPullRequest(
+            todo.revision, ctx.incarnation, link, todo.held().generation))
+        return link.url
+
+
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = ("open the problem's PR from this owned source checkout "
-            "with its immutable order identity")
+    help = "create or adopt a PR and record its GitHub identity on this order"
     pid: str = option("pid")
-    title: str = option("--title")
-    body_file: str = option("--body-file")
+    title: str = option("--title", default="")
+    body_file: str = option("--body-file", default="")
+    existing: PullRequestSelection = option(
+        "--existing", type=ExistingPullRequestSelection.from_text, normalize=FieldCodec.encode,
+        default_factory=NewPullRequestSelection, parser_default_factory=NewPullRequestSelection,
+        choices=None, metavar="N")
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
@@ -843,8 +883,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         if not source.holds(todo):
             sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
                      f'not {todo.repo.to_wire()}.')
-        print(todo.order.checked().open_pull_request(
-            todo, source.checkout, self.title, Path(self.body_file).read_text()))
+        print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 
 @dataclass(frozen=True, kw_only=True)

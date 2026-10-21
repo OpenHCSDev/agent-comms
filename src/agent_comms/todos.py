@@ -255,7 +255,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if WorkBranches.main in branches:
             return MainDeliveryMerge()
         requests = await asyncio.to_thread(PullRequests((todo,)).listed,
-                                           todo.repo, "merged", todo)
+                                           todo.repo, MergedListedPullRequest, todo)
         for request in requests:
             for merge in await request.delivery_merges(self, check):
                 return merge
@@ -341,6 +341,41 @@ class OperationDelivery(OrderDelivery):
 
 
 @dataclass(frozen=True)
+class PullRequestLink:
+    """The GitHub identity recorded by the order that delivers it."""
+    repo: RepositoryName
+    number: int
+
+    def __post_init__(self) -> None:
+        if FieldCodec.decode(int, self.number) <= 0:
+            raise ValueError("A pull request number must be positive.")
+
+    @property
+    def url(self) -> str:
+        return f"https://github.com/{self.repo.to_wire()}/pull/{self.number}"
+
+    @staticmethod
+    def _reported_number(repo: RepositoryName, reference: str) -> int:
+        result = subprocess.run(
+            ("gh", "pr", "view", reference, "-R", repo.to_wire(),
+             "--json", "number", "--jq", ".number"),
+            capture_output=True, text=True, timeout=60, check=True)
+        return FieldCodec.decode(int, FieldCodec.parse(result.stdout))
+
+    @classmethod
+    def created(cls, repo: RepositoryName, reference: str) -> Self:
+        """GitHub resolves its opaque creation result; we never parse its URL."""
+        return cls(repo, cls._reported_number(repo, reference))
+
+    @classmethod
+    def existing(cls, repo: RepositoryName, number: int) -> Self:
+        link = cls(repo, number)
+        if cls._reported_number(repo, str(number)) != number:
+            raise ValueError(f"GitHub did not report pull request {number} in {repo.to_wire()}.")
+        return link
+
+
+@dataclass(frozen=True)
 class PullRequest(DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
@@ -400,18 +435,19 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     branch: str
     head: str
     updated: str
-    body: str
     base: str
 
-    @abstractmethod
-    def parsed(self) -> PullRequest: ...
+    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
+        return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
+                                   orders, base=self.base, problems=problems)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
-    def parsed(self) -> UnmergedPullRequest:
-        return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   ProblemOrder.pull_request_ids(self.body), base=self.base,
-                                   problems=ProblemOrder.pull_request_problems(self.body))
+    """An open request, selected by its declared member rather than a state string."""
+
+
+class ClosedListedPullRequest(ListedPullRequest):
+    """Closed without merging; never selected as an open request."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -419,62 +455,71 @@ class MergedListedPullRequest(ListedPullRequest):
     merge: PullRequestCommit
     merged: str
 
-    def parsed(self) -> MergedPullRequest:
+    def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                 ProblemOrder.pull_request_ids(self.body), base=self.base,
+                                 orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=ProblemOrder.pull_request_problems(self.body))
+                                 problems=problems)
 
 
 class PullRequests:
-    """Problem and retained order references, cached within one board read."""
+    """GitHub facts for recorded links, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
-        self._read: dict[tuple[RepositoryName, str, str], tuple[PullRequest, ...]] = {}
+        self._read: dict[tuple[RepositoryName, type[ListedPullRequest], str], tuple[PullRequest, ...]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
         for todo in todos:
-            if todo.holder:
-                self._todos.setdefault(todo.repo, {})[todo.id] = todo
+            self._todos.setdefault(todo.repo, {})[todo.id] = todo
 
-    def listed(self, repo: RepositoryName, state: str, todo: Todo) -> tuple[PullRequest, ...]:
-        key = (repo, state, todo.id)
+    def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
+               todo: Todo) -> tuple[PullRequest, ...]:
+        key = (repo, kind, todo.id)
         if key not in self._read:
-            self._read[key] = self.read(repo, state, todo)
+            self._read[key] = self.read(repo, kind, todo)
         return tuple(request for request in self._read[key] if request.belongs_to(todo))
 
-    def read(self, repo: RepositoryName, state: str, todo: Todo) -> tuple[PullRequest, ...]:
+    def read(self, repo: RepositoryName, kind: type[ListedPullRequest],
+             todo: Todo) -> tuple[PullRequest, ...]:
         problems = self._todos.setdefault(repo, {})
         problems[todo.id] = todo
-        references = ((candidate, reference) for candidate in problems.values()
-                      for reference in (candidate.id, *(order.pull_request_reference
-                                                        for order in candidate.order_history)))
-        aliases = {f"o{index}": pair for index, pair in enumerate(references)}
-        selections = []
-        for alias, (_, reference) in aliases.items():
-            search = json.dumps(f'repo:{repo.to_wire()} is:pr is:{state} in:body '
-                                f'"{reference}" sort:updated-desc')
-            selections.append(
-                f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
-                '... on PullRequest { number branch: headRefName head: headRefOid body '
-                'base: baseRefName merge: mergeCommit { oid } merged: mergedAt '
-                'updated: updatedAt } } }')
+        linked: dict[int, list[Todo]] = {}
+        for candidate in problems.values():
+            for number in {link.number for order in candidate.order_history
+                           for link in order.pull_requests if link.repo == repo}:
+                linked.setdefault(number, []).append(candidate)
+        if not linked:
+            for candidate in problems.values():
+                self._read[repo, kind, candidate.id] = ()
+            return ()
+        selections = [
+            f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
+            'head: headRefOid base: baseRefName closed merge: mergeCommit { oid } '
+            'merged: mergedAt updated: updatedAt }' for number in linked]
+        query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
+                 f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = subprocess.run(
-            ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
-             "--jq", '.data | map_values(.nodes | map(if .merged == null then '
-             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} else '
-             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end))'),
+            ("gh", "api", "graphql", "-f", "query=" + query,
+             "--jq", '.data.repository | map_values((if .merged == null then '
+             '(if .closed then '
+             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
+             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
+             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) | del(.closed))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
-        rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
-                                 FieldCodec.parse(listed.stdout))
+        rows = FieldCodec.decode(dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout))
+        requests = tuple(row.parsed(
+            tuple(candidate.id for candidate in linked[row.number]),
+            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
+                                for order in candidate.order_history
+                                if PullRequestLink(repo, row.number) in order.pull_requests)))
+            for row in rows.values() if isinstance(row, kind))
         for candidate in problems.values():
-            requests = {row.number: row.parsed() for alias, (problem, _) in aliases.items()
-                        if problem.id == candidate.id for row in rows[alias]}
-            self._read[repo, state, candidate.id] = tuple(sorted(
-                requests.values(), key=lambda request: request.updated_at, reverse=True))
-        return self._read[repo, state, todo.id]
+            self._read[repo, kind, candidate.id] = tuple(sorted(
+                (request for request in requests if request.belongs_to(candidate)),
+                key=lambda request: request.updated_at, reverse=True))
+        return self._read[repo, kind, todo.id]
 
 
 @dataclass(frozen=True)
@@ -727,9 +772,9 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.checked().at.recorded_at("An order")
 
-    def requests(self, state: str) -> list[PullRequest]:
+    def requests(self, kind: type[ListedPullRequest]) -> list[PullRequest]:
         """Explicit PR references survive checkout removal or branch reuse."""
-        return list(self.pulls.listed(self.todo.repo, state, self.todo))
+        return list(self.pulls.listed(self.todo.repo, kind, self.todo))
 
     def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
         points = (
@@ -919,7 +964,7 @@ class OpenPrProgress(GitProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
         return (cls(pr.number, pr.head[:9], at=pr.updated_at,
-                    readings=source.readings()) for pr in source.requests("open"))
+                    readings=source.readings()) for pr in source.requests(UnmergedListedPullRequest))
 
     @property
     def state(self) -> str:
@@ -934,7 +979,7 @@ class MergedProgress(FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha) for pr in source.requests("merged")
+        return (cls(sha) for pr in source.requests(MergedListedPullRequest)
                 for sha in pr.merged_commits(source.since))
 
     @property
@@ -1370,21 +1415,12 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
-    pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
-    pull_request_problem_label: ClassVar[str] = "Agent-Comms-Problem:"
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
     @property
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
         return ()
-
-    @classmethod
-    def pull_request_problems(cls, body: str) -> tuple[str, ...]:
-        """Explicit body declarations and problem headings, never titles or incidental mentions."""
-        return tuple(re.findall(
-            rf"(?m)^(?:#{{1,6}} +|{re.escape(cls.pull_request_problem_label)} +|Problem: +)"
-            r"(P[1-9][0-9]*)(?=[:\s]|$)", body))
 
     def closed_by_merge(self, todo: Todo, storage: StorageRule,
                         pulls: PullRequests) -> tuple[Todo, ...]:
@@ -1393,11 +1429,6 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def reissued(self, at: float) -> PendingProblemOrder:
         """This order sent again at ``at`` to a new owner, its first-call window kept."""
         raise ValueError("Only an undelivered order can change owner.")
-
-    @classmethod
-    def pull_request_ids(cls, body: str) -> tuple[str, ...]:
-        return tuple(line.removeprefix(cls.pull_request_label).strip()
-                     for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
     def board_cells(self, todo: Todo) -> str:
         return f"{self.finding.place()} | unassigned | - | - | -"
@@ -1514,6 +1545,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (self,)
 
     id: str
+    pull_requests: tuple[PullRequestLink, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
     owner: FileLine
     check: OrderCheck
     edits: tuple[str, ...]
@@ -1598,32 +1631,30 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
 
-    @property
-    def pull_request_reference(self) -> str:
-        return f"{self.pull_request_label} {self.id}"
-
-    def pull_request_body(self, body: str) -> str:
-        declared = self.pull_request_ids(body)
-        if any(order != self.id for order in declared):
-            raise ValueError("The pull request body names a different order.")
-        content = "\n".join(line for line in body.splitlines()
-                            if not line.startswith(self.pull_request_label))
-        return f"{content.rstrip()}\n\n{self.pull_request_reference}\n"
-
-    def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
-        """The order creates its PR with the immutable identity every progress reader uses."""
+    def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
+                          store: TodoStore, actor: ThreadIncarnation) -> str:
+        """Create once; record the returned identity on this order, not in its prose."""
+        todo.require_actor(actor, todo.held().generation)
         created = subprocess.run(
             ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
-            input=f"{self.pull_request_problem_label} {todo.id}\n{self.pull_request_body(body)}",
+            input=body,
             cwd=checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
             raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
-        return created.stdout.strip()
+        url = created.stdout.strip()
+        try:
+            store.apply(todo.id, RecordPullRequest(todo.revision, actor,
+                                                  PullRequestLink.created(todo.repo, url),
+                                                  todo.held().generation))
+        except (ValueError, TodoError, subprocess.SubprocessError) as error:
+            raise ValueError(f"Created {url}, but recording its link failed: {error}. "
+                             "Use order pr --existing; do not create another PR.") from error
+        return url
 
     def pull_request_instruction(self, problem: str) -> str:
         return (f"Open the PR with agent-comms-commander order pr {problem} "
-                "--title '<title>' --body-file <file>; Core writes its required order identity.")
+                "--title '<title>' --body-file <file>; Core records its link on this order.")
 
     def work_instructions(self) -> tuple[str, ...]:
         return (f"Owner: {self.owner.to_wire()}",
@@ -2546,6 +2577,24 @@ class OrderMessage(TodoOperation):
         current.require_commander(self.actor)
         _text(self.message_id, "Order message ID", 200)
         return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class RecordPullRequest(TodoCommand):
+    actor: ThreadIncarnation
+    link: PullRequestLink
+    generation: str
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_actor(self.actor, self.generation)
+        if self.link.repo != current.repo:
+            raise TodoError("A recorded pull request must belong to the todo's repository.")
+        order = current.order.checked()
+        if self.link in order.pull_requests:
+            return current
+        return replace(current, revision=current.revision + 1,
+                       order=replace(order, pull_requests=(*order.pull_requests, self.link)))
 
 
 @dataclass(frozen=True)
