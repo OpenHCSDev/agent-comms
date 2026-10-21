@@ -536,7 +536,7 @@ class Commander(CommanderContext):
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Replace a wrong check of a pending or claimed order by the rule send uses; Core refuses
-        any other order or a closed problem (CorrectCheckTodo.apply). done checks the delivered SHA."""
+        any other order or a closed problem (CorrectCheckTodo.apply); done checks the SHA."""
         todo = self.comms.goals.todos.get(pid)
         check = self.read_check(line)
         if len(why.split()) < 8:
