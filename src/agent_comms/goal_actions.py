@@ -29,8 +29,10 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import (
+from agent_comms.goals import (
     Goal,
+    GoalCheckpoint,
+    GoalChangedError,
     GoalDeclaration,
     GoalOrder,
     NoGoal,
@@ -39,6 +41,7 @@ from .goals import (
     RequestDirective,
     RequestGoalOrder,
     UnorderedGoalOrder,
+    UnobservedGoalCheckpoint,
 )
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
@@ -74,9 +77,14 @@ class GoalPrecondition:
     expected_state: GoalState | None = None
     expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
+    expected_checkpoint: Annotated[
+        GoalCheckpoint, field_codec.WireOmitDefault()
+    ] = UnobservedGoalCheckpoint()
 
     def check(self, ctx: GoalActionContext) -> None:
         thread, goal = ctx.thread, ctx.thread.goal
+        if not self.expected_checkpoint.matches(goal):
+            raise GoalChangedError(thread, self.expected_checkpoint)
         if self.expected_owner is not None and (
             thread.process_identity != self.expected_owner
             or not ctx.goals.registry.status(thread.name).running

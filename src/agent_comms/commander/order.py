@@ -666,10 +666,10 @@ class Commander(CommanderContext):
                 sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
         thread = self.comms.registry.require(unit)
         storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
-        checkout = storage.rule.order_checkout(unit, pid)
-        if checkout in storage.extra_checkouts:
-            sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; '
-                     'storage rule: it removes it before the order counts as done.')
+        for checkout in storage.rule.problem_checkouts(unit, pid):
+            if checkout in storage.extra_checkouts:
+                sys.exit(f'Refused: {unit} still has the checkout {checkout} for this order; '
+                         'storage rule: it removes it before the order counts as done.')
         try:
             storage.require_quota()
         except SelectedToolDenied as quota:

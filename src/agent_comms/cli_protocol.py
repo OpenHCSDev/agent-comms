@@ -63,6 +63,12 @@ class WireHeader(WireModel):
     type: str
 
 
+class TextWire:
+    """The text tag shared by external CLI content families."""
+
+    wire_tag: ClassVar[str] = 'text'
+
+
 class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
     """A JSON type tag supplied by its declared class, not caller policy."""
     wire_tag: ClassVar[str]

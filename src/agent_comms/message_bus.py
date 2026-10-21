@@ -33,11 +33,12 @@ from .routing import DeliveryScope
 from .publisher import Publisher
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
-    from .relationships import PeerRelation
-    from .threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.registration import Registration
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.relationships import PeerRelation
+    from agent_comms.threads import Thread
+
 
 
 class HeldBusWrite:
@@ -47,13 +48,18 @@ class HeldBusWrite:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass(HeldBusWrite, ABC):
+class WatchPass[Observed](HeldBusWrite, ABC):
+    """Observe before entering maintenance to apply the result."""
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            self.write_when_open(comms, partial(self.pass_body, comms))
+            observed = self.observe(comms)
+            self.write_when_open(comms, partial(self.pass_body, comms, observed))
 
     @abstractmethod
-    def pass_body(self, comms: Comms) -> None: ...
+    def observe(self, comms: Comms) -> Observed: ...
+
+    @abstractmethod
+    def pass_body(self, comms: Comms, observed: Observed) -> None: ...
 
 
 class MessageBus[Writes: Publisher]:
@@ -61,8 +67,8 @@ class MessageBus[Writes: Publisher]:
         self, root: Path, registry: Registration, publisher: type[Writes], *,
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
-        from .catalog_store import ChannelCatalog
-        from .read_ledger import ReadLedger
+        from agent_comms.catalog_store import ChannelCatalog
+        from agent_comms.read_ledger import ReadLedger
 
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
