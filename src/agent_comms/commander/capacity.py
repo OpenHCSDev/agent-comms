@@ -14,7 +14,7 @@ from ..turn_digests import OrderEditCountRead
 class Load(ToolResult):
     """Order and edit debt, with receiving children that themselves command orders."""
     owed: int
-    overdue: int
+    timers_up: int
     unjudged: int
     forks: tuple[str, ...]
 
@@ -32,14 +32,14 @@ class Load(ToolResult):
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
         )
-        return cls(len(owed), sum(t.overdue(now) for t in owed), unjudged, forks)
+        return cls(len(owed), sum(bool(t.timer_up(now)) for t in owed), unjudged, forks)
 
     @projected(view="wire")
     def total(self) -> float:
-        return self.owed + 2 * self.overdue + self.unjudged / 10
+        return self.owed + 2 * self.timers_up + self.unjudged / 10
 
     def __str__(self) -> str:
-        return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
+        return (f'load {self.total:.0f} ({self.owed} open orders, {self.timers_up} review timers up, '
                 f'{self.unjudged} unjudged edits), {len(self.forks)} live forks {list(self.forks)}')
 
 

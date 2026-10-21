@@ -1,4 +1,5 @@
-"""The only way the commander sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
+"""The only way the commander sends an order to a unit. Refuses soft or vague orders; records strikes,
+and starts the commander's review timer on every order.
 
 `order send` and `order problem` take one JSON file. Its `order` is decoded by
 FieldCodec into the PendingProblemOrder used by native tools; its other fields
@@ -9,8 +10,8 @@ Incompetence is not tolerated: a unit is fired from a task, not berated about it
 Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
 error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
 counting. An order sent in error is retired with `withdraw`: its problem closes with no strike.
-Nothing here judges code; it refuses orders that leave a unit room to interpret,
-and refuses to let a deadline lapse silently.
+Nothing here judges code; it refuses orders that leave a unit room to interpret. The unit never
+sees the review time: when it is up, the heartbeat tells the commander to read the diff.
 """
 from __future__ import annotations
 
@@ -41,20 +42,19 @@ from ..message_reference import MessageReference
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, PlanPhase
 from ..progress_claims import MergedClaim, WorkingClaim
-from ..recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from ..recorded_time import RecordedEventTime
 from ..repo import Repo
 from ..standing_rules import HuntDue
 from ..storage_rules import UnitStorage
 from ..thread_identity import ThreadIncarnation
 from ..todos import (
-    AssignTodo,
     BluntText,
     CleanHunt,
     CommitDelivery,
     DirectiveText,
     FileDeliveryEvidence,
     LocatedProblemFinding,
-    MeasuredDeadline,
+    MeasuredReview,
     NoDeliveryEvidence,
     OperationDelivery,
     OrderedHunt,
@@ -285,7 +285,7 @@ class CommanderContext(CommanderConfig):
 
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, due: EventTime, document: OrderFile, clean=False, reassign=None, new=None,
+    def send(self, unit, document: OrderFile, clean=False, reassign=None, new=None,
              traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
@@ -386,7 +386,7 @@ class Commander(CommanderContext):
         if replaces and not replacing:
             problems.append('--replaces: fix: name the current order on these problems to the same unit')
         if holders and not reassign:
-            problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
+            problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, a wrong delivery>"')
         if reassign is not None and len(reassign.split()) < 8:
             problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
         if problems:
@@ -394,7 +394,7 @@ class Commander(CommanderContext):
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *order.work_instructions()))
         message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
-                   + '\nStart now and push as you go.')  # a unit shown a due time takes until then
+                   + '\nStart now and push as you go.')
         taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
         fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
         if not order.run.mechanical and fired:
@@ -403,19 +403,18 @@ class Commander(CommanderContext):
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
-        measured = MeasuredDeadline.read(self.comms.goals.todos)
-        measured_at = measured.deadline(order)
-        due_at = due.continued_from(measured_at.at)
+        measured = MeasuredReview.read(self.comms.goals.todos)
+        review_at = measured.review_at(order)
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, deadline=due_at, commander=self.commander)))
+                order=order, request=request, review_at=review_at, commander=self.commander)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
                 assigner=self.incarnation, traced=trace,
-                order=order, request=request, deadline=due_at, commander=self.commander)))
+                order=order, request=request, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -424,8 +423,7 @@ class Commander(CommanderContext):
                 self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
-        print(f'{measured.summary}; selected deadline {due_at.clock()}; '
-              f'measured deadline {measured_at.clock()}')
+        print(f'{measured.summary}; review timer {review_at.clock()}')
         print(order.id)
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
@@ -463,11 +461,11 @@ class Commander(CommanderContext):
             answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
         if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2:
-            sys.exit('Refused: an edit list needs a tracked deadline; use order send with a JSON file.')
+            sys.exit('Refused: an edit list needs a tracked order and review timer; use order send with a JSON file.')
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
-    def problem(self, order_file, unit, due, where, disk=False,
+    def problem(self, order_file, unit, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         document = OrderFile.read(Path(order_file).read_text())
@@ -479,7 +477,7 @@ class Commander(CommanderContext):
                 document.order, location, checkout, document.slop, time.time())
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
-        self.send(unit, due, document, new=(pid, document.defect),
+        self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
 
@@ -630,22 +628,6 @@ class Commander(CommanderContext):
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
         print(f'{unit}: {n} strike(s) on {task}')
 
-    def due(self, pid: str, at: str, why: str) -> None:
-        """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
-        todo = self.comms.goals.todos.get(pid)
-        if not todo.pending:
-            sys.exit(f'Refused: {pid} holds no pending order whose deadline could move.')
-        if len(why.split()) < 8:
-            sys.exit('Refused: --why says why the deadline moves (8+ words)')
-        refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
-        moved = RecordedEventTime(time.time()).at_clock(at)
-        self.call(CommsChangeProblemTool(problem=pid, operation=AssignTodo(
-            todo.revision, todo.held(), moved, todo.order, todo.goal)))
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} '
-                  f'deadline changed): {why}', 'Deadline',
-                  VerdictAudience.of(todo.held().owner, todo.goal))
-        print(f'{pid}: due {moved.clock()}')
-
     @boundary_decoder
     def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
         """Core retires an undelivered order sent in error.
@@ -755,11 +737,6 @@ class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     body_file: str = option("body_file", metavar="ORDER.json")
-    due: EventTime = option("--due", type=RecordedEventTime.from_clock,
-                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
-                            parser_default_factory=UnrecordedEventTime,
-                            choices=None, metavar="HH:MM",
-                            help="HH:MM local time; default measured from deliveries")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
     replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
@@ -768,14 +745,14 @@ class SendVerb(OrderVerb, DirectiveVerb):
                                 help="the first failing source line, required after two owners")
 
     def run(self, ctx: Commander) -> None:
-        ctx.send(self.unit, self.due, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
+        ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
              replaces=self.replaces, disk=self.disk, answers=self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
 class StrikeVerb(OrderVerb, DirectiveVerb):
-    help = "a send-back, a missed deadline or a false claim"
+    help = "a send-back or a false claim"
     unit: str = option("unit")
     pid: str = option("pid", help="the struck problem")
     where: str = option("where", help="the source file:line that explains the strike")
@@ -808,17 +785,6 @@ class UnstrikeVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
-
-
-@dataclass(frozen=True, kw_only=True)
-class DueVerb(OrderVerb):
-    help = "move a held order's deadline; the reason goes on the public record"
-    pid: str = option("pid")
-    at: str = option("at", help="HH:MM the order is now due")
-    why: str = option("--why")
-
-    def run(self, ctx: Commander) -> None:
-        ctx.due(self.pid, self.at, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -922,7 +888,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
-    help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
+    help = "replace an open order's wrong check with one passing on main; keeps its review timer and strikes"
     pid: str = option("pid")
     check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
     why: str = option("--why", help="what was wrong with the recorded check")
@@ -933,7 +899,7 @@ class CheckVerb(OrderVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
-    help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
+    help = "name the plan phase an open order serves; keeps its id, review timer and strikes"
     pid: str = option("pid")
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
@@ -957,16 +923,11 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
     order: str = option("order", metavar="ORDER.json")
     to: str = option("--to")
-    due: EventTime = option("--due", type=RecordedEventTime.from_clock,
-                            normalize=FieldCodec.encode, default_factory=UnrecordedEventTime,
-                            parser_default_factory=UnrecordedEventTime,
-                            choices=None, metavar="HH:MM",
-                            help="HH:MM local time; default measured from deliveries")
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
 
     def run(self, ctx: Commander) -> None:
-        ctx.problem(self.order, self.to, self.due, self.where, self.disk,
+        ctx.problem(self.order, self.to, self.where, self.disk,
                     self.answer_references(ctx))
 
 

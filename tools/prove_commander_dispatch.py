@@ -224,7 +224,7 @@ class ObserveProofCommand(ProofCommand):
             Repo.of(project).github,
             "Verify rotation starts a native unit and its reply.",
             order,
-            deadline_seconds=300,
+            review_seconds=300,
         )
         print(f"ROOT {root}", flush=True)
         source = subprocess.check_output(

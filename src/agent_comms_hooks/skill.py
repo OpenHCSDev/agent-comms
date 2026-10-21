@@ -1,6 +1,6 @@
 """At session start, resume and compaction, write the commander's sources and order them read.
 
-The sources are the indictment, the packaged spine, the recorded failures, the
+The sources are the commander's voice, the indictment, the packaged spine, the recorded failures, the
 commander skill, the packaged rules and the pinned refactor-audit pattern catalog. Claude Code caps
 injected hook text at 10,000 characters and the sources are far longer, so they
 go into parts beside the transcript and the hook injects the order to read
@@ -19,7 +19,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import CommanderReread
+from agent_comms_hooks.reread import CommanderReread, ContextCadence
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,8 @@ class CommanderStart(CommanderReread):
     def due(self, tokens: int) -> bool:
         return True
 
-    def write_parts(self) -> None:
+    def prepare(self) -> None:
+        self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
             old.unlink()
@@ -52,6 +53,7 @@ class CommanderStart(CommanderReread):
         return "\n\n".join(
             (
                 cls.notice(),
+                CommanderConfig.packaged_voice().read_text(encoding="utf-8", newline=""),
                 CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
                 CommanderConfig.packaged_spine().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
@@ -87,7 +89,7 @@ class SkillText(ClaudeHookProgram):
 
 
 def main() -> None:
-    CommanderStart.read().reread()
+    ContextCadence.remind(CommanderStart)
 
 
 if __name__ == "__main__":

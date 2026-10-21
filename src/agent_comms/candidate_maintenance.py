@@ -99,10 +99,13 @@ def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
 
 
 def drain_candidate_catchup(root: Path) -> None:
-    """A stopped root cannot be renamed or removed while its worker still writes."""
+    """A stopped directory cannot be removed while workers on its roots still write."""
     while True:
         with _guard:
-            if root not in _pending:
-                return
-            worker = _pending[root]
-        worker.join()
+            workers = tuple(
+                worker for path, worker in _pending.items() if path.is_relative_to(root)
+            )
+        if not workers:
+            return
+        for worker in workers:
+            worker.join()

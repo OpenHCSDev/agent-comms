@@ -147,7 +147,7 @@ class DeliveredCommitCase:
             for todo in run.commander.comms.goals.todos.for_commander(run.commander.incarnation)
         }
         run.commander.problem(
-            str(run.document), run.worker, run.due, f"{Path(__file__).resolve()}:1"
+            str(run.document), run.worker, f"{Path(__file__).resolve()}:1"
         )
         (created,) = (
             todo

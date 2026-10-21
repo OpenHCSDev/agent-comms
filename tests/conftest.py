@@ -6,13 +6,14 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Awaitable
-from contextlib import AsyncExitStack
+from collections.abc import Awaitable, Iterator
+from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
 from xdist import is_xdist_worker
 
+from agent_comms import candidate_maintenance
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
 from agent_comms.message_bus import MessageBus
@@ -156,6 +157,22 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.delenv(name, raising=False)
 
 
+@contextmanager
+def _root_lifetime(root: Path) -> Iterator[Path]:
+    """Keep each directory's bus workers inside the directory's actual lifetime."""
+    try:
+        yield root
+    finally:
+        candidate_maintenance.drain_candidate_catchup(root)
+
+
+@pytest.fixture
+def tmp_path(tmp_path: Path) -> Iterator[Path]:
+    """Join bus workers before pytest applies its passed-directory retention policy."""
+    with _root_lifetime(tmp_path) as root:
+        yield root
+
+
 @pytest.fixture
 def private_directory():
     """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
@@ -166,8 +183,11 @@ def private_directory():
         or Path("/var/tmp").is_symlink()
     ):
         pytest.skip("a private bus needs a physical /var/tmp")
-    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
-        yield Path(directory)
+    with (
+        tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory,
+        _root_lifetime(Path(directory)) as root,
+    ):
+        yield root
 
 
 @pytest.fixture
@@ -189,8 +209,9 @@ def private_comms(private_directory):
 
 
 @pytest.fixture
-def root(tmp_path: Path) -> Path:
-    return tmp_path / "comms"
+def root(tmp_path: Path) -> Iterator[Path]:
+    with _root_lifetime(tmp_path / "comms") as root:
+        yield root
 
 
 def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
