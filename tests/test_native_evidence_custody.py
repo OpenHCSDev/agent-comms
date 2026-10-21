@@ -6,11 +6,16 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from agent_comms.native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, NativeEvidenceScope
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_input_record import NativeInputLocation
+from agent_comms.native_transcript import NativeTranscript
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.coordinator import Coordination
+from agent_comms.store_files import StoreLockContention, _store_lock
 from test_native_pi import INPUT_ID, _evidence
 
 
@@ -30,20 +35,15 @@ def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, read
     assert session.read_bytes() == before
 
 
-@pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
-def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
+def test_held_native_reader_refuses_a_new_hardlink(tmp_path):
+    # All decoded readers inherit this physical source. Check its lifetime once,
+    # rather than restating the same assertion for each decoding capability.
     session = _evidence(tmp_path)
-    with reader_type.open(session) as reader:
-        if reader_type is PrivateEvidenceRead:
-            tuple(reader.rows())
-        else:
-            reader.observe()
+    with PrivateEvidenceRead.open(session) as reader:
+        tuple(reader.rows())
         os.link(session, tmp_path / "new-link.jsonl")
         with pytest.raises(NativePiUnavailable):
-            if reader_type is PrivateEvidenceRead:
-                tuple(reader.rows())
-            else:
-                reader.observe()
+            tuple(reader.rows())
 
 
 
@@ -54,16 +54,17 @@ def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
 def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, rewrite):
     session = _evidence(tmp_path)
     restored_input = "d" * 32
-    restored = b"".join(json.dumps(row).encode() + b"\n" for row in (
-        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored", "version": 3},
-        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored-entry", "message": {
-            "role": "user", "inputId": restored_input, "inputDigest": "e" * 64,
-            "content": [{"type": "text", "text": "restored sou"}],
-        }},
-    ))
+    restored = (session.read_bytes().replace(b'"sid"', b'"new"')
+                .replace(INPUT_ID.encode(), restored_input.encode())
+                .replace(b"separate", b"restored"))
+    _header, original = NativeTranscript(session).forward(0, session.stat().st_size)
+    location = NativeInputLocation(INPUT_ID, "sid", "entry", session_entry_start=original.start)
+    restored_location = NativeInputLocation(
+        restored_input, "new", "entry", session_entry_start=original.start,
+    )
     with NativeEvidenceScope() as scope:
         evidence = scope.for_source(session)
-        header, entries = evidence.observe()
+        header, entries = evidence.observe(location)
         assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
             assert len(restored) == session.stat().st_size
@@ -73,8 +74,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             replacement.write_bytes(restored)
             replacement.chmod(0o600)
             replacement.replace(session)
-        header, entries = evidence.observe()
-        assert header.id == "restored"
+        header, entries = evidence.observe(restored_location)
+        assert header.id == "new"
         assert tuple(evidence.inputs) == (restored_input,)
         assert evidence.source.size == len(restored)
 
@@ -106,9 +107,6 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
 
 
 def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
-    import sqlite3
-    from agent_comms.native_pi import NativeContextJournal
-
     session = _evidence(tmp_path)
     original = sqlite3.OperationalError("consumer transaction refused")
     with pytest.raises(sqlite3.OperationalError) as caught:
@@ -133,12 +131,16 @@ def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
 
 
 def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
-    from agent_comms.store_files import StoreLockContention, _store_lock
     lock_target = tmp_path / "ownership"
     with _store_lock(lock_target):
-        with pytest.raises(BlockingIOError):
-            with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
-                pytest.fail("A competing descriptor acquired exclusive ownership")
+        # Nested scopes in one execution deliberately borrow the lock. A
+        # different thread must acquire its own descriptor and spend its budget.
+        def compete():
+            with pytest.raises(BlockingIOError):
+                with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+                    pytest.fail("A competing descriptor acquired exclusive ownership")
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            worker.submit(compete).result(timeout=1)
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
     with _store_lock(lock_target, blocking=False):
@@ -158,9 +160,8 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
 @pytest.mark.asyncio
 async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(tmp_path):
     """Cancellation cannot retire borrowed source before its SQL worker closes."""
-    from agent_comms.coordinator import Coordination
-
     session = _evidence(tmp_path)
+    _header, original_input = NativeTranscript(session).forward(0, session.stat().st_size)
     before = session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()
     path = tmp_path / 'coordination.sqlite3'
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
@@ -176,11 +177,13 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 worker_connections.append(store.session._connection)
                 with store.session.read():
                     assert store.participants.get('original').owner_thread == 'owner'
-                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence,
+                                                      session_entry_start=original_input.start)
                     entered.set()
                     assert release.wait(2), 'bounded fixture release missing'
                     assert not evidence.source.stream.closed
-                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence,
+                                                      session_entry_start=original_input.start)
 
             pending = asyncio.create_task(Coordination.run_async(path, observe,
                 clock_ms=original.session.now))

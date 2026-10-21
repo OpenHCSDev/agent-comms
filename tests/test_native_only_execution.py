@@ -10,6 +10,7 @@ import pytest
 
 import agent_comms.agent_events as events
 from agent_comms.child_process import BoundedRun
+from agent_comms.launch_root import LaunchRoot
 from pi_session_turn import one_turn_events
 
 
@@ -18,10 +19,10 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     import subprocess
 
     root = tmp_path / 'must-remain-absent'
-    environment = dict(os.environ, AGENT_COMMS_ROOT=str(root))
+    environment = LaunchRoot.environment(os.environ)
     environment.pop('AGENT_COMMS_THREAD', None)
     result = subprocess.run(
-        (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *arguments),
+        (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *LaunchRoot.from_path(root).arguments(), *arguments),
         env=environment, capture_output=True, timeout=30,
     )
     assert result.returncode == code, result.stderr.decode()

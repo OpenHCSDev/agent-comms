@@ -68,7 +68,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     saved = ToolResultMessage.from_wire({
         "role": "toolResult", "toolCallId": "original-send", "toolName": "comms_send",
         **raw, "isError": False,
-    }).transcript_events(None)[0]
+    }).transcript_events(None, None)[0]
     assert saved.sent_message == result.sent_message(True)
     assert tool_result_content("original-send", saved.text, saved.diff, saved.sent_message) == (
         tool_result_content("original-send", result.text(), sent_message=result.sent_message(True)))

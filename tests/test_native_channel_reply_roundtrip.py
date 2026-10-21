@@ -232,7 +232,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     class Client:
         async def session_update(self, **kwargs):
-            facts.extend(decode_updates(kwargs["update"].get("_meta")))
+            facts.extend(decode_updates(kwargs["update"].field_meta))
 
     attachment.on_connect(Client())
 

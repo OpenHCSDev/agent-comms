@@ -404,7 +404,7 @@ class NativeInputContext:
             for item in fields(self):
                 annotation = item.metadata.get("native_context")
                 if annotation is not None:
-                    FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, item.name), annotation))
+                    FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, item.name)))
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)
