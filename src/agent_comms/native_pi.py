@@ -201,18 +201,6 @@ class NativeContextRecord(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeProofDifference:
-    missing_rows: int
-    conflicting_keys: int
-
-    def require_compatible(self) -> None:
-        if self.conflicting_keys:
-            raise RelationViolationError(
-                f"Native proof history has {self.conflicting_keys} conflicting keys"
-            )
-
-
-@dataclass(frozen=True, slots=True)
 class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
@@ -239,84 +227,6 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
                 for action in ("UPDATE", "DELETE")
             },
         }
-
-    history_schema = "native_history"
-
-    @classmethod
-    def history_difference(cls, db: sqlite3.Connection) -> NativeProofDifference:
-        """Compare an attached read-only history using the declared primary key."""
-        same_key = " AND ".join(
-            f'past."{item.wire_name}" = present."{item.wire_name}"'
-            for item in cls._fields() if item.column.primary_key
-        )
-        different = " OR ".join(
-            f'past."{item.wire_name}" IS NOT present."{item.wire_name}"'
-            for item in cls._fields()
-        )
-        past = f"{cls.history_schema}.{cls.declared_name}"
-        present = f"main.{cls.declared_name}"
-        missing = db.execute(
-            f"SELECT COUNT(*) FROM {past} AS past WHERE NOT EXISTS "
-            f"(SELECT 1 FROM {present} AS present WHERE {same_key})"
-        ).fetchone()[0]
-        conflicts = db.execute(
-            f"SELECT COUNT(*) FROM {past} AS past JOIN {present} AS present "
-            f"ON {same_key} WHERE {different}"
-        ).fetchone()[0]
-        return NativeProofDifference(missing, conflicts)
-
-    @classmethod
-    def validate_history(cls, db: sqlite3.Connection, *, session_id: str) -> None:
-        """Decode and validate the union through its declared row schema in memory.
-
-        Historical generations from separate journal lifetimes can overlap. The
-        live append policy is not a rule for restoring immutable keyed evidence.
-        No input is executed and neither durable journal is written.
-        """
-        cls.history_difference(db).require_compatible()
-        columns = cls._column_list(tuple(cls.column_projection()))
-        rows = cls.read(db.execute(
-            f"SELECT {columns} FROM {cls.history_schema}.{cls.declared_name} UNION "
-            f"SELECT {columns} FROM main.{cls.declared_name} "
-            "ORDER BY request_generation, input_id"
-        ))
-        with closing(sqlite3.connect(":memory:")) as validation:
-            cls.create_schema(validation)
-            for name in cls.trigger_bodies():
-                validation.execute(f'DROP TRIGGER "{name}"')
-            for row in rows:
-                if row.session_id != session_id:
-                    raise RelationViolationError("Native proof history belongs to another session")
-                row.insert(validation)
-
-    @classmethod
-    def merge_history(cls, db: sqlite3.Connection, *, session_id: str) -> int:
-        """Insert historical holes atomically, preserving inode and writer schema."""
-        # Decode outside the reserved writer lock. Native writers can append while
-        # this runs; the transaction below rechecks every key before inserting.
-        cls.validate_history(db, session_id=session_id)
-        with db:
-            db.execute("BEGIN IMMEDIATE")
-            difference = cls.history_difference(db)
-            difference.require_compatible()
-            if not difference.missing_rows:
-                return 0
-            # The append trigger intentionally rejects older generations. The
-            # declared row schema above validated the entire union first;
-            # transactional DDL makes every trigger rollback with a failed insert.
-            triggers = cls.trigger_bodies()
-            for name in triggers:
-                db.execute(f'DROP TRIGGER "{name}"')
-            columns = cls._column_list(tuple(cls.column_projection()))
-            inserted = db.execute(
-                f"INSERT INTO {cls.declared_name} ({columns}) "
-                f"SELECT {columns} FROM {cls.history_schema}.{cls.declared_name} "
-                f"EXCEPT SELECT {columns} FROM main.{cls.declared_name}"
-            ).rowcount
-            declarations = cls.schema_objects()
-            for name in triggers:
-                db.execute(declarations[name])
-        return inserted
 
     @classmethod
     def native_contract(cls) -> dict[str, Any]:

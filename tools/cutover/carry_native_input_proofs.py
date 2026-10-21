@@ -20,7 +20,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.native_pi import NativeContextJournal, NativeProofDifference
+from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_session_files import NativeInputProof, NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -83,6 +83,18 @@ class ProofRelocation(LegacyNativeProof):
 
 
 @dataclass(frozen=True)
+class NativeProofDifference:
+    missing_rows: int
+    conflicting_keys: int
+
+    def require_compatible(self) -> None:
+        if self.conflicting_keys:
+            raise RelationViolationError(
+                f"Native proof history has {self.conflicting_keys} conflicting keys"
+            )
+
+
+@dataclass(frozen=True)
 class ProofHistoryReport:
     source: Annotated[Path, PathText]
     target: Annotated[Path, PathText]
@@ -118,9 +130,11 @@ class MissingProofTarget(ProofHistory):
 
 
 class ExistingProofTarget(ProofHistory):
+    history_schema = "native_history"
+
     @contextmanager
     def connection(self, journal_root: Path, mode: Literal["ro", "rw"]) -> Iterator[sqlite3.Connection]:
-        """SQLite URI modes are the external read/write capability, not a kind switch."""
+        """SQLite URI modes are its external protocol, not domain dispatch."""
         self.require_sources(journal_root)
         self.require_targets()
         NativeSessionFileRole.require(self.input_proof.lstat())
@@ -128,19 +142,90 @@ class ExistingProofTarget(ProofHistory):
                                      timeout=30)) as db:
             db.execute("PRAGMA synchronous=EXTRA")
             NativeContextJournal.require_schema(db)
-            db.execute(f"ATTACH DATABASE ? AS {NativeContextJournal.history_schema}",
+            db.execute(f"ATTACH DATABASE ? AS {self.history_schema}",
                        (self.source.as_uri() + "?mode=ro",))
             yield db
 
+    def difference(self, db: sqlite3.Connection) -> NativeProofDifference:
+        """Derive every key and compared column from the existing declaration."""
+        table = NativeContextJournal
+        same_key = " AND ".join(
+            f'past."{item.wire_name}" = present."{item.wire_name}"'
+            for item in table._fields() if item.column.primary_key
+        )
+        different = " OR ".join(
+            f'past."{item.wire_name}" IS NOT present."{item.wire_name}"'
+            for item in table._fields()
+        )
+        past = f"{self.history_schema}.{table.declared_name}"
+        present = f"main.{table.declared_name}"
+        missing = db.execute(
+            f"SELECT COUNT(*) FROM {past} AS past WHERE NOT EXISTS "
+            f"(SELECT 1 FROM {present} AS present WHERE {same_key})"
+        ).fetchone()[0]
+        conflicts = db.execute(
+            f"SELECT COUNT(*) FROM {past} AS past JOIN {present} AS present "
+            f"ON {same_key} WHERE {different}"
+        ).fetchone()[0]
+        return NativeProofDifference(missing, conflicts)
+
+    def validate(self, db: sqlite3.Connection) -> None:
+        """Validate immutable historical rows through the existing schema in memory.
+
+        Independent journal lifetimes can reuse generations. The live append
+        policy is not a rule for restoring older keyed evidence. No input runs.
+        """
+        self.difference(db).require_compatible()
+        table = NativeContextJournal
+        columns = table._column_list(tuple(table.column_projection()))
+        rows = table.read(db.execute(
+            f"SELECT {columns} FROM {self.history_schema}.{table.declared_name} UNION "
+            f"SELECT {columns} FROM main.{table.declared_name}"
+        ))
+        with closing(sqlite3.connect(":memory:")) as validation:
+            table.create_schema(validation)
+            for name in table.trigger_bodies():
+                validation.execute(f'DROP TRIGGER "{name}"')
+            for row in rows:
+                if row.session_id != self.session_id:
+                    raise RelationViolationError("Native proof history belongs to another session")
+                row.insert(validation)
+
+    def merge(self, db: sqlite3.Connection) -> int:
+        # Decode outside the writer lock; recheck every key inside the transaction.
+        self.validate(db)
+        table = NativeContextJournal
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            difference = self.difference(db)
+            difference.require_compatible()
+            if not difference.missing_rows:
+                return 0
+            # Transactional DDL restores triggers on rollback too. Only the live
+            # append policy is bypassed, never the declared row checks/keys.
+            triggers = table.trigger_bodies()
+            for name in triggers:
+                db.execute(f'DROP TRIGGER "{name}"')
+            columns = table._column_list(tuple(table.column_projection()))
+            inserted = db.execute(
+                f"INSERT INTO {table.declared_name} ({columns}) "
+                f"SELECT {columns} FROM {self.history_schema}.{table.declared_name} "
+                f"EXCEPT SELECT {columns} FROM main.{table.declared_name}"
+            ).rowcount
+            declarations = table.schema_objects()
+            for name in triggers:
+                db.execute(declarations[name])
+        return inserted
+
     def inspect(self, journal_root: Path) -> ProofHistoryReport:
         with self.connection(journal_root, "ro") as db:
-            difference = NativeContextJournal.history_difference(db)
+            difference = self.difference(db)
         return self.report(difference)
 
     def apply(self, journal_root: Path) -> ProofHistoryReport:
         with self.connection(journal_root, "rw") as db:
-            difference = NativeContextJournal.history_difference(db)
-            inserted = NativeContextJournal.merge_history(db, session_id=self.session_id)
+            difference = self.difference(db)
+            inserted = self.merge(db)
         return self.report(difference, inserted=inserted)
 
 
