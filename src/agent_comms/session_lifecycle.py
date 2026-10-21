@@ -227,11 +227,6 @@ class SessionLifecycle:
                 f"Headless owner {os.getpid()} did not acquire {thread.name!r}; "
                 f"it belongs to {thread.process_identity}"
             )
-        from .attempt_recovery import RecoveryMonitorCapability
-
-        await Coordination.run_worker(partial(
-            RecoveryMonitorCapability.recover_owner, self.comms.root, thread,
-        ))
         await self._bind_loaded(thread, session_id)
         self.effects.inputs.ensure_live_drain(session_id)
 

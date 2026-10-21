@@ -16,6 +16,7 @@ from uuid import uuid4
 from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
     Platform,
@@ -161,7 +162,13 @@ class OwnerRelease(ABC):
     @abstractmethod
     def matches(self, expected) -> bool: ...
     @abstractmethod
-    def require_native_loss(self, snapshot, source): ...
+    def require_owner_loss(self, snapshot, owner_identity): ...
+
+    def require_native_loss(self, snapshot, source):
+        release = self.require_owner_loss(snapshot, source.owner_identity)
+        current = snapshot.require(release.name)
+        source.sent_owner_claimed_generation.require_release(release, snapshot, current)
+        return release
 
 
 class NoRelease(OwnerRelease):
@@ -171,7 +178,7 @@ class NoRelease(OwnerRelease):
     def matches(self, expected) -> bool:
         return False
 
-    def require_native_loss(self, snapshot, source):
+    def require_owner_loss(self, snapshot, owner_identity):
         raise RelationViolationError("native owner release acknowledgement is missing")
 
 
@@ -203,17 +210,16 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
             return False
         return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
-    def require_native_loss(self, snapshot, source) -> None:
-        """A recorded release confirms only its exact dead process and input generation.
+    def require_owner_loss(self, snapshot, owner_identity):
+        """Attest only this recorded owner's release and dead process.
 
-        A recorded send can be fenced by a later release in the same incarnation.
-        An unrecorded epoch instead needs the exact current stopped acknowledgement. Both
-        paths preserve UNKNOWN; neither says bytes were unwritten or permits retry.
+        Input generation belongs to the recorded input, not to owner-loss proof.
+        Neither this release nor missing input proves bytes were unwritten.
         """
         if not self.incarnation().current(snapshot):
             raise RelationViolationError("Released native owner incarnation changed")
         current = snapshot.require(self.name)
-        source.require_recorded_owner(current)
+        owner_identity.require_recorded_owner(current)
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
@@ -221,7 +227,6 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
-        source.sent_owner_claimed_generation.require_release(self, snapshot, current)
         return self
 
 
@@ -460,8 +465,6 @@ class OwnerLifecycle:
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
-        from .attempt_recovery import RecoveryMonitorCapability
-
         for thread, generation in owners:
             self._finish_stopped_owner(thread, generation)
             RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
@@ -489,6 +492,9 @@ class OwnerLifecycle:
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
+        # Retire the predecessor while its released declaration is still stopped.
+        # Reserving the replacement PID first destroys that observation.
+        RecoveryMonitorCapability.recover_owner(self.root, thread)
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)

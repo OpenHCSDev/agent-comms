@@ -11,17 +11,181 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.private_path import FileRevision
+from agent_comms.cli import main as cli_main
+from agent_comms.cli_protocol import CoreError, WATCH_LINE
+from agent_comms.native_arguments import GivenBinary
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.runtime import socket_path
+from agent_comms.thread_model import DeclaredModel
+from functools import partial
+from native_backend_fixture import native_backend_fixture
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
+from agent_comms.selected_participant import SelectedParticipant
+from agent_comms.selected_turn import SelectedAttempt
+from agent_comms.launch_runtime import ThreadLaunch
+from contextlib import closing
+from test_coordinated_runtime import _root
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerReleaseEvidence
+from agent_comms.reason_codes import GivenReasonCode
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
-from test_coordinated_runtime import tmp_path  # noqa: F401
+
+
+async def release_starting_attempt(directory):
+    root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
+    comms.registry.register(replace(comms.registry.require("beta"), model=DeclaredModel("response-local/fixture")))
+    with closing(CursorDelivery()) as delivery, Coordination(root / "coordination.sqlite3") as store:
+        async with SelectedParticipant.select(
+            comms, store, root_id, "beta", 0, cursor_delivery=delivery,
+        ) as participant:
+            assert participant is not None
+            created = store.executions.create(
+                participant.batch.execution_id, ExecutionOrigin.WIRE,
+                participant.lookup, participant.owner.thread.name, 1,
+                sources=participant.batch.sources,
+            ).value
+            await SelectedAttempt.engage(participant, created)
+            environment = ThreadLaunch.from_thread(participant.owner.thread).apply(dict(os.environ))
+            os.environ.clear()
+            os.environ.update(environment)
+            comms.owners.release("beta")
+    return root
+
+
+def starting_owner(directory, output, exit_allowed):
+    output.put(str(asyncio.run(release_starting_attempt(directory))))
+    if not exit_allowed.wait(15):
+        raise TimeoutError("test must release starting owner")
+
+
+@pytest.fixture
+def released_starting(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    output, exit_allowed = context.Queue(), context.Event()
+    process = context.Process(target=starting_owner, args=(str(tmp_path), output, exit_allowed))
+    process.start()
+    try:
+        root = Path(output.get(timeout=10))
+        leave(process, exit_allowed)
+        yield root
+    finally:
+        exit_allowed.set()
+        process.join(10)
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+        output.close()
+        assert process.exitcode == 0
+
+
+def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(released_starting):
+    comms = Comms(released_starting)
+    owner = comms.registry.require("beta")
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        before = store.snapshots.get(execution_id)
+        assert before.attempt.lifecycle.starting
+        assert NativeRuntimeInput.count(store.session._connection) == 0
+        inputs = input_evidence(store)
+    bus = (released_starting / "bus.jsonl").read_bytes()
+    dispositions = FileRevision.capture(InputDispositions.path_in(released_starting))
+    RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        after = store.snapshots.get(execution_id)
+        assert not after.is_current and after.attempt.lifecycle.failed
+        assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
+        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not after.replay.replay_safe
+        assert not CurrentExecutions.require(store.session._connection,
+            owner_lookup=owner.incarnation.lookup).unresolved
+        assert input_evidence(store) == inputs
+        assert NativeRuntimeInput.count(store.session._connection) == 0
+    assert (released_starting / "bus.jsonl").read_bytes() == bus
+    assert FileRevision.capture(InputDispositions.path_in(released_starting)) == dispositions
+
+
+def test_observed_owner_loss_expires_with_its_boundary(released_starting):
+    owner = Comms(released_starting).registry.require("beta")
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        before = store.snapshots.get(execution_id)
+        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
+            assert proof.owns(store, before.attempt)
+        assert not proof.owns(store, before.attempt)
+        with pytest.raises(RecoveryBlocked):
+            proof.require_native_exit()
+        assert store.snapshots.get(execution_id) == before
+
+
+async def test_launch_recovers_before_reserving_replacement_pid(
+    released_starting, native_runtime_package, source_programs,
+):
+    source_programs.bind(released_starting.parent)
+    provider_root = released_starting.parent / "provider"
+    provider_root.mkdir(mode=0o700)
+    async with native_backend_fixture(provider_root, package=native_runtime_package):
+        comms = Comms(released_starting)
+        old = comms.registry.require("beta")
+        with Coordination(released_starting / "coordination.sqlite3") as store:
+            pointer = CurrentExecutions.require(store.session._connection, owner_lookup=old.incarnation.lookup)
+            execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        with LaunchRoot.from_path(released_starting).selected():
+            result = await Coordination.run_worker(partial(
+                comms.owners.start, "beta", agent_bin=GivenBinary("pi"),
+            ))
+            owner = comms.registry.require("beta")
+            try:
+                async with asyncio.timeout(15):
+                    while not socket_path(comms.root, result.pid).exists():
+                        assert owner.process_alive
+                        await asyncio.sleep(0.02)
+                with Coordination(released_starting / "coordination.sqlite3") as store:
+                    after = store.snapshots.get(execution_id)
+                    assert not after.is_current
+                    assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
+                    assert NativeRuntimeInput.count(store.session._connection) == 0
+                assert owner.process_alive and owner.process_identity != old.process_identity
+            finally:
+                await Coordination.run_worker(partial(comms.owners.stop, "beta"))
+
+
+def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, capsys):
+    comms = Comms(released_starting)
+    owner = comms.registry.require("beta")
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        before = store.snapshots.get(execution_id)
+        with store.session.writing() as db:
+            NativeRuntimeInput(
+                input_id="c" * 32, stage=FullNativeExecution,
+                execution_id=TextNativeColumn(execution_id),
+                attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
+                owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+                owner_generation=before.attempt.owner_generation + 1,
+                owner_token_digest="e" * 64,
+            ).insert(db)
+        inputs = input_evidence(store)
+    with pytest.raises(RecoveryBlocked) as blocked:
+        RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    assert cli_main(["--root", str(released_starting), "start", "--name", "beta"]) == 1
+    assert WATCH_LINE.validate_json(capsys.readouterr().out) == CoreError.from_exception(blocked.value)
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        assert store.snapshots.get(execution_id) == before
+        assert input_evidence(store) == inputs
 
 
 def unknown_owner(directory, history, output, exit_allowed):
@@ -32,7 +196,7 @@ def unknown_owner(directory, history, output, exit_allowed):
 
 
 @pytest.fixture(params=NativeSendHistory.members_with(UnknownHistory), ids=lambda history: history.declared_name)
-def released_unknown(tmp_path, request):  # noqa: F811
+def released_unknown(tmp_path, request):
     context = multiprocessing.get_context("spawn")
     output, exit_allowed = context.Queue(), context.Event()
     process = context.Process(
@@ -176,7 +340,7 @@ def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
         assert store.snapshots.get(execution_id).is_current
 
 
-def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):  # noqa: F811
+def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
     from agent_comms.coordination_errors import StaleFence, StaleRevision
     from test_coordination_store import ready, started
 

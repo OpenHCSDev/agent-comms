@@ -19,6 +19,7 @@ from agent_comms.typed_table import (
     SqlValue,
     TypedRow,
     TypedTable,
+    RowNotFoundError,
 )
 
 
@@ -43,6 +44,20 @@ class TableChildRow(TypedTable):
     @classmethod
     def references(cls):
         return (ForeignKey(("parent", "parent_count"), TableParentRow, ("key", "count")),)
+
+
+def test_required_row_distinguishes_absence_from_duplicate_results():
+    with sqlite3.connect(":memory:") as db:
+        TableParentRow.create(db)
+        with pytest.raises(RowNotFoundError):
+            TableParentRow.require(db, key="missing")
+        first, second = TableParentRow("first", 3), TableParentRow("second", 3)
+        first.insert(db)
+        second.insert(db)
+        assert TableParentRow.require(db, key=first.key) == first
+        with pytest.raises(MalformedRecord) as duplicate:
+            TableParentRow.require(db, count=3)
+        assert type(duplicate.value) is MalformedRecord
 
 
 def test_declared_table_family(tmp_path):
