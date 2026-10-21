@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
+from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 

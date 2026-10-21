@@ -824,7 +824,7 @@ class WireRevision(ReadState):
     ]
     bus_changes: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: Bus.source_paths(views.root), *STATUS_SOURCE),
+        *revision_source(lambda views: views.bus.bus.source_paths(views.root), *STATUS_SOURCE),
     ]
     bus_identity: Annotated[
         RecordedBusIdentity, WatchViews((*STATUS_SOURCE, BusSourceView)),

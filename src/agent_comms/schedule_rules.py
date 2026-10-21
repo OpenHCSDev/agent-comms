@@ -159,7 +159,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
     async def run(self) -> None:
         inputs, session_id = self.inputs, self.session_id
         effects = inputs.effects
-        root_id = effects.configured_root_id
+        root_id = inputs.comms.owners.require_private_launch().wire_root_id
         # Selection may have been scheduled just before maintenance began.
         # A deferred selection is not a successful drain or diagnostic recovery.
         hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)

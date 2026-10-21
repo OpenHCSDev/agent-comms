@@ -122,7 +122,7 @@ class QueuedInput:
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
-        """Called inside the wire boundary; acceptance follows the durable reservation."""
+        """Called under the registry lock; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]

@@ -29,8 +29,17 @@ _DELETE_SELF = 0x00000400
 _MOVE_SELF = 0x00000800
 _OVERFLOW = 0x00004000
 _IGNORED = 0x00008000
-_MASK = (_MODIFY | _ATTRIB | _CLOSE_WRITE | _MOVED_FROM | _MOVED_TO
-         | _CREATE | _DELETE | _DELETE_SELF | _MOVE_SELF)
+_MASK = (
+    _MODIFY
+    | _ATTRIB
+    | _CLOSE_WRITE
+    | _MOVED_FROM
+    | _MOVED_TO
+    | _CREATE
+    | _DELETE
+    | _DELETE_SELF
+    | _MOVE_SELF
+)
 _HEADER = struct.Struct("=iIII")
 
 
@@ -131,6 +140,10 @@ class ChangedSources(ExitStack):
         if fresh:
             self.changed()
 
+    def invalidate(self) -> None:
+        """Lost event coverage requires a fresh read of every declared source."""
+        self._record(source.path for source in self.sources)
+
     def _touch(self, path: Path) -> None:
         self._record(
             source.path
@@ -159,15 +172,14 @@ class ChangedSources(ExitStack):
             name = raw[offset:end].partition(b"\0")[0]
             offset = end
             if mask & _OVERFLOW:
-                self._record(source.path for source in self.sources)
+                self.invalidate()
                 self._refresh(lost=True)
                 continue
-            try:
-                directory = self._directories[watch]
-            except KeyError:
-                # Removal queues an IGNORED event for a registration we retired.
+            if watch not in self._directories:
+                # A retired descriptor no longer identifies a current source.
+                self.invalidate()
                 continue
-            path = directory / os.fsdecode(name)
+            path = self._directories[watch] / os.fsdecode(name)
             self._touch(path)
             if mask & (_DELETE | _MOVED_FROM | _IGNORED | _DELETE_SELF | _MOVE_SELF):
                 self._record(self._below.get(path, ()))
@@ -186,7 +198,7 @@ class ChangedSources(ExitStack):
             # A synchronous reader cannot claim complete coverage of a bounded
             # batch while the kernel still holds events. Re-read registered sources
             # rather than keeping stale cached data or draining forever.
-            self._record(source.path for source in self.sources)
+            self.invalidate()
         return self._take_paths()
 
 

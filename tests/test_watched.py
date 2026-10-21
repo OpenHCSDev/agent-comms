@@ -230,6 +230,19 @@ def test_native_reply_publication_uses_the_index_commit_source(tmp_path):
         state.close()
 
 
+def test_retired_native_events_invalidate_registered_source_coverage(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    path = root / "observed"
+    unrelated = tmp_path / "another-source"
+    with Bus.register_sources(FileSource(path), FileSource(unrelated)) as changes:
+        root.rename(tmp_path / "retired")
+        assert path in changes.changed_paths()
+        # Removing the old native registration queues its final events after
+        # the rename batch. Their retired descriptor cannot prove quietness.
+        assert changes.changed_paths() == frozenset((path, unrelated))
+
+
 def test_synchronous_backlog_invalidates_admitted_sources(tmp_path):
     path = tmp_path / "observed"
     with Bus.register_sources(FileSource(path)) as changes:

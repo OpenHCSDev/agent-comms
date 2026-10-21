@@ -20,7 +20,9 @@ from .message_reference import MessageReference
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .input_disposition import InputDispositions
+    from .thread_identity import ThreadIncarnation
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -213,6 +215,18 @@ class RetainedTaskFacts:
     """One frozen source projection; no inferred prose facts or replay authority."""
 
     facts: tuple[ExactTaskFact, ...]
+
+    @classmethod
+    def capture(cls, source: BusReader, owner: ThreadIncarnation) -> RetainedTaskFacts:
+        """Capture declared facts from one participant's immutable native read."""
+        lookup = owner.require_recorded().lookup
+        after = 0
+        facts: list[ExactTaskFact] = []
+        while records := source.conversation(lookup, after=after, descending=False):
+            facts.extend(fact for record in records for message in record.messages()
+                         for fact in message.retained_task_facts())
+            after = records[-1].seq
+        return cls(tuple(facts))
 
     @property
     def source_digest(self) -> TextDigest:

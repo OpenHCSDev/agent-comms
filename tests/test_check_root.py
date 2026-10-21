@@ -17,7 +17,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 
 
 @pytest.fixture
-def source(scratch_root):
+def source(scratch_root, durable_home):
     root = scratch_root / "source"
     c = Comms(root)
     Bus.install(Bus.path_in(c.root))
@@ -54,7 +54,7 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, s
         return
     external.finish(turn_id="saved", item_id="item", events=events)
     with CheckRoot(source, (owner.name,), root).open() as copied:
-        session = Path(copied.registry.require(owner.name).session_file)
+        session = Path(copied.registry.require(owner.name).session_file.require("Missing check session"))
         rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
         assert [entry.message.text for entry in rows[1:]] == [event.text for event in events[:2]]
         assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [

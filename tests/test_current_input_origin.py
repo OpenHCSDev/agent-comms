@@ -1,6 +1,5 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
-from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
@@ -20,7 +19,6 @@ from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, 
 from agent_comms.message_reference import MessageReference
 from agent_comms.queued_input import QueuedInput
 from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
-from agent_comms.store_files import _store_lock
 from test_acp_queue_contract import _owner
 from stored_inputs import stored_inputs
 
@@ -49,7 +47,6 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     scope = await agent.inputs.queue_binding('beta')
     assert scope == LiveQueueScope(
         'beta', comms.registry.snapshot().claimed_identity('beta'),
@@ -73,13 +70,11 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
 
 async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(live_owner):
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     agent.on_connect(Client())
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.state('beta').open_inbox()
     origin = capture(comms)
-    with comms.bus.log.opened_wire_snapshot() as source:
-        before = tuple(source.public_records())
+    before = comms.bus.bus.revision()
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
     assert decode_request(encode_request(command)) == command
     await agent.prompt(session_id="beta", prompt=[TextContentBlock(type="text", text=command.user_text)],
@@ -88,8 +83,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     key = "acp:" + command.input_id
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
-    with comms.bus.log.opened_wire_snapshot() as source:
-        assert len(stored_inputs(inputs.root).rows) == 1 and tuple(source.public_records()) == before
+    assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.bus.revision() == before
     from agent_comms.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').require_inbox().get_nowait()
     assert queued.input_id.value == command.input_id
@@ -114,19 +108,18 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
 
 async def test_foreign_or_changed_origin_refused_before_any_reservation(live_owner):
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     invalid = (replace(origin, root_id="f" * 32),
                replace(origin, author=replace(origin.author, created_at=origin.author.created_at + 1)),
                replace(origin, project="/another/project"),
                WireInputOrigin(origin.root_id, MessageReference(1, "forged-reference")))
     for witness in invalid:
-        with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
+        with comms.registry.store.locked(), pytest.raises(RelationViolationError):
             with ExitStack() as ownership:
                 QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                     echo=True, images=(), controller=Client(), origin=witness, ownership=ownership)
                 ownership.pop_all()
-    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
+    with comms.registry.store.locked(), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=None, origin=origin, ownership=ownership)
@@ -136,7 +129,6 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
 
 async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(live_owner):
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
                             "beta", "Exact old user-looking text")
@@ -161,7 +153,6 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
 @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
 async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(live_owner, state):
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     absent = capture(comms)
     assert absent.goal == AbsentGoalCheckpoint()
     assert FieldCodec.encode(absent)["goal"] == {"kind": "absent"}
@@ -185,7 +176,7 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     with pytest.raises(ValueError):
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
-    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
+    with comms.registry.store.locked(), pytest.raises(RelationViolationError):
         with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=Client(), origin=absent, ownership=ownership)
@@ -215,7 +206,6 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     from agent_comms.turn_context import WireProvenance
 
     comms, agent = live_owner
-    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     async with QueuedInput.reserve(
@@ -235,8 +225,8 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
 
     def captured(name):
         owner = comms.registry.require(name)
-        with comms.bus.log.checked_read() as source:
-            wire_facts = tuple(source.retained_task_facts(owner.incarnation))
+        with comms.bus.bus.reading() as source:
+            wire_facts = RetainedTaskFacts.capture(source, owner.incarnation).facts
         input_facts = tuple(r.origin.retained_fact(r) for r in stored_inputs(inputs.root).rows.values())
         return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
 
@@ -245,13 +235,13 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     assert retained.current_authored_sources(snapshot.require('beta'), snapshot) == (pin,)
     assert retained.original_text_source(pin) == row
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
-    with comms.bus.log.checked_read() as source:
-        wire_only = tuple(source.retained_task_facts(snapshot.require('beta').incarnation))
+    with comms.bus.bus.reading() as source:
+        wire_only = RetainedTaskFacts.capture(source, snapshot.require('beta').incarnation).facts
     with pytest.raises(RelationViolationError):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated,)
-    before = (comms.root / 'bus.jsonl').read_bytes()
+    before = comms.bus.bus.revision()
     comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
@@ -263,7 +253,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_input_constraint('beta', WireProvenance(MessageReference(1, 'not-input')),
                                              worktree=origin.project)
-    assert (comms.root / 'bus.jsonl').read_bytes() == before
+    assert comms.bus.bus.revision() == before
     assert inputs.path.read_bytes() == original_inputs
 
     # Same text, separately reserved original inputs never acquire one identity.

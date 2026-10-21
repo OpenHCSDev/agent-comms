@@ -571,12 +571,13 @@ class NativeInputConstraintPin(HumanConstraintPin):
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions
+        from .registry_store import RegistryStore
 
-        original_source.require_current()
+        privacy = RegistryStore.at(original_source.path.parent).private_guard_unlocked()
         row = self.subject.require_human_input().require_original(
             InputDispositions(original_source.path.parent))
         origin = row.origin.require_human()
-        if origin.root_id != original_source.witness.root_id:
+        if origin.root_id != privacy.namespace:
             raise RelationViolationError("USER input pin belongs to another wire root")
         original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
