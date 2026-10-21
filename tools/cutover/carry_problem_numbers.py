@@ -1,4 +1,4 @@
-"""Install the assignment row declaration without changing retained orders or inputs.
+"""Seed global problem allocation and index the original Todo assignment.
 
 Delete this step once every retained bus has been carried.
 """
@@ -8,10 +8,10 @@ from pathlib import Path
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.todos import ProblemNumber, Todo, TodoStore, UnitAssignment
+from agent_comms.todos import ProblemNumber, Todo, TodoStore
 
 
-class UnitAssignments(Carry):
+class ProblemNumbers(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
         paths = tuple(path for path in SQLiteFile.files(TodoStore.path_in(root)) if path.exists())
@@ -27,15 +27,18 @@ class UnitAssignments(Carry):
             return Carried(0)
         with closing(CoordinationStore.read_snapshot(path)) as db:
             stored = {row.name for row in TodoStore.stored_schema(db)}
-            missing = tuple(row for row in (UnitAssignment, ProblemNumber)
-                            if row.declared_name not in stored)
-        if not missing or not apply:
-            return Carried(len(missing))
+            numbers_missing = ProblemNumber.declared_name not in stored
+            index_missing = Todo.unit_index.name(Todo) not in stored
+        changed = int(numbers_missing) + int(index_missing)
+        if not changed or not apply:
+            return Carried(changed)
         with closing(CoordinationStore.writer(path)) as db, SQLiteFile.write_transaction(db):
-            for row in missing:
-                row.create(db)
-            for todo in Todo.stream(db):
-                ProblemNumber.reserve(db, todo.id)
+            if numbers_missing:
+                ProblemNumber.create(db)
+                for todo in Todo.stream(db):
+                    ProblemNumber.reserve(db, todo.id)
+            if index_missing:
+                db.execute(Todo.unit_index.sql(Todo))
             TodoStore.require_schema(db)
-        return Carried(len(missing), rewritten=tuple(
+        return Carried(changed, rewritten=tuple(
             str(file.relative_to(root)) for file in SQLiteFile.files(path)))

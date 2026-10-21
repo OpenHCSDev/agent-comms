@@ -510,35 +510,34 @@ class Commander(CommanderContext):
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(order)
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
-        with self._caller.assigning(self.comms, unit, order.id):
-            if new:
-                self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-                    problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                    order=order, request=request, review_at=review_at, commander=self.commander)))
-            for pid in [] if new else group:
-                self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-                    problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                    assigner=self.incarnation, traced=traced,
-                    order=order, request=request, review_at=review_at, commander=self.commander)))
-            message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
-            sent = self.post(VerdictAudience((unit,)), message, answers)
-            # The message is each order's recorded link; a verdict citing it lands on that order.
-            for pid in group:
-                self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                    self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
-            for other, text in taken.items():
-                self.post(VerdictAudience((other,)), text)
-            print(f'{measured.summary}; review timer {review_at.clock()}')
-            print(order.id)
-            if replacing and not clean and struck_already:
-                print(f'{unit} already struck on this order of {group[0]}; '
-                      'the send-back counts that one miss once')
-            elif replacing and not clean and reassign.strikes_send_back:
-                # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
-                # Done here so the commander cannot send work back and forget either.
-                verdict = document.prose.strip()
-                self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}',
-                            evidence=(order.owner,))
+        if new:
+            self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
+                problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
+                order=order, request=request, review_at=review_at, commander=self.commander)))
+        for pid in [] if new else group:
+            self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
+                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
+                assigner=self.incarnation, traced=traced,
+                order=order, request=request, review_at=review_at, commander=self.commander)))
+        message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
+        sent = self.post(VerdictAudience((unit,)), message, answers)
+        # The message is each order's recorded link; a verdict citing it lands on that order.
+        for pid in group:
+            self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
+                self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
+        for other, text in taken.items():
+            self.post(VerdictAudience((other,)), text)
+        print(f'{measured.summary}; review timer {review_at.clock()}')
+        print(order.id)
+        if replacing and not clean and struck_already:
+            print(f'{unit} already struck on this order of {group[0]}; '
+                  'the send-back counts that one miss once')
+        elif replacing and not clean and reassign.strikes_send_back:
+            # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
+            # Done here so the commander cannot send work back and forget either.
+            verdict = document.prose.strip()
+            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}',
+                        evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
@@ -569,7 +568,6 @@ class Commander(CommanderContext):
             sys.exit('Refused: an edit list needs a tracked order and review timer; use order send with a JSON file.')
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
-        self._caller.reported(self.comms, units)
 
     def problem(self, order_file, unit, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
@@ -1119,6 +1117,15 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(OrderVerb):
+    help = "stop a commander fork without discarding its open orders"
+
+    def run(self, ctx: Commander) -> None:
+        ctx._caller.retire(ctx.comms)
+        print(f'{ctx.commander} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

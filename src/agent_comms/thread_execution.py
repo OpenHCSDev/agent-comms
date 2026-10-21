@@ -85,14 +85,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
-    def keeps_assignment(cls, status: ThreadStatus) -> bool:
-        """Ordinary commands own their synchronous reservation independently of presence."""
-        return True
-
-    @classmethod
-    def require_assigning(cls, status: ThreadStatus) -> None:
-        if not cls.keeps_assignment(status):
-            raise RelationViolationError('live owner is stopped or unavailable')
+    def require_commander_fork(cls) -> None:
+        raise RelationViolationError('This thread is not a declared commander fork.')
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
@@ -185,3 +179,15 @@ class ExternalThreadExecution(ThreadExecution):
         from .agent_activity import ExternalRecipientActivity
 
         return ExternalRecipientActivity(thread.incarnation)
+
+
+class CommanderForkExecution(ExternalThreadExecution):
+    """A commander child uses its CLI inbox, not a native process or bridge."""
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        return requested
+
+    @classmethod
+    def require_commander_fork(cls) -> None:
+        pass

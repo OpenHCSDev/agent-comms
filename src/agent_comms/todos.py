@@ -94,6 +94,7 @@ from agent_comms.typed_table import (
     Column,
     DurableStore,
     Index,
+    ExpressionIndex,
     JsonStorage,
     TextStorage,
     TypedTable,
@@ -2387,7 +2388,7 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
-    def require_unit(self, db: sqlite3.Connection, root: Path) -> None:
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
         """Only assignment operations compete for a unit."""
 
     @abstractmethod
@@ -2408,8 +2409,8 @@ class AssignTodo(TodoOperation):
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
-    def require_unit(self, db: sqlite3.Connection, root: Path) -> None:
-        UnitAssignment.require(db, self.proposed.owner_identity, self.actor, root)
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+        TodoStore.require_unit_in(db, self.proposed.owner_identity, current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2950,7 +2951,11 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
-    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+    unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        "json_extract({assignment}, '$.owner')",
+        "json_extract({assignment}, '$.owner_created')", "{state}",
+    ))
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)), unit_index)
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3208,34 +3213,6 @@ class ProblemNumber(TypedTable):
         return f'P{cursor.lastrowid}'
 
 
-@dataclass(frozen=True)
-class UnitAssignment(TypedTable):
-    """One assigner reserves a unit across its fork's commander verbs."""
-
-    unit: Annotated[ThreadIncarnation, Column(primary_key=True)]
-    assigner: Annotated[ThreadIncarnation, Column(index=True)]
-    order: str
-
-    @classmethod
-    def require(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
-                assigner: ThreadIncarnation, root: Path) -> None:
-        for held in cls.select(db, unit=unit):
-            if held.assigner != assigner and held.active(root):
-                raise TodoError(
-                    f"{unit.name} is being assigned by {held.assigner.name} "
-                    f"on open order {held.order}; finish that fork before assigning it again.")
-
-    def active(self, root: Path) -> bool:
-        """Presence belongs to the registry, even after an interrupted retirement."""
-        from .registration import Registration
-
-        snapshot = Registration(RegistryFile.path_in(root)).snapshot()
-        if not self.assigner.current(snapshot):
-            return False
-        thread = snapshot.require(self.assigner.name)
-        return thread.execution.keeps_assignment(snapshot.status(thread.name))
-
-
 @dataclass(frozen=True, slots=True)
 class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -3247,7 +3224,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, UnitAssignment, ProblemNumber)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemNumber)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3275,30 +3252,24 @@ class TodoStore(DurableStore):
 
     def require_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
         with self.snapshot() as db:
-            UnitAssignment.require(db, unit, assigner, self.root)
+            self.require_unit_in(db, unit, assigner)
 
-    def take_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
-        from .registration import Registration
-
-        registry = Registration(RegistryFile.path_in(self.root))
-        with self.writing() as db:
-            thread = registry.require(assigner.name)
-            if thread.incarnation != assigner:
-                raise TodoError(f"Assigner {assigner.name} changed before reserving {unit.name}.")
-            thread.execution.require_assigning(registry.status(thread.name))
-            UnitAssignment.require(db, unit, assigner, self.root)
-            UnitAssignment(unit, assigner, order).upsert(db)
-
-    def release_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
-        with self.writing() as db:
-            UnitAssignment.delete(db, unit=unit, assigner=assigner, order=order)
-
-    def retire_assigner(self, registry: Registration, assigner: ThreadIncarnation) -> None:
-        with self.writing() as db:
-            if registry.require(assigner.name).incarnation != assigner:
-                raise TodoError(f"Assigner {assigner.name} changed before retirement.")
-            registry.unregister(assigner.name)
-            UnitAssignment.delete(db, assigner=assigner)
+    @staticmethod
+    def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
+                        assigner: ThreadIncarnation) -> None:
+        """The original open Todo owns who assigns its unit, under this transaction."""
+        states = TodoState.open_names()
+        held = Todo.select(db,
+            where="json_extract(assignment, '$.owner')=? "
+                  "AND json_extract(assignment, '$.owner_created')=? "
+                  f"AND state IN ({','.join('?' for _ in states)}) "
+                  "AND NOT (creator=? AND creator_created=?)",
+            parameters=(unit.name, unit.wire_birth, *states, assigner.name, assigner.wire_birth),
+            limit=1)
+        for todo in held:
+            raise TodoError(
+                f"{unit.name} is assigned by {todo.creator} on open order {todo.order.id} "
+                f"({todo.id}); finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3548,7 +3519,7 @@ class TodoStore(DurableStore):
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
             review_at, order, goal)
         with self.writing() as db:
-            UnitAssignment.require(db, assignee, identity, self.root)
+            self.require_unit_in(db, assignee, identity)
             ProblemNumber.reserve(db, todo_id)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -3558,8 +3529,8 @@ class TodoStore(DurableStore):
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
-            command.require_unit(db, self.root)
             current = self._current(db, todo_id)
+            command.require_unit(db, current)
             result = command.apply(current)
             if result == current:
                 return current

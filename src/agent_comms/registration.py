@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Concatenate
+from typing import TYPE_CHECKING, Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
@@ -21,7 +21,8 @@ from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
 from .store_files import SharedLock, _store_lock
 from .thread_identity import GenerationCounter, TurnId
-from .thread_text import NoThreadText, ThreadText
+from .thread_text import ForkedParent, NoThreadText, ThreadText
+from .thread_execution import CommanderForkExecution
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
@@ -29,6 +30,9 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -78,6 +82,33 @@ class Registration:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
+
+    def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
+        """Declare or resume one child and its own request under the registry's lock."""
+        from .goal_actions import GoalActionContext, SetGoalAction
+        from .goals import RequestGoalOrder
+
+        with self.store.editing() as edit:
+            parent = edit.document.require(parent_name)
+            if edit.document.canonical_name(name) != name:
+                raise RelationViolationError(f"Commander fork {name!r} is an alias.")
+            existing = edit.document.threads.get(name)
+            if existing is not None:
+                existing.execution.require_commander_fork()
+                if not existing.parent.named(parent.name):
+                    raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
+                return self._declare_in(edit, existing, _RUNNING_STATUS)
+            child = self.new_thread(name, parent.tags, parent.worktree,
+                parent=ForkedParent(parent.name), model=parent.model,
+                thinking_level=parent.thinking_level, service_tier=parent.service_tier,
+                execution=CommanderForkExecution)
+            request = ('\n'.join(goal.text for goal in parent.goal.active())
+                       or f'Coordinate assigned work for {parent.name}.')
+            with self._preparing_declaration(edit, child, _RUNNING_STATUS) as change:
+                goal = SetGoalAction(text=request, order=RequestGoalOrder()).create(
+                    GoalActionContext(goals, change.thread))
+                return self._commit_registration(edit, replace(
+                    change, thread=replace(change.thread, goal=goal))).thread
 
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):
@@ -156,13 +187,17 @@ class Registration:
             self._prepare_declaration(document, channels, thread, status)
 
     def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
-        root = self.store.path.parent
-        catalog = ChannelCatalog.at(root)
+        with self._preparing_declaration(edit, thread, status) as change:
+            return self._commit_registration(edit, change).thread
+
+    @contextmanager
+    def _preparing_declaration(self, edit: RegistryEdit, thread: Thread,
+                              status: ThreadStatus) -> Iterator[RegistrationChange]:
+        catalog = ChannelCatalog.at(self.store.path.parent)
         with catalog.editing() as channels:
             change = self._prepare_declaration(edit.document, channels, thread, status)
-            change = self._commit_registration(edit, change)
+            yield change
             channels.remember_tags(change.thread.tags)
-        return change.thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         change.thread.role.require_maintenance_open(
