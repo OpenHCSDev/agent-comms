@@ -47,7 +47,9 @@ class VerifiedGoalSettlement(MroDispatch):
             for goal in owner.goal.continued_by(current.goal):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
-                generation.lifecycle.continue_work(store, generation, f"verified-turn:{account.turn.value}")
+                generation.lifecycle.continue_work(
+                    store, generation, f"verified-turn:{account.turn.value}"
+                )
 
     @property
     def progress_witness(self) -> str:
@@ -98,7 +100,9 @@ class TurnGoalAccount:
             with comms.registry.store.locked():
                 claim_scope = comms.registry.snapshot().claim_generation(owner.name)
                 generation = store.require_generation(goal.id)
-                return generation.lifecycle.turn_permit(store, comms.goals, owner, claim_scope, generation)
+                return generation.lifecycle.turn_permit(
+                    store, comms.goals, owner, claim_scope, generation
+                )
         except GoalAttemptError as error:
             if autonomous:
                 return NoLaunchPermit()

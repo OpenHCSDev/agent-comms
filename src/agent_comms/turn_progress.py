@@ -203,8 +203,11 @@ class TurnProgress(events.AgentEventConsumer):
                 text=("An identified follow-up input was not started; inspect local diagnostics."),
             )
         if event.ok and not (event.text.strip() or self.goals.has_productive_tool):
-            event = replace(event, ok=False,
-                            text="Backend reported success without assistant output or tool activity.")
+            event = replace(
+                event,
+                ok=False,
+                text="Backend reported success without assistant output or tool activity.",
+            )
         event = self.turn.terminal.reported(event)
         event = event.resolve(self.terminal_error, document, self.original)
         # Retain the resolved outcome before transport publication. If delivery

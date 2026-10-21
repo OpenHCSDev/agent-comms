@@ -7,13 +7,17 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .field_codec import (
-    NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireName, WireTransient,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireName,
+    WireTransient,
     boundary_decoder,
 )
 from .locked_store import DurableFile, JsonDocument, PatternFile
@@ -24,9 +28,9 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .child_process import ProcessState
+    from .goal_presentation import GoalExecution, GoalExecutionSource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .goal_presentation import GoalExecution, GoalExecutionSource
 
 
 class TurnDeclaration(SubclassUnion, affix=""):

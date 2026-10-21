@@ -38,18 +38,26 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import AttemptUnresolvedExecution
+
         return AttemptUnresolvedExecution(source.goal.id)
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
         from .goal_failure_observation import NoFailedTurnEvidence
+
         return NoFailedTurnEvidence()
 
     def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
         """An accepted order or verified progress does not resolve unknown work."""
         pass
 
-    def turn_permit(self, store: GoalAttemptStore, goals: Goals, owner: Thread,
-                    claim_scope: int, generation: Generation) -> GoalTurnPermit:
+    def turn_permit(
+        self,
+        store: GoalAttemptStore,
+        goals: Goals,
+        owner: Thread,
+        claim_scope: int,
+        generation: Generation,
+    ) -> GoalTurnPermit:
         return NoLaunchPermit()
 
     def validate_attempt(self, attempt_id: str | None) -> None:
@@ -85,12 +93,21 @@ class ReadyGeneration(GenerationState):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import RunnableExecution
+
         return RunnableExecution(source.goal.id)
 
-    def turn_permit(self, store: GoalAttemptStore, goals: Goals, owner: Thread,
-                    claim_scope: int, generation: Generation) -> GoalTurnPermit:
+    def turn_permit(
+        self,
+        store: GoalAttemptStore,
+        goals: Goals,
+        owner: Thread,
+        claim_scope: int,
+        generation: Generation,
+    ) -> GoalTurnPermit:
         grant = goals.ready_goal_grant_locked(owner, claim_scope, generation)
-        return store.claim_launch(store.reserve(generation.goal_id, generation.number, ready_grant=grant))
+        return store.claim_launch(
+            store.reserve(generation.goal_id, generation.number, ready_grant=grant)
+        )
 
     def require_ready(self) -> None:
         pass
@@ -174,6 +191,7 @@ class CompletedGeneration(GenerationState):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution
+
         return CompletedExecution(source.goal.id)
 
     @classmethod

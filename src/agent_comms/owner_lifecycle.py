@@ -230,7 +230,9 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
         if actual == released and not self.matches(current):
-            raise RelationViolationError("Native release process differs from its original declaration")
+            raise RelationViolationError(
+                "Native release process differs from its original declaration"
+            )
         return self
 
 

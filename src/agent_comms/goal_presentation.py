@@ -74,12 +74,6 @@ class GoalExecutionSource:
 class GoalExecution(SubclassUnion, affix="Execution"):
     """The complete execution family consumed by commands, views and the commander."""
 
-    toggle_label: ClassVar[str] = "Pause"
-
-    @property
-    def toggle(self) -> type[GoalAction] | None:
-        return None
-
     def details_heading(self, heading: str) -> str:
         return heading
 
@@ -138,7 +132,17 @@ class WaitingExecution(BoundGoalExecution, declared_name=None):
         return self.presentation(ordinary.title)
 
 
-class ActiveExecution(BoundGoalExecution, declared_name=None):
+class ControlledExecution(BoundGoalExecution, declared_name=None):
+    """An execution the owner moves on with one control; the others offer none."""
+
+    toggle_label: ClassVar[str] = "Pause"
+
+    @property
+    @abstractmethod
+    def toggle(self) -> type[GoalAction]: ...
+
+
+class ActiveExecution(ControlledExecution, declared_name=None):
     @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import PausedGoalAction
@@ -161,7 +165,7 @@ class CompletedExecution(BoundGoalExecution):
 
 
 @dataclass(frozen=True)
-class PausedExecution(WaitingExecution):
+class PausedExecution(WaitingExecution, ControlledExecution):
     source: PauseSource
     label = "Paused"
     toggle_label = "Resume"
@@ -196,7 +200,7 @@ class StandbyExecution(ActiveExecution, WaitingExecution):
         return goal.id == self.goal_id and goal.state.active
 
 
-class BlockedExecution(WaitingExecution, declared_name=None):
+class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None):
     glyph = "!"
     label = "Blocked"
     toggle_label = "Retry"

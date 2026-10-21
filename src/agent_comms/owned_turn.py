@@ -412,7 +412,8 @@ class OwnedTurn:
                         return
                     await self.run_native()
                 except asyncio.CancelledError as error:
-                    self.terminal = TurnTerminal.from_cancellation(error).interrupting(self.terminal)
+                    cancelled = TurnTerminal.from_cancellation(error)
+                    self.terminal = cancelled.interrupting(self.terminal)
                     raise
 
     def settle_unbound(self):

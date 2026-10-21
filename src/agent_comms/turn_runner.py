@@ -88,7 +88,7 @@ class TurnRunner:
         *,
         agent_bin: LaunchBinary,
         agent_args: LaunchArguments,
-        owner_stop: TurnInterruption = EndedWithoutResult(),
+        owner_stop: TurnInterruption,
     ):
         self.comms = comms
         self.runtime = runtime
