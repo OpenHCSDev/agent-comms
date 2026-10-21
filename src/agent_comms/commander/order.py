@@ -407,8 +407,6 @@ class Commander(CommanderContext):
              disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
-        self.comms.goals.todos.require_unit(
-            self.comms.registry.require(unit).incarnation, self.incarnation)
         problems = document.problems_found(clean)
         check = replace(document.order.check,
                         directory=str(self.repo_directory(document.order.check.directory)))

@@ -3255,10 +3255,6 @@ class TodoStore(DurableStore):
         with self.writing() as db:
             return ProblemNumber.allocate(db)
 
-    def require_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
-        with self.snapshot() as db:
-            self.require_unit_in(db, unit, assigner)
-
     @staticmethod
     def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:

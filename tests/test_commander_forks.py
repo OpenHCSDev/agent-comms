@@ -133,10 +133,17 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     result = command(comms, 'capacity')
     assert result.returncode == 0 and "2 live forks ['fork-one', 'fork-two']" in result.stdout
     print(result.stdout.strip())
-    resend = replace(OrderFile.read(Path(first).read_text()), problems=('P41',), slop=())
-    Path(first).write_text(json.dumps(FieldCodec.encode(resend)))
-    result = command(comms, 'order', 'send', 'worker', first, '--fork', 'fork-two')
+    second_owned = comms.goals.todos.held_for_commander(
+        comms.registry.require('fork-two').incarnation)[0]
+    # Reassign this fork's own problem, not the other commander's P number.
+    resend = replace(OrderFile.read(Path(second).read_text()), problems=(second_owned.id,))
+    resend_file = tmp_path / 'reassign.json'
+    resend_file.write_text(json.dumps(FieldCodec.encode(resend)))
+    result = command(comms, 'order', 'send', 'worker', str(resend_file),
+        '--fork', 'fork-two', '--reassign',
+        'The copied fixture exercises transfer after the first worker failed its assigned review.')
     assert result.returncode != 0 and refusal in result.stderr
+    assert comms.goals.todos.get(second_owned.id) == second_owned
     lead = comms.registry.require('lead')
     worker = comms.registry.require('worker')
     retained = comms.goals.todos.get('P40')
@@ -160,12 +167,15 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     assert comms.goals.todos.get('P41') == original
     assert "1 live forks ['fork-two']" in command(comms, 'capacity').stdout
     # Stopping a thread cannot discard its open work. Only the original Todo changes it.
-    with pytest.raises(TodoError, match='fork-one on open order first-order'):
-        comms.goals.todos.require_unit(worker.incarnation, lead.incarnation)
+    result = command(comms, 'order', 'problem', second, '--to', 'worker',
+                     '--where', 'owner.py:2')
+    assert result.returncode != 0 and refusal in result.stderr
     comms.goals.todos.apply('P41', ReleaseTodo(
         original.revision, fork.incarnation, original.held(),
         StrikeReason('The fixture releases its actual original order after the completed review.')))
-    comms.goals.todos.require_unit(worker.incarnation, lead.incarnation)
+    result = command(comms, 'order', 'problem', second, '--to', 'worker',
+                     '--where', 'owner.py:2')
+    assert result.returncode == 0, result.stderr
     assert comms.goals.todos.get('P40') == retained
 
 
