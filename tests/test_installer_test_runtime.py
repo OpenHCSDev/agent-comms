@@ -25,6 +25,12 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
         tree.extractall(checkout, filter="data")
     subprocess.run(["git", "init", "-q", checkout], check=True)
     subprocess.run(["git", "-C", checkout, "add", "."], check=True)
+    # Archives omit submodule entries; retain their declarations for Checkout.prepare.
+    entries = subprocess.run(["git", "-C", repository, "ls-files", "--stage"],
+                             check=True, capture_output=True, text=True).stdout
+    subprocess.run(["git", "-C", checkout, "update-index", "--index-info"], check=True,
+                   input="".join(line + "\n" for line in entries.splitlines()
+                                 if line.startswith("160000 ")), text=True)
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Runtime test",
                     "-c", "user.email=runtime@example.invalid", "commit", "-qm", "Fixture checkout"],
                    check=True)
@@ -42,7 +48,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
               for path in (runtimes, retained, witness,
                            live_home / ".local/share/agent-comms/current")
               if path.exists()}
-    bootstrap = Stack(repository, runtime=LaunchRuntime.running())
+    bootstrap = Stack(repository, home=live_home, runtime=LaunchRuntime.running())
     cache = subprocess.run([bootstrap.uv, "cache", "dir"], check=True,
                            capture_output=True, text=True).stdout.strip()
     result = subprocess.run(

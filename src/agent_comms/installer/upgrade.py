@@ -357,6 +357,7 @@ class Stack:
     @classmethod
     def build(cls, checkout: Path, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
+        Checkout(checkout).prepare()
         source = cls(checkout, home, runtime=LaunchRuntime.running())
         source.require_uv()
         run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",

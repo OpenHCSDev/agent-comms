@@ -1,7 +1,7 @@
 """Run source-checkout tests in a private built runtime.
 
 Usage: python -m agent_comms.installer.test_runtime [--home DIR] PYTEST_ARGS
-The default home is disposable; --home retains a private build for reuse.
+The default home is disposable; --home retains the private test build for inspection.
 Neither path publishes a runtime or changes the live installation.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from agent_comms.storage_rules import StorageRule
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("--home", type=Path, help="private runtime home to retain for reuse")
+    parser.add_argument("--home", type=Path, help="private runtime home to retain for inspection")
     options, arguments = parser.parse_known_args()
     with ExitStack() as lifetime:
         if options.home is None:
