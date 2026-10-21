@@ -15,7 +15,7 @@ from agent_comms.field_codec import BoundedText, NullMember, SingleFieldValue, S
 
 if TYPE_CHECKING:
     from agent_comms.channel_targets import NamedTarget
-    from agent_comms.goal_management import Goals
+    from agent_comms.wire_log import CheckedRead
     from agent_comms.messages import Message
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -145,15 +145,5 @@ class RequestDirective:
     def due_time(self) -> str:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
-    def original(self, goals: Goals) -> Message:
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
-
-    def overdue(self, goals: Goals, owner: RecordedThreadIncarnation, now: float) -> bool:
-        if self.deadline >= now:
-            return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
-            replies = source.replies((original,))
-        return not any(reply.audience.sender_lookup == owner.lookup and original in reply.message.answers
-                       for reply in replies)
+    def original(self, source: CheckedRead) -> Message:
+        return source.delivery(self.seq).message

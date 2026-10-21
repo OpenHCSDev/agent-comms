@@ -338,17 +338,18 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
-        return tuple(
-            cls(directive.original(comms.goals), request.id, directive)
-            for request in comms.goals.todos.open_requests(thread.incarnation)
-            for directive in request.overdue_directives(comms.goals, now)
-        )
+        requests = comms.goals.todos.open_requests(thread.incarnation)
+        with comms.bus.log.checked_read() as source:
+            return tuple(cls(original, request.id, directive)
+                         for request in requests
+                         for directive, original in request.overdue_directives(source, now))
 
     @classmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         thread = comms.registry.require(commander)
-        return tuple(message for request in comms.goals.todos.open_requests(thread.incarnation)
-                     for message in request.directive_messages(comms.goals))
+        requests = comms.goals.todos.open_requests(thread.incarnation)
+        with comms.bus.log.checked_read() as source:
+            return tuple(message for request in requests for message in request.directive_messages(source))
 
     def began(self) -> float:
         return self.directive.deadline

@@ -118,6 +118,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
+    from agent_comms.wire_log import CheckedRead
 
 
 @dataclass(frozen=True)
@@ -3034,12 +3035,17 @@ class OwnerRequest(TypedTable):
             raise TodoError(f"Request {self.id.value} history is not a recorded directive prefix.")
         return RequestAtRevision(self.id, len(directives))
 
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return tuple(directive.original(goals) for directive in self.directives)
+    def directive_messages(self, source: CheckedRead) -> tuple[Message, ...]:
+        return tuple(directive.original(source) for directive in self.directives)
 
-    def overdue_directives(self, goals: Goals, now: float) -> tuple[RequestDirective, ...]:
-        return tuple(directive for directive in self.directives
-                     if directive.overdue(goals, self.commander, now))
+    def overdue_directives(self, source: CheckedRead, now: float) -> tuple[tuple[RequestDirective, Message], ...]:
+        originals = tuple((directive, directive.original(source)) for directive in self.directives
+                          if directive.deadline < now)
+        if not originals:
+            return ()
+        answered = {answer for reply in source.replies(tuple(message.reference for _, message in originals))
+                    if reply.audience.sender_lookup == self.commander.lookup for answer in reply.message.answers}
+        return tuple((directive, message) for directive, message in originals if message.reference not in answered)
 
 
 @dataclass(frozen=True, slots=True)

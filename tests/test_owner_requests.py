@@ -1,5 +1,6 @@
 """One request family journey through the real store and publication tools."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -70,11 +71,12 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     newest = comms.bus.log.latest_sequence()
     first, second = store.owner_request(first.id), store.owner_request(second.id)
     assert len(first.directives) == len(second.directives) == 1
-    assert first.directives[0].original(comms.goals).seq == named
-    assert second.directives[0].original(comms.goals).seq == newest
+    with comms.bus.log.checked_read() as source:
+        original = first.directives[0].original(source)
+        assert original.seq == named
+        assert second.directives[0].original(source).seq == newest
     prefix = first.at_revision(first.directives)
     assert prefix.directives(store) == first.directives
-    original = first.directives[0].original(comms.goals)
     claim = OrderClaim.for_order(
         todo, worker.incarnation, 1, "a" * 40, "The request owner was inspected.",
         MessageReference(original.seq, original.message_id), store=store,
@@ -84,10 +86,9 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     comms.messaging.send(
         "commander", "claude-ai", "The request was read.", answers=(original.reference,),
     )
-    assert not first.directives[0].overdue(
-        comms.goals, commander.incarnation.renamed("commander-renamed"),
-        first.directives[0].deadline + 1,
-    )
+    renamed = replace(first, commander=commander.incarnation.renamed("commander-renamed"))
+    with comms.bus.log.checked_read() as source:
+        assert not renamed.overdue_directives(source, first.directives[0].deadline + 1)
 
     CommsSendTool(
         sender="worker", target="commander", body="The source records are available.",
