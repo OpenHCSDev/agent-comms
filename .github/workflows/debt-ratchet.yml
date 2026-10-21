@@ -88,6 +88,7 @@ jobs:
         run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
         run: |
+          umask 077
           python - <<'PY'
           import shutil
           from pathlib import Path
@@ -101,10 +102,12 @@ jobs:
           installed = Stack.build(checkout)
           run(bootstrap.uv, 'pip', 'install', '--python', installed.python,
               '-r', 'pyproject.toml', '--extra', 'dev', cwd=checkout)
-          print(run('timeout', '300', installed.python, '-m', 'pytest', '-n', '0', '-q',
+          print(run('timeout', '300', installed.python, '-m', 'pytest', '-n', '0', '-q', '-s',
                     '-o', 'pythonpath=. tools', '-o', 'faulthandler_timeout=60',
+                    '--basetemp', bootstrap.home / '.cache/agent-scratch/p447-installed-tests',
                     '-p', 'no:cacheprovider', 'tests/test_install_rehearsal.py',
-                    cwd=checkout, env=installed.environment()))
+                    'tests/test_native_input_bus_path.py', cwd=checkout,
+                    env=installed.environment()))
           PY
 
   review-verdict:

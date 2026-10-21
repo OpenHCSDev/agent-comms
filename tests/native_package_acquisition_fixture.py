@@ -1,4 +1,4 @@
-"""Run the source acquisition owner inside a real installed runtime, without patching it."""
+"""Profile native-package work in a real installed runtime without patching Core."""
 
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ import json
 import os
 import runpy
 import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -30,6 +33,18 @@ class PackageTrace:
     tree_hash_calls: int = 0
     content_reads: int = 0
 
+    @contextmanager
+    def active(self) -> Iterator[PackageTrace]:
+        """Observe acquisitions in the coordinator's worker threads as well as its caller."""
+        previous_thread = threading.getprofile()
+        previous_caller = sys.getprofile()
+        threading.setprofile_all_threads(self)
+        try:
+            yield self
+        finally:
+            threading.setprofile_all_threads(previous_thread)
+            sys.setprofile(previous_caller)
+
     def __call__(self, frame: FrameType, event: str, argument: object) -> None:
         # CPython owns these external profiling events; compare function identities.
         if event == "call" and frame.f_code is self.digest_code:
@@ -47,13 +62,10 @@ def measure_acquisition(source: Path) -> AcquisitionSample:
     owner = cast(type[VerifiedNativePackage], namespace["VerifiedNativePackage"])
     digest = cast(FunctionType, namespace["package_tree_digest"])
     trace = PackageTrace(digest.__code__)
-    sys.setprofile(trace)
-    started = perf_counter()
-    try:
+    with trace.active():
+        started = perf_counter()
         package = owner.acquire(root)
         seconds = perf_counter() - started
-    finally:
-        sys.setprofile(None)
     return AcquisitionSample(package.path, seconds, trace.tree_hash_calls, trace.content_reads)
 
 

@@ -3,7 +3,6 @@
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -20,12 +19,8 @@ def test_manifest_build_hashes_content_once(launcher):
     stack, package = launcher
     namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
     trace = PackageTrace(namespace["package_tree_digest"].__code__)
-    previous = sys.getprofile()
-    sys.setprofile(trace)
-    try:
+    with trace.active():
         namespace["write_native_manifest"](package)
-    finally:
-        sys.setprofile(previous)
     assert trace.tree_hash_calls == 1
 
 
