@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -39,7 +38,7 @@ class GoalWaitTarget(WireValue):
         return self.incarnation.to_wire()
 
     @classmethod
-    def from_wire(cls, data: Mapping) -> GoalWaitTarget:
+    def from_wire(cls, data: dict[str, object]) -> GoalWaitTarget:
         return cls(RecordedThreadIncarnation.from_wire(data))
 
     @classmethod
