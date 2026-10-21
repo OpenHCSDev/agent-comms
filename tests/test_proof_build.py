@@ -4,6 +4,7 @@ from agent_comms.bus import Bus
 
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -341,8 +342,10 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
 
 @pytest.mark.parametrize("advance_main", (False, True), ids=("installed-main", "newer-main"))
 def test_install_due_compares_fetched_main_to_installed_build(
-    tmp_path, proof_build_checkouts, advance_main,
+    tmp_path, proof_build_checkouts, advance_main, monkeypatch,
 ):
+    # The settle window is its own test; here every uninstalled merge has settled.
+    monkeypatch.setattr(InstallDue, "settle", 0)
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     checkout = graph.repository.checkout
@@ -383,6 +386,32 @@ def test_install_due_compares_fetched_main_to_installed_build(
     assert after_install == ()
     assert len(StandingRule.heartbeat_changes(due, after_install)) == int(advance_main)
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
+
+
+def test_install_waits_for_merges_to_settle_into_one_batch(
+    tmp_path, proof_build_checkouts, monkeypatch,
+):
+    """A merge younger than the settle window is not due yet; once it has stood, it is."""
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    checkout = graph.repository.checkout
+    origin = tmp_path / graph.repository.github.owner / f"{graph.repository.github.name}.git"
+    origin.parent.mkdir()
+    subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
+    Repo.git(checkout, "remote", "set-url", "origin", str(origin))
+    Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
+    bus = Comms(tmp_path / "bus")
+    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
+    CommanderConfig.root_path(bus.root).write_text(config.model_dump_json())
+    merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
+
+    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)
+    assert InstallDue.violations(bus, "lead") == ()
+
+    monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle)
+    (due,) = InstallDue.violations(bus, "lead")
+    assert graph.newer in due.why
+    assert "oldest 30 min" in due.why
 
 
 def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path):
