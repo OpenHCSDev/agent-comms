@@ -8,7 +8,8 @@ OpenHCSDev mains, and must import Toad and the ACP client. The bus ledger
 ``src`` and ``tools`` (``agent_comms.installer.carry``). Every run first rehearses on a
 copy of the bus: the steps, then ``who``, ``threads`` and ``history`` reads, and
 every file no step names as rewritten must be unchanged by saved-file size,
-nanosecond mtime and inode. ``--rehearse`` stops there.
+nanosecond mtime and inode, and the installed runtime answers the owner probe the live
+run asks before its stop. ``--rehearse`` stops there.
 
 A live run then stops the running agent owners with the installed CLI, backs up only
 files the rehearsal changed, moves the checkout, prepares native Pi, carries the bus,
@@ -478,8 +479,10 @@ def carry_all(
     return tuple(results)
 
 
-def rehearse(root: Path, stack: Stack, tree: TargetTree, chain: CarryChain,
+def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain: CarryChain,
              installer: InstallerChoice) -> CarriedRehearsal:
+    """The live run on a practice copy, up to stopping owners: the outgoing runtime answers
+    the same owner probe the live run asks it before the stop."""
     parent = installer.scratch(StorageRule.load(root))
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
@@ -498,6 +501,7 @@ def rehearse(root: Path, stack: Stack, tree: TargetTree, chain: CarryChain,
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
         stopping = before_stop(copied, pending, stack, tree)
+        installed.running_owners(copied)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
             MaintenanceOperator.current()).nonce
         with transcripts_held(copied):
@@ -538,7 +542,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused(str(error)) from None
         installed = Stack(checkout)
         installed.require_uv()
-        if not rehearse_only and not installed.python.exists():
+        if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path)
         install = member.of(checkout, root, current, target, chain, pending, installed, staged,
@@ -617,7 +621,8 @@ class Install[Rehearsed: Rehearsal](ABC):
 
 class ChangedInstall(Install[CarriedRehearsal]):
     def rehearsal(self) -> CarriedRehearsal:
-        return rehearse(self.root, self.staged, self.tree, self.chain, self.installer)
+        return rehearse(self.root, self.staged, self.installed, self.tree, self.chain,
+                        self.installer)
 
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
