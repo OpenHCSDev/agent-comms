@@ -331,6 +331,12 @@ class AwaitedRead(ObservationRequest):
     root: str
     request_id: int = field(default=0, kw_only=True)
 
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (
+            CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision,
+        )
+
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
             raise StaleRevision("The read belongs to another Comms root than the observed one")
@@ -362,7 +368,7 @@ class ReadRequest(AwaitedRead):
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
             return ReadAnswered(self.request_id, value)
-        except (CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision) as error:
+        except self.refusal_errors as error:
             return self.refused(error)
 
 
@@ -376,6 +382,13 @@ class OwnerRead(AwaitedRead):
     """
 
     owner: ThreadIncarnation
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (
+            *super().refusal_errors,
+            RequestError, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+        )
 
     def receive(self, service: ObservationService) -> None:
         service.owner_reads[self.request_id] = service.tasks.create_task(self.serve(service))
@@ -391,8 +404,7 @@ class OwnerRead(AwaitedRead):
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (RequestError, CoordinationError, ToolRefusedError,
-                RelationViolationError, ConnectionError, TimeoutError) as error:
+        except self.refusal_errors as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
