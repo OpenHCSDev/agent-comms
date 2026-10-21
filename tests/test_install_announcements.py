@@ -19,7 +19,6 @@ from agent_comms.installer.upgrade import (
     StepRun, UnchangedRun, Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.repo import ReadableCheckout, UnreadableCheckout
 from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
 
@@ -30,8 +29,6 @@ from conftest import declare_test_bus
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
         read=BusReadBack(2, 2, 1), stopped=("worker",), services=("connector",),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
-        checkouts=(ReadableCheckout(Path("worker--P1")),
-                   UnreadableCheckout(Path("busy--P2"), "could not get a repository handle")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),
     ),

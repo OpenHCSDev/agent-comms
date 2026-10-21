@@ -1,17 +1,22 @@
 """A checkout owns its pinned submodules: an interrupted clone is rebuilt, and retiring a
 tree with submodules needs no hand-forced removal."""
+
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from agent_comms.repo import Checkout, CheckoutHoldsWork, ReadableCheckout, ScratchCheckout
+from agent_comms.repo import Checkout, CheckoutHoldsWork, ScratchCheckout
 
 
 def git(path: Path, *args: str) -> str:
-    return subprocess.run(("git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@t",
-                           *args), check=True, capture_output=True, text=True).stdout
+    return subprocess.run(
+        ("git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@t", *args),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
 
 
 @pytest.fixture
@@ -50,20 +55,44 @@ def pointer_without_store(checkout: Checkout) -> None:
     shutil.rmtree(module.store)
 
 
-@pytest.mark.parametrize("break_store", (config_only_store, pointer_without_store))
-def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(repository, tmp_path,
-                                                                    break_store):
+def hand_copied_directory(checkout: Checkout) -> None:
+    """The catalog's files copied into the submodule path, with no store and no .git."""
+    (module,) = checkout.submodules()
+    shutil.rmtree(module.store)
+    shutil.rmtree(module.path)
+    module.path.mkdir()
+    (module.path / "catalog.md").write_text("copied by hand\n")
+
+
+def linked_directory(checkout: Checkout) -> None:
+    """A link to another tree's catalog standing where the clone belongs."""
+    (module,) = checkout.submodules()
+    elsewhere = checkout.path.parent / "elsewhere-catalog"
+    shutil.copytree(module.path, elsewhere, ignore=shutil.ignore_patterns(".git"))
+    shutil.rmtree(module.store)
+    shutil.rmtree(module.path)
+    module.path.symlink_to(elsewhere)
+
+
+@pytest.mark.parametrize(
+    "break_store",
+    (config_only_store, pointer_without_store, hand_copied_directory, linked_directory),
+)
+def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
+    repository, tmp_path, break_store
+):
     checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
     break_store(checkout)
     with pytest.raises(subprocess.CalledProcessError):
         git(checkout.path, "submodule", "update", "--init", "--recursive", "--checkout")
-    assert checkout.read() == ReadableCheckout(checkout.path)
+    checkout.prepare()
     assert (checkout.path / "pinned" / "catalog.md").read_text() == "patterns\n"
     assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
 
 
-def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(repository,
-                                                                                tmp_path):
+def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
+    repository, tmp_path
+):
     held = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
     (held.path / "owner.py").write_text("edited\n")
     with pytest.raises(CheckoutHoldsWork):
@@ -75,5 +104,6 @@ def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(r
     clean = Checkout.add(repository, tmp_path / "unit--P2", "HEAD", "--detach")
     clean.retire()
     assert not scratch.path.exists() and not clean.path.exists()
-    assert {each.path for each in Checkout.of_repository(repository)} == {
-        repository.resolve(), held.path.resolve()}
+    listed = git(repository, "worktree", "list", "--porcelain")
+    assert str(held.path.resolve()) in listed
+    assert str(scratch.path) not in listed and str(clean.path) not in listed

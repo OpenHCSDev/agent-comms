@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
-from .declared_family import DeclaredFamily
-from .field_codec import PathText
 from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
@@ -113,51 +110,50 @@ class PinnedSubmodule:
 
     @property
     def store(self) -> Path:
-        return Path(Repo.git(self.checkout, "rev-parse", "--path-format=absolute",
-                             "--git-path", f"modules/{self.name}").strip())
+        return Path(
+            Repo.git(
+                self.checkout,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                f"modules/{self.name}",
+            ).strip()
+        )
 
     def usable(self) -> bool:
-        return subprocess.run(
-            ("git", "--git-dir", str(self.store), "rev-parse", "--verify", "--quiet",
-             "HEAD^{commit}"),
-            capture_output=True, timeout=30,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                (
+                    "git",
+                    "--git-dir",
+                    str(self.store),
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "HEAD^{commit}",
+                ),
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
 
     def broken(self) -> bool:
-        """A store without a repository, or a working directory pointing at one."""
-        return (self.store.exists() or (self.path / ".git").exists()) and not self.usable()
+        """Anything but a usable store or the empty directory `git worktree add` leaves: a
+        store without a repository, a `.git` pointing at one, a hand-copied directory or a
+        link standing where the clone belongs."""
+        occupied = self.path.is_symlink() or (self.path.is_dir() and any(self.path.iterdir()))
+        return (self.store.exists() or occupied) and not self.usable()
 
     def clear(self) -> None:
         """Pinned package data, never a unit's edit: dropped whole so the next update
         clones it again from its declared source."""
+        if self.path.is_symlink():
+            self.path.unlink()
         for directory in (self.store, self.path):
             if directory.exists():
                 shutil.rmtree(directory)
         self.path.mkdir(parents=True)
-
-
-class CheckoutRead(DeclaredFamily, affix="Checkout"):
-    """Whether a checkout answers git reads once its submodules are prepared."""
-
-    @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
-
-
-@dataclass(frozen=True)
-class ReadableCheckout(CheckoutRead):
-    path: Annotated[Path, PathText]
-
-    def lines(self) -> tuple[str, ...]:
-        return ()
-
-
-@dataclass(frozen=True)
-class UnreadableCheckout(CheckoutRead):
-    path: Annotated[Path, PathText]
-    error: str
-
-    def lines(self) -> tuple[str, ...]:
-        return (f"Checkout unreadable: {self.path}: {self.error}",)
 
 
 @dataclass(frozen=True)
@@ -183,28 +179,26 @@ class Checkout:
         checkout.prepare()
         return checkout
 
-    @classmethod
-    def of_repository(cls, repository: Path) -> tuple[Self, ...]:
-        """Every existing worktree of the repository, its main checkout included."""
-        listed = Repo.git(repository, "worktree", "list", "--porcelain")
-        paths = (Path(line.removeprefix("worktree ")) for line in listed.splitlines()
-                 if line.startswith("worktree "))
-        return tuple(cls(path) for path in paths if path.is_dir())
-
     def submodules(self) -> tuple[PinnedSubmodule, ...]:
         if not (self.path / ".gitmodules").is_file():
             return ()
-        listed = Repo.git(self.path, "config", "-f", ".gitmodules", "--get-regexp",
-                          r"^submodule\..*\.path$")
+        listed = Repo.git(
+            self.path, "config", "-f", ".gitmodules", "--get-regexp", r"^submodule\..*\.path$"
+        )
         return tuple(
-            PinnedSubmodule(self.path, key.removeprefix("submodule.").removesuffix(".path"),
-                            self.path / value)
+            PinnedSubmodule(
+                self.path, key.removeprefix("submodule.").removesuffix(".path"), self.path / value
+            )
             for key, value in (line.split(" ", 1) for line in listed.splitlines())
         )
 
     def prepare(self) -> None:
-        """Populate the pinned submodules, rebuilding any an interrupted clone left broken."""
-        for module in self.submodules():
+        """Populate the pinned submodules, rebuilding any an interrupted clone left broken.
+        A tree that pins none has nothing to prepare."""
+        modules = self.submodules()
+        if not modules:
+            return
+        for module in modules:
             if module.broken():
                 module.clear()
         subprocess.run(
@@ -224,17 +218,6 @@ class Checkout:
             timeout=300,
         )
 
-    def read(self) -> CheckoutRead:
-        """Prepared, then read the way Core reads a unit's edits."""
-        try:
-            self.prepare()
-            Repo.git(self.path, "diff", "--name-only", "HEAD")
-        except subprocess.CalledProcessError as error:
-            return UnreadableCheckout(self.path, error.stderr.strip())
-        except subprocess.TimeoutExpired as error:
-            return UnreadableCheckout(self.path, str(error))
-        return ReadableCheckout(self.path)
-
     def held_work(self) -> str:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
         return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
@@ -245,8 +228,9 @@ class Checkout:
         held = self.held_work()
         if held:
             raise CheckoutHoldsWork(self.path, held)
-        common = Path(Repo.git(self.path, "rev-parse", "--path-format=absolute",
-                               "--git-common-dir").strip())
+        common = Path(
+            Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
 
 

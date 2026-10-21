@@ -49,7 +49,7 @@ from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, CheckoutRead, ScratchCheckout
+from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 from agent_comms.installer import publication, step_worker
@@ -261,7 +261,6 @@ class LiveRun(DeclaredFamily, affix="Run"):
 @dataclass(frozen=True)
 class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     started: tuple[OwnerStart, ...]
-    checkouts: tuple[CheckoutRead, ...]
     restore_space: RestoreSpace
     backup: BackupReport
     retired_backups: tuple[Annotated[Path, PathText], ...]
@@ -270,7 +269,6 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
             *self.stopped_lines(),
-            *(line for checkout in self.checkouts for line in checkout.lines()),
             *(line for owner in self.started for line in owner.lines()),
             *self.service_lines(),
             f"Backup: {self.backup.backup} ({self.backup.bytes} bytes)",
@@ -827,14 +825,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
               file=sys.stderr)
         raise InstallRolledBack(error, started, backup.description,
                                 runtime=installed.runtime) from error
-    # Installed: the carries ran and the runtime is published. While the owners are still
-    # stopped, every checkout of the repository is prepared and read through its owner, so a
-    # clone the stop interrupted is rebuilt and one that stays unreadable is named in the
-    # result. Starting the owners is reported per owner; neither rolls the install back.
-    checkouts = tuple(each.read() for each in Checkout.of_repository(checkout))
+    # Installed: the carries ran and the runtime is published. Starting the owners it
+    # stopped is reported per owner and never rolls the install back.
     started = staged.start(root, running)
     retired_backups = backup.retain(spill_dir)
     return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
-                           checkouts=checkouts,
                            restore_space=restore, backup=backup.report(),
                            retired_backups=retired_backups)
