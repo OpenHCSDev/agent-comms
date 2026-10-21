@@ -10,10 +10,19 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_comms.cli_bridges.monitor import SessionRequest
+    from agent_comms.cli_bridges.shared import Serve
+
+
+class SessionRefusedError(ValueError):
+    """A session endpoint rejected the control request, not malformed wire data."""
 
 
 @dataclass(frozen=True)
@@ -102,17 +111,29 @@ class WatchClaim:
 
     def enrol(self, record: WatchRecord) -> None:
         with self.launching():
-            current = self.state()
-            if isinstance(current, LiveWatch):
-                if current.record != record:
-                    raise ValueError("This session is already bound to another bridge command")
-                return
-            with self.held(record):
-                pass
+            self.state().enrol(self, record)
 
 
 class WatchState:
-    """Whether a session's claim has a recorded watch, and whether its holder lives."""
+    """The claim state owns connection, shutdown, enrolment and discovery."""
+
+    def connect(self, serve: Callable[[], Serve],
+                request: Callable[[Serve], SessionRequest]) -> None:
+        """An unenrolled session does not construct a serve or request authority."""
+
+    def connect_held(self, serve: Callable[[], Serve],
+                     request: Callable[[Serve], SessionRequest]) -> None:
+        """A claim removed while awaiting its launch lock remains unclaimed."""
+
+    def end(self, request: Callable[[], SessionRequest]) -> None:
+        """Only a live holder can receive a shutdown request."""
+
+    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
+        with claim.held(record):
+            pass
+
+    def serving_claims(self) -> tuple[WatchClaim, ...]:
+        return ()
 
 
 class UnclaimedWatch(WatchState):
@@ -124,9 +145,39 @@ class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
 
+    def connect(self, serve: Callable[[], Serve],
+                request: Callable[[Serve], SessionRequest]) -> None:
+        with self.claim.launching():
+            self.claim.state().connect_held(serve, request)
+
+    def connect_held(self, serve: Callable[[], Serve],
+                     request: Callable[[Serve], SessionRequest]) -> None:
+        operation = serve()
+        operation.owner.require_alive()
+        verification = request(operation)
+        try:
+            verification.exchange(self.claim)
+        except (FileNotFoundError, ConnectionRefusedError, SessionRefusedError):
+            self.reconnect(operation, verification)
+
+    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
+        serve.launch_record(self.claim, self.record, request)
+
 
 class LiveWatch(RecordedWatch):
-    pass
+    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
+        raise RuntimeError(
+            'An older watch still owns this session. Stop that Monitor once, then connect.')
+
+    def end(self, request: Callable[[], SessionRequest]) -> None:
+        request().exchange(self.claim)
+
+    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
+        if self.record != record:
+            raise ValueError('This session is already bound to another bridge command')
+
+    def serving_claims(self) -> tuple[WatchClaim, ...]:
+        return (self.claim,) if self.claim.socket_path.exists() else ()
 
 
 class LapsedWatch(RecordedWatch):

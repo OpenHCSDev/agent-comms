@@ -12,7 +12,7 @@ from agent_comms.acp_extension import (
     TranscriptSnapshotUpdate,
     decode_updates,
 )
-from agent_comms.child_process import ParentedProcess, ProcessIdentity
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
@@ -28,7 +28,7 @@ def runtime_processes():
     try:
         for _ in range(2):
             children.append(
-                ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+                SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
             )
         yield tuple(child.identity for child in children)
     finally:

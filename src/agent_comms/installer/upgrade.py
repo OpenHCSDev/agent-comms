@@ -601,9 +601,9 @@ class Install[Rehearsed: Rehearsal](ABC):
     def install(self, rehearsal: Rehearsed) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
-        The owner-launched process is the only launcher with the right ancestry. Its
-        retained control connection survives until live() publishes or rolls back;
-        the installed pointer, not a copied target version, selects its successor.
+        Each serve retains its recorded owner's PID and start time after the hook exits.
+        Its control connection survives until live() publishes or rolls back; the
+        installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
             for bridge in Serve.running(self.installed.home):

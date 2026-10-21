@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ParentedProcess
+from agent_comms.child_process import SpawnedProcess
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
@@ -24,7 +24,7 @@ def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path,
             python.symlink_to(sys.executable)
             environment = dict(os.environ, AGENT_COMMS_THREAD=name,
                                AGENT_COMMS_AGENT_BIN=str(python))
-            child = ParentedProcess.launch((str(python), "-c", "import time; time.sleep(60)"),
+            child = SpawnedProcess.launch((str(python), "-c", "import time; time.sleep(60)"),
                                            env=environment)
             children.callback(child.close)
             threads[name] = thread_registration.new_thread(

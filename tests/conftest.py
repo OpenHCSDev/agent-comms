@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import uuid
 from collections.abc import Awaitable, Iterator
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
@@ -52,6 +53,20 @@ class TranscriptRecords:
 
 
 transcript_records = TranscriptRecords()
+
+
+@pytest.fixture
+def bridge_home(tmp_path, monkeypatch):
+    """Short per-worker socket addresses; all state stays in persistent test scratch."""
+    destination = tmp_path / 'home'
+    destination.mkdir()
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    home = Path(f'.bridge-home-{uuid.uuid4().hex[:8]}')
+    home.symlink_to(destination, target_is_directory=True)
+    try:
+        yield home
+    finally:
+        home.unlink()
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({

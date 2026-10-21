@@ -22,7 +22,7 @@ from agent_comms.child_process import (
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
-    ParentedProcess,
+    SpawnedProcess,
     Platform,
     ProcessIdentity,
     TimedOutOutcome,
@@ -71,7 +71,7 @@ async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: P
 
 @pytest.mark.asyncio
 async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> None:
-    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
     try:
         assert not stale.alive()
@@ -88,7 +88,7 @@ async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
 @pytest.mark.parametrize("owner", (
     pytest.param(lambda process, identity: ObservedProcess(identity), id="stored-observed"),
-    pytest.param(ParentedProcess, id="parented"),
+    pytest.param(SpawnedProcess, id="spawned"),
 ))
 @pytest.mark.parametrize("retire", (
     pytest.param(lambda child: asyncio.to_thread(child.stop_sync), id="sync"),
@@ -119,7 +119,7 @@ async def test_stop_shared_process_group_member_without_signalling_neighbors(own
 @pytest.mark.asyncio
 async def test_stored_leader_keeps_group_scope_after_term_exits_leader(tmp_path: Path):
     acknowledgement = tmp_path / "stored-tree.json"
-    child = ParentedProcess.launch((sys.executable, "-c", TREE, str(acknowledgement)))
+    child = SpawnedProcess.launch((sys.executable, "-c", TREE, str(acknowledgement)))
     stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(child.identity))
     try:
         await ready(acknowledgement)
@@ -221,7 +221,7 @@ async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> Non
     if not isinstance(Platform.current(), NamespaceContainment):
         pytest.skip("This platform does not provide PID namespaces")
     acknowledgement = tmp_path / "namespace.json"
-    launcher = ParentedProcess.launch(
+    launcher = SpawnedProcess.launch(
         (
             sys.executable,
             "-c",
@@ -312,7 +312,7 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
         assert identity.alive()
         recorded.append(identity)
 
-    child = ParentedProcess.launch(
+    child = SpawnedProcess.launch(
         (
             sys.executable,
             "-c",
@@ -341,7 +341,7 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
         raise ValueError("reservation refused")
 
     with pytest.raises(ValueError):
-        ParentedProcess.launch(
+        SpawnedProcess.launch(
             (
                 sys.executable,
                 "-c",
@@ -405,7 +405,7 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
 async def test_parent_process_reaps_but_observation_cannot_claim_exit_code():
     from agent_comms.child_process import DetachedExitOutcome
 
-    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1); exit(7)"))
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1); exit(7)"))
     observed = ObservedProcess(child.identity)
     try:
         assert await child.wait() == ExitedOutcome(7)
