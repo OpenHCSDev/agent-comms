@@ -13,8 +13,8 @@ from . import turn_failure as failures
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
-from .native_startup import SessionLoad
 from .mro_dispatch import MroDispatch, handles
+from .native_startup import SessionLoad
 
 if TYPE_CHECKING:
     from .backend import TurnSession

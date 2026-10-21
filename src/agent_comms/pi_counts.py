@@ -7,7 +7,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
-from .field_codec import AcceptsNull, ExternalJsonShape, FieldCodec, FieldRepresentation, NullMember, WireValue, boundary_decoder
+from .field_codec import (
+    AcceptsNull,
+    ExternalJsonShape,
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    WireValue,
+    boundary_decoder,
+)
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent

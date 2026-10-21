@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Annotated
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
 from . import agent_events as events
@@ -184,14 +184,7 @@ class DurablePiEvent(PiEvent, declared_name=None):
         return members[0] if members else UnknownPiEvent
 
 
-@dataclass(frozen=True)
-class UnreadPayload(Opaque):
-    """A Pi event whose fields Core does not read; the record is kept as received."""
-
-    payload: dict[str, Any]
-
-
-class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
+class IgnoredDurableEvent(Opaque, DurablePiEvent):
     ignored_kinds = ('run_start', 'run_end', 'inbox_update', 'submission', 'deferred_poll', 'usage_changed', 'snapshot', 'agent_changed')
 
     @classmethod
@@ -200,7 +193,7 @@ class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
+class UnknownPiEvent(Opaque, NativePiEvent, DurablePiEvent):
     """Ignore unrecognized events; they do not prove permission to start input."""
 
     @classmethod
@@ -209,42 +202,42 @@ class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True)
-class TurnStart(UnreadPayload, NativePiEvent, DurablePiEvent):
+class TurnStart(Opaque, NativePiEvent, DurablePiEvent):
     """Pi starts one model round. Core follows the run, not its rounds."""
 
 
 @dataclass(frozen=True)
-class TurnEnd(UnreadPayload, NativePiEvent, DurablePiEvent):
+class TurnEnd(Opaque, NativePiEvent, DurablePiEvent):
     """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
 
 
 @dataclass(frozen=True)
-class QueueUpdate(UnreadPayload, NativePiEvent):
+class QueueUpdate(Opaque, NativePiEvent):
     """Pi's own steering queue changed. Core keeps the queue the user sees."""
 
 
 @dataclass(frozen=True)
-class EntryAppended(UnreadPayload, NativePiEvent, DurablePiEvent):
+class EntryAppended(Opaque, NativePiEvent, DurablePiEvent):
     """Pi wrote a session entry. History is read from the session file."""
 
 
 @dataclass(frozen=True)
-class SessionInfoChanged(UnreadPayload, NativePiEvent):
+class SessionInfoChanged(Opaque, NativePiEvent):
     """The session name changed. Core reads it from get_state."""
 
 
 @dataclass(frozen=True)
-class ThinkingLevelChanged(UnreadPayload, NativePiEvent):
+class ThinkingLevelChanged(Opaque, NativePiEvent):
     """The thinking level changed. Core reads it from get_state."""
 
 
 @dataclass(frozen=True)
-class BashExecutionUpdate(UnreadPayload, NativePiEvent):
+class BashExecutionUpdate(Opaque, NativePiEvent):
     """Output of a user ``!`` bash command; Core never sends one."""
 
 
 @dataclass(frozen=True)
-class ExtensionError(UnreadPayload, NativePiEvent):
+class ExtensionError(Opaque, NativePiEvent):
     """An extension hook failed inside Pi; the failure stays in Pi's own handling."""
 
 
@@ -871,7 +864,11 @@ class PiToolCallEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(
-    phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase
+    phases.AcceptsPrompt,
+    PiToolCallEvent,
+    NativePiEvent,
+    DurablePiEvent,
+    ends=phases.ToolRunningPhase,
 ):
     def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_ended(self.tool_id)
@@ -899,7 +896,12 @@ class ToolExecutionEnd(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(
-    phases.AcceptsPrompt, RetryProgress, PiToolCallEvent, NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase
+    phases.AcceptsPrompt,
+    RetryProgress,
+    PiToolCallEvent,
+    NativePiEvent,
+    DurablePiEvent,
+    starts=phases.ToolRunningPhase,
 ):
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_started(self.tool_id, self.tool_label)

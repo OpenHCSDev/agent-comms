@@ -25,6 +25,7 @@ from agent_comms.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate, RetryProgress
 from agent_comms.pi_payloads import (
     ContentDelta,
+    NativeToolDetails,
     Opaque,
     PiContent,
     PiDelta,
@@ -36,10 +37,11 @@ from agent_comms.pi_payloads import (
     StrictFields,
     TextContent,
     UnknownContent,
+    UnknownData,
     UnknownPayload,
 )
 from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_phase import AcceptsPrompt, IdlePhase, ModelWaitPhase, TurnPhase
+from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase
 from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
 
 
@@ -111,7 +113,26 @@ def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
     decoded = family.from_wire(wire)
     assert type(decoded) is unknown
     assert decoded.payload == wire
+    assert decoded.to_wire() == wire
     assert unknown.from_wire(wire) == decoded
+
+
+def test_opaque_event_entry_and_tool_data_keep_the_original_external_shape():
+    from agent_comms.native_entries import NativeEntry
+
+    for family, wire in (
+        (PiEvent, {"type": "future_notice", "extra": [1]}),
+        (NativeEntry, {"type": "future_entry", "timestamp": "2026-10-21T00:00:00Z", "extra": [1]}),
+        (NativeToolDetails, {"extra": [1]}),
+        (UnknownData, [1, {"extra": True}]),
+    ):
+        assert family.from_wire(wire).to_wire() == wire
+
+
+@pytest.mark.parametrize("invalid", [object(), {1: "not a JSON key"}, float("inf")])
+def test_opaque_payload_uses_the_canonical_json_value_boundary(invalid):
+    with pytest.raises(MalformedRecord):
+        UnknownData.from_wire(invalid)
 
 
 @pytest.mark.parametrize("representation, valid, invalid", [
@@ -156,7 +177,6 @@ class WatchdogSession:
 async def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unowned_events():
     assert AgentStart in PiEvent.members_with(AcceptsPrompt)
     assert QueueUpdate not in PiEvent.members_with(AcceptsPrompt)
-    assert IdlePhase in TurnPhase.members_with(AcceptsPrompt)
     watchdog = ProgressWatchdog(ModelWait(), 10, 10, NativeStartupPolicy())
     watchdog.launching(lambda: 3.0, None)
     watchdog.model_wait.elapsed = watchdog.input_wait.elapsed = 2.0

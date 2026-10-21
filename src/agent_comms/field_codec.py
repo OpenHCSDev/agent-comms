@@ -712,24 +712,6 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
-class AcceptsNull:
-    """Null is this representation's input, not the structural target's."""
-
-    @handles(type(None))
-    @classmethod
-    def decode_null(cls, data, structural):
-        return cls.decode_value(data, structural)
-
-
-class ExternalJsonShape:
-    """Decode the external shape directly, without revalidating each subtree."""
-
-    @handles(object)
-    @classmethod
-    def decode_value(cls, data, structural):
-        return cls.from_wire(data)
-
-
 class FieldRepresentation(MroDispatch, ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
@@ -740,19 +722,19 @@ class FieldRepresentation(MroDispatch, ABC):
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
 
     @classmethod
-    def decode_field(cls, data, structural):
+    def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
         handler = getattr(cls, next(cls.handler_names_for(type(data))))
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
-            return handler(data, structural)
+            return cast(object, handler(data, structural))
 
     @handles(type(None))
     @classmethod
-    def decode_null(cls, data, structural):
+    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
         return structural.decode(data)
 
     @handles(object)
     @classmethod
-    def decode_value(cls, data, structural):
+    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
         return cls.decode(data)
 
     @classmethod
@@ -771,6 +753,28 @@ class FieldRepresentation(MroDispatch, ABC):
     def argument_options(cls) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
+
+
+class AcceptsNull(FieldRepresentation):
+    """Null is this representation's input, not the structural target's."""
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.decode_value(data, structural)
+
+
+class ExternalJsonShape(FieldRepresentation):
+    """Decode the external shape directly, without revalidating each subtree."""
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.from_wire(data)
+
+    @classmethod
+    @abstractmethod
+    def from_wire(cls, data: object) -> Self: ...
 
 
 class WiredValue(Protocol):
@@ -1004,11 +1008,15 @@ class ValidatedScalar[V](FieldRepresentation):
     """The wire scalar is the decoded value, validated identically in both directions."""
 
     @classmethod
+    @abstractmethod
+    def decode(cls, value: object) -> V: ...
+
+    @classmethod
     def encode(cls, value: object) -> V:
         return cls.decode(value)
 
 
-class SpelledText(ValidatedScalar[str], TextRepresentation[str]):
+class SpelledText(TextRepresentation[str], ValidatedScalar[str]):
     """Text with one declared spelling: what decoding accepts and what its schema reports."""
 
     spelling: ClassVar[re.Pattern[str]]
@@ -1036,7 +1044,7 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
-class BoundedText(ValidatedScalar[str], TextRepresentation[str]):
+class BoundedText(TextRepresentation[str], ValidatedScalar[str]):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
     max_length: ClassVar[int] = 4096

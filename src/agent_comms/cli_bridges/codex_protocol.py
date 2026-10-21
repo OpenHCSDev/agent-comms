@@ -29,6 +29,7 @@ from agent_comms.runtime_updates import (
     HiddenItem,
     PageItem,
     ParagraphDraft,
+    PresentableDraft,
     PublishedPage,
     RuntimeUpdate,
     StartedItem,
@@ -309,7 +310,10 @@ class Item(TaggedWire, ABC):
     def phase(self) -> TurnPhase:
         return ModelWaitPhase(self.doing)
 
-class AccumulatedEvents:
+class AccumulatedItem(Item, ABC):
+    @abstractmethod
+    def accumulator(self, started_at: EventTime) -> PresentableDraft: ...
+
     def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return self.accumulator(EventTime.capture(timestamp)).events
 
@@ -319,24 +323,24 @@ class NoTranscript:
         return ()
 
 
-class TextBody(AccumulatedEvents, WireModel):
+class TextBody(WireModel):
     text: str
 
     def accumulator(self, started_at: EventTime) -> TextDraft:
         return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at, self.id)
 
 
-class AssistantItem(TextBody, Item):
+class AssistantItem(TextBody, AccumulatedItem):
     wire_tag = 'agentMessage'
     doing = 'Replying'
 
 
-class PlanItem(TextBody, Item):
+class PlanItem(TextBody, AccumulatedItem):
     wire_tag = 'plan'
     doing = 'Planning'
 
 
-class ReasoningItem(AccumulatedEvents, Item):
+class ReasoningItem(AccumulatedItem):
     wire_tag = 'reasoning'
     summary: list[str] = Field(default_factory=list)
 

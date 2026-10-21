@@ -147,7 +147,7 @@ class PreparingPhase(TurnPhase):
     label = "Preparing input"
 
 
-class IdlePhase(AcceptsPrompt, ActivityWord, TurnPhase):
+class IdlePhase(ActivityWord, TurnPhase):
     busy = False
     accepts_followup = False
     can_compact = True

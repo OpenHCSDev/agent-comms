@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any, ClassVar, TypeVar
 
 Handler = TypeVar("Handler", bound=Callable[..., Any])
@@ -46,7 +46,7 @@ class MroDispatch:
         )
 
     @classmethod
-    def handler_names_for(cls, value_type: type):
+    def handler_names_for(cls, value_type: type) -> Iterator[str]:
         """Resolve a declaration directly; instance dispatch uses the same lookup."""
         for capability in value_type.__mro__:
             for name, classes in cls._handler_declarations:
