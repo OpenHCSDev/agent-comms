@@ -30,7 +30,6 @@ from agent_comms.storage_room import (
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
 
 StoragePath = Annotated[Path, PathText]
@@ -99,24 +98,23 @@ class StorageRule(RoomAllocation):
         """Allocation path for a new problem checkout; an existing source may be reused."""
         return self.checkout_base.resolve() / f'{name}--{problem}'
 
-    def owns_checkout(self, owner: ThreadIncarnation, path: Path) -> bool:
+    def owns_checkout(self, owner: Thread, path: Path) -> bool:
         problem = path.name.removeprefix(f'{owner.name}--')
-        return (path == self.checkout_base.resolve() / owner.name
+        return (path == owner.project_path
                 or (bool(re.fullmatch(r'P[1-9][0-9]*', problem))
                     and path == self.order_checkout(owner.name, problem)))
 
-    def checkout_paths(self, owner: ThreadIncarnation) -> tuple[Path, ...]:
-        """Candidate locations; Git worktree metadata supplies their branches."""
+    def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
+        """Declared home and order locations; Git metadata supplies their branches."""
         ordered = self.order_checkout(owner.name, 'P*')
-        return tuple(path for path in (self.checkout_base.resolve() / owner.name,
+        return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
                      if path.is_dir() and self.owns_checkout(owner, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
-        home = self.checkout_base.expanduser().resolve() / thread.name
-        candidates = (home, Path(thread.worktree).expanduser().resolve(),
-                      *self.checkout_paths(thread.incarnation))
+        home = thread.project_path
+        candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
         listed = set()
         for repository in candidates:
@@ -130,7 +128,7 @@ class StorageRule(RoomAllocation):
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_checkout(thread.incarnation, path))
+                             if path.is_dir() and self.owns_checkout(thread, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -208,7 +206,7 @@ class StorageRule(RoomAllocation):
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if not self.owns_checkout(thread.incarnation, checkout):
+            if not self.owns_checkout(thread, checkout):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
@@ -216,14 +214,15 @@ class StorageRule(RoomAllocation):
                 f'{self.max_checkouts} extra checkouts; allocation floor {self.floor_gib:g} GiB. '
                 'No clones, virtualenv creation, uv sync or .artifacts writes.')
 
-    def order_text(self, unit: str, pythons: Sequence[str]) -> str:
-        """The rule as an order states it to ``unit``."""
-        home = self.checkout_base / unit
+    def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
+        """The rule uses the same declared paths as storage enforcement."""
         return (
-            f'Storage (refused without a strike): your checkouts are {home}--P<n>, at most '
-            f'{self.max_checkouts} besides your home checkout {home}, removed with git worktree '
-            'remove in the same order that created them; your only scratch dir is '
-            f'{self.scratch_base / unit}/, capped at {self.scratch_cap_gib:g} GB together with '
+            f'Storage (refused without a strike): your checkouts are '
+            f'{self.order_checkout(thread.name, "P<n>")}, at most '
+            f'{self.max_checkouts} besides your home checkout {thread.project_path}, '
+            'removed with git worktree remove in the same order that created them; '
+            'your only scratch dir is '
+            f'{thread.storage_roots.scratch}/, capped at {self.scratch_cap_gib:g} GB together with '
             f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
@@ -233,23 +232,18 @@ class StorageRule(RoomAllocation):
 
 @dataclass(frozen=True)
 class UnitStorage:
-    """The home storage slot (possibly non-Git) followed by extra Git checkouts."""
+    """The declared home (possibly non-Git) and separately counted extra Git checkouts."""
 
     rule: StorageRule
     unit: str
-    checkouts: tuple[Path, ...]
+    home: Path
+    extra_checkouts: tuple[Path, ...]
 
     @classmethod
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
-        return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
-
-    @property
-    def home(self) -> Path:
-        return self.checkouts[0]
-
-    @property
-    def extra_checkouts(self) -> tuple[Path, ...]:
-        return self.checkouts[1:]
+        home, *extras = rule.checkouts_of(thread)
+        return cls(rule, thread.name, home,
+                   tuple(dict.fromkeys(path for path in (*extras, *proposed) if path != home)))
 
     @property
     def over_checkouts(self) -> bool:
@@ -260,14 +254,15 @@ class UnitStorage:
         return not self.home.is_dir()
 
     def adding(self, path: Path) -> UnitStorage:
-        proposed = replace(self, checkouts=tuple(dict.fromkeys((*self.checkouts, path))))
+        proposed = replace(self, extra_checkouts=tuple(dict.fromkeys(
+            checkout for checkout in (*self.extra_checkouts, path) if checkout != self.home)))
         proposed.require_quota()
         return proposed
 
     def removing(self, path: Path) -> UnitStorage:
         if path not in self.extra_checkouts:
             self.rule.deny('only a current extra checkout can be removed')
-        return replace(self, checkouts=tuple(p for p in self.checkouts if p != path))
+        return replace(self, extra_checkouts=tuple(p for p in self.extra_checkouts if p != path))
 
     def require_quota(self) -> None:
         if self.over_checkouts:
@@ -407,7 +402,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
         rule.require_path(thread, self.path)
-        if not rule.owns_checkout(thread.incarnation, self.path):
+        if not rule.owns_checkout(thread, self.path):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)
@@ -420,7 +415,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
 
     def check(self, projection: StorageProjection):
         if self.path == projection.thread.project_path:
-            projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; move it home first: agent-comms set-project {projection.thread.name} {projection.rule.checkout_base / projection.thread.name}')
+            projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; choose another existing project first: agent-comms set-project {projection.thread.name} <existing-project>')
         projection.storage = projection.storage.removing(self.path)
 
 
