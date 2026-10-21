@@ -6,6 +6,10 @@ import sys
 import pytest
 
 from agent_comms.cli_commands import HistoryCliCommand, InstallResult
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_bridges.shared import (
+    BridgeResume, OwnerExitedBridge, ReplacedBridge, ResumedBridge, UnobservedBridge,
+)
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.errors import UnknownChannelError
@@ -21,6 +25,28 @@ from agent_comms.installer.upgrade import (
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
+
+
+@pytest.mark.parametrize("bridge", (
+    ResumedBridge("session", LaunchRuntime(Path("/old/bin/python")),
+                  LaunchRuntime(Path("/new/bin/python"))),
+    OwnerExitedBridge("session"),
+    ReplacedBridge("session", ProcessIdentity(101, 10), ProcessIdentity(102, 20)),
+    UnobservedBridge("session"),
+))
+def test_bridge_outcome_family_survives_the_run_codec_and_report(private_comms, bridge):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    result = InstalledUpgrade(
+        "a" * 40, "b" * 40, comms.root, (), FreshRehearsal(),
+        UnchangedRun(bridges=(bridge,)), InstallResult(NoConfigFile(), {}),
+    )
+    decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(result))
+    assert decoded == result
+    assert FieldCodec.decode(BridgeResume, FieldCodec.encode(bridge)) == bridge
+    assert bridge.resume() is bridge
+    InstallReport(comms.root).finished(decoded)
+    (message,) = HistoryCliCommand(target="#comms").apply(comms).messages
+    assert all(line in message.body for line in bridge.lines())
 
 
 @pytest.mark.parametrize("live", (

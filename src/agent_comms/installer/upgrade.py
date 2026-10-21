@@ -40,7 +40,7 @@ import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity run
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve
+from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
@@ -251,11 +251,15 @@ class RetiringRehearsal(FreshRehearsal):
     """The bus at the root moves aside before a fresh one is created there."""
 
 
+@dataclass(frozen=True, kw_only=True)
 class LiveRun(DeclaredFamily, affix="Run"):
-    """What a live install changed."""
+    """What a live install changed, including every session bridge outcome."""
+
+    bridges: tuple[BridgeResume, ...] = ()
 
     @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
+    def lines(self) -> tuple[str, ...]:
+        return tuple(line for bridge in self.bridges for line in bridge.lines())
 
 
 @dataclass(frozen=True)
@@ -267,6 +271,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
 
     def lines(self) -> tuple[str, ...]:
         return (
+            *super().lines(),
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
             *self.stopped_lines(),
             *(line for owner in self.started for line in owner.lines()),
@@ -280,7 +285,7 @@ class UnchangedRun(LiveRun):
     """Published the installed runtime again and planned the next install."""
 
     def lines(self) -> tuple[str, ...]:
-        return ("Runtime republished; nothing carried",)
+        return (*super().lines(), "Runtime republished; nothing carried")
 
 
 @dataclass(frozen=True)
@@ -288,7 +293,7 @@ class CreatedRun(RestartedServices, LiveRun, Extendable):
     route: str
 
     def lines(self) -> tuple[str, ...]:
-        return (f"Created bus; route: {self.route}", *self.service_lines())
+        return (*super().lines(), f"Created bus; route: {self.route}", *self.service_lines())
 
 
 @dataclass(frozen=True)
@@ -684,10 +689,14 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            for bridge in Serve.running(self.installed.home):
-                for paused in bridge.pause(resources):
-                    resources.callback(paused.resume)
-            return self.live(rehearsal)
+            paused = tuple(bridge.pause(resources)
+                           for bridge in Serve.running(self.installed.home))
+            try:
+                result = self.live(rehearsal)
+            finally:
+                # A failed live pass has restored the outgoing runtime; resume onto it too.
+                resumed = tuple(bridge.resume() for bridge in paused)
+            return replace(result, bridges=resumed)
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...
