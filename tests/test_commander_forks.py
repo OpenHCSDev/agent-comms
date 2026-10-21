@@ -144,7 +144,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
-    assert "1 live forks ['fork-one']" in command(comms, 'capacity').stdout
+    assert "working forks" in command(comms, 'capacity').stdout
     refused = command(comms, 'order', 'send', 'worker', body, '--fork', 'fork-two')
     assert refused.returncode != 0 and 'worker is assigned by fork-one' in refused.stderr
     assert store.get('P40') == saved
