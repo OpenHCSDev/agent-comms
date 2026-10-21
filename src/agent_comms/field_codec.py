@@ -739,7 +739,7 @@ class ExternalNull(ExternalField, MroDispatch):
 
     @classmethod
     def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        handler = getattr(cls, next(cls.handler_names_for(type(value))))
+        handler = next(cls.class_handlers_for(type(value)))
         return handler(value, record)
 
     @handles(type(None))
@@ -788,7 +788,7 @@ class FieldRepresentation(MroDispatch, ABC):
 
     @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
-        handler = getattr(cls, next(cls.handler_names_for(type(data))))
+        handler = next(cls.class_handlers_for(type(data)))
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cast(object, handler(data, structural))
 
@@ -1267,8 +1267,8 @@ class FieldCodec(MroDispatch, Sealed):
 
     @classmethod
     def external_normalizers(cls, target: type) -> Iterator[ExternalNormalizer]:
-        for name in cls.handler_names_for(target):
-            yield getattr(cls, name)(target)
+        for handler in cls.class_handlers_for(target):
+            yield cast(ExternalNormalizer, handler(target))
 
     @handles(ExternalField)
     @classmethod

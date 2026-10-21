@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.backup import bus_files
+from agent_comms.cli_commands import HistoryCliCommand
+from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import CarriedRehearsal, RehearsedUpgrade, Upgrade
 from conftest import declare_test_bus, publish_initial
 
@@ -61,14 +62,16 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
 
 @pytest.mark.timeout(280)
 @pytest.mark.parametrize("repos", ((), ("--repos",)), ids=("kept-repos", "given-repos"))
-def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, tmp_path, repos):
+def test_install_rehearses_preserving_existing_data_and_publishing_its_result(
+        private_comms, installed_home, tmp_path, repos):
     comms = private_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "-q", REPOSITORY, checkout], check=True)
-    before = bus_files(comms.root)
+    before = HistoryCliCommand().apply(comms).messages
+    worker = comms.registry.require("worker")
     given = (*repos, str(checkout)) if repos else ()
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
@@ -78,4 +81,15 @@ def test_install_rehearses_without_changing_the_bus(private_comms, installed_hom
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
     assert isinstance(result, RehearsedUpgrade) and isinstance(result.rehearsal, CarriedRehearsal)
-    assert bus_files(comms.root) == before
+    after = HistoryCliCommand().apply(comms).messages
+    assert comms.registry.require("worker") == worker
+    original = {message.reference: message for message in before}
+    retained = {message.reference: message for message in after}
+    assert {reference: retained[reference] for reference in original} == original
+    assert len(after) == len(before) + 2
+    reports = tuple(reversed(HistoryCliCommand(
+        target=f"#{InstallReport.channel}").apply(comms).messages))
+    assert len(reports) == 2
+    assert all(message.sender == InstallReport.sender for message in reports)
+    assert reports[0].body.splitlines()[0] == "Install starting"
+    assert reports[1].body.splitlines()[0] == "Install finished"

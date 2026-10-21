@@ -53,6 +53,12 @@ class MroDispatch:
                 if capability in classes:
                     yield name
 
+    @classmethod
+    def class_handlers_for(cls, value_type: type) -> Iterator[Callable[..., object]]:
+        """Bind factory handlers to their declaring class, not an arbitrary instance."""
+        for name in cls.handler_names_for(value_type):
+            yield getattr(cls, name)
+
     def handlers_for(self, value: Any):
         for name in self.handler_names_for(type(value)):
             yield getattr(self, name)

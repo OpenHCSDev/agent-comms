@@ -1,9 +1,8 @@
-"""Typed installer results use the real publisher and retained channel history."""
+"""Run-scoped installer reporting and typed results on a real private bus."""
 from dataclasses import replace
 from pathlib import Path
 import os
 import subprocess
-import sys
 
 import pytest
 
@@ -11,100 +10,131 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.shared import (
     OwnerExitedBridge, ReplacedBridge, ResumedBridge, UnobservedBridge,
 )
-from agent_comms.cli_commands import HistoryCliCommand, InstallResult
+from agent_comms.cli_commands import HistoryCliCommand, InstallCliCommand, InstallResult
 from agent_comms.commander.config import NoConfigFile
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.errors import UnknownChannelError
+from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
-from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.launch import InstallReport, InstallRun
+from agent_comms.installer.reporting import (
+    CrashedInstall, InstalledWriter, PreparedFreshWriter, RefusedInstall,
+)
 from agent_comms.installer.upgrade import (
     BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade,
-    InstallRolledBack, RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
-    StepRun, UnchangedRun, Upgrade,
+    RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
+    StepRun, UnchangedRun, Upgrade, upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
 
 
-@pytest.mark.parametrize("live", (
-    CarriedRun(
+@pytest.mark.parametrize("live_factory", (
+    pytest.param(lambda root: CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
-        read=BusReadBack(2, 2, 1), stopped=("worker",), services=("connector",),
+        read=BusReadBack(2, 2, 1), root=root, stopped=("worker",), services=("connector",),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),
-    ),
-    UnchangedRun(),
-    CreatedRun(("connector",), "created route"),
-    RetiredRun(services=("connector",), route="created route", stopped=("worker",),
-               retired=Path("retired-bus")),
-), ids=("carried", "unchanged", "created", "retired"))
-def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):
-    comms = declare_test_bus(private_comms, channels=("comms",))
-    report = InstallReport(comms.root)
-    found = Upgrade("a" * 40, "b" * 40, comms.root, ("carry_order_scopes",))
+    ), id="carried"),
+    pytest.param(lambda root: UnchangedRun(), id="unchanged"),
+    pytest.param(lambda root: CreatedRun(("connector",), "created route"), id="created"),
+    pytest.param(lambda root: RetiredRun(
+        services=("connector",), route="created route", stopped=("worker",),
+        retired=Path("retired-bus")), id="retired"),
+))
+def test_live_result_family_survives_codec_and_retained_history(report_bus, live_factory):
+    comms = report_bus
     outgoing = LaunchRuntime(Path("/outgoing/bin/python"))
     target = LaunchRuntime(Path("/target/bin/python"))
     owner = ProcessIdentity.capture(os.getpid())
     successor = ProcessIdentity.capture(os.getppid())
-    live = replace(live, bridges=(
+    live = replace(live_factory(comms.root), bridges=(
         ResumedBridge("resumed", outgoing, target), OwnerExitedBridge("exited"),
         ReplacedBridge("replaced", owner, successor), UnobservedBridge("unobserved"),
     ))
     installed = InstalledUpgrade(
-        found.source, found.target, found.root, found.pending, FreshRehearsal(),
+        "a" * 40, "b" * 40, comms.root, ("carry_order_scopes",), FreshRehearsal(),
         live, InstallResult(NoConfigFile(), {}),
     )
-    # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
     assert decoded == installed
-    started = report.starting(found)
-    finished = report.finished(decoded)
-    messages = tuple(reversed(HistoryCliCommand(target="#comms").apply(comms).messages))
+    InstallReport.register(comms.registry)
+    comms.messaging.send(InstallReport.sender, f"#{InstallReport.channel}",
+                         "\n".join(decoded.lines()))
+    messages = HistoryCliCommand(target=f"#{InstallReport.channel}").apply(comms).messages
+    assert len(messages) == 1
+    assert all(line in messages[0].body for line in live.lines())
+    assert comms.registry.require(InstallReport.sender).execution is ExternalThreadExecution
+
+
+@pytest.fixture
+def report_bus(comms):
+    """Reporting starts no native owner: use the ordinary bus, not a native-SDK fixture."""
+    comms.messaging.initialize_private_initial_protocol()
+    return declare_test_bus(comms, channels=(InstallReport.channel,))
+
+
+@pytest.fixture
+def refused_request(report_bus, tmp_path):
+    """An actual ancestry refusal, before stack building or dependency work."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    git = ["git", "-C", str(checkout)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "-c", "user.name=Installer test", "-c", "user.email=test@example.invalid",
+                    "commit", "-q", "--allow-empty", "-m", "old"], check=True)
+    target = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run([*git, "-c", "user.name=Installer test", "-c", "user.email=test@example.invalid",
+                    "commit", "-q", "--allow-empty", "-m", "new"], check=True)
+    comms = report_bus
+    request = InstallRun(InstallCliCommand(checkout=checkout, project=checkout),
+                         comms.root, tmp_path / "scratch", target)
+    return request, comms
+
+
+@pytest.mark.parametrize("scratch_present,error_kind,outcome_kind", (
+    (True, UpgradeRefused, RefusedInstall),
+    (False, FileNotFoundError, CrashedInstall),
+), ids=("early-refusal", "cleanup-crash"))
+def test_install_failure_family_through_upgrade(refused_request, scratch_present,
+                                                error_kind, outcome_kind):
+    request, comms = refused_request
+    if scratch_present:
+        request.scratch.mkdir()
+    report = InstallReport.for_run(request)
+    with pytest.raises(error_kind):
+        upgrade(request, report)
+    messages = tuple(reversed(HistoryCliCommand(
+        target=f"#{report.channel}").apply(comms).messages))
     assert len(messages) == 2
-    assert tuple(message.sender for message in messages) == ("installer", "installer")
-    assert tuple(message.reference for message in messages) == (started.reference, finished.reference)
-    assert all(found.target[:12] in message.body for message in messages)
-    assert all(line in messages[1].body for line in live.lines())
-    sender = comms.registry.require("installer")
-    assert sender.execution is ExternalThreadExecution
+    assert messages[0].body.splitlines()[0] == "Install starting"
+    assert messages[1].body.splitlines()[0].startswith("Install failed")
+    assert all(message.sender == report.sender for message in messages)
+    assert isinstance(report.outcome, outcome_kind)
+    assert isinstance(report.outcome.writer, InstalledWriter)
+    assert not request.scratch.exists()
+    assert all(line in messages[1].body for line in report.outcome.lines())
+    assert report.outcome.writer.stack.runtime == LaunchRuntime.running()
 
 
-def test_rollback_and_refusal_are_published_from_their_error_types(private_comms):
-    comms = declare_test_bus(private_comms, channels=("comms",))
-    error = UpgradeRefused("carry_order_scopes refused its rows")
-    runtime = LaunchRuntime(Path("/saved-original-runtime/bin/python"))
-    restored = InstallRolledBack(error, (StartedOwner("worker"),), "saved-original-bus",
-                                runtime=runtime)
-    report = InstallReport(comms.root)
-    report.failed(error)
-    report.failed(restored)
-    messages = tuple(reversed(HistoryCliCommand(target="#comms").apply(comms).messages))
+@pytest.mark.parametrize("fresh,writer_kind", (
+    (False, InstalledWriter), (True, PreparedFreshWriter),
+), ids=("outgoing-schema", "fresh-source"))
+def test_root_writer_family_through_upgrade(refused_request, fresh, writer_kind):
+    request, _existing = refused_request
+    root = request.root.with_name("fresh") if fresh else request.root
+    request = replace(request, root=root)
+    request.scratch.mkdir()
+    report = InstallReport.for_run(request)
+    with pytest.raises(UpgradeRefused):
+        upgrade(request, report)
+    assert isinstance(report.outcome.writer, writer_kind)
+    messages = tuple(reversed(HistoryCliCommand(
+        target=report.target).apply(Comms(root)).messages))
     assert len(messages) == 2
-    assert all(message.sender == "installer" for message in messages)
-    assert all(line in messages[1].body for line in restored.lines())
-    assert str(error) in messages[1].body
-    assert str(runtime.prefix) in messages[1].body
-    completed = subprocess.run(
-        [sys.executable, "-m", "agent_comms.cli", "--root", str(comms.root),
-         "history", "--target", "#comms"],
-        capture_output=True, text=True, timeout=30,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
-
-
-def test_publication_failure_raises_after_registering_the_sender(private_comms):
-    # No #comms channel exists: the real publisher refuses it after registering its sender.
-    CommanderHeartbeat.register(private_comms.registry)
-    report = InstallReport(private_comms.root)
-    with pytest.raises(UnknownChannelError):
-        report.failed(UpgradeRefused("stopped before carrying"))
-    original = private_comms.registry.require("installer")
-    report.register(private_comms.registry)
-    assert private_comms.registry.require("installer").incarnation == original.incarnation
-    assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
+    assert messages[0].body.splitlines()[0] == "Install starting"
+    assert messages[1].body.splitlines()[0].startswith("Install failed")
+    assert not request.scratch.exists()

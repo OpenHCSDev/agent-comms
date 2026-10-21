@@ -1617,7 +1617,7 @@ class InstallCliCommand(CliCommand):
     ] = UnnamedInstaller()
     rehearse: Annotated[
         bool,
-        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
+        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy; publish its report without installing"}),
     ] = False
     retire: Annotated[
         bool,
@@ -1661,7 +1661,7 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> InstallResult:
         """The install child's last step, on the bus it carried or created."""
         home = Path.home()
         record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)
