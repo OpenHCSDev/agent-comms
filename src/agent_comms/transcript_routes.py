@@ -1,6 +1,7 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
 from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.native_session_reopen import NativeSessionIdentity
 
 import hashlib
 import os
@@ -196,7 +197,8 @@ class TranscriptRoutes(StoreWriter):
         try:
             final, user = reader.publication_input(
                 after=floor, through=revision.size,
-                files=NativeSessionFiles(path, root=log.path.parent, owner=incarnation),
+                files=NativeSessionFiles.for_identity(NativeSessionIdentity.locate(str(path)),
+                                                      root=log.path.parent, owner=incarnation),
             )
         except MalformedRecord as error:
             raise RelationViolationError("Native publication evidence is invalid") from error

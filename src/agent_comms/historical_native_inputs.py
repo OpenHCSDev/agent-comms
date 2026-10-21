@@ -170,7 +170,7 @@ def read_historical_native_inputs(
                 # this check only corroborates its message-bearing context facts.
                 corroborated = recorded.corroborates_input(
                     row.input_id, evidence=source_reads.for_source(session_file),
-                    files=NativeSessionFiles(session_file, root=store.session.path.parent,
+                    files=NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
                                              owner=row.owner_identity),
                 )
             except (OSError, ValueError) as error:

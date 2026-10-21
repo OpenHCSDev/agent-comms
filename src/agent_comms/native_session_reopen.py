@@ -13,6 +13,7 @@ from .private_path import FileRevision
 if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_entries import NativeEvidenceRead
+    from agent_comms.native_pi import NativeContextProof
     from .pi_native_backend import PersistentPiSession
 
 
@@ -59,8 +60,12 @@ class NativeSessionIdentity(SessionRetention):
         if not self.same_session(other):
             raise NativeReopenError("Native saved source identity changed")
 
+    @staticmethod
+    def from_context(context: NativeContextProof) -> NativeSessionIdentity:
+        return NativeSessionIdentity(context.session_id, str(context.session_file))
+
     def require_context(self, context) -> None:
-        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))
+        self.require_same_session(self.from_context(context))
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""

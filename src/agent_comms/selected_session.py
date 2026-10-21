@@ -67,7 +67,7 @@ class SelectedSession:
         return self.attest(actual)
 
     def require_context(self, context) -> None:
-        self.attest(NativeSessionIdentity(context.session_id, str(context.session_file)))
+        self.attest(NativeSessionIdentity.from_context(context))
 
     def continued(self, context) -> SelectedSession:
         raise NativePiUnavailable("An unselected session cannot own a tracked native continuation")
@@ -119,7 +119,7 @@ class SavedSelectedSession(SelectedSession):
     owner: ParticipantIdentity = field(kw_only=True)
 
     def files(self, root: Path) -> NativeSessionFiles:
-        return NativeSessionFiles(self.path, root=root, owner=self.owner)
+        return NativeSessionFiles.for_identity(self.identity, root=root, owner=self.owner)
 
     def proof_arguments(self, root: Path) -> tuple[str, ...]:
         proof = self.files(root).input_proof
@@ -129,7 +129,7 @@ class SavedSelectedSession(SelectedSession):
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory, owner=self.owner,
-            identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
+            identity=NativeSessionIdentity.from_context(context))
 
     @property
     def path(self) -> Path:

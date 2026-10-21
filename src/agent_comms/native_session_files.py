@@ -1,15 +1,17 @@
-"""A saved native session file and the sidecars kept beside it."""
+"""Native transcript resources and bus-owned input proofs."""
 
 from __future__ import annotations
 
+import hashlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from .errors import RelationViolationError
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.field_codec import Id128Text
 from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.native_session_reopen import NativeSessionIdentity
 
 
 class SessionFiles:
@@ -97,15 +99,10 @@ class SessionFiles:
         return freed
 
 
-@dataclass(frozen=True, slots=True)
-class NativeSessionLocks(SessionFiles):
-    """A native transcript and its writer lock, independent of proof storage."""
+class NativeTranscriptFiles(SessionFiles):
+    """Share native transcript/writer-lock lifetime without owning proof storage."""
 
-    session: Path
-
-    @classmethod
-    def of(cls, session_file: str) -> NativeSessionLocks:
-        return cls(Path(session_file).resolve())
+    __slots__ = ()
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:
@@ -120,21 +117,42 @@ class NativeSessionLocks(SessionFiles):
         return self.session, self.writer_lock
 
 
+@dataclass(frozen=True, slots=True)
+class NativeSessionLocks(NativeTranscriptFiles):
+    """A transcript whose caller needs only its native writer lock."""
+
+    session: Path
+
+    @classmethod
+    def of(cls, session_file: str) -> NativeSessionLocks:
+        return cls(Path(session_file).resolve())
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NativeSessionFiles(NativeSessionLocks):
-    """Bind native proof storage to its original bus and participant identity."""
+class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
+    """Bind the existing saved identity to its bus and participant namespace."""
 
     root: Path
     owner: ParticipantIdentity
 
     @classmethod
-    def of(cls, session_file: str, *, root: Path, owner: ParticipantIdentity) -> NativeSessionFiles:
-        return cls(Path(session_file).resolve(), root=root, owner=owner)
+    def for_identity(
+        cls, identity: NativeSessionIdentity, *, root: Path, owner: ParticipantIdentity,
+    ) -> NativeSessionFiles:
+        return cls(*(getattr(identity, declaration.name)
+                     for declaration in fields(NativeSessionIdentity)), root=root, owner=owner)
+
+    @property
+    def session(self) -> Path:
+        return self.path
 
     @property
     def input_proof(self) -> Path:
+        # Native IDs are opaque header data, not trusted path components. Hashing
+        # keeps the key stable across transcript moves and confined to one file.
+        key = hashlib.sha256(self.session_id.encode()).hexdigest()
         return NativeInputProof.path_in(
-            self.root, lookup=Id128Text.decode(self.owner.lookup), name=self.session.name,
+            self.root, lookup=Id128Text.decode(self.owner.lookup), name=key,
         )
 
 

@@ -319,7 +319,7 @@ class RecoveryMonitorCapability:
                     raise RecoveryBlocked("native recovery input does not match its binding")
                 try:
                     proof = NativeContextProof.read_evidence(
-                        NativeSessionFiles(session.path, root=store.session.path.parent,
+                        NativeSessionFiles.for_identity(session, root=store.session.path.parent,
                                            owner=source.owner_identity),
                         source.input_id, evidence=evidence,
                         session_entry_start=source.require_context_proof().session_entry_start,
@@ -432,7 +432,7 @@ class RecoveryMonitorCapability:
                 if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")
                 proof = NativeContextProof.read_evidence(
-                    NativeSessionFiles(session_file, root=store.session.path.parent,
+                    NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
                                        owner=reserved.owner_identity),
                     reserved.input_id, evidence=evidence,
                     session_entry_start=reserved.require_context_proof().session_entry_start,
