@@ -24,6 +24,7 @@ from agent_comms.service_passes import ServicePassStore
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
+    from agent_comms.messages import Message
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
@@ -134,6 +135,16 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
+class OwedAnswer(StandingRule, declared_name=None):
+    """A message to the commander owed an answer past its window. Every member gates the
+    commander's answering verbs until an action names it with --answers, so an answer cannot
+    be held: one that must wait is sent now as "waiting on X, owner Y"."""
+
+    @abstractmethod
+    def owed(self, comms: Comms) -> Message:
+        """The original message this violation is owed an answer to."""
+
+
 class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
@@ -299,7 +310,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(DatedStandingRule):
+class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
     request: str
@@ -318,6 +329,9 @@ class DirectiveUnacted(DatedStandingRule):
 
     def began(self) -> float:
         return self.directive.deadline
+
+    def owed(self, comms: Comms) -> Message:
+        return self.directive.original(comms.goals)
 
     def line(self) -> str:
         return (

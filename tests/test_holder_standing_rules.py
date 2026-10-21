@@ -22,13 +22,15 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.order import Commander, OrderFile, SayVerb
+from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.standing import (
     HeartbeatSilent,
     Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
+from agent_comms.goal_actions import (
+    BlockedGoalAction, CreateProblemGoalAction, DirectiveGoalAction, SetGoalAction,
+)
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
 from agent_comms.goal_generation import GenerationState, ReadyGeneration, RetryableGeneration
@@ -305,6 +307,37 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
     with pytest.raises(SystemExit, match="unanswered unit messages"):
         SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
+
+
+def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
+    question = publish(held_bus, "worker", "lead", time.time() - UnitAskUnanswered.seconds - 1)
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Waiting on the merge queue, owner unit-goalblock")
+    for verb in (SendVerb(unit="worker", body_file="unused"),
+                 SayVerb(units="worker", body_file=str(reply))):
+        with pytest.raises(SystemExit, match=question.message_id):
+            verb.apply(ctx)
+    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    with pytest.raises(SystemExit, match="REFUSED: --answers"):
+        SendVerb(unit="worker", body_file="unused", answers=(question.message_id,)).apply(ctx)
+
+
+def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
+    directive = held_bus.bus.publisher.publish_ordinary(
+        Message(sender="outsider", target="lead", type=InfoKind, body="Ship the install now",
+                timestamp=time.time() - 3600), origin=AgentOrigin(),
+    )
+    held_bus.goals.update_goal("lead", DirectiveGoalAction(
+        text=directive.body, seq=directive.seq, at=directive.timestamp))
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / "reply.txt"
+    reply.write_text("Installing now")
+    with pytest.raises(SystemExit, match=f"{directive.message_id}: DIRECTIVE UNACTED"):
+        SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
+    SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
 
 
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])

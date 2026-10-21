@@ -30,7 +30,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import NamedViewer
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    DatedStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule, OwedAnswer, ReasonedStandingRule, StandingRule, UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
@@ -251,7 +251,7 @@ class PlanIdle(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnitAskUnanswered(UndatedStandingRule):
+class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     unit: str
     reference: MessageReference
     sent_at: float
@@ -276,6 +276,10 @@ class UnitAskUnanswered(UndatedStandingRule):
         snapshot = comms.registry.snapshot()
         return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
                      for message in cls.asks(comms, commander, time.time() - cls.seconds))
+
+    def owed(self, comms: Comms) -> Message:
+        with comms.bus.log.checked_read() as source:
+            return source.delivery(self.reference.seq).message
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.sent_at) // 60))

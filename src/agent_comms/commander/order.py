@@ -54,7 +54,7 @@ from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HuntDue
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -789,15 +789,13 @@ class DirectiveVerb(CommanderVerb):
 
     def gate(self, ctx: Commander) -> None:
         answers = self.answer_references(ctx)
-        thread = ctx.comms.registry.require(self.who(ctx))
-        overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
-        if overdue and not answers:
-            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
-            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        owed = OwedAnswer.broken(ctx.comms, self.who(ctx))
+        if owed and not answers:
+            lines = '\n'.join(f'{message.message_id}: {rule.line()}: {message.body[:80]}'
+                              for rule in owed for message in (rule.owed(ctx.comms),))
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
+                     'that must wait is sent now: "waiting on X, owner Y".')
         super().gate(ctx)
 
 
