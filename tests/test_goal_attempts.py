@@ -27,6 +27,7 @@ from agent_comms.goal_attempts import (
     AttemptRecord,
     Generation,
     GoalAttemptStore,
+    GoalWorkDecision,
     ProviderUsageTotal,
     ReservationConflictError,
     StaleAttemptError,
@@ -513,7 +514,7 @@ def test_stopped_reserved_generation_refuses_its_missing_attempt(store):
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
     store.create_goal("goal")
     with sqlite3.connect(store.path) as conn:
-        conn.execute("DROP TABLE goal_human_decision")
+        GoalWorkDecision.drop(conn)
     before = store.path.read_bytes()
     with pytest.raises(StorageUncertainError):
         GoalAttemptStore(store.root)
