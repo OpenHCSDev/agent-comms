@@ -57,8 +57,16 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
     """A claim row may be visible after failed durability; never replay automatically."""
 
 
-class HumanSendRefusedError(ToolRefusedError):
+class HumanSendError(RelationViolationError):
+    """A human send Core did not complete; delivery_failure decodes each member for the sender."""
+
+
+class HumanSendRefusedError(ToolRefusedError, HumanSendError):
     """The send transaction rolled back; the human's message was not sent."""
+
+
+class HumanInitialUnknownError(HumanSendError):
+    """A private USER initial may be committed; inspect its ID, never retry."""
 
 
 class CommittedMessageError(RuntimeError):
@@ -71,7 +79,7 @@ class CommittedMessageError(RuntimeError):
         )
 
 
-class HumanClaimBlockedError(RelationViolationError):
+class HumanClaimBlockedError(HumanSendError):
     """A prior private reservation cannot be safely retried."""
 
 
