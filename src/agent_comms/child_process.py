@@ -1693,8 +1693,8 @@ class SynchronousProcess(ChildProcess):
         """Step every member's stop plan together: one signal pass, one shared grace, one force pass.
 
         Each member still runs the sole stop plan under its own guard. Expected
-        identity, signalling and retirement failures are raised once every other
-        plan has finished; programming errors propagate immediately.
+        identity and retirement failures are raised once every other plan has
+        finished; storage, ownership and programming faults propagate immediately.
         """
         errors: list[Exception] = []
         plans = {}
@@ -1714,7 +1714,7 @@ class SynchronousProcess(ChildProcess):
                 except StopIteration as done:
                     stages[index] = done.value
                     del plans[index]
-                except (ChildRetirementFailed, OSError, RelationViolationError) as error:
+                except ChildRetirementFailed as error:
                     errors.append(error)
                     del plans[index]
             if delays:

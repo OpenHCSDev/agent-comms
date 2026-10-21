@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -23,6 +23,7 @@ from agent_comms.child_process import (
     IdentityMismatchError,
     ObservedProcess,
     SpawnedProcess,
+    SynchronousProcess,
     Platform,
     ProcessIdentity,
     TimedOutOutcome,
@@ -79,6 +80,20 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
         timeout=5, cwd=tmp_path, env=dict(os.environ),
     )
     assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
+
+
+def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> None:
+    exited = SpawnedProcess.launch((sys.executable, "-c", "pass"))
+    live = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        exited.process.wait(timeout=5)
+        original = ObservedProcess(exited.identity)
+        with pytest.raises(ProcessLookupError):
+            SynchronousProcess.stop_together(((original, nullcontext), (live, nullcontext)))
+        assert live.retired
+    finally:
+        live.close()
+        exited.close()
 
 
 @pytest.mark.asyncio
