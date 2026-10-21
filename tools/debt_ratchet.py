@@ -8,6 +8,7 @@ import ast
 import dataclasses
 import enum
 import importlib
+import inspect
 import importlib.resources
 import importlib.util
 import io
@@ -57,6 +58,8 @@ from audit.handler_declarations import BuiltinHandlerDeclarations
 from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
+import agent_comms
+from agent_comms import coordinated_runtime_schema, coordination_schema, field_codec, typed_table
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -1314,13 +1317,14 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
         return self.generic_visit(node)
 
     # GitMeasure supplies complete repository-relative paths. Only those exact
-    # original modules own codec/schema behavior; nested package tails do not.
-    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
-        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
-        ("agent_comms", "coordination_schema.py"),
-        ("agent_comms", "coordinated_runtime_schema.py"),
-        ("toad", "agent_schema.py"), ("toad", "db.py"),
-    })
+    # original modules own codec/schema behavior; nested package tails do not. Our own
+    # modules are named by their files; Toad's live in another repository, named by path.
+    mechanism_modules = frozenset((
+        *(Path("src", Path(inspect.getfile(module)).relative_to(
+            Path(inspect.getfile(agent_comms)).parents[1]))
+          for module in (field_codec, typed_table, coordination_schema, coordinated_runtime_schema)),
+        *(Path("src", "toad", module) for module in ("agent_schema.py", "db.py")),
+    ))
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
