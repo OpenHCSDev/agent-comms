@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
-from agent_comms.bus import Bus, BusRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
@@ -25,12 +25,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import FullWake, MessageAudience
-from test_bus import record_from
-
-
-@pytest.fixture
-def bus(tmp_path):
-    return Bus(Bus.path_in(tmp_path))
+from bus_record_fixture import record_from
 
 
 @pytest.fixture
