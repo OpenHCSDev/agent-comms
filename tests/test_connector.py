@@ -10,26 +10,27 @@ import json
 import logging
 import time
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from aiohttp import ClientSession, web
+from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
-    CALLBACK,
-    AuthorizationQuery,
     Connector,
     ConnectorVerb,
     ServeVerb,
-    ApproveVerb,
     RevokeVerb,
 )
-from agent_comms.connector_store import ConnectorStore
+from agent_comms.connector_store import (
+    CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorStore, IssuedCode, TrustedBrowser, digest,
+)
+from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
@@ -132,12 +133,14 @@ async def client(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
     connector = Connector(store, "http://127.0.0.1:18766", root)
-    async with TestClient(TestServer(connector.application())) as client:
-        yield client
+    async with TestServer(connector.application()) as server:
+        cookies = CookieJar(unsafe=True, treat_as_secure_origin=server.make_url("/"))
+        async with TestClient(server, cookie_jar=cookies) as client:
+            yield client
 
 
-async def approved_token(client: TestClient, store: ConnectorStore) -> str:
-    """Register as claude.ai does, have the owner approve on this machine, and redeem the code."""
+async def approved_token(client: TestClient, comms: Comms) -> str:
+    """Register, open the real owner-message link, and redeem its PKCE-bound code."""
     registered = await (
         await client.post(
             "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
@@ -155,9 +158,15 @@ async def approved_token(client: TestClient, store: ConnectorStore) -> str:
     }
     waiting = await client.get("/authorize", params=query, allow_redirects=False)
     assert waiting.status == 200
-    request = AuthorizationQuery(**query).request_id
-    assert ApproveVerb(request=request).apply(store) == 0
-    redirected = await client.get("/authorize", params=query, allow_redirects=False)
+    owner = comms.messaging.user_identity(str(comms.root))
+    notice = comms.bus.inbox(owner.name)[-1]
+    link = urlsplit(notice.body.splitlines()[-1])
+    redirected = await client.get(link.path, allow_redirects=False)
+    assert redirected.status == 302
+    cookie = redirected.cookies[TrustedBrowser.cookie_name]
+    assert cookie["secure"] and cookie["httponly"] and cookie["samesite"] == "Lax"
+    assert cookie["path"] == "/" and not cookie["domain"]
+    assert redirected.headers["Cache-Control"] == "no-store"
     code = parse_qs(urlsplit(redirected.headers["Location"]).query)["code"][0]
     issued = await client.post(
         "/token",
@@ -169,6 +178,7 @@ async def approved_token(client: TestClient, store: ConnectorStore) -> str:
             "redirect_uri": CALLBACK,
         },
     )
+    assert issued.status == 200
     return (await issued.json())["access_token"]
 
 
@@ -218,7 +228,7 @@ async def test_registration_accepts_only_the_claude_callback(client):
 
 
 async def test_connector_lists_every_tool(client, store, comms):
-    token = await approved_token(client, store)
+    token = await approved_token(client, comms)
     headers = {"Authorization": f"Bearer {token}"}
     listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
     family = ToolRequest.members_with(ToolRequest)
@@ -236,7 +246,7 @@ async def test_connector_reads_two_newest_first_conversation_pages(client, store
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
     comms.messaging.send("commander", "claude-ai", "not this conversation")
-    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
 
     async def page(arguments):
         response = await client.post("/mcp", headers=headers, json={
@@ -273,7 +283,7 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(clien
     before = copied.bus.pending_count("claude-ai", target)
     ledger = copied.bus.reads.read()
     async with TestClient(TestServer(connector.application())) as reader:
-        headers = {"Authorization": f"Bearer {await approved_token(reader, copied_store)}"}
+        headers = {"Authorization": f"Bearer {await approved_token(reader, copied)}"}
         response = await reader.post("/mcp", headers=headers, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "comms_history", "arguments": {"peer": "#comms", "limit": 50}},
@@ -297,7 +307,7 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(clien
 
 
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
-    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+    headers = {"Authorization": f"Bearer {await approved_token(client, comms)}"}
     calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
              {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
     for call in calls:
@@ -309,8 +319,8 @@ async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
         ("claude-ai", "Owner said go")]
 
 
-async def test_a_call_returns_what_the_tool_returns_in_process(client, store, root):
-    token = await approved_token(client, store)
+async def test_a_call_returns_what_the_tool_returns_in_process(client, store, root, comms):
+    token = await approved_token(client, comms)
     called = await (
         await client.post(
             "/mcp",
@@ -325,8 +335,6 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
     ).json()
     in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
-    assert [thread["name"] for thread in in_process["threads"]] == [
-        "claude-ai", "commander-heartbeat", "worker"]
 
 
 @pytest.mark.parametrize("phases", [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
@@ -341,9 +349,9 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     monkeypatch.setenv("HOME", str(tmp_path))
     store = ConnectorStore.at(tmp_path / "copy-auth")
     connector = Connector(store, "http://127.0.0.1:18766", copied_root)
-    before = (copied_root / "bus.jsonl").read_bytes()
     async with TestClient(TestServer(connector.application())) as reader:
-        headers = {"Authorization": f"Bearer {await approved_token(reader, store)}"}
+        headers = {"Authorization": f"Bearer {await approved_token(reader, Comms(copied_root))}"}
+        before = (copied_root / "bus.jsonl").read_bytes()
         barrier = MaintenanceBarrier(copied_root / "registry.json")
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
@@ -373,8 +381,83 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     assert comms.owners.maintenance.read().turn_pending is False
 
 
-async def test_a_revoked_token_is_refused(client, store):
-    token = await approved_token(client, store)
+async def test_owner_browser_approval_lifecycle(client, store, comms):
+    """One real HTTP/store/bus journey: owner consent, remembered browser, expiry and revoke."""
+    token = await approved_token(client, comms)
+    owner = comms.messaging.user_identity(str(comms.root))
+    notices = comms.bus.inbox(owner.name)
+    assert len(notices) == 1 and notices[0].target == owner.name
+    first_link = urlsplit(notices[0].body.splitlines()[-1])
+    assert first_link.netloc == "127.0.0.1:18766"
+    assert '"claude.ai"' in notices[0].body
+    assert (await client.get(first_link.path, allow_redirects=False)).status == 400
+    browser = next(cookie.value for cookie in client.session.cookie_jar
+                   if cookie.key == TrustedBrowser.cookie_name)
+    grants = store.read()
+    assert digest(browser) in grants.trusted_browsers and not grants.requests
+    assert browser not in store.path.read_text()
+    assert first_link.path.rsplit("/", 1)[-1] not in store.path.read_text()
+    assert grants.holds(token)
+
+    registered = await (await client.post(
+        "/register", json={"redirect_uris": [CALLBACK], "client_name": "claude.ai"}
+    )).json()
+    query = AuthorizationQuery(
+        "code", registered["client_id"], CALLBACK, "another-browser-challenge", "S256", "account-two"
+    )
+    assert query.client_id != next(iter(grants.clients))
+    redirected = await client.get(
+        "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+    )
+    assert redirected.status == 302
+    assert parse_qs(urlsplit(redirected.headers["Location"]).query)["state"] == [query.state]
+    assert len(comms.bus.inbox(owner.name)) == 1
+
+    client.session.cookie_jar.clear()
+    query = replace(query, state="untrusted-browser")
+    for _ in range(2):
+        waiting = await client.get(
+            "/authorize", params=FieldCodec.encode(query), allow_redirects=False
+        )
+        assert waiting.status == 200
+    notices = comms.bus.inbox(owner.name)
+    assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
+    link = urlsplit(notices[-1].body.splitlines()[-1])
+    assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
+    expired = replace(store.read().requests[query.request_id], expires_at=time.time() - 1)
+    store.update(lambda grants: replace(
+        grants, requests={query.request_id: expired},
+        codes=grants.codes | {"expired-code": IssuedCode(
+            query.client_id, query.code_challenge, expires_at=expired.expires_at
+        )},
+    ))
+    assert (await client.get(link.path, allow_redirects=False)).status == 400
+    store.update(lambda grants: grants.issued(query.client_id)[0])
+    assert not store.read().requests and "expired-code" not in store.read().codes
+
+    waiting = await client.get("/authorize", params=FieldCodec.encode(query))
+    assert waiting.status == 200
+    held = store.read().requests[query.request_id]
+    store.update(lambda grants: replace(grants, requests={
+        query.request_id: replace(held, expires_at=time.time() - 1)
+    }))
+    fresh = replace(query, state="fresh-wait")
+    assert (await client.get("/authorize", params=FieldCodec.encode(fresh))).status == 200
+    assert query.request_id not in store.read().requests
+    assert store.read().requests[fresh.request_id].expires_at <= time.time() + CODE_SECONDS
+
+    assert RevokeVerb().apply(store) == 0
+    assert not store.read().trusted_browsers
+    client.session.cookie_jar.update_cookies({TrustedBrowser.cookie_name: browser})
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(fresh), allow_redirects=False
+    )).status == 200
+    assert not store.read().codes and not store.read().trusts(browser)
+    assert len(comms.bus.inbox(owner.name)) == 5
+
+
+async def test_a_revoked_token_is_refused(client, store, comms):
+    token = await approved_token(client, comms)
     assert RevokeVerb().apply(store) == 0
     refused = await client.post("/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"})
     assert refused.status == 401

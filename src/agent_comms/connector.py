@@ -2,15 +2,14 @@
 
 The server is a transport over the ToolRequest family: ``tools/list`` reports every member
 and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the bus thread claude-ai.
-OAuth stands in front of every MCP request. The owner approves each authorization on this
-machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only as digests
-under ``~/.local/state/agent-comms/connector/``.
+OAuth stands in front of every MCP request. An unknown browser waits for the owner's
+single-use approval link sent on comms. Approval remembers that browser on this issuer;
+subsequent sign-ins need no repeated step. Grant storage retains only secret digests under
+``~/.local/state/agent-comms/connector/``.
 
 Usage:
   agent-comms-connector serve --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector round_trip ROOT RUNTIME [--port PORT]
-  agent-comms-connector pending
-  agent-comms-connector approve REQUEST
   agent-comms-connector revoke
 """
 
@@ -20,7 +19,6 @@ import argparse
 import asyncio
 import base64
 import hashlib
-import html
 import json
 import logging
 import secrets
@@ -32,8 +30,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Self, get_args
-from urllib.parse import urlencode
+from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
@@ -48,10 +45,10 @@ from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
-    CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode, IssuedTokens,
-    RegisteredClient, digest,
+    CODE_SECONDS, AuthorizationQuery, AuthorizationRequest, ClaudeCallback,
+    ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message
+from .messages import Message, QuestionKind
 from .commander.standing import UnownedWheelSpin
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
@@ -102,8 +99,6 @@ class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declare
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
-ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
-CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -133,20 +128,6 @@ class ClientRegistration:
 
     redirect_uris: tuple[ClaudeCallback]
     client_name: str = "unnamed client"
-
-
-@dataclass(frozen=True)
-class AuthorizationQuery:
-    response_type: Literal["code"]
-    client_id: str
-    redirect_uri: ClaudeCallback
-    code_challenge: str
-    code_challenge_method: Literal["S256"]
-    state: str = ""
-
-    @property
-    def request_id(self) -> str:
-        return digest(self.code_challenge)[:16]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -182,7 +163,7 @@ class AuthorizationCodeGrant(TokenGrant):
         )
         if (
             issued is None
-            or issued.expires_at < time.time()
+            or not issued.live(time.time())
             or (issued.client_id, issued.code_challenge) != (self.client_id, challenge)
         ):
             raise OAuthError("invalid_grant", "The code is unknown, expired or not this client's.")
@@ -329,11 +310,6 @@ class ToolsListResult(McpResult):
 @dataclass(frozen=True)
 class RoundTripResult:
     round_trip: str
-
-
-@dataclass(frozen=True)
-class PendingAuthorization:
-    client: str
 
 
 @dataclass(frozen=True)
@@ -528,6 +504,7 @@ class Connector:
                 web.get("/.well-known/oauth-authorization-server", self.server_metadata),
                 web.post("/register", self.register),
                 web.get("/authorize", self.authorize),
+                web.get("/approve/{request_id}/{secret}", self.approve),
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),
             ]
@@ -599,48 +576,91 @@ class Connector:
         )), status=201)
 
     async def authorize(self, request: web.Request) -> web.Response:
-        """Hold the authorization until the owner approves it on this machine, then redirect."""
+        """A trusted browser proceeds; an unknown one needs its owner's one-use link."""
         try:
             query = FieldCodec.decode(
                 AuthorizationQuery, declared(AuthorizationQuery, request.query)
             )
         except MalformedRecord as error:
             raise web.HTTPBadRequest(text=str(error)) from error
-        code = secrets.token_urlsafe(32)
+        code, approval = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        browser = request.cookies.get(TrustedBrowser.cookie_name, "")
+        notices: list[AuthorizationRequest] = []
 
         def decided(grants: ConnectorGrants) -> ConnectorGrants:
+            now = time.time()
+            grants = grants.unexpired(now)
             if query.client_id not in grants.clients:
                 raise web.HTTPBadRequest(text="Unknown client.")
-            held = grants.requests.get(query.request_id)
-            if held is None or not held.approved:
-                pending = AuthorizationRequest(query.client_id, query.code_challenge, query.state)
-                return replace(
-                    grants, requests=grants.requests | {query.request_id: held or pending}
+            if grants.trusts(browser):
+                return grants.code_issued(query, code, now)
+            if query.request_id not in grants.requests:
+                pending = AuthorizationRequest(
+                    query, digest(approval), expires_at=now + CODE_SECONDS
                 )
-            return replace(
-                grants,
-                requests={k: v for k, v in grants.requests.items() if v is not held},
-                codes=grants.codes
-                | {
-                    digest(code): IssuedCode(
-                        query.client_id, query.code_challenge, time.time() + CODE_SECONDS
-                    )
-                },
-            )
+                notices.append(pending)
+                return replace(grants, requests=grants.requests | {query.request_id: pending})
+            return grants
 
-        grants = self.store.update(decided)
+        grants = await asyncio.to_thread(self.store.update, decided)
+        for pending in notices:
+            link = f"{self.issuer}/approve/{pending.query.request_id}/{approval}"
+            await asyncio.to_thread(
+                self.request_approval, grants.clients[query.client_id].name, link
+            )
         if query.request_id in grants.requests:
             return web.Response(
                 content_type="text/html",
+                headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
                 text=(
-                    "<!doctype html><meta http-equiv=refresh content=3>"
-                    "<title>Approve connector</title>"
-                    "<p>Approve this connection on the machine running agent-comms:</p>"
-                    f"<pre>agent-comms-connector approve {html.escape(query.request_id)}</pre>"
-                    "<p>This page continues once it is approved.</p>"
+                    "<!doctype html><title>Approve connector</title>"
+                    "<p>An approval link was sent to the owner on comms.</p>"
+                    "<p>Open that link in your browser to connect and remember this browser.</p>"
                 ),
             )
-        raise web.HTTPFound(f"{CALLBACK}?{urlencode({'code': code, 'state': query.state})}")
+        raise web.HTTPFound(query.redirect(code), headers={"Cache-Control": "no-store"})
+
+    def request_approval(self, client: str, link: str) -> None:
+        """Only the durable human identity receives the bearer approval link."""
+        with self.opened_wire() as comms:
+            owner = comms.messaging.user_identity(str(self.root))
+            comms.messaging.send(
+                CALLER.name, owner.name,
+                f"Connector sign-in requested by {json.dumps(client)}. "
+                f"Approve only if you started this connection; the link expires in "
+                f"{CODE_SECONDS} seconds and remembers this browser.\n{link}",
+                QuestionKind,
+            )
+
+    async def approve(self, request: web.Request) -> web.Response:
+        """Consume the owner's link and establish browser trust in the same store update."""
+        request_id, secret = request.match_info["request_id"], request.match_info["secret"]
+        code, browser = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        approved: list[AuthorizationQuery] = []
+
+        def consumed(grants: ConnectorGrants) -> ConnectorGrants:
+            now = time.time()
+            held = grants.requests.get(request_id)
+            if held is None or not held.live(now) or not secrets.compare_digest(
+                held.approval_digest, digest(secret)
+            ):
+                raise web.HTTPBadRequest(text="This approval link is unknown, expired or used.")
+            approved.append(held.query)
+            return replace(
+                grants.unexpired(now).code_issued(held.query, code, now),
+                trusted_browsers=grants.trusted_browsers | {digest(browser): TrustedBrowser(now)},
+            )
+
+        await asyncio.to_thread(self.store.update, consumed)
+        response = web.HTTPFound(
+            approved[0].redirect(code),
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
+        response.set_cookie(
+            TrustedBrowser.cookie_name, browser, max_age=TrustedBrowser.cookie_seconds,
+            secure=True, httponly=True, samesite="Lax", path="/",
+        )
+        raise response
 
     async def token(self, request: web.Request) -> web.Response:
         try:
@@ -765,46 +785,13 @@ class RoundTripVerb(ConnectorVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PendingVerb(ConnectorVerb):
-    help = "List authorizations waiting for approval"
-
-    def apply(self, ctx: ConnectorStore) -> int | str:
-        grants = ctx.read()
-        print(
-            json.dumps(
-                {
-                    key: FieldCodec.encode(
-                        PendingAuthorization(grants.clients[held.client_id].name)
-                    )
-                    for key, held in grants.requests.items()
-                }
-            )
-        )
-        return 0
-
-
-@dataclass(frozen=True, kw_only=True)
-class ApproveVerb(ConnectorVerb):
-    help = "Approve one waiting authorization"
-    request: str = option("request", help="The id the authorize page shows")
-
-    def apply(self, ctx: ConnectorStore) -> int | str:
-        def approved(grants: ConnectorGrants) -> ConnectorGrants:
-            held = grants.requests[self.request]
-            return replace(
-                grants, requests=grants.requests | {self.request: replace(held, approved=True)}
-            )
-
-        ctx.update(approved)
-        return 0
-
-
-@dataclass(frozen=True, kw_only=True)
 class RevokeVerb(ConnectorVerb):
-    help = "Revoke every issued token and code"
+    help = "Revoke every issued token, code and trusted browser"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        ctx.update(lambda grants: replace(grants, requests={}, codes={}, access={}, refresh={}))
+        ctx.update(lambda grants: replace(
+            grants, requests={}, codes={}, access={}, refresh={}, trusted_browsers={}
+        ))
         return 0
 
 
