@@ -52,9 +52,9 @@ from agent_comms.thread_model import DeclaredModel
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
     """Share the original installed/configured private receiving preparation."""
-    from agent_comms.native_package import verify_native_package
+    from agent_comms.native_package import VerifiedNativePackage
 
-    verify_native_package(arguments.package)
+    VerifiedNativePackage.acquire(arguments.package)
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
     if not continue_existing:
@@ -467,7 +467,6 @@ async def configured_mixed_routes(arguments):
     """
     from agent_comms.comms import wire
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage

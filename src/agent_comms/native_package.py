@@ -22,6 +22,7 @@ from typing import Annotated, Literal
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -237,7 +238,7 @@ def write_native_manifest(root: Path) -> None:
             os.replace(replacement, MANIFEST)
         finally:
             replacement.unlink(missing_ok=True)
-
+    VerifiedNativePackage.qualify(root)
 
 
 @dataclass(frozen=True)
@@ -378,11 +379,13 @@ AMBIENT_NODE = frozenset({"NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"})
 
 @dataclass(frozen=True, slots=True)
 class VerifiedNativePackage:
-    """The immutable artifact acquired for one process; never a readiness proof."""
+    """A package qualified before publication, then acquired by its owning runtime."""
 
     path: Path
 
-    def __post_init__(self):
+    @classmethod
+    def qualify(cls, root: Path) -> VerifiedNativePackage:
+        """Compare a mutable build/install tree with the pin before publication."""
         pins = [
             line[len(TREE_PREFIX) :]
             for line in MANIFEST.read_text().splitlines()
@@ -394,8 +397,9 @@ class VerifiedNativePackage:
             digest = FieldCodec.decode(Annotated[str, Sha256Text], pins[0])
         except MalformedRecord as error:
             raise NativePackageError("Pinned native package tree commitment unavailable") from error
-        if package_tree_digest(self.path) != digest:
+        if package_tree_digest(root) != digest:
             raise NativePackageError("Native package tree differs from pinned artifact")
+        return cls(root)
 
     @property
     def cli(self) -> Path:
@@ -421,15 +425,13 @@ class VerifiedNativePackage:
             raise NativePackageError("Pinned native Pi package path is not lexical")
         if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
             raise NativePackageError("Canonical native Pi package layout is required")
+        if not root.is_relative_to(LaunchRuntime.running().prefix):
+            raise NativePackageError("Native Pi package is outside the running runtime prefix")
         for ancestor in (root, *root.parents):
             failed = TrustedAncestorRole.violation(ancestor.lstat())
             if failed is not None:
                 raise NativePackageError(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
         if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
             raise NativePackageError("Disposable native Pi root must be owner-only")
-        return verify_native_package(root)
-
-def verify_native_package(root: Path) -> VerifiedNativePackage:
-    """Verify the entire copied package against the repository-owned commitment."""
-    return VerifiedNativePackage(root)
+        return cls(root)
 

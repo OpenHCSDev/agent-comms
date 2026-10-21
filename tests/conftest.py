@@ -190,7 +190,7 @@ def native_runtime_package():
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
-    package = VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.qualify(pinned_native_package())
     UnitInstructions.prepare()
     return package
 

@@ -401,7 +401,7 @@ class Stack:
         run(self.python, "-c", "from agent_comms.native_package import "
             "VerifiedNativePackage,pinned_native_package; "
             "from agent_comms.unit_instructions import UnitInstructions; "
-            "VerifiedNativePackage.acquire(pinned_native_package()); UnitInstructions.prepare()",
+            "VerifiedNativePackage.qualify(pinned_native_package()); UnitInstructions.prepare()",
             cwd=self.checkout, env=self.environment())
 
     def publish(self) -> None:

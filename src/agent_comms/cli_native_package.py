@@ -15,7 +15,7 @@ from agent_comms.native_package import (
     install_declared_sources,
     package_tree_digest,
     share_native_resources,
-    verify_native_package,
+    VerifiedNativePackage,
     write_native_manifest,
 )
 from agent_comms.storage_rules import StoragePath
@@ -45,7 +45,7 @@ class VerifyVerb(NativePackageVerb):
     ]
 
     def apply(self, ctx: None = None) -> None:
-        verify_native_package(self.package)
+        VerifiedNativePackage.qualify(self.package)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -113,8 +113,8 @@ class InstallSourcesVerb(NativePackageVerb):
     ]
 
     def apply(self, ctx: None = None) -> None:
-        verify_native_package(self.package)
-        install_declared_sources(self.package, self.snapshot)
+        package = VerifiedNativePackage.acquire(self.package)
+        install_declared_sources(package.path, self.snapshot)
 
 
 @dataclass(frozen=True, kw_only=True)
