@@ -14,10 +14,12 @@ from acp.schema import (
 )
 
 from . import agent_events as events
+from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
+from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
@@ -71,6 +73,13 @@ class TurnProgress(events.AgentEventConsumer):
         self.reply_parts: list[str] = []
         self.terminal_error: events.Error | None = None
         self.publication_measurements = PublicationMeasurements()
+        # The turn keeps its last context record, so recording never re-reads it.
+        self.context_prior: ContextPrior = UNREAD_CONTEXT
+        route = self.routing.reply
+        self.consumer = (
+            RoutedTurnEventConsumer(effects, session_id, runtime, self.turn_lease.turn_id, route)
+            if route else TurnEventConsumer(effects, session_id, runtime, self.turn_lease.turn_id)
+        )
         self.publication = TurnEventPublication(
             comms=comms,
             sessions=sessions,
@@ -105,12 +114,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        manifest = await event.context.record(self.comms.contexts, self.thread, self.turn_lease)
-        self.runtime.agent.annotations.observe(self.session_id, manifest, event.context.values)
-
-    @property
-    def reply_targets(self):
-        return self.routing.reply.targets if self.routing.reply is not None else ()
+        self.context_prior = await event.context.record(
+            self.comms.contexts, self.context_prior, self.thread, self.turn_lease
+        )
+        self.runtime.agent.annotations.observe(
+            self.session_id, self.context_prior.value, event.context.values
+        )
 
     @property
     def comms(self) -> Comms:
@@ -143,7 +152,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
-        if self.reply_targets:
+        if self.turn.reply_targets:
             self.reply_parts.append(event.text)
 
     @handles(events.CommittedProgress)
@@ -157,14 +166,14 @@ class TurnProgress(events.AgentEventConsumer):
 
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
-        if self.reply_targets:
+        if self.turn.reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
                 # Publish it once as visible, non-waking progress; the
                 # final reply contains only subsequent assistant text.
                 results = tuple(self.comms.messaging.send(
                     self.thread_name, target, progress, role=NoticeRole()
-                ) for target in self.reply_targets)
+                ) for target in self.turn.reply_targets)
                 self.reply_parts.clear()
                 return results
         return ()
@@ -233,7 +242,7 @@ class TurnProgress(events.AgentEventConsumer):
     async def emit_turn_effects(self, states: Iterable[TurnState]) -> None:
         for state in states:
             with self.publication_measurements.measuring():
-                await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
+                await self.consumer.dispatch(TurnTranscriptUpdate(state=state))
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
@@ -257,10 +266,7 @@ class TurnProgress(events.AgentEventConsumer):
         if publication is None:
             return
         with self.publication_measurements.measuring():
-            published = await self.effects._emit_event(
-                self.session_id, publication,
-                turn_id=self.turn_lease.turn_id, route=self.routing.reply,
-            )
+            published = await self.consumer.dispatch(publication)
         if isinstance(published, events.Done):
             # ACP publication may replace Done with its notification acknowledgement;
             # terminal consumers retain that exact completed outcome.
@@ -282,7 +288,7 @@ class TurnProgress(events.AgentEventConsumer):
         with ExitStack() as publications:
             publications.callback(record_publication)
             if self.reply_parts:
-                for target in self.reply_targets:
+                for target in self.turn.reply_targets:
                     published.append(self.comms.messaging.send(
                         self.thread_name, target, "".join(self.reply_parts)
                     ))
@@ -299,7 +305,7 @@ class TurnProgress(events.AgentEventConsumer):
             # failure notice non-waking, including for human reply targets.
             notice_targets = tuple(
                 dict.fromkeys(
-                    (*self.reply_targets,)
+                    (*self.turn.reply_targets,)
                     + tuple(
                         origin.exact_reply_target
                         for origin in self.origins
@@ -316,7 +322,9 @@ class TurnProgress(events.AgentEventConsumer):
             )
             results = []
             for target in notice_targets:
-                prefix = "Request failed" if target in self.reply_targets else "Delivery failed"
+                prefix = (
+                    "Request failed" if target in self.turn.reply_targets else "Delivery failed"
+                )
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
