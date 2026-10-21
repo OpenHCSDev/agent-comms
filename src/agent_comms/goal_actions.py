@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-import time
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 

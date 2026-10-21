@@ -41,11 +41,11 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
 from .goal_presentation import (
+    GoalExecution,
+    GoalExecutionSource,
     GoalPublicationSnapshot,
     GoalSnapshot,
     GoalWaitTarget,
-    GoalExecution,
-    GoalExecutionSource,
     IdleGoalExecution,
 )
 from .goals import Goal, GoalDeclaration

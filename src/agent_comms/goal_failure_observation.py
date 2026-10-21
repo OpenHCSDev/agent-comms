@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-
 from .diagnostics import FailureReason
 from .field_codec import Id128Text, WireName
 from .goal_attempt_identity import GoalAttemptIdentity
@@ -27,10 +26,10 @@ from .typed_table import Column, DurableTables, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
+    from .goal_presentation import GoalExecution
     from .goals import Goal
     from .threads import Thread
     from .turn_lease import TurnLeaseFence
-    from .goal_presentation import GoalExecution
 
 
 class GoalLedgerTable(DurableTables):
