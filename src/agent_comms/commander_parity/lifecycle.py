@@ -175,6 +175,10 @@ class LifecycleRun:
                             "from reaching zero.",
                             "This is stupid because an unfinished copied decision must not count "
                             "as delivered work.",
+                            unplanned_reason=(
+                                "This disposable parity workflow measures native ownership rather "
+                                "than advancing the production plan."
+                            ),
                         )
                     )
                 )
