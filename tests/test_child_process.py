@@ -99,6 +99,25 @@ def test_child_imports_the_checkout_its_parent_imported(tmp_path: Path) -> None:
     assert Path(result.stdout.decode().strip()).resolve().is_relative_to(checkout)
 
 
+def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -> None:
+    # The child relaunches through the same owner: two generations of real launches.
+    report = (
+        "import os,sys; from pathlib import Path; "
+        "from agent_comms.child_process import SpawnedProcess; "
+        "r = SpawnedProcess.run((sys.executable, '-c', "
+        "'import os; print(os.environ[\"PYTHONPATH\"])'), "
+        "timeout=30, cwd=Path.cwd(), env=dict(os.environ)); "
+        "sys.stdout.buffer.write(r.stdout)"
+    )
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run((sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment)
+    assert result.returncode == 0, result.stderr
+    import agent_comms
+
+    root = str(Path(agent_comms.__file__).resolve().parents[1])
+    assert result.stdout.decode().strip().split(os.pathsep).count(root) == 1
+
+
 @pytest.mark.asyncio
 async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> None:
     child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))

@@ -182,7 +182,9 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
 
     def first(self, root: Path) -> ImportPath:
-        return SpecifiedImportPath(os.pathsep.join((str(root), self.value)))
+        # Each generation re-applies its root: keep exactly one copy, searched first.
+        entries = (entry for entry in self.value.split(os.pathsep) if entry != str(root))
+        return SpecifiedImportPath(os.pathsep.join((str(root), *entries)))
 
 
 class EnvironmentValue(SubclassUnion, TextChoice, affix="Variable"):
