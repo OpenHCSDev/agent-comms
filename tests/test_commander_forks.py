@@ -99,8 +99,11 @@ def test_fork_orders_refuse_competitors_and_closing_report_releases(fork_bus, tm
     held = comms.goals.todos.held_for_commander(fork.incarnation)
     assert [todo.id for todo in held] == ['P41']
     second = document(tmp_path / 'second.json', replace(order, id='second-order'))
+    collision = tmp_path / 'collision.json'
+    collision.write_text(json.dumps(FieldCodec.encode(replace(
+        OrderFile.read(Path(second).read_text()), slop=()))))
     for prefix in (('--fork', 'fork-two'), ()):
-        result = command(comms, 'order', 'problem', second, '--to', 'worker',
+        result = command(comms, 'order', 'problem', str(collision), '--to', 'worker',
                          '--where', 'owner.py:2', *prefix)
         assert result.returncode != 0
         assert 'worker is being assigned by fork-one on open order first-order' in result.stderr

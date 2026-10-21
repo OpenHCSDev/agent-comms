@@ -574,14 +574,14 @@ class Commander(CommanderContext):
     def problem(self, order_file, unit, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
+        self.comms.goals.todos.require_unit(
+            self.comms.registry.require(unit).incarnation, self.incarnation)
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
         checkout = self.repo_directory(document.order.check.directory)
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
-        self.comms.goals.todos.require_unit(
-            self.comms.registry.require(unit).incarnation, self.incarnation)
         pid = self.comms.goals.todos.allocate_problem()
         self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
