@@ -343,6 +343,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 
 def test_activity_write_is_refused_while_draining(tmp_path: Path, capsys) -> None:
     """Activity is not a publication request and remains refused during a hold."""
+    from agent_comms.activity import ActivityStore
     from agent_comms.cli import main
 
     def cli(*argv: str) -> tuple[int, str]:
@@ -353,7 +354,7 @@ def test_activity_write_is_refused_while_draining(tmp_path: Path, capsys) -> Non
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
     def written() -> tuple[bytes, ...]:
         return tuple(path.read_bytes() if path.exists() else b''
-                     for path in (tmp_path / 'bus.jsonl', tmp_path / 'activity.jsonl'))
+                     for path in (tmp_path / 'bus.jsonl', ActivityStore.path_in(tmp_path)))
 
     before = written()
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
