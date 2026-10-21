@@ -50,14 +50,6 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
-class UnexpectedTurnFailure(NativeRequestFailure):
-    """An execution fault is reported without claiming the native runtime is unavailable."""
-
-    def __init__(self, cause: Exception) -> None:
-        super().__init__(f"Unexpected turn failure: {cause}")
-        self.__cause__ = cause
-
-
 class OwnedTurn:
     """One authorized owner turn; stable source facts and native callbacks live here."""
 
@@ -445,8 +437,6 @@ class OwnedTurn:
             raise
         except (NativeRequestFailure, RequestError) as error:
             await self.fail(error, error)
-        except Exception as error:
-            await self.fail(UnexpectedTurnFailure(error), error)
         # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.
         await self.progress.publish_result()

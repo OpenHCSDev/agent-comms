@@ -1692,16 +1692,16 @@ class SynchronousProcess(ChildProcess):
     def stop_together(stops, *, deadline=math.inf) -> tuple[ChildOutcome, ...]:
         """Step every member's stop plan together: one signal pass, one shared grace, one force pass.
 
-        Each member still runs the sole stop plan under its own guard. A failing
-        member never leaves the others signalled but unretired; its error is
-        raised once every other plan has finished.
+        Each member still runs the sole stop plan under its own guard. Expected
+        identity, signalling and retirement failures are raised once every other
+        plan has finished; programming errors propagate immediately.
         """
         errors: list[Exception] = []
         plans = {}
         for index, (process, guard) in enumerate(stops):
             try:
                 process.require_stop_authority()
-            except Exception as error:
+            except ProcessLookupError as error:
                 errors.append(error)
                 continue
             plans[index] = process._stop_plan(guard, deadline)
@@ -1714,7 +1714,7 @@ class SynchronousProcess(ChildProcess):
                 except StopIteration as done:
                     stages[index] = done.value
                     del plans[index]
-                except Exception as error:
+                except (ChildRetirementFailed, OSError, RelationViolationError) as error:
                     errors.append(error)
                     del plans[index]
             if delays:

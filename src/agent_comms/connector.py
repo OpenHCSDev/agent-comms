@@ -45,7 +45,8 @@ from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .errors import ToolRefusedError, UnregisteredThreadError
+from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
+from .coordination_errors import CoordinationError
 from .field_codec import (
     Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
 )
@@ -458,7 +459,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
-        except Exception as error:
+        except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
 
