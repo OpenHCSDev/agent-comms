@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 import json
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
+from dataclasses import fields
 from pathlib import Path
 
 from agent_comms.bus_publication import Delivered
@@ -27,7 +29,7 @@ from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
+from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, WalStore
 from agent_comms.watched import Watched
 
 
@@ -50,64 +52,15 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
-class Bus(StoreWriter, DurableFile, Watched):
-    """One SQLite transaction owns the sequence and all of a record's fields."""
+class BusReader(ABC):
+    """One query implementation for individual reads and an admitted read snapshot."""
 
-    filename = "bus.sqlite3"
-
-    def __init__(self, path: Path):
-        super().__init__(path)
-
-    @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
-            db.execute("PRAGMA foreign_keys=ON")
-            with self.transaction(db):
-                if not SQLiteTableName.stored(db):
-                    BusTables.create_schema(db)
-                    BusProjectionTables.create_schema(db)
-                BusTables.require_schema(db)
-                BusProjectionTables.require_schema(db)
-                yield db
-
-    @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
-        """Borrow one existing read-only snapshot, including for an archived bus."""
-        with CoordinationStore.observing(self.path) as db:
-            BusTables.require_schema(db)
-            BusProjectionTables.require_schema(db)
-            yield db
+    @abstractmethod
+    def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
     def revision(self) -> int:
         with self.observing() as db:
             return BusRow.last_seq(db)
-
-    def backup(self, destination: Path) -> None:
-        """Copy a consistent SQLite snapshot, never replace an existing destination."""
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        destination.touch(mode=0o600, exist_ok=False)
-        try:
-            with self.observing() as source, closing(
-                CoordinationStore.writer(destination, isolation_level=None)
-            ) as target:
-                source.backup(target)
-        except BaseException:
-            destination.unlink()
-            raise
-
-    def append(self, build: RecordBuilder) -> BusRecord:
-        with ExitStack() as writes:
-            db = writes.enter_context(self.writing())
-            MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
-            seq = BusRow.next_seq(db)
-            record = build(seq, db)
-            committed = self._record(db, BusRow.require(db, seq=record.append_to(db, seq)))
-            try:
-                writes.close()
-            except StoreNotificationError as error:
-                raise MessageNotificationError(committed) from error
-            return committed
 
     @staticmethod
     def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
@@ -118,8 +71,8 @@ class Bus(StoreWriter, DurableFile, Watched):
             if not rows:
                 raise RelationViolationError(
                     f"Bus row {header.seq} lacks {table.declared_name}")
-            values.update(FieldCodec.encode_fields(rows[0]))
-        return FieldCodec.decode_record(member, values)
+            values.update({item.name: getattr(rows[0], item.name) for item in fields(table)})
+        return FieldCodec.construct(member, values)
 
     def lookup(self, seq: int) -> BusRecord:
         with self.observing() as db:
@@ -284,3 +237,72 @@ class Bus(StoreWriter, DurableFile, Watched):
                            f'WHERE ({predicate}) AND seq <= ?)'),
                 parameters=(*parameters, through),
             )
+
+
+class Bus(BusReader, WalStore, DurableFile, Watched):
+    """One SQLite transaction owns the sequence and all of a record's fields."""
+
+    filename = "bus.sqlite3"
+
+    def __init__(self, path: Path):
+        super().__init__(path)
+
+    def _prepare_schema(self, db: sqlite3.Connection) -> None:
+        if not SQLiteTableName.stored(db):
+            with self.write_transaction(db):
+                if not SQLiteTableName.stored(db):
+                    BusTables.create_schema(db)
+                    BusProjectionTables.create_schema(db)
+        BusTables.require_schema(db)
+        BusProjectionTables.require_schema(db)
+
+    @contextmanager
+    def observing(self) -> Iterator[sqlite3.Connection]:
+        """Borrow one existing read-only snapshot, including for an archived bus."""
+        with self._attached(lambda: CoordinationStore.observing(self.path)) as db:
+            BusTables.require_schema(db)
+            BusProjectionTables.require_schema(db)
+            yield db
+
+    @contextmanager
+    def reading(self) -> Iterator[BusReader]:
+        """Use one read-only SQLite snapshot for a batch of queries."""
+        with self.observing() as db:
+            yield BusSnapshot(db)
+
+    def backup(self, destination: Path) -> None:
+        """Copy a consistent SQLite snapshot, never replace an existing destination."""
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        destination.touch(mode=0o600, exist_ok=False)
+        try:
+            with self.observing() as source, closing(
+                CoordinationStore.writer(destination, isolation_level=None)
+            ) as target:
+                source.backup(target)
+        except BaseException:
+            destination.unlink()
+            raise
+
+    def append(self, build: RecordBuilder) -> BusRecord:
+        with ExitStack() as writes:
+            db = writes.enter_context(self.writing())
+            MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
+            seq = BusRow.next_seq(db)
+            record = build(seq, db)
+            committed = self._record(db, BusRow.require(db, seq=record.append_to(db, seq)))
+            try:
+                writes.close()
+            except StoreNotificationError as error:
+                raise MessageNotificationError(committed) from error
+            return committed
+
+
+class BusSnapshot(BusReader):
+    """The surrounding reading scope owns this already validated connection."""
+
+    def __init__(self, connection: sqlite3.Connection):
+        self._connection = connection
+
+    @contextmanager
+    def observing(self) -> Iterator[sqlite3.Connection]:
+        yield self._connection

@@ -1,6 +1,7 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
 import json
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,11 +32,12 @@ def channel_bus(root):
 
 
 def pages(messages):
-    before = messages.bus.revision() + 1
     result = []
-    while page := messages.bus.page(before, 2):
-        result.append(tuple(row.seq for row in page))
-        before = page[-1].seq
+    with messages.bus.reading() as reader:
+        before = reader.revision() + 1
+        while page := reader.page(before, 2):
+            result.append(tuple(row.seq for row in page))
+            before = page[-1].seq
     return result
 
 
@@ -51,11 +53,15 @@ def test_archived_database_pages_read_only(tmp_path):
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)
     archived.bus.path.chmod(0o400)
-    source.validate()
-    assert source.snapshot_bus_revision == 5
-    assert pages(archived) == [(5, 4), (3, 2), (1,)]
-    with archived.bus.observing() as db:
-        assert db.execute("PRAGMA query_only").fetchone()[0] == 1
+    archive.chmod(0o500)
+    try:
+        source.validate()
+        assert source.snapshot_bus_revision == 5
+        assert pages(archived) == [(5, 4), (3, 2), (1,)]
+        with archived.bus.observing() as db:
+            assert db.execute("PRAGMA query_only").fetchone()[0] == 1
+    finally:
+        archive.chmod(0o700)
     replacement = tmp_path / "replacement.sqlite3"
     live.bus.backup(replacement)
     replacement.replace(archived.bus.path)
@@ -72,6 +78,21 @@ def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_pat
     messages.bus.append(lambda seq, db: replace(original, seq=seq))
     with pytest.raises(MalformedRecord, match="Expected one"):
         messages.bus.lookup_message(original.message_id)
+
+
+def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    with messages.bus.reading() as reader:
+        with reader.observing() as first, reader.observing() as second:
+            assert first is second and first.execute("PRAGMA query_only").fetchone()[0] == 1
+        original = reader.lookup(1)
+        assert reader.lookup_message(original.message_id).reference == original.reference
+        messages.bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "#history", "later", InfoKind, seq=seq)))
+        assert reader.revision() == 5 and messages.bus.revision() == 6
+        assert tuple(row.seq for row in reader.page(7, 2)) == (5, 4)
+    with pytest.raises(sqlite3.ProgrammingError):
+        reader.lookup(1)
 
 
 def test_view_revision_distinguishes_sequence_growth_from_source_replacement(tmp_path):

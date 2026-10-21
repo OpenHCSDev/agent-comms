@@ -62,8 +62,9 @@ def test_first_write_does_not_change_the_opened_empty_snapshot(tmp_path):
 def test_change_marker_publishes_only_committed_row_changes(tmp_path):
     store = InputDispositions(tmp_path)
     marker, = store.source_paths(tmp_path)
-    with store.writing():
-        pass
+    with store.writing() as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert not marker.exists()
     store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
     changed = marker.stat().st_mtime_ns
