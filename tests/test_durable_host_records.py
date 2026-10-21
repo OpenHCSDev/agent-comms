@@ -92,7 +92,7 @@ def test_result_kind_is_bound_to_its_pending_command():
     asyncio.run(journey())
 
 
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration):
+def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
@@ -109,7 +109,7 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             with pytest.raises(RuntimeError):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(UnreportedCount(), UnreportedCount())
+            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(PiCount.from_wire(0), UnreportedCount())
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:

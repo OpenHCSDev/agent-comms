@@ -56,7 +56,7 @@ try {
 """
 
 
-def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration):
+def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home):
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
     hosts = Path(__file__).parents[1] / 'src/agent_comms'
     seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
