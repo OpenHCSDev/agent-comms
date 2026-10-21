@@ -12,6 +12,7 @@ import json
 import os
 import shlex
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -26,7 +27,7 @@ from agent_comms.progress_claims import WorkingClaim
 from native_backend_fixture import native_backend_fixture
 
 
-async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
+async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage) -> None:
     assert '/site-packages/' in inspect.getfile(Goals), (
         'Use the installed candidate, not editable source'
     )
@@ -50,7 +51,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
             )
 
             class Responses:
-                async def wait(self):
+                async def wait(self) -> bool:
                     number = native.provider.posts
                     if number == 1:
                         native.provider.tool_call = ('comms_set_goal', {
@@ -91,7 +92,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
             app = ToadApp(agent_data=definition, project_dir=str(native.project),
                           agent_session_id=session)
             async with app.run_test(size=(120, 40)) as pilot:
-                async def until(predicate):
+                async def until(predicate: Callable[[], bool]) -> None:
                     async with asyncio.timeout(35):
                         while not predicate():
                             await pilot.pause(.05)
