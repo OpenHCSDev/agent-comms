@@ -21,16 +21,16 @@ from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import ClassVar
 
 import agent_comms
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.typed_table import (
     DerivedTables,
+    SQLiteCatalogObject,
     SQLiteSchemaObject,
     SQLiteUserVersion,
     TypedRow,
@@ -62,44 +62,13 @@ def unnamed(sql: str) -> str:
     return _INDEX_NAME.sub(r"\1\2", sql, count=1)
 
 
-class CatalogKind(DeclaredFamily, affix="Kind"):
-    """What SQLite's catalog calls an entry; each kind owns how the carry treats it."""
-
-    holds_rows: ClassVar[bool] = False
-    named_by_coverage: ClassVar[bool] = False
-
-
-class TableKind(CatalogKind):
-    holds_rows = True
-
-
-class IndexKind(CatalogKind):
-    named_by_coverage = True
-
-
-class TriggerKind(CatalogKind):
-    pass
-
-
-class ViewKind(CatalogKind):
-    pass
-
-
 @dataclass(frozen=True)
-class StoredObject(TypedRow):
-    """One catalog entry: SQLite's own type, name and table."""
-
-    type: type[CatalogKind]
-    name: str
-    tbl_name: str
-    sql: str
+class StoredObject(SQLiteCatalogObject):
+    """One catalog entry, as the legacy carry reads it: retired sealed copies included."""
 
     @property
     def retired(self) -> bool:
         return self.type.holds_rows and self.name in RETIRED_TABLES
-
-    def drop(self, db) -> None:
-        db.execute(f'DROP {self.type.declared_name.upper()} IF EXISTS "{self.name}"')
 
     def declaration(self, path: Path) -> type[TypedTable]:
         try:
@@ -118,12 +87,6 @@ class StoredObject(TypedRow):
 
     def render(self) -> str:
         return f"{self.type.declared_name} {self.name} on {self.tbl_name}: {self.sql}"
-
-    @classmethod
-    def stored(cls, db) -> tuple[StoredObject, ...]:
-        return tuple(cls.read(db.execute(
-            "SELECT type,name,tbl_name,sql FROM sqlite_master "
-            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
 
 
 def derived(row: type[TypedTable]) -> bool:
@@ -213,14 +176,10 @@ def carry(path: Path) -> FileCarried:
             declared = {name: sql for row in rows for name, sql in row.schema_objects().items()}
             counts = RowCount.of(db, kept)
             retired = RowCount.of(db, [item for item in tables if item.retired])
-            for item in before:
-                if not item.type.holds_rows and declared.get(item.name) != item.sql:
-                    item.drop(db)
             for item in tables:
                 if item.retired:
                     item.drop(db)
-            for row in rows:
-                row.create(db, if_not_exists=True)
+            StoredObject.carry(db, declared, frozenset(item.name for item in before))
             if differences := SQLiteSchemaObject.differences(TypedTable.objects_of(db, rows), declared):
                 raise RelationViolationError(f"{path}: still differs: {differences}")
             if RowCount.of(db, kept) != counts:

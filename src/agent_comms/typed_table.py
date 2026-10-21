@@ -588,6 +588,80 @@ class SQLiteTableName(TypedRow):
         db.execute(f"DROP TABLE {_identifier(self.name)}")
 
 
+class CatalogKind(DeclaredFamily, affix="Kind"):
+    """What SQLite's catalog calls an entry; each kind owns how a schema carry treats it."""
+
+    holds_rows: ClassVar[bool] = False
+    named_by_coverage: ClassVar[bool] = False
+
+    @classmethod
+    def drop(cls, db: sqlite3.Connection, name: str) -> None:
+        db.execute(f"DROP {cls.declared_name.upper()} IF EXISTS {_identifier(name)}")
+
+    @classmethod
+    def derive(cls, db: sqlite3.Connection, item: SQLiteCatalogObject,
+               declared: Mapping[str, str]) -> None:
+        """An object that holds no rows is rebuilt from its declaration: one that differs from
+        it, or that nothing declares, is dropped, and the carry creates what is declared."""
+        if declared.get(item.name) != item.sql:
+            cls.drop(db, item.name)
+
+
+class TableKind(CatalogKind):
+    holds_rows = True
+
+    @classmethod
+    def derive(cls, db: sqlite3.Connection, item: SQLiteCatalogObject,
+               declared: Mapping[str, str]) -> None:
+        """Rows are never rebuilt from a declaration: a table that differs stays, and the
+        caller's schema check refuses it."""
+
+
+class IndexKind(CatalogKind):
+    named_by_coverage = True
+
+
+class TriggerKind(CatalogKind):
+    pass
+
+
+class ViewKind(CatalogKind):
+    pass
+
+
+@dataclass(frozen=True)
+class SQLiteCatalogObject(TypedRow):
+    """One catalog entry: SQLite's own type, name and table."""
+
+    type: type[CatalogKind]
+    name: str
+    tbl_name: str
+    sql: str
+
+    def drop(self, db: sqlite3.Connection) -> None:
+        self.type.drop(db, self.name)
+
+    @classmethod
+    def stored(cls, db: sqlite3.Connection) -> tuple[SQLiteCatalogObject, ...]:
+        return tuple(cls.read(db.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")))
+
+    @classmethod
+    def carry(cls, db: sqlite3.Connection, declared: Mapping[str, str],
+              compared: frozenset[str]) -> None:
+        """Inside the caller's write transaction, the compared objects onto the declaration:
+        each kind derives its stored objects (rebuilt, or left for the caller's check), then
+        every declared object the file lacks is created from its declared SQL."""
+        for item in cls.stored(db):
+            if item.name in compared:
+                item.type.derive(db, item, declared)
+        present = {item.name for item in cls.stored(db)}
+        for name, sql in declared.items():
+            if name not in present:
+                db.execute(sql)
+
+
 class TableSchema(ABC):
     """The tables of one SQLite file, and the one reader of the SQL SQLite stored for them.
 
@@ -647,9 +721,22 @@ class TableSchema(ABC):
             row.create(db)
 
     @classmethod
+    def derive_schema(cls, db: sqlite3.Connection) -> None:
+        """Inside the caller's write transaction, the stored schema onto the declaration
+        wherever the declaration says how: a row's declared earlier table name, an index,
+        trigger or view rebuilt from its SQL, a declared object the file lacks. What it cannot
+        say, a table whose columns differ, is refused with the rows untouched."""
+        for row in cls.schema_rows():
+            row.take_previous_name(db)
+        SQLiteCatalogObject.carry(db, cls.declared_schema(),
+                                  frozenset(item.name for item in cls.stored_schema(db)))
+        cls.require_schema(db)
+
+    @classmethod
     @abstractmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
-        """The writer's answer to a stored schema that differs from the declaration."""
+        """The writer's answer to a stored schema that differs from the declaration, in a
+        write transaction of its own."""
 
 
 class RowMutation(Enum):
@@ -728,13 +815,17 @@ class DerivedTables(TableSchema):
 
 
 class DurableTables(TableSchema):
-    """Rows nothing else can rebuild: a schema that differs is refused; only a carry moves it."""
+    """Rows nothing else can rebuild: the writer carries a stored schema that differs onto
+    the declaration where the declaration says how, keeping every row, and refuses the rest.
+    No hand-written step repeats what a declaration already says."""
 
     __slots__ = ()
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
-        cls.require_schema(db)
+        if cls.schema_differs(db):
+            with SQLiteFile.write_transaction(db):
+                cls.derive_schema(db)
 
 
 @lru_cache(maxsize=4)
@@ -772,6 +863,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()
     without_rowid: ClassVar[bool] = False
+    renamed_from: ClassVar[tuple[str, ...]] = ()
+    """Table names this row's rows were stored under before; the writer renames the one it
+    finds, so a renamed declaration needs no hand-written step."""
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -913,6 +1007,23 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def drop(cls, db: sqlite3.Connection) -> None:
         """Drop the declared table; SQLite drops its indexes with it."""
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
+
+    @classmethod
+    def take_previous_name(cls, db: sqlite3.Connection) -> None:
+        """Rows stored under a declared earlier name move to the declared one; rows under both
+        are refused, since nothing says which to keep."""
+        stored = {table.name for table in SQLiteTableName.stored(db)}
+        match [name for name in cls.renamed_from if name in stored]:
+            case []:
+                pass
+            case [previous] if cls.declared_name not in stored:
+                db.execute(f"ALTER TABLE {_identifier(previous)} RENAME TO "
+                           f"{_identifier(cls.declared_name)}")
+            case found:
+                holders = sorted({*found, cls.declared_name} & stored)
+                raise RelationViolationError(
+                    f"{cls.declared_name}: tables {holders} could each hold its rows;"
+                    " refusing to choose")
 
     @classmethod
     def stored_columns(cls, db: sqlite3.Connection) -> tuple[str, ...]:
@@ -1243,7 +1354,7 @@ class TypedStore(StoreWriter, TableSchema):
                 with self.write_transaction(connection):
                     if not self.stored_schema(connection):
                         self.create_schema(connection)
-            # Under the attachment boundary: a derived file is rebuilt, a durable one refused.
+            # Under the attachment boundary: a derived file is rebuilt, a durable one carried.
             self.reconcile_schema(connection)
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
