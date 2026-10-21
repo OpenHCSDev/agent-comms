@@ -905,6 +905,20 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     )
 
 
+def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
+    base = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.done\n"})
+    kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})
+    status, report = repo.compare(base, kept)
+    identity = f"{NoneAbsence.__name__}:{repo.root}/owner.py"
+    assert report["introduced"][identity] == 0
+    added = repo.commit(
+        {"owner.py": "def ready(stored):\n    return stored is not None and stored.owner is not None\n"}
+    )
+    status, report = repo.compare(kept, added)
+    assert status == 1
+    assert report["introduced_lines"][identity] == [2]
+
+
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
