@@ -157,8 +157,9 @@ class PlanStalledDegradation(Degradation):
 
 
 class OverloadDegradation(Degradation):
-    """More owed orders, expired timers and unjudged edits than one commander keeps up with;
-    load moves every beat, so it stops the commander once per round while it stays over."""
+    """More owed orders, expired timers and unjudged edits per reader than one thread keeps up
+    with. Forking adds readers, so a commander relieves this by forking; load moves every beat,
+    so it stops the commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -166,7 +167,7 @@ class OverloadDegradation(Degradation):
     @classmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         load = Load.of(comms, commander)
-        if load.total < cls.ceiling:
+        if load.share < cls.ceiling:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
                      f"{load}, over {cls.ceiling:.0f}"),)
