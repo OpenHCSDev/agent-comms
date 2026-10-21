@@ -32,7 +32,7 @@ from .working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .message_bus import WatchPass
+    from agent_comms.message_bus import WatchPass
 
 Result = TypeVar("Result")
 
@@ -128,8 +128,8 @@ class Coordination:
         return await join_retirement(pending)
 
     @classmethod
-    async def watch_worker(
-        cls, watch: WatchPass, opened_wire: Callable[[], AbstractContextManager[Comms]],
+    async def watch_worker[Observed](
+        cls, watch: WatchPass[Observed], opened_wire: Callable[[], AbstractContextManager[Comms]],
     ) -> None:
         """Join each entered pass before idling; cancellation also joins borrowed work."""
         while True:

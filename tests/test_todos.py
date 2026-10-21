@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import shlex
@@ -65,6 +66,8 @@ from agent_comms.todos import (
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.work_branches import WorkBranches
 
+
+pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work")
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -416,6 +419,88 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                 held = [line for line in observed if line.split()[1] != "free"]
                 assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
         assert tuple(c.goals.todos.get(todo.id) for todo in originals) == originals
+
+
+def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
+    from test_holder_standing_rules import blocked_holder
+    from agent_comms.commander.standing import Blocked
+    from agent_comms.goal_actions import GoalPreconditionChanged, RetryGoalAction
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.commander_heartbeat import CommanderReview
+
+    caplog.set_level(logging.INFO)
+    with LaunchRoot.from_path(held_bus.root).selected():
+        blocked_holder(held_bus)
+        observed, = Blocked.violations(held_bus, "lead")
+        recovered = held_bus.goals.update_goal("worker", RetryGoalAction())
+        rows = tuple(held_bus.goals.todos.get(problem) for problem in observed.orders)
+        generation = held_bus.goals.open_goal_store().require_generation(recovered.id)
+        inputs = InputDispositions(held_bus.root)
+        unresolved = inputs.lookup("unresolved-input")
+        review = CommanderReview(frozenset())
+        with held_bus.bus.locked():
+            CommanderHeartbeat.register(held_bus.registry)
+            review.wake(held_bus, CommanderHeartbeat.sender,
+                        held_bus.registry.require("lead"), (observed,))
+        assert observed not in review.violations
+        assert held_bus.registry.require("worker").goal == recovered
+        assert tuple(held_bus.goals.todos.get(row.id) for row in rows) == rows
+        assert held_bus.goals.open_goal_store().require_generation(recovered.id) == generation
+        assert inputs.lookup("unresolved-input") == unresolved
+        rejected = caplog.records[-1].args[0]
+        assert isinstance(rejected, GoalPreconditionChanged)
+        assert rejected.thread.name == "worker"
+        assert rejected.expected == observed.goal.captured
+
+
+def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
+    from test_holder_standing_rules import blocked_holder
+    from agent_comms.commander.standing import Blocked, UnownedWheelSpin
+    from agent_comms.standing_rules import StandingRule
+
+    with LaunchRoot.from_path(held_bus.root).selected():
+        blocked_holder(held_bus)
+        observed, = Blocked.violations(held_bus, "lead")
+        row = held_bus.goals.todos.get(observed.orders[0])
+        reassigned = held_bus.goals.update_goal("outsider", UnownedWheelSpin.order_for(
+            row, "lead", held_bus.registry.require("lead").incarnation))
+        assigned = held_bus.goals.todos.get(row.id)
+        generation = held_bus.goals.open_goal_store().require_generation(observed.goal.id)
+        with held_bus.bus.locked(), pytest.raises(TodoError):
+            StandingRule.enforce_all(held_bus, "lead", (observed,))
+        assert held_bus.registry.require("worker").goal == observed.goal
+        assert held_bus.registry.require("outsider").goal == reassigned
+        assert held_bus.goals.todos.get(row.id) == assigned
+        assert held_bus.goals.open_goal_store().require_generation(observed.goal.id) == generation
+
+
+def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
+    from agent_comms.commander.standing import ReassignedWheelSpin
+    from agent_comms.goal_actions import GoalPreconditionChanged
+    from agent_comms.goals import NoGoal
+
+    caplog.set_level(logging.INFO)
+    with LaunchRoot.from_path(checkout_bus.root).selected():
+        watch = UnownedOrderWatch()
+        observed = watch.observe(checkout_bus)
+        item, = observed
+        assert isinstance(item.rule, ReassignedWheelSpin)
+        selected = item.rule.dispatch.unit
+        assert selected.goal == NoGoal()
+        assert FieldCodec.decode(
+            type(item.rule.dispatch.action), FieldCodec.encode(item.rule.dispatch.action)
+        ) == item.rule.dispatch.action
+        changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
+            text="New independent work after the idle observation"))
+        before = checkout_bus.goals.todos.get(item.rule.todo.id)
+        with checkout_bus.bus.locked():
+            watch.pass_body(checkout_bus, observed)
+        assert checkout_bus.registry.require(selected.name).goal == changed
+        assert checkout_bus.goals.todos.get(before.id) == before
+        rejected = caplog.records[-1].args[0]
+        assert isinstance(rejected, GoalPreconditionChanged)
+        assert rejected.thread.name == selected.name
+        assert rejected.expected == selected.goal.captured
 
 
 def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):

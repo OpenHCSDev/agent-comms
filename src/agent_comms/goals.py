@@ -212,16 +212,37 @@ class GoalRevision:
 
 
 class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):
-    """Captured goal identity, not a goal record or execution permission."""
+    """Captured goal identity, including observed absence or no observation."""
+
+    def matches(self, goal: GoalDeclaration) -> bool:
+        return self == goal.captured
 
     @abstractmethod
     def require_identity(self, goal_id: str) -> None: ...
+
+    @abstractmethod
+    def __str__(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class UnobservedGoalCheckpoint(GoalCheckpoint):
+    def matches(self, goal: GoalDeclaration) -> bool:
+        return True
+
+    def require_identity(self, goal_id: str) -> None:
+        raise ValueError("No goal execution identity was observed")
+
+    def __str__(self) -> str:
+        return "unobserved goal"
 
 
 @dataclass(frozen=True)
 class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
     def require_identity(self, goal_id: str) -> None:
         raise ValueError("Goal execution identity does not match its declaration")
+
+    def __str__(self) -> str:
+        return "no goal"
 
 
 @dataclass(frozen=True)
@@ -231,6 +252,9 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     def require_identity(self, goal_id: str) -> None:
         if self.revision.id != goal_id:
             raise ValueError("Goal execution identity does not match its declaration")
+
+    def __str__(self) -> str:
+        return f"goal {self.revision.id}@{self.revision.revision}"
 
 
 class CheckResult(DeclaredFamily, affix="CheckResult"):
@@ -707,7 +731,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return goal
 
     def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        if self.captured != PresentGoalCheckpoint(checkpoint):
+        if not PresentGoalCheckpoint(checkpoint).matches(self):
             raise ValueError("The goal changed before this action; the action was not applied.")
         return self.require()
 

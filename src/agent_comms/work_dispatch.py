@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from .goal_actions import (
+from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
     ProblemOrderGoalAction,
@@ -107,6 +107,12 @@ class ReusedWorkDispatch(WorkDispatch):
     """Publish to an existing unit without allocating or starting another process."""
 
     unit: Thread
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "action", replace(
+            self.action,
+            expect=replace(self.action.expect, expected_checkpoint=self.unit.goal.captured),
+        ))
 
     @property
     def name(self) -> str:

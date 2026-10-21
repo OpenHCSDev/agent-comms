@@ -6,13 +6,13 @@ import time
 from collections.abc import Iterable, Sequence
 from abc import abstractmethod
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.goals import Goal, GoalRevision
+from agent_comms.goal_actions import GoalPrecondition, ReissuedOrderGoalAction
+from agent_comms.goals import Goal
 from agent_comms.goal_states import BlockedState
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.goal_generation import GenerationState, RetryableGeneration
@@ -94,7 +94,7 @@ class BlockedHolder(HolderCannotRun, declared_name=None):
     """A holder whose blocked goal is idle; its attempt ledger decides what may follow."""
 
     block_record: Path
-    goal: GoalRevision
+    goal: Goal
 
     @staticmethod
     @abstractmethod
@@ -109,7 +109,7 @@ class BlockedHolder(HolderCannotRun, declared_name=None):
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().revision_key)
+        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require())
 
 
 @dataclass(frozen=True)
@@ -133,10 +133,17 @@ class Blocked(BlockedHolder):
         return isinstance(generation, RetryableGeneration)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        observed = self.goal
         for problem in self.orders:
             todo = comms.goals.todos.get(problem)
-            comms.goals.update_goal(self.unit, UnownedWheelSpin.order_for(
-                todo, commander, CoreWatcherIncarnation.watcher()))
+            todo.require_assignee(comms.registry.require(self.unit).incarnation, observed.id)
+            action = UnownedWheelSpin.order_for(todo, commander, CoreWatcherIncarnation.watcher())
+            observed = comms.goals.update_goal(self.unit, replace(
+                action, expect=GoalPrecondition(
+                    goal_id=observed.id, expected_state=observed.state,
+                    expected_checkpoint=observed.captured,
+                ),
+            ))
 
     def line(self) -> str:
         return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
@@ -343,7 +350,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 
     def pass_body(self, comms: Comms, observed: tuple[UnownedObservation, ...]) -> None:
         for item in observed:
-            item.rule.enforce(comms, item.commander.name)
+            StandingRule.enforce_all(comms, item.commander.name, (item.rule,))
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

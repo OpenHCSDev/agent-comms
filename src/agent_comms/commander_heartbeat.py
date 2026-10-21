@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class CommanderReview:
-    """One commander's observed violations and its next review position."""
+    """One commander's handled observations and its next review position."""
 
     violations: frozenset[StandingRule]
     turn: int = 0
@@ -33,8 +33,11 @@ class CommanderReview:
             return
         # Mark the observation before any effect; an uncertain publication is not replayed.
         self.violations = found
-        StandingRule.enforce_all(comms, commander.name,
-                                 (rule for rule in rules if rule not in previous))
+        rejected = StandingRule.enforce_all(
+            comms, commander.name, (rule for rule in rules if rule not in previous)
+        )
+        # A checked rejection has no effects and must not suppress a fresh observation.
+        self.violations = found - rejected
         lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
         owed = comms.goals.todos.held_for_commander(commander.incarnation)
         units = sorted({todo.held().owner for todo in owed})
@@ -43,7 +46,10 @@ class CommanderReview:
             orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
             lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
             self.turn += 1
-        lines.extend(StandingRule.heartbeat_changes(previous, rules))
+        lines.extend(StandingRule.heartbeat_changes(
+            previous, tuple(rule for rule in rules if rule not in rejected)
+        ))
+        lines.extend(rule.rejected_line() for rule in rules if rule in rejected)
         if not found:
             lines.append("Standing rules clear.")
         comms.messaging.send(sender, commander.name, "\n".join(lines))

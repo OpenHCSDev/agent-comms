@@ -6,6 +6,7 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
+import logging
 import time
 from abc import abstractmethod
 from collections import Counter, defaultdict
@@ -37,13 +38,25 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
+    def rejected_line(self) -> str:
+        return f"Not applied (goal changed): {self.line()}"
+
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
     @staticmethod
-    def enforce_all(comms: Comms, commander: str, rules: Iterable[StandingRule]) -> None:
+    def enforce_all(comms: Comms, commander: str,
+                    rules: Iterable[StandingRule]) -> frozenset[StandingRule]:
+        from agent_comms.goal_actions import GoalPreconditionChanged
+
+        rejected: set[StandingRule] = set()
         for rule in rules:
-            rule.enforce(comms, commander)
+            try:
+                rule.enforce(comms, commander)
+            except GoalPreconditionChanged as changed:
+                logging.info("Skipped stale enforcement: %s", changed)
+                rejected.add(rule)
+        return frozenset(rejected)
 
     def heartbeat_group(self) -> object:
         """Ordinary violations each own one heartbeat line."""
