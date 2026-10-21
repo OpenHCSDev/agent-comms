@@ -98,6 +98,12 @@ class ChannelRowModel:
 
 
 class SidebarObservation(ABC):
+    def status_text(self) -> str:
+        return "Reading comms"
+
+    def shows_status(self) -> bool:
+        return True
+
     def require_snapshot(self) -> CoordinationSnapshot:
         self.unavailable()
 
@@ -131,6 +137,9 @@ class WaitingSidebar(SidebarObservation):
 class FailedSidebar(SidebarObservation):
     error: Exception
 
+    def status_text(self) -> str:
+        return str(self.error)
+
     def unavailable(self) -> NoReturn:
         raise self.error
 
@@ -142,6 +151,12 @@ class FailedSidebar(SidebarObservation):
 @dataclass(frozen=True)
 class ObservedSidebar(SidebarObservation):
     snapshot: CoordinationSnapshot
+
+    def status_text(self) -> str:
+        return ""
+
+    def shows_status(self) -> bool:
+        return False
 
     def require_snapshot(self) -> CoordinationSnapshot:
         return self.snapshot

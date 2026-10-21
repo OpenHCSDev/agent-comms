@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.context_segments.response import SelectedResponseSegment
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -31,7 +32,7 @@ from agent_comms.ui_model.observation import (
     ReadRefused,
     ReadRequest,
     SidebarObserved,
-    SidebarDeferred,
+    SidebarPreparing,
     SidebarReading,
     SidebarReadStage,
     ThreadsObserved,
@@ -168,33 +169,41 @@ def failing(error):
 DEFERRED, MALFORMED = StaleRevision("source moved during the read"), ValueError("Unknown ContextSegment kind")
 
 
-@pytest.mark.parametrize("error_type", [CoordinationReadUnavailable, StaleRevision])
-def test_sidebar_deferred_read_does_not_replace_its_original_interest(
-    comms, monkeypatch, error_type
-):
-    def deferred(*args, **kwargs):
-        raise error_type("original sidebar read deferred")
+@dataclass(frozen=True)
+class PreparingStage(SidebarReadStage):
+    cause: CoordinationReadUnavailable
 
-    original = comms.views.viewer_snapshot
+    def unavailable(self, *args):
+        raise self.cause
+
+    def read(self, request, comms, revision):
+        return request._answer(revision, self.unavailable, request.worktree)
+
+
+@pytest.mark.parametrize("cause", [
+    CoordinationReadUnavailable("original sidebar read deferred"),
+    StaleRevision("source moved"),
+    RouteIndexRebuilding(1, 2),
+])
+def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     request = ObserveSidebar(str(comms.root.parent), True, True)
     revision = comms.views.revision()
     reading = SidebarReading(request)
-    reading.stage = stage = SidebarReadStage()
-    initial_sent, initial_published = reading.sent, reading.published
-    with monkeypatch.context() as patch:
-        patch.setattr(comms.views, "viewer_snapshot", deferred)
-        result = stage.read(request, comms, revision)
-        assert isinstance(result, SidebarDeferred)
-        assert list(reading.read(comms, revision)) == []
-        assert reading.request is request and reading.stage is stage
-        assert reading.sent is initial_sent and reading.published is initial_published
-    assert comms.views.viewer_snapshot == original
+    reading.stage = stage = PreparingStage(cause)
+    first = list(reading.read(comms, revision))
+    assert isinstance(first[0], SidebarPreparing)
+    assert first[0].cause is cause
+    assert first[0].status_text() == f"Reading comms\n{cause}"
+    assert reading.request is request and reading.stage is stage
+    assert not any(isinstance(result, SidebarPreparing) for result in reading.read(comms, revision))
+    reading.stage = SidebarReadStage()
     completed = list(reading.read(comms, revision))
-    assert len(completed) == 1
+    assert len(completed) == 1 and isinstance(completed[0], SidebarObserved)
     assert reading.published is completed[0]
-    assert reading.stage is stage and reading.sent is not initial_sent
-    # The unchanged interest publishes once, then remains quiet.
     assert list(reading.read(comms, revision)) == []
+    reading.stage = stage
+    assert not any(isinstance(result, SidebarPreparing) for result in reading.read(comms, revision))
+    assert reading.published is completed[0]
 
 
 async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
