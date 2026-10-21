@@ -16,6 +16,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goals import RequestGoalOrder
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
+from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
@@ -83,6 +84,11 @@ class Registration:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
+
+    def prepare_native_root(self) -> PrivateRegistryGuard:
+        """Explicit owner launch prepares registry authority before any coordinator exists."""
+        with self.store.locked():
+            return self.store.private_guard_unlocked().prepare_native(self.store.path)
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
         """Declare or resume one child and its own request under the registry's lock."""

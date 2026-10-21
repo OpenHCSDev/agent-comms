@@ -1,7 +1,7 @@
 """Default-off private registry durability gate; never a public wire acknowledgement.
 
-This two-slot file must be created and directory-fsynced before the private
-marker. It is read only while the registry's process lock is held. A corrupt
+This two-slot file owns the native namespace and the registry's committed
+bytes. It is read only while the registry's process lock is held. A corrupt
 slot, or a pending slot whose replacement may be visible, is deliberately NOT
 repaired or skipped: an atomic replacement may already be visible even when
 its directory fsync failed.
@@ -38,6 +38,7 @@ from .private_path import fsync_directory
 
 if TYPE_CHECKING:
     from .threads import Thread
+    from .private_nk_entrypoint import RootLaunch
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -118,6 +119,15 @@ class RegistryPrivacy(ABC):
     @abstractmethod
     def register_restored(self, threads: Iterable[Thread]) -> None: ...
 
+    @abstractmethod
+    def launch(self, root: Path) -> RootLaunch: ...
+
+    @abstractmethod
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard: ...
+
+    @abstractmethod
+    def require_root(self, root_id: str, error: Exception) -> None: ...
+
 
 class PublicRegistry(RegistryPrivacy):
     def write(self, registry_path: Path, text: str) -> None:
@@ -125,6 +135,20 @@ class PublicRegistry(RegistryPrivacy):
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """A public bus has no coordinator identities for restored threads."""
+
+    def launch(self, root: Path) -> RootLaunch:
+        from .private_nk_entrypoint import SharedRootLaunch
+
+        return SharedRootLaunch(root)
+
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
+        guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
+        guard.create_pending()
+        guard.commit_initial()
+        return guard
+
+    def require_root(self, root_id: str, error: Exception) -> None:
+        raise error
 
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
@@ -138,6 +162,37 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         self.registry_path = registry_path
         self.path = self.path_in(registry_path.parent)
         self.root_id = bytes.fromhex(wire_root_id)
+
+    @classmethod
+    def load(cls, registry_path: Path) -> PrivateRegistryGuard:
+        """Read this guard's namespace; both slots and the registry must corroborate it."""
+        descriptor = os.open(cls.path_in(registry_path.parent), os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            raw = os.pread(descriptor, _SIZE, 0)
+        finally:
+            os.close(descriptor)
+        if len(raw) != _SIZE:
+            _reject("slot has an invalid length")
+        _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
+        _decode(raw, root_id)
+        guard = cls(registry_path, root_id.hex())
+        guard.verify()
+        return guard
+
+    def launch(self, root: Path) -> RootLaunch:
+        from .private_nk_entrypoint import PrivateNkLaunch
+
+        return PrivateNkLaunch.installed(root, self.root_id.hex())
+
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
+        if registry_path != self.registry_path:
+            _reject("belongs to another registry")
+        self.verify()
+        return self
+
+    def require_root(self, root_id: str, error: Exception) -> None:
+        if root_id != self.root_id.hex():
+            raise error
 
     def _trusted_root(self) -> None:
         if os.name != "posix" or not all(
@@ -274,7 +329,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                     committed=True)
 
     def create_pending(self) -> None:
-        """Caller holds bus then registry locks; no marker may exist yet."""
+        """The registry lock covers explicit native preparation before coordinator setup."""
         self._trusted_root()
         if self.path.exists() or self.path.is_symlink():
             _reject("already exists before initialization")
@@ -306,7 +361,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 ):
                     _reject("initial slots were incomplete")
                 os.fsync(fd)
-                os.fsync(directory_fd)  # guard name is durable before marker
+                os.fsync(directory_fd)  # guard name is durable before native preparation returns
                 self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
             finally:
                 os.close(fd)

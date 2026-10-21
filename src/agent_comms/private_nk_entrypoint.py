@@ -26,7 +26,7 @@ from .native_package import (
 )
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
-from .wire_log import WireLog
+from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .acp_extension import CursorScope
@@ -37,8 +37,7 @@ if TYPE_CHECKING:
 
 
 class RootLaunch(ABC):
-    """How a bus root launches native owners, decoded once from its marker where the root
-    is opened: a private root launches pinned owners, a shared root launches none."""
+    """Native launch policy derived from the registry's existing authority."""
 
     __slots__ = ()
 
@@ -46,15 +45,16 @@ class RootLaunch(ABC):
     def derive(route: CommsRoute) -> RootLaunch:
         """This route's launch from the owners of its facts.
 
-        The marker owns the root ID and this installation's pin owns the package.
-        A parent and its child read the same marker and pin, so they derive the
-        same launch.
+        The registry guard owns the native namespace; the installed pin owns
+        the package. No bus-file metadata participates in either decision.
         """
-        root = route.root
-        metadata = WireLog(WireLog.path_in(root)).read_metadata_unlocked()
-        if not metadata.private:
-            return SharedRootLaunch(root)
-        return PrivateNkLaunch.installed(root, metadata.root_id)
+        from .locked_store import RegistryFile
+        from .registry_store import RegistryStore
+
+        root = route.observe_root()
+        registry = RegistryStore(RegistryFile.path_in(root))
+        with registry.locked(mode=SharedLock()):
+            return registry.private_guard_unlocked().launch(root)
 
     @property
     @abstractmethod
@@ -69,13 +69,29 @@ class RootLaunch(ABC):
     def check(self) -> None:
         """Refuse a launch whose root was replaced; a shared root has nothing to check."""
 
-    @abstractmethod
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
-        """The binary a restarted owner runs."""
+        """Every prepared owner runs the selected runtime's pinned entrypoint."""
+        self.check()
+        return runtime.native_entrypoint
 
-    @abstractmethod
     def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        """Prepare this root for a launched owner; the binary that owner runs."""
+        """Explicit owner launch prepares registry authority, then native tables."""
+        from .locked_store import RegistryFile
+        from .registration import Registration
+
+        if agent_bin == NativeArguments.default_binary:
+            agent_bin = runtime.native_entrypoint
+        else:
+            agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
+        root = self.child_root
+        Registration(RegistryFile.path_in(root)).prepare_native_root()
+        with Coordination(str(CoordinationStore.path_in(root))) as store:
+            store.install_private_runtime()
+            store.participants.register(
+                thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                committed=True,
+            )
+        return agent_bin
 
     @abstractmethod
     def package_for(self, command: str) -> VerifiedNativePackage:
@@ -94,7 +110,7 @@ class RootLaunch(ABC):
 
 @dataclass(frozen=True, slots=True)
 class SharedRootLaunch(RootLaunch):
-    """An ordinary shared root: it launches no private owner and publishes no cursor."""
+    """An unprepared registry publishes no native cursor before an explicit owner launch."""
 
     root: Path
 
@@ -108,12 +124,6 @@ class SharedRootLaunch(RootLaunch):
 
     def check(self) -> None:
         pass
-
-    def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
-        return source_binary
-
-    def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        return agent_bin
 
     def package_for(self, command: str) -> VerifiedNativePackage:
         stack_launcher = MANIFEST.parent / "bin/pi-native"
@@ -149,32 +159,6 @@ class PrivateNkLaunch(RootLaunch):
     def check(self) -> None:
         self.validate()
 
-    def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
-        self.validate()
-        return runtime.native_entrypoint
-
-    def prepare_owner(self, thread: Thread, agent_bin: str, runtime: LaunchRuntime) -> str:
-        if agent_bin == NativeArguments.default_binary:
-            # The default stock binary cannot attest native input IDs.
-            # Keep the owner on this installation's pinned Pi entrypoint.
-            agent_bin = runtime.native_entrypoint
-        else:
-            # The owner process keeps the launcher selected at its start.
-            # A later PATH or installed-runtime symlink change cannot retarget
-            # drains already owned by this process.
-            agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
-        # Explicit launch installs the current runtime before registering
-        # this owner. Readers never create or repair runtime schemas.
-        with Coordination(str(CoordinationStore.path_in(self.validated_root))) as store:
-            store.install_private_runtime()
-            store.participants.register(
-                thread.incarnation.require_recorded().lookup,
-                thread.name,
-                thread.name,
-                committed=True,
-            )
-        return agent_bin
-
     def package_for(self, command: str) -> VerifiedNativePackage:
         return self.validate()
 
@@ -206,8 +190,14 @@ class PrivateNkLaunch(RootLaunch):
         directory, registry or database and make no provider request.
         """
         NativeSessionFiles.require_private_directory(self.validated_root)
-        with WireLog(WireLog.path_in(self.validated_root)).checked_read() as source:
-            marker = source.marker
-        if marker.root_id != self.wire_root_id:
-            raise IdentityConflict("private initial wire root changed")
+        from .bus import Bus
+        from .locked_store import RegistryFile
+        from .registry_store import RegistryStore
+
+        Bus(Bus.path_in(self.validated_root)).revision()
+        registry = RegistryStore(RegistryFile.path_in(self.validated_root))
+        with registry.locked(mode=SharedLock()):
+            registry.private_guard_unlocked().require_root(
+                self.wire_root_id, IdentityConflict("Native registry namespace changed"),
+            )
         return self.native_package
