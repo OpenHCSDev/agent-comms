@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, BinaryIO
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
+from agent_comms.locked_store import DurableFile, WireWakeFile
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .bus_page_index import BusPageIndex, BusPageRow
@@ -48,7 +49,6 @@ from .errors import (
     StoredHistoryUnreadable,
 )
 from .field_codec import FieldCodec, MalformedRecord
-from agent_comms.locked_store import DurableFile, WireWakeFile
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead, WritableCheckpoint
 from .private_path import AbsentPath, FileIdentity, FileRevision, MissingFile, ObservedPath
