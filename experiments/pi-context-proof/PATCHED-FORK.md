@@ -1,9 +1,9 @@
-# Disposable Pi 0.85.1 native input-ID fork (not a live rollout)
+# Disposable native input-ID fork (not a live rollout)
 
-`prepare-copied-pi.sh` verifies exact SHA-256 of 12 installed Pi/core/ai files, copies the 159 MB package into a private `/var/tmp` directory, applies `pi-0.85.1-native-input.patch` with **zero fuzz**, checks six patched JS modules, and prints `PI_PACKAGE_DIR` and `PI_CLI`. It does **not** patch the installed binary or create an autoload extension. The patch also updates the corresponding `.d.ts` files. Any upstream package change fails closed before patching.
+`stack/bin/prepare-pi-native` fetches the npm spec declared in `stack/pi-native.sha256` and installs its locked dependencies. It passes that spec and package directory to `prepare-copied-pi.sh`, which checks package identity, makes an independent private copy, applies `native-input.patch` with **zero fuzz**, checks six patched JS modules, and prints `PI_PACKAGE_DIR` and `PI_CLI`. The script has no default stock directory and no second release or per-file checksum list. It does **not** patch the installed binary or create an autoload extension. The patch also updates the corresponding `.d.ts` files. Package identity mismatch, patch rejection and tool failures keep their own diagnostics.
 
 ```sh
-experiments/pi-context-proof/prepare-copied-pi.sh
+stack/bin/prepare-pi-native --python /path/to/python
 # Use its PI_PACKAGE_DIR result:
 PI_PACKAGE_DIR=/var/tmp/agent-comms-pi-native-.../node_modules/@earendil-works/pi-coding-agent \
   PI_OFFLINE=1 node --test \

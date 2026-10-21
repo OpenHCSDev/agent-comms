@@ -17,7 +17,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SOURCE = REPO / "src" / "agent_comms"
 STACK = REPO / "stack"
-NATIVE_INPUT_PATCH = REPO / "experiments" / "pi-context-proof" / "pi-0.85.1-native-input.patch"
+NATIVE_INPUT_PATCH = REPO / "experiments" / "pi-context-proof" / "native-input.patch"
 
 pytestmark = pytest.mark.refactor_guard
 
