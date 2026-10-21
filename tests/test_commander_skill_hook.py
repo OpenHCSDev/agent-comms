@@ -101,13 +101,15 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
     assert [hook.take() for _ in range(SliceReminder.every)][-1] == (slices[0],)
 
 
-def test_the_deck_carries_the_voice_every_third_slice_and_every_drift_tell():
+def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():
     slices = CommanderStart.slices()
     voice = CommanderStart.paragraphs(CommanderConfig.packaged_voice().read_text())
     indictment = CommanderStart.paragraphs(CommanderConfig.packaged_indictment().read_text())
-    assert set(slices[0::3]) == set(voice)
-    assert set(slices[1::3]) == set(indictment)
-    assert set(slices[2::3]) == set(RuleFile.drift_tells())
+    assert set(slices[0::4]) == set(voice)
+    assert set(slices[1::4]) == set(indictment)
+    assert set(slices[2::4]) == set(RuleFile.drift_tells())
+    assert set(slices[3::4]) == {
+        f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
     assert all(len(text) < 2_000 for text in slices)
 
 

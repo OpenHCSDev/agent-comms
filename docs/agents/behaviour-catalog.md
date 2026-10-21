@@ -32,6 +32,13 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 21, It reported a state its evidence did not show: no pattern cites it yet
 - Failure 22, It left a unit's question unanswered for hours: no pattern cites it yet
 - Failure 23, It held plan work for hours while nothing reached main: `plan_stalled`
+- Failure 24, It kept a dead copy and called it a legacy case: no pattern cites it yet
+- Failure 25, It noted slop for later instead of deleting it: no pattern cites it yet
+- Failure 26, It restated an owner's rule in a second file: no pattern cites it yet
+- Failure 27, It gave an order from a guess about code it had not read: no pattern cites it yet
+- Failure 28, It called a workaround a fix: no pattern cites it yet
+- Failure 29, It softened slop into neutral words: no pattern cites it yet
+- Failure 30, It waited on checks that test nothing it changed: no pattern cites it yet
 
 ## plan_idle
 
