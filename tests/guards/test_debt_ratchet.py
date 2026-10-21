@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
+from agent_comms.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
@@ -105,8 +106,16 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
             assert len(pool) > 1, "the real ratchet must have started its pool"
             with pytest.raises(subprocess.TimeoutExpired):
                 child.collect(timeout=.05)
-        assert not child.platform.group_members(child.identity)
-        assert all(not member.alive() for member in observed)
+        after = child.platform.group_members(child.identity)
+        surviving_probe = tuple(member for member in observed if member.alive())
+        (tmp_path / "comparison-tree.json").write_text(json.dumps({
+            "tool_group_before": [FieldCodec.encode(member) for member in pool],
+            "probe_before": [FieldCodec.encode(member) for member in observed],
+            "tool_group_after": [FieldCodec.encode(member) for member in after],
+            "probe_after": [FieldCodec.encode(member) for member in surviving_probe],
+        }, indent=2))
+        assert not after
+        assert not surviving_probe
     finally:
         # Failure cleanup has exact identities and runs after the assertions. It
         # cannot make the test pass by sweeping unrelated processes by name.
