@@ -1,5 +1,6 @@
 """Source membership, public-only capture, and selected recorded values."""
 
+from agent_comms.context_store import UNREAD_CONTEXT
 from bus_history import read_history
 from dataclasses import replace
 import hashlib
@@ -160,7 +161,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     original = replace(original, thread=owner.incarnation,
         turn=replace(original.turn, occurrence=replace(original.turn.occurrence,
                                                        incarnation=owner.incarnation)))
-    comms.contexts.record(original)
+    comms.contexts.record_after(UNREAD_CONTEXT, original)
     page = comms.contexts.page(owner.name, comms.registry)
     request = ContextRecordedSegmentRuntimeRequest(thread=owner.name, turn=original.turn,
                 request_id=original.request_id.require_id(), record=page.reference(page.resources[0].value),
@@ -269,7 +270,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
                                  .measured_manifest(),)), thread=owner.incarnation)
     captured = replace(captured, segments=(replace(captured.segments[0],
                                                   captured_text=("Original request system",)),))
-    comms.contexts.record(captured)
+    comms.contexts.record_after(UNREAD_CONTEXT, captured)
     page = comms.contexts.page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
     assert read_history(comms) == []

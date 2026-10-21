@@ -19,6 +19,7 @@ from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend
+from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -120,7 +121,9 @@ class TurnRunner:
             self.comms.agents.transition_turn, lease, phase
         ))
         for state in states:
-            await self.effects._emit_event(session_id, TurnTranscriptUpdate(state=state))
+            await TurnEventConsumer(self.effects, session_id, self.runtime, lease.turn_id).dispatch(
+                TurnTranscriptUpdate(state=state)
+            )
 
     async def observe_compaction(self, session_id: str, event) -> None:
         name = self.sessions.bindings.get(session_id)
@@ -150,7 +153,7 @@ class TurnRunner:
         """Publish this attested saved owner through the shared info consumer."""
         state.model.require_selection(thread.model)
         await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
-        await self.effects._emit_event(session_id, info)
+        await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
     async def inspect_context(self, session_id, thread):
         from .pi_commands import AgentCommsInspectContext
@@ -197,7 +200,9 @@ class TurnRunner:
                     self.comms.messaging.send, thread_name, target, body,
                 ))
                 for notice in sent.notices:
-                    await self.effects._emit_event(session_id, events.Notice(text=notice))
+                    await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
+                        events.Notice(text=notice)
+                    )
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
             )
@@ -356,15 +361,17 @@ class TurnRunner:
             update = await Coordination.run_worker(partial(
                 self.finish_turn, resources, session_id, lease,
             ))
-            await self.effects._emit_event(session_id, update)
+            await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(update)
 
     def current_turn_update(self, session_id: str):
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
-    async def publish_turn_state(self, session_id: str, client: Any = None) -> None:
-        """Publish the registry owner's current turn to this open session."""
-        update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
-        await self.effects._emit_event(session_id, update, client=client)
+    async def publish_turn_state(self, consumer: AcpEventConsumer) -> None:
+        """Publish the registry owner's current turn to this explicit recipient."""
+        update = await Coordination.run_worker(
+            partial(self.current_turn_update, consumer.session_id)
+        )
+        await consumer.dispatch(update)
 
     async def active_backend_turn(self, session_id: str) -> DrainTurn:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
@@ -414,7 +421,7 @@ class TurnRunner:
             self.turn_tasks[session_id] = task
             try:
                 result = await execution.run(
-                    on_compaction=partial(self.effects._emit_event, session_id),
+                    on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
                     pi_session=self.backend_for(session_id, owner),
                     following=following,
                 )
@@ -427,7 +434,9 @@ class TurnRunner:
                         self.turn_tasks.pop(session_id, None)
                     # SelectedParticipant closed the registry lease while unwinding
                     # execution. Publish that canonical end on success and failure.
-                    await self.publish_turn_state(session_id)
+                    await self.publish_turn_state(
+                        AcpEventConsumer(self.effects, session_id, self.runtime)
+                    )
 
     async def run_agent_turn(
         self,
