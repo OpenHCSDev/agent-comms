@@ -12,7 +12,7 @@ import hashlib
 import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
@@ -33,15 +33,16 @@ class WatchClaim:
     """The kernel-held lifetime and saved re-arm command of one session's bridge watch."""
 
     thread: str
+    home: Path = field(default_factory=Path.home)
 
     @classmethod
-    def directory(cls) -> Path:
-        return Path.home() / ".local/state/agent-comms/cli-watch"
+    def directory(cls, home: Path) -> Path:
+        return home / ".local/state/agent-comms/cli-watch"
 
     @property
     def path(self) -> Path:
         key = hashlib.sha256(self.thread.encode()).hexdigest()
-        return self.directory() / f"{key}.lock"
+        return self.directory(self.home) / f"{key}.lock"
 
     @property
     def socket_path(self) -> Path:

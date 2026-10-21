@@ -3,23 +3,69 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
+import select
 import socket
 import sys
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import TypeAdapter, ValidationError
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import Outcome, TaggedWire
+from agent_comms.field_codec import FieldCodec
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 if TYPE_CHECKING:
-    from .shared import LineMonitorBridge, MonitorProbe
+    from .shared import LineMonitorBridge, MonitorProbe, Serve
+
+
+class BridgeExit:
+    """Normal retirement has no successor runtime."""
+
+    def finish(self, operation: Serve, record: WatchRecord) -> None:
+        pass
+
+
+@dataclass
+class BridgeReplacement(BridgeExit):
+    """Keep the owner-launched process, not its old bus resources, through install."""
+
+    peer: socket.socket
+
+    def finish(self, operation: Serve, record: WatchRecord) -> None:
+        self.peer.setblocking(True)
+        with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
+            stream.write((SessionReady().model_dump_json() + "\n").encode())
+            while operation.owner.alive():
+                if select.select((self.peer,), (), (), 1)[0]:
+                    break
+            else:
+                print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
+                      file=sys.stderr)
+                return
+            # EOF means the installer died. Never select a fallback runtime.
+            self.peer.settimeout(30)
+            raw = stream.readline(4096)
+            if not raw:
+                return
+            runtime = FieldCodec.decode(LaunchRuntime, FieldCodec.parse(raw.decode()))
+        if not operation.owner.alive():
+            print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
+                  file=sys.stderr)
+            return
+        operation.owner.require_ancestor_of(os.getpid())
+        runtime.require_available()
+        command = operation.command(record, runtime)
+        os.execve(command[0], command, runtime.environment(os.environ))
 
 
 @dataclass
@@ -141,12 +187,32 @@ class SessionReply(TaggedWire):
     def end_session(self, service: MonitorService) -> None:
         """A refusal cannot stop the service."""
 
+    def pause_session(self, service: MonitorService, peer: MonitorPeer,
+                      process: ProcessIdentity) -> SessionReply:
+        return self
+
 
 class SessionReady(SessionReply):
     wire_tag = "ready"
 
     def end_session(self, service: MonitorService) -> None:
         asyncio.get_running_loop().call_soon(service.stop)
+
+    def pause_session(self, service: MonitorService, peer: MonitorPeer,
+                      process: ProcessIdentity) -> SessionReply:
+        if process != ProcessIdentity.capture(os.getpid()):
+            return SessionRefused(error='This is a different bridge process incarnation')
+        service.bridge.retirement = BridgeReplacement(peer.writer.get_extra_info('socket').dup())
+        self.end_session(service)
+        return PeerGone()
+
+
+class SessionInformation(SessionReply):
+    wire_tag = "information"
+    owner: ProcessIdentity
+    process: ProcessIdentity
+    runtime: LaunchRuntime
+    transcript: Path
 
 
 class SessionRefused(SessionReply):
@@ -170,13 +236,22 @@ REPLIES = TypeAdapter(SessionReply.declared_union())
 class SessionRequest(TaggedWire):
     __registry_config__ = TaggedWire.family_registry()
 
-    def exchange(self, claim: WatchClaim) -> None:
+    @contextmanager
+    def connection(self, claim: WatchClaim) -> Iterator[socket.socket]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
-            peer.settimeout(5)
+            peer.settimeout(30)
             peer.connect(str(claim.socket_path))
             peer.sendall((self.model_dump_json() + "\n").encode())
-            with peer.makefile("rb") as stream:
-                REPLIES.validate_json(stream.readline(4096)).require()
+            yield peer
+
+    def exchange(self, claim: WatchClaim) -> SessionReply:
+        with self.connection(claim) as peer, peer.makefile("rb") as stream:
+            raw = stream.readline(4096)
+            if not raw:
+                raise ConnectionResetError('Session bridge closed before replying')
+            reply = REPLIES.validate_json(raw)
+            reply.require()
+            return reply
 
     @abstractmethod
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...
@@ -199,6 +274,33 @@ class VerifySession(SessionRequest):
                 dict(error="This bridge belongs to a different Claude process incarnation")
             )
         return SessionReady()
+
+
+class InspectSession(SessionRequest):
+    wire_tag = "inspect"
+
+    def information(self, claim: WatchClaim) -> SessionInformation:
+        reply = self.exchange(claim)
+        if not isinstance(reply, SessionInformation):
+            raise ValueError("Session bridge did not report its process and runtime")
+        return reply
+
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        return SessionInformation(
+            owner=service.owner, process=ProcessIdentity.capture(os.getpid()),
+            runtime=LaunchRuntime.running(),
+            transcript=service.bridge.options.operation.transcript_source(),
+        )
+
+
+class PauseSession(VerifySession):
+    wire_tag = "pause"
+    process: ProcessIdentity
+
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        reply = await super().handle(service, peer)
+        # The replacement acknowledges only after all bus tasks, locks and DBs close.
+        return reply.pause_session(service, peer, self.process)
 
 
 class EndSession(VerifySession):
@@ -240,30 +342,42 @@ class MonitorService:
         path = WatchClaim(self.bridge.binding.thread).socket_path
         path.unlink(missing_ok=True)
         try:
-            async with asyncio.TaskGroup() as clients:
-                server = await asyncio.start_unix_server(
-                    lambda reader, writer: clients.create_task(self.accept(reader, writer)),
-                    str(path),
-                )
-                async with server:
-                    self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
-                    try:
-                        await self.owner.wait_exited()
-                    finally:
-                        self.stop()
+            server = await asyncio.start_unix_server(
+                lambda reader, writer: clients.create_task(self.accept(reader, writer)),
+                str(path), start_serving=False,
+            )
+            # Clients retire before Server.wait_closed waits for their transports.
+            async with server, asyncio.TaskGroup() as clients:
+                await server.start_serving()
+                self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
+                try:
+                    await self.owner.wait_exited()
+                finally:
+                    self.stop()
         finally:
             path.unlink(missing_ok=True)
 
 
 async def read_monitor(claim: WatchClaim) -> None:
+    session = await asyncio.to_thread(InspectSession().information, claim)
     with claim.reader_held():
-        reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
-        peer = MonitorPeer(reader, writer)
-        try:
-            await peer.write(AttachMonitor().model_dump_json())
-            REPLIES.validate_json(await reader.readline()).require()
-            async for line in reader:
-                sys.stdout.write(line.decode())
-                sys.stdout.flush()
-        finally:
-            await peer.close()
+        while session.owner.alive():
+            try:
+                current = await asyncio.to_thread(InspectSession().information, claim)
+                if current.owner != session.owner:
+                    raise ValueError('The session bridge now belongs to a different owner')
+                reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
+                peer = MonitorPeer(reader, writer)
+                try:
+                    await peer.write(AttachMonitor().model_dump_json())
+                    REPLIES.validate_json(await reader.readline()).require()
+                    async for line in reader:
+                        sys.stdout.write(line.decode())
+                        sys.stdout.flush()
+                finally:
+                    await peer.close()
+            except (FileNotFoundError, ConnectionRefusedError, ConnectionResetError):
+                pass
+            # Retirement drops the old connection; the same owner can publish a
+            # fresh endpoint. Keep the reader lease and require its fresh probe.
+            await asyncio.sleep(.05)
