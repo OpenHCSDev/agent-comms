@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
@@ -42,11 +42,17 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(SharedFileTables, DurableTables):
+class NativeRuntimeTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
+
+    @classmethod
+    def install(cls, store) -> None:
+        from .coordinated_runtime_schema import install_native_runtime_schema
+
+        install_native_runtime_schema(store)
 
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:
@@ -54,28 +60,6 @@ class NativeRuntimeTable(SharedFileTables, DurableTables):
         from . import triage_native_sources  # noqa: F401
 
         return super().schema_rows()
-
-
-@dataclass(frozen=True)
-class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSchema):
-    @classmethod
-    def install(cls, store) -> None:
-        from .coordinated_runtime_schema import install_native_runtime_schema
-
-        install_native_runtime_schema(store)
-
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[7] = field(default=7, kw_only=True)
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        return {
-            f"{cls.declared_name}_{operation.lower()}_guard": " "
-            f"BEFORE {operation} ON {cls.declared_name} "
-            "BEGIN SELECT RAISE(ABORT,'native runtime schema is frozen'); END"
-            for operation in ("UPDATE", "DELETE")
-        }
 
 
 @dataclass(frozen=True)

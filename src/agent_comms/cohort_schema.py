@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Literal
 
 from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
@@ -27,15 +26,18 @@ from .typed_table import (
     TypedTable,
 )
 
-COHORT_SCHEMA_VERSION = 2
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(SharedFileTables, DurableTables):
+class CohortTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
     schema_error = SchemaVersionError
+
+    @classmethod
+    def install(cls, store) -> None:
+        install_private_cohort_schema(store)
 
 
 class AwarenessTable(SharedFileTables, DurableTables):
@@ -43,34 +45,6 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
     __slots__ = ()
     schema_error = SchemaVersionError
-
-
-@dataclass(frozen=True, kw_only=True)
-class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
-    @classmethod
-    def install(cls, store) -> None:
-        install_private_cohort_schema(store)
-
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[2]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "cohort_meta_update_guard": (
-                " BEFORE UPDATE ON cohort_"
-                "schema_meta\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata is imm"
-                "utable'); END"
-            ),
-            "cohort_meta_delete_guard": (
-                " BEFORE DELETE ON cohort_"
-                "schema_meta\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata cannot"
-                " be deleted'); END"
-            ),
-        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -408,30 +382,6 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AwarenessSchemaMeta(AwarenessTable, TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[2]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "awareness_meta_update_guard": (
-                " BEFORE UPDATE ON awar"
-                "eness_schema_meta\n"
-                "        BEGIN SELECT RAISE(ABORT, 'optional schema metadata is i"
-                "mmutable'); END"
-            ),
-            "awareness_meta_delete_guard": (
-                " BEFORE DELETE ON awar"
-                "eness_schema_meta\n"
-                "        BEGIN SELECT RAISE(ABORT, 'optional schema metadata cann"
-                "ot be deleted'); END"
-            ),
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
 class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     claim_id: str = field(metadata={"sql": Column(primary_key=True)})
     wire_root_id: str
@@ -548,20 +498,9 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
         }
 
 
-def _digest(schema: dict[str, str]) -> str:
-    return hashlib.sha256("\n".join(schema.values()).encode()).hexdigest()
-
-
 def assert_cohort_schema(db: sqlite3.Connection) -> None:
-    schema = CohortTable.declared_schema()
-    try:
-        meta = CohortSchemaMeta.one(db, singleton=1)
-    except (sqlite3.Error, MalformedRecord) as error:
-        raise SchemaVersionError("private cohort schema is not installed") from error
-    if meta != CohortSchemaMeta(
-        singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(schema)
-    ):
-        raise SchemaVersionError("unsupported private cohort schema version")
+    if not CohortTable.stored_schema(db):
+        raise SchemaVersionError("private cohort schema is not installed")
     if CohortTable.schema_differs(db) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
@@ -569,33 +508,22 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
 
 
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    meta = AwarenessSchemaMeta.one(db, singleton=1)
-    if AwarenessTable.schema_differs(db) or meta != AwarenessSchemaMeta(
-        singleton=1, version=2, ddl_digest=_digest(AwarenessTable.declared_schema())
-    ):
+    if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):
         raise SchemaVersionError("optional awareness generation schema is unavailable")
 
 
 def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
     if not AwarenessTable.stored_schema(db):
         AwarenessTable.create_schema(db)
-        AwarenessSchemaMeta(
-            singleton=1, version=2, ddl_digest=_digest(AwarenessTable.declared_schema())
-        ).insert(db)
     assert_optional_awareness_schema(db)
 
 
 def install_private_cohort_schema(store: Coordination) -> None:
     """Create current acknowledgement tables on a fresh coordinator; no old-schema repair."""
     with store.session.writing() as db:
-        if store.session.schema_version != COORDINATION_SCHEMA_VERSION:
-            raise SchemaVersionError("unsupported coordinator schema")
+        CoordinatorTable.require_schema(db)
         if not CohortTable.stored_schema(db):
             CohortTable.create_schema(db)
-            CohortSchemaMeta(
-                singleton=1, version=COHORT_SCHEMA_VERSION,
-                ddl_digest=_digest(CohortTable.declared_schema())
-            ).insert(db)
         assert_cohort_schema(db)
         if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
             SQLiteJournalMode("delete")
