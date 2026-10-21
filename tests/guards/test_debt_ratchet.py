@@ -978,7 +978,7 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
 
 
 def string_identity_readings(source: bytes) -> list[tuple[str, type]]:
-    declared = b"class CarryStep: pass\ndef carry_hunts(): pass\n"
+    declared = b"class CarryStep: pass\nclass Claimed: pass\ndef carry_hunts(): pass\n"
     spellings = DeclaredSpellings.read(
         {
             path: DeclaredSpellings.declarations(path, module)
@@ -1019,6 +1019,25 @@ word = "plain words here"
         ("model", NamedAccess),
         ("pkg.plugin", NamedAccess),
         ("text", NamedAccess),
+    ]
+
+
+def test_a_one_word_class_name_counts_only_where_a_type_is_expected():
+    source = b"""notice = Message(owner, owner, "Claimed", kind)
+label = "Claimed"
+field: Annotated[int, tool_field("Claimed")] = 0
+step = "CarryStep"
+def read() -> "Claimed": pass
+held: "Claimed"
+class Index(list["Claimed"]): pass
+Bound = TypeVar("Bound", bound="Claimed")
+"""
+    assert string_identity_readings(source) == [
+        ("CarryStep", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
     ]
 
 
