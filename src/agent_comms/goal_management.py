@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
 from .goal_presentation import (
     GoalPublicationSnapshot,
     GoalSnapshot,

@@ -297,7 +297,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request="request",
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead", assigner=caller.identity(comms),
+                        commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),

@@ -5,10 +5,24 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from agent_comms import field_codec
+from agent_comms.goals import (
+    Goal,
+    GoalChangedError,
+    GoalCheckpoint,
+    GoalDeclaration,
+    GoalOrder,
+    NoGoal,
+    ProblemGoalOrder,
+    ReportedTurn,
+    RequestDirective,
+    RequestGoalOrder,
+    UnobservedGoalCheckpoint,
+    UnorderedGoalOrder,
+)
 from agent_comms.input_disposition import InputDispositions
 
 from .change_report import FileLine, NoSourceReference
@@ -28,20 +42,6 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.goals import (
-    Goal,
-    GoalCheckpoint,
-    GoalChangedError,
-    GoalDeclaration,
-    GoalOrder,
-    NoGoal,
-    ProblemGoalOrder,
-    ReportedTurn,
-    RequestDirective,
-    RequestGoalOrder,
-    UnorderedGoalOrder,
-    UnobservedGoalCheckpoint,
-)
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
@@ -509,7 +509,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     commander: str
     assigner: ThreadIncarnation
 
-    def bound_to(self, actor: ThreadIncarnation, commander: ThreadIncarnation) -> ProblemOrderGoalAction:
+    def bound_to(
+        self, actor: ThreadIncarnation, commander: ThreadIncarnation,
+    ) -> ProblemOrderGoalAction:
         return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod

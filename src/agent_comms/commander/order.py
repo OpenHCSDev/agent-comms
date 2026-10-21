@@ -52,10 +52,10 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.plan_phases import OrderPhase
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.problem_number import ProblemNumber
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
@@ -235,7 +235,9 @@ def revision(repo: str, ref: str) -> str:
 class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
-    actor: Annotated[InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)] = NoThreadCaller()
+    actor: Annotated[
+        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
+    ] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
@@ -939,12 +941,10 @@ class DeliverVerb(OrderVerb):
         )
 
     def run(self, ctx: Commander) -> None:
-        ThreadCaller(self.who(ctx)).invoke(
-            CommsOrderDeliverTool(
-                problem=self.problem, pull_request=self.pull_request,
-                head=self.head, report=Path(self.report_file).read_text(),
-            ), ctx.comms,
-        )
+        ctx.call(CommsOrderDeliverTool(
+            problem=self.problem, pull_request=self.pull_request,
+            head=self.head, report=Path(self.report_file).read_text(),
+        ))
         print(f'{self.problem}: delivery claim recorded')
 
 

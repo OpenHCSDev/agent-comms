@@ -30,9 +30,12 @@ class ProblemNumbers(Carry):
         with closing(CoordinationStore.read_snapshot(path)) as db:
             stored = {row.name for row in TodoStore.stored_schema(db)}
             numbers_missing = ProblemAllocation.declared_name not in stored
-            migrate_numbers = numbers_missing and 'problem_number' in stored
-            missing_indexes = tuple(index for index in (Todo.unit_index, Todo.problem_index)
-                                    if index.name(Todo) not in stored)
+            migrate_numbers = numbers_missing and "problem_number" in stored
+            missing_indexes = tuple(
+                index
+                for index in (Todo.unit_index, Todo.problem_index)
+                if index.name(Todo) not in stored
+            )
             changed = int(numbers_missing) + len(missing_indexes)
             if not changed:
                 return Carried(0)
@@ -42,7 +45,9 @@ class ProblemNumbers(Carry):
         with closing(CoordinationStore.writer(path)) as db, SQLiteFile.write_transaction(db):
             if migrate_numbers:
                 # SQLite renames its sequence too; even unsent issued IDs stay reserved.
-                db.execute(f'ALTER TABLE problem_number RENAME TO "{ProblemAllocation.declared_name}"')
+                db.execute(
+                    f'ALTER TABLE problem_number RENAME TO "{ProblemAllocation.declared_name}"'
+                )
                 for number in created:
                     ProblemAllocation.delete(db, number=number.number)
             elif numbers_missing:

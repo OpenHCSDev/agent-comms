@@ -10,15 +10,15 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .presentation import MessageNotification, ThreadRecord
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .messages import Message
-    from .tools import ToolRequest
     from .threads import Thread
+    from .tools import ToolRequest
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,7 @@ class ToolCaller(ABC):
 
     def commanding(self, comms: Comms, commander: str) -> None:
         """An ordinary caller needs no commander-child registration."""
+        return None
 
     def retire(self, comms: Comms) -> None:
         raise ToolRefusedError('Only a commander fork can retire through this verb.')

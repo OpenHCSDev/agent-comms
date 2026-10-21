@@ -3083,7 +3083,8 @@ class Todo(TypedTable):
     @classmethod
     def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
         return tuple(cls.read(db.execute(
-            f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid", parameters)))
+            f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
+            parameters)))
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
@@ -3392,7 +3393,8 @@ class TodoStore(DurableStore):
                         assigner: ThreadIncarnation) -> None:
         """The original open Todo owns who assigns its unit, under this transaction."""
         for todo in cls.held_in(db,
-                f'NOT ({Assignment.sql_field("parent")}=? AND {Assignment.sql_field("parent_created")}=?)',
+                f'NOT ({Assignment.sql_field("parent")}=? '
+                f'AND {Assignment.sql_field("parent_created")}=?)',
                 (assigner.name, assigner.wire_birth), unit=unit):
             raise TodoError(
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
@@ -3589,8 +3591,8 @@ class TodoStore(DurableStore):
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth),
-                            reader=self._open)
+        return self._select("creator=? AND creator_created=?",
+                            (commander.name, commander.wire_birth), reader=self._open)
 
     def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
@@ -3686,7 +3688,9 @@ class TodoStore(DurableStore):
                 todo.upsert(db)
             return corrected
 
-    def fire(self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+    def fire(
+        self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
+    ) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
