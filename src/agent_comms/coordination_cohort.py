@@ -14,7 +14,7 @@ from typing import Annotated
 from dataclasses import dataclass
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
-from agent_comms.bus_publication import CommittedDelivery
+from agent_comms.bus_publication import Delivered
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
@@ -57,7 +57,7 @@ def _assignment_id(root: str, seq: int, lookup: str) -> str:
 
 
 def _expected_assignments(
-    initial: CommittedDelivery, accepted_at_ms: int
+    initial: Delivered, accepted_at_ms: int
 ) -> tuple[WakeAssignment, ...]:
     result: list[WakeAssignment] = []
     for recipient, member in zip(initial.audience.recipients, initial.decisions, strict=True):
@@ -102,7 +102,7 @@ def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignm
     )
 
 
-def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
+def _claim_record(db: sqlite3.Connection, initial: Delivered) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
     row = ClaimBatchAcknowledgements.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)

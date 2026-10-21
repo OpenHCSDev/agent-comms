@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)
@@ -773,7 +773,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: CommittedDelivery
+        self, recipient: FrozenRecipient, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup

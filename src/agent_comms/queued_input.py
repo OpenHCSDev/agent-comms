@@ -38,7 +38,7 @@ from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .agent_backend import InputContent, TurnInbox
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
     from .input_drain import InputDrain
@@ -326,7 +326,7 @@ class DeliveredInput(QueuedInput):
     @classmethod
     def reserve_pending(
         cls, inputs: InputDrain, name: str, root_id: str,
-        pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
+        pending: tuple[tuple[Delivered, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
     ) -> None:
