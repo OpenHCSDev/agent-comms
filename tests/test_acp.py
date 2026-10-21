@@ -454,32 +454,26 @@ class TestActivityLayer:
         from agent_comms.activity import Activity
 
         wired.agents.activity.emit(
-            Activity(thread="PR111", state=ActivityState.WORKING, detail="old")
+            Activity(thread="PR111", state=ActivityState.WORKING, detail="old",
+                     timestamp=_time.time() - 1000)
         )
-        import json as _json
-
-        log = wired.agents.activity._path
-        lines = [_json.loads(line) for line in log.read_text().splitlines()]
-        lines[-1]["ts"] = _time.time() - 1000
-        log.write_text("\n".join((_json.dumps(line) for line in lines)))
         assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
     def test_activity_persistence(self, tmp_path):
-        from agent_comms.activity import Activity, ActivityLog
+        from agent_comms.activity import Activity, ActivityStore
 
-        path = tmp_path / "activity.jsonl"
-        log = ActivityLog(path)
-        log.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
-        assert ActivityLog(path).current("a").detail == "bash"
+        store = ActivityStore.at(tmp_path)
+        store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
+        assert ActivityStore.at(tmp_path).current("a").detail == "bash"
 
     def test_all_current_latest_per_thread(self, tmp_path):
-        from agent_comms.activity import Activity, ActivityLog
+        from agent_comms.activity import Activity, ActivityStore
 
-        log = ActivityLog(tmp_path / "activity.jsonl")
-        log.emit(Activity(thread="a", state=ActivityState.THINKING))
-        log.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
-        log.emit(Activity(thread="b", state=ActivityState.THINKING))
-        current = log.all_current()
+        store = ActivityStore.at(tmp_path)
+        store.emit(Activity(thread="a", state=ActivityState.THINKING))
+        store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
+        store.emit(Activity(thread="b", state=ActivityState.THINKING))
+        current = store.all_current()
         assert current["a"].state is ActivityState.WORKING
         assert current["b"].state is ActivityState.THINKING
 

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 from .activity import (
     Activity,
-    ActivityLog,
+    ActivityStore,
     ActivityState,
     DrainDiagnostic,
     DrainObservation,
@@ -116,7 +116,7 @@ class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
         self._wire_lock_path = root / "wire"
-        self.activity = ActivityLog(ActivityLog.path_in(root))
+        self.activity = ActivityStore.at(root)
         self.runtime_info = RuntimeInfoStore.at(root)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
