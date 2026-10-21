@@ -17,7 +17,6 @@ from agent_comms.goal_states import BlockedState
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.goal_generation import GenerationState, RetryableGeneration
 from agent_comms.message_page import MessageReadRequest
-from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.bus import BusReader
@@ -28,7 +27,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import NamedViewer
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    DatedStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule, OwedAnswer, ReasonedStandingRule, StandingRule, UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
@@ -247,10 +246,8 @@ class PlanIdle(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnitAskUnanswered(UndatedStandingRule):
+class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     unit: str
-    reference: MessageReference
-    sent_at: float
     seconds: ClassVar[int] = 5 * 60
 
     @staticmethod
@@ -270,12 +267,16 @@ class UnitAskUnanswered(UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
+        return tuple(cls(message, snapshot.canonical_name(message.sender))
                      for message in cls.asks(comms, commander, time.time() - cls.seconds))
 
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return cls.asks(comms, commander, time.time())
+
     def line(self) -> str:
-        age = max(0, int((time.time() - self.sent_at) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.reference.seq}:{self.reference.message_id}, "
+        age = max(0, int((time.time() - self.message.timestamp) // 60))
+        return (f"UNANSWERED {self.unit}: message {self.message.seq}:{self.message.message_id}, "
                 f"{age} min old -> commander must answer")
 
 
