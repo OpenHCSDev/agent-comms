@@ -499,9 +499,12 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     request: str
     review_at: EventTime
     commander: str
+    assigner: ThreadIncarnation
 
-    @abstractmethod
-    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
+    def bound_to(
+        self, actor: ThreadIncarnation, commander: ThreadIncarnation,
+    ) -> ProblemOrderGoalAction:
+        return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
@@ -551,11 +554,6 @@ class OrderGoalAction(ProblemOrderGoalAction):
     traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
         NoSourceReference()
     )
-    assigner: ThreadIncarnation
-
-    def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
-        return replace(self, commander=actor.name, assigner=actor)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
@@ -572,14 +570,16 @@ class ReissuedOrderGoalAction(OrderGoalAction):
     """
 
     @classmethod
-    def for_todo(cls, todo: Todo, commander: str, assigner: ThreadIncarnation) -> Self:
-        """The order the Todo already accepted, handed again with a fresh review window."""
+    def for_todo(cls, todo: Todo, commander: str) -> Self:
+        """The order the Todo already accepted, handed again with a fresh review window, by the
+        actor that assigned it."""
         now = time.time()
         order = todo.order.reissued(now)
         return cls(
             problem=todo.id, expected_revision=todo.revision,
             order=order, request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
+            review_at=todo.reissued_review(now), commander=commander,
+            assigner=todo.acting_assigner,
             traced=order.owner)
 
     def require_sendable(self) -> None:
@@ -591,13 +591,11 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: RepositoryName
     text: str
 
-    def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
-        return replace(self, commander=actor.name)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=generation, goal=goal, review_at=self.review_at, order=self.order)
+            assigner=self.assigner, generation=generation, goal=goal,
+            review_at=self.review_at, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
