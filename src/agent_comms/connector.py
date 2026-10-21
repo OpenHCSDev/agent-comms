@@ -125,8 +125,10 @@ class ConnectorHeadReviewTool(ConnectorTool, declared_name="comms_review_head"):
     an order's pull request takes comms_verdict, which also records the verdict on the order."""
 
     label = "Review PR head without an order"
-    description = ("Post the connector reviewer's verdict (accepted, or sent_back with its reason) "
-                   "as agent-comms/review on the exact head commit of a pull request no order holds.")
+    description = (
+        "Post the connector reviewer's verdict (accepted, or sent_back with its reason) as "
+        "agent-comms/review on the exact head commit of a pull request no order holds."
+    )
     repo: Annotated[RepositoryName, *tool_field("Repository, owner/name")]
     pr: Annotated[int, *tool_field("Pull request number")]
     head: Annotated[str, *tool_field("The exact head commit reviewed")]

@@ -25,10 +25,22 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
 
     def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
         posted = subprocess.run(
-            ("gh", "api", "--method", "POST", f"repos/{repo.to_wire()}/statuses/{head}",
-             "-f", f"state={self.state}", "-f", f"context={self.context}",
-             "-f", f"description={self.description(reviewer, subject)[:self.description_limit]}"),
-            capture_output=True, text=True, timeout=60,
+            (
+                "gh",
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repo.to_wire()}/statuses/{head}",
+                "-f",
+                f"state={self.state}",
+                "-f",
+                f"context={self.context}",
+                "-f",
+                f"description={self.description(reviewer, subject)[:self.description_limit]}",
+            ),
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if posted.returncode:
             raise ToolRefusedError(posted.stderr.strip() or f"Review status on {head} failed.")
@@ -44,7 +56,7 @@ class AcceptedHeadReview(HeadReview):
 
 @dataclass(frozen=True)
 class SentBackHeadReview(HeadReview):
-    """The head goes back; the reason names the defect, and the PR's review comment carries the detail."""
+    """The head goes back; the reason names the defect, the PR's review comment the detail."""
 
     reason: str
     state = "failure"
