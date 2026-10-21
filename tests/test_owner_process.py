@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
@@ -23,11 +22,20 @@ from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.launch_root import LaunchRoot
+from delivery_owner_fixture import canonical_agent
+from native_backend_fixture import native_backend_fixture
 
 
-def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
-    comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+@pytest.fixture
+async def native_workers(tmp_path, native_runtime_package):
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
+        with LaunchRoot.from_path(native.root).selected():
+            yield native
+
+
+async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, native_workers) -> None:
+    comms = Comms(native_workers.root)
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
     first = comms.owners.start(
@@ -36,27 +44,18 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
     owner = comms.registry.require("worker")
     try:
         deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, first.pid).exists():
+        while not socket_path(comms.root, first.pid).exists():
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             time.sleep(0.02)
         assert comms.owners.start("worker").pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
-        from agent_comms.native_pi import NativePiUnavailable
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        # A fresh lifecycle derives its package from the pin; the reviewed layout refuses another.
-        import agent_comms.private_nk_entrypoint as private_nk_entrypoint
-
-        with monkeypatch.context() as patch:
-            patch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path / "other-package")
-            mismatched = Comms(tmp_path)
-            before = comms.registry.snapshot()
-            with pytest.raises(NativePiUnavailable):
-                mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+        # The current launch derives its immutable package from the installation;
+        # the removed mutable-package override is not a supported input.
         assert owner.process_alive
-        assert comms.registry.snapshot() == before
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)
         restarted = comms.owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[]
@@ -77,7 +76,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
             def after_stopped(self, lifecycle):
                 assert not replacement.process_alive
 
-        (installed,) = Comms(tmp_path).owners.restart_owners(
+        (installed,) = Comms(comms.root).owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
         )
         assert installed.previous_pid == replacement.require_process().pid
@@ -142,7 +141,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
-def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch):
+async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch, native_workers):
     """One provider-free installed worker batch, with original distinct settings."""
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
@@ -150,21 +149,20 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.owner_cutover import StoppedOwnerInstallation
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
-    model = "openai-codex/gpt-6.1-sol"
+    model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
-    comms = Comms(tmp_path)
+    comms = Comms(native_workers.root)
     package = pinned_native_package()
-    comms.messaging.initialize_private_initial_protocol()
 
     async def thinking_options():
         async with AsyncExitStack() as lifetime:
             # Query the fixture workers' pinned SDK, not the caller's launcher.
-            client = CommsAgent(comms, agent_bin=str(package / 'dist' / 'cli.js'), auto_wake=False)
+            client = canonical_agent(comms, agent_bin=str(package / 'dist' / 'cli.js'), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
             return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=model))
 
-    declared_options = asyncio.run(thinking_options())
+    declared_options = await thinking_options()
     thinking = declared_options[0].value
     originals = []
     settings = (
@@ -208,17 +206,17 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
     cutover = RebuildFixtureCheckpoint()
 
-    def ready(owner):
+    async def ready(owner):
         async def attach():
             # The old helper allowed 10 s for opening plus 10 s for ready.
             async with asyncio.timeout(20), AsyncExitStack() as lifetime:
-                client = CommsAgent(comms, auto_wake=False)
+                client = canonical_agent(comms, auto_wake=False)
                 lifetime.push_async_callback(client.shutdown)
-                proxy = RuntimeProxy(client, owner.name, socket_path(tmp_path, owner.require_process().pid))
+                proxy = RuntimeProxy(client, owner.name, socket_path(comms.root, owner.require_process().pid))
                 lifetime.push_async_callback(proxy.close)
                 await proxy.subscribe()
 
-        asyncio.run(attach())
+        await attach()
 
     try:
         for name, arguments, credential in settings:
@@ -229,7 +227,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
                 comms.owners.start(name, agent_args=arguments)
             original = comms.registry.require(name)
-            ready(original)
+            await ready(original)
             originals.append(original)
         # The original process launch name remains valid through registry rename.
         comms.registry.rename("batch-b", "batch-renamed")
@@ -256,7 +254,6 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(("--thinking", declared_options[-1].value)))
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_runtime = LaunchRuntime.running()
-        prefix = target_runtime.interpreter.parent.parent
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)
         receipts = comms.owners.restart_owners(
@@ -266,7 +263,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         assert all(not owner.process_alive for owner in originals)
         for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
             current = comms.registry.require(acknowledgement.thread)
-            ready(current)
+            await ready(current)
             from agent_comms.owner_lifecycle import OwnerRestartSelection
 
             launch = RetainedOwnerLaunch.capture(

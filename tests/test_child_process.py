@@ -197,13 +197,13 @@ time.sleep(60)
     child = await NamespacedChild.start(command, deadline=time.monotonic() + 2)
     try:
         await ready(acknowledgement)
-        assert NamespaceContainment.namespace_alive(child.namespace)
+        assert child.namespace.alive()
         async with asyncio.timeout(6):
             outcome = await child.wait()
             assert isinstance(outcome, SignaledOutcome)
     finally:
         await child.stop()
-    assert not NamespaceContainment.namespace_alive(child.namespace)
+    assert not child.namespace.alive()
 
 
 @pytest.mark.asyncio
@@ -216,7 +216,7 @@ async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) ->
 
 @pytest.mark.asyncio
 async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> None:
-    from agent_comms.child_process import NamespaceContainment
+    from agent_comms.child_process import NamespaceContainment, PidNamespace
 
     if not isinstance(Platform.current(), NamespaceContainment):
         pytest.skip("This platform does not provide PID namespaces")
@@ -224,28 +224,18 @@ async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> Non
     launcher = SpawnedProcess.launch(
         (
             sys.executable,
-            "-c",
-            """import asyncio,json,sys,time
-from pathlib import Path
-from agent_comms.child_process import NamespacedChild
-async def run():
-    command=(sys.executable,'-c','import time; time.sleep(60)')
-    child=await NamespacedChild.start(command,deadline=time.monotonic()+3)
-    Path(sys.argv[1]).write_text(json.dumps(child.namespace))
-    await asyncio.sleep(60)
-asyncio.run(run())
-""",
+            str(Path(__file__).with_name('namespace_launcher_child.py')),
             str(acknowledgement),
         )
     )
     try:
         await ready(acknowledgement)
-        namespace = json.loads(acknowledgement.read_text())
-        assert NamespaceContainment.namespace_alive(namespace)
+        namespace = FieldCodec.decode(PidNamespace, json.loads(acknowledgement.read_text()))
+        assert namespace.alive()
         launcher.force()
         await launcher.wait()
         async with asyncio.timeout(6):
-            while NamespaceContainment.namespace_alive(namespace):
+            while namespace.alive():
                 await asyncio.sleep(0.02)
     finally:
         if launcher.alive():

@@ -19,6 +19,10 @@ class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
 
+class ThreadNotStoppedError(ToolRefusedError, RelationViolationError):
+    """A stopped-thread precondition refused an operation before any write."""
+
+
 class StoredHistoryUnreadable(RelationViolationError):  # noqa: N818 - nominal read failure
     """Stored wire bytes cannot be decoded as their declared history type."""
 
