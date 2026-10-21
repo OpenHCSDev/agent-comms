@@ -19,7 +19,6 @@ from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..goal_actions import CreateProblemGoalAction
 from ..goals import CountCheckResult, OrderCheck
-from ..plan_phases import RecordPlanePhase
 from ..progress_claims import MergedClaim
 from ..recorded_time import RecordedEventTime
 from ..repo import Repo
@@ -276,6 +275,6 @@ class DeletionTargetParityRow(ParityRow):
     number = 31
     capability = "An order states its intent as a deletion target"
     current = "Current order command with a declared FamilyDeletion"
-    native = "CommsTodoCreateTool and CommsOrderDoneTool check the delivered family count"
-    phases = (RecordPlanePhase,)
+    native = "`FamilyDeletion.checks`, `OrderDelivery.verified`: count the delivered source"
+    phases = ()
     comparison = DeletionComparison.read

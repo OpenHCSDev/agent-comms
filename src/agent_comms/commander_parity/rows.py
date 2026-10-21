@@ -5,7 +5,6 @@ from ..plan_phases import (
     ControlPlanePhase,
     CutoverPhase,
     OneOrderOwnerPhase,
-    RecordPlanePhase,
     ReviewQueuePhase,
     StoryPhase,
 )
@@ -51,7 +50,7 @@ class DeliveredCommitParityRow(ParityRow):
     capability = "Complete only on the delivered commit"
     current = "`order.py done`"
     native = "`CommsOrderDoneTool`: merged to main, another branch, or not merged"
-    phases = (OneOrderOwnerPhase, RecordPlanePhase)
+    phases = (OneOrderOwnerPhase,)
     comparison = DeliveredCommitCase.read
 
 
@@ -85,8 +84,8 @@ class StrikeLimitParityRow(ParityRow):
     number = 7
     capability = "Strikes and the strike limit"
     current = "`order.py strike`; `strikes.jsonl`"
-    native = "`Strike` rows, author-declared `StrikeLimit`, one `comms_fire`"
-    phases = (RecordPlanePhase,)
+    native = "`StrikeTodo`, `ObjectiveStrike`, `ProblemGoalOrder.StrikeLimit`, `TodoStore.fire`"
+    phases = ()
 
     comparison = StrikeLimitCase.read
 
@@ -95,8 +94,8 @@ class VerdictParityRow(ParityRow):
     number = 8
     capability = "Verdicts on a unit's tool calls"
     current = "`judge.py ok`, `back`; both invoke `CommsVerdictTool`"
-    native = "Order `Verdict`; send-back revises the Goal and records its strike atomically"
-    phases = (RecordPlanePhase,)
+    native = "`CommsVerdictTool`, `SendBackVerdict`: one retained event and Goal revision"
+    phases = ()
     comparison = VerdictComparison.read
 
 
@@ -104,16 +103,16 @@ class PlainWordsParityRow(ParityRow):
     number = 9
     capability = "Plain words in verdicts and strikes"
     current = "judge and order checks"
-    native = "`PlainText`"
-    phases = (RecordPlanePhase,)
+    native = "`PlainText`, `StrikeReason`"
+    phases = ()
 
 
 class OrderWordingParityRow(ParityRow):
     number = 10
     capability = "Refuse soft or vague orders"
     current = "`order.py`"
-    native = "`OrderText` on every order action"
-    phases = (RecordPlanePhase,)
+    native = "`OrderText`, `CheckedProblemOrder.require_wording`"
+    phases = ()
 
 
 class OrderWorkParityRow(ParityRow):
@@ -219,24 +218,24 @@ class ApplicationRunParityRow(ParityRow):
     number = 23
     capability = "An order states the user-visible run that closes it"
     current = "scratch `rts/order.py send` (`Works when:`)"
-    native = "`OrderText` requires the run; `CommsProblemCloseTool.works` checks it"
-    phases = (RecordPlanePhase,)
+    native = "`ApplicationOrderRun`, `InstallTodo`, `CommsProblemCloseTool`"
+    phases = ()
 
 
 class TracedTransferParityRow(ParityRow):
     number = 24
     capability = "Reassigning past two owners needs the commander's trace"
     current = "scratch `order.py send --reassign --traced`"
-    native = "Transfer reads Todo owner history and requires traced source location"
-    phases = (RecordPlanePhase,)
+    native = "`Assignment.require_trace`, `Todo.assigned`"
+    phases = ()
 
 
 class UnitWordingParityRow(ParityRow):
     number = 25
     capability = "Unit wording gets a correction, not a strike"
     current = "scratch `vibe_watch.py`"
-    native = "`PlainText` for commander verdicts/strikes; unit wording gets correction"
-    phases = (RecordPlanePhase,)
+    native = "`PlainText`, `CommsCorrectWordingTool`: correction leaves strikes unchanged"
+    phases = ()
 
 
 class DecisionAlertsParityRow(ParityRow):
@@ -277,8 +276,8 @@ class FinishedWorkTransferParityRow(ParityRow):
     number = 29
     capability = "No handoff of finished, checked work"
     current = "none; scratch transfer moved P507 after its fix was pushed and checked"
-    native = "Transfer refuses delivered checked work; that owner merges; check is reused"
-    phases = (RecordPlanePhase,)
+    native = "`DeliveredProblemOrder.require_transfer`: the checked delivery stays with its owner"
+    phases = ()
 
     comparison = FinishedHandoffCase.read
 
@@ -287,8 +286,8 @@ class BuildBoundProofParityRow(ParityRow):
     number = 30
     capability = "A proof is bound to the build it ran on"
     current = "none; screenshots and logs are bare paths"
-    native = "Build run records runtime and Core/Toad revisions; close requires delivered commit"
-    phases = (RecordPlanePhase,)
+    native = "`DeliveredProblemOrder.require_installation`, `RecordedBuildIdentity.require_installed`"
+    phases = ()
 
     comparison = BuildBoundProofCase.read
 
