@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import (
     GoalAttemptError, GoalAttemptStore, GoalTurnPermit, LaunchPermit, NoLaunchPermit,
 )
@@ -75,13 +74,7 @@ class FailedGoalOrigin(MroDispatch):
 
     @handles(ActiveGoal, CompletedGoal)
     def block(self, state) -> None:
-        self.comms.goals.update_goal(
-            self.thread_name,
-            BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal),
-                progress="Goal origin turn did not finish successfully.",
-            ),
-        )
+        self.comms.goals.block_failed_origin(self.thread_name, self.goal)
 
 
 @dataclass(kw_only=True)
