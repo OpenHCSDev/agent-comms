@@ -1,3 +1,5 @@
+
+from agent_comms.bus import Bus
 import json
 import os
 import subprocess
@@ -117,7 +119,7 @@ class TestCliSuccess:
         for name in ("sender", "one", "two"):
             tags = frozenset() if name == "sender" else frozenset({"comms"})
             comms.registry.declare(comms.registry.new_thread(name, tags, str(comms.root)))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         for role, expected in (("notice", "passive"), ("conversation", "bounded_triage")):
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)

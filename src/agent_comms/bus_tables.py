@@ -29,9 +29,9 @@ class BusProjectionTables(SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
-    def reset_schema(cls, db: sqlite3.Connection) -> None:
-        """Rebuild this family's rows from history, using the append projection owner."""
-        super().reset_schema(db)
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        """Create/rebuild rows from history using the append projection owner."""
+        super().create_schema(db)
         with closing(BusRow.stream(db, order_by=("seq",))) as headers:
             for header in headers:
                 header.kind.read_from(db, header.seq).project_into(db)

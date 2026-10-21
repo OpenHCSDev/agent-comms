@@ -1,6 +1,8 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import sqlite3
@@ -44,7 +46,6 @@ def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(private_d
     log = WireLog(WireLog.path_in(root))
     assert log.fresh()
     Bus.install(Bus.path_in(root))
-    Comms(root).messaging.initialize_private_initial_protocol()
     assert not log.fresh()
     chain = CarryChain.at(REPO)
     CarryLedger(root).start(chain)
@@ -221,7 +222,6 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     Bus.install(Bus.path_in(root))
-    Comms(root).messaging.initialize_private_initial_protocol()
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
         for _ in range(2):

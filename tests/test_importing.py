@@ -1,3 +1,5 @@
+
+from agent_comms.bus import Bus
 import asyncio
 import json
 import os
@@ -35,7 +37,7 @@ from agent_comms.thread_text import GivenThreadText, NoThreadText
 
 @pytest.fixture
 def comms(comms):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     return comms
 
 

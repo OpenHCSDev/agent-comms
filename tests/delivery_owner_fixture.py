@@ -1,5 +1,7 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 
+from agent_comms.bus import Bus
+
 from contextlib import asynccontextmanager
 
 from agent_comms.acp import CommsAgent
@@ -42,7 +44,7 @@ def canonical_agent(comms, **options):
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
     if not metadata.private:
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
     agent = CommsAgent(
         comms,
         **options,

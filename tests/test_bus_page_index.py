@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import json
 import sqlite3
 from contextlib import closing
@@ -26,7 +28,7 @@ def retained_source(root, count, *, access=ArchivedAccess()):
     comms = Comms(root)
     for name in ("a", "b", "c"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root)))
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
         with comms.bus.log.path.open("w") as output:
             for seq in range(1, count + 1):

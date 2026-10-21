@@ -1,5 +1,7 @@
 """The real bus publishes only files declared by their existing state owners."""
 
+from agent_comms.bus import Bus
+
 from pathlib import Path
 import sqlite3
 
@@ -30,7 +32,6 @@ def comms(tmp_path: Path) -> Comms:
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
-    comms.messaging.initialize_private_initial_protocol()
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
@@ -67,7 +68,6 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
 
 
 def test_a_derived_index_written_by_a_running_owner_is_never_carried(tmp_path: Path, comms: Comms) -> None:
-    comms.messaging.initialize_private_initial_protocol()
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send("peer", "owner", "Index this message")

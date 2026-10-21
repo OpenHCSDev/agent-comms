@@ -1,5 +1,7 @@
 """Fresh canonical roots check before publication or native source observation."""
 
+from agent_comms.bus import Bus
+
 import os
 from pathlib import Path
 
@@ -86,7 +88,7 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
     with monkeypatch.context() as patch:
         patch.setattr(wire_log, "_atomic_write_text", fail_seal)
         with pytest.raises(OSError):
-            comms.messaging.initialize_private_initial_protocol()
+            Bus.install(Bus.path_in(comms.root))
     assert (comms.root / "private_bus_checkpoint.sqlite3").exists()
     with pytest.raises(RelationViolationError):
         Comms(comms.root).registry.snapshot()
@@ -109,7 +111,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
 )
 async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
     comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     agent = CommsAgent(
         comms,
         auto_wake=False,

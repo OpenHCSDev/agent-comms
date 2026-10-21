@@ -1,3 +1,5 @@
+
+from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -132,7 +134,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
 ):
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):
             comms.registry.declare(
                 old.registry.new_thread(name, frozenset({"team"}), str(tmp_path))

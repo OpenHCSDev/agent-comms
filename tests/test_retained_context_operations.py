@@ -1,5 +1,7 @@
 """One original human-source workflow through the public CLI and file effects."""
 
+from agent_comms.bus import Bus
+
 import json
 
 from agent_comms.thread_text import SavedSessionFile
@@ -18,7 +20,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     from test_task_decisions import saved_source
     import hashlib
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
@@ -46,7 +48,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root)))
     other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
@@ -123,7 +125,7 @@ async def original_input_consumer_journey(tmp_path, command):
     from agent_comms.retained_task_facts import InputTaskFact
 
     comms, agent, _, _ = _owner(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     wording = "Never replay UNKNOWN.\nPreserve original λ /source/owned bytes."
     originals = []

@@ -5,6 +5,8 @@ No fake transport, provider or history is used. Failed attempts remain retained.
 
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import argparse
 import asyncio
 import json
@@ -132,7 +134,7 @@ class RunProofCommand(ProofCommand):
         home = root.parent / "home"
         home.mkdir(parents=True)
         comms = Comms(root)
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         # A fresh interpreter acquires the scratch commander configuration.
         # Keep the actual storage declaration across its isolated HOME.
         (root / "storage.json").write_text(

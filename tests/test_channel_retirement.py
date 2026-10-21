@@ -1,5 +1,7 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
+from agent_comms.bus import Bus
+
 from bus_history import read_history
 from agent_comms.messages import Membership
 import json
@@ -56,7 +58,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)

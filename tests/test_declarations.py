@@ -1,4 +1,6 @@
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import sys
@@ -41,7 +43,7 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
         with pytest.raises(RelationViolationError):
-            Comms(root).messaging.initialize_private_initial_protocol()
+            Bus.install(Bus.path_in(Comms(root).root))
         assert not (root / "bus_meta.json").exists()
         assert not (root / "bus.jsonl").exists()
     monkeypatch.chdir(tmp_path)
@@ -327,7 +329,7 @@ class TestRegistration:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
         comms = Comms(root)
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         reopened = Comms(root)
         reopened.registry.declare(reopened.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
@@ -340,7 +342,7 @@ class TestRegistration:
         root.mkdir(mode=0o700)
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
         for field in ("owners", "claims"):
@@ -370,14 +372,14 @@ class TestRegistration:
 
         monkeypatch.setattr(os, "fsync", fsync)
         with pytest.raises(OSError):
-            comms.messaging.initialize_private_initial_protocol()
+            Bus.install(Bus.path_in(comms.root))
         monkeypatch.undo()
         assert (root / ".registry-owner-guard").exists()
         assert (root / "bus_meta.json").exists()
         with pytest.raises(RelationViolationError):
             Registration(root / "registry.json")
         with pytest.raises(RelationViolationError):
-            comms.messaging.initialize_private_initial_protocol()  # never auto-repair
+            Bus.install(Bus.path_in(comms.root))  # never auto-repair
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])
@@ -387,7 +389,7 @@ class TestRegistration:
         root = tmp_path / "private"
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         original_pwrite = os.pwrite
         guard_calls = 0
 
@@ -416,7 +418,7 @@ class TestRegistration:
         root = tmp_path / "guarded"
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"

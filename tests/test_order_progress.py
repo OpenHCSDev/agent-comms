@@ -1,5 +1,7 @@
 """An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
 The commander's review timer comes back every window until delivery, and the unit never sees it."""
+
+from agent_comms.bus import Bus
 import json
 import os
 import subprocess
@@ -117,7 +119,7 @@ def held(tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     comms.goals.update_goal('lead', SetGoalAction(
