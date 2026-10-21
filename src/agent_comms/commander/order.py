@@ -86,7 +86,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
@@ -233,9 +233,11 @@ class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
     _comms: Comms = PrivateAttr()
+    _caller: ThreadCaller = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
+        self._caller = ThreadCaller(self.commander)
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -265,7 +267,12 @@ class CommanderContext(CommanderConfig):
         return published.message.message_id
 
     def call(self, tool):
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
+        return self._caller.invoke(tool, self.comms)
+
+    def commanding(self, caller: ThreadCaller) -> Self:
+        bound = self.model_copy(update={'commander': caller.name})
+        bound._caller = caller
+        return bound
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -395,6 +402,8 @@ class Commander(CommanderContext):
              disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
+        self.comms.goals.todos.require_unit(
+            self.comms.registry.require(unit).incarnation, self.incarnation)
         problems = document.problems_found(clean)
         check = replace(document.order.check,
                         directory=str(self.repo_directory(document.order.check.directory)))
@@ -500,34 +509,35 @@ class Commander(CommanderContext):
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(order)
         request = order.request(self.comms.registry.require(self.commander), tuple(group))
-        if new:
-            self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-                problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, review_at=review_at, commander=self.commander)))
-        for pid in [] if new else group:
-            self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=traced,
-                order=order, request=request, review_at=review_at, commander=self.commander)))
-        message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
-        sent = self.post(VerdictAudience((unit,)), message, answers)
-        # The message is each order's recorded link; a verdict citing it lands on that order.
-        for pid in group:
-            self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
-        for other, text in taken.items():
-            self.post(VerdictAudience((other,)), text)
-        print(f'{measured.summary}; review timer {review_at.clock()}')
-        print(order.id)
-        if replacing and not clean and struck_already:
-            print(f'{unit} already struck on this order of {group[0]}; '
-                  'the send-back counts that one miss once')
-        elif replacing and not clean and reassign.strikes_send_back:
-            # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
-            # Done here so the commander cannot send work back and forget either.
-            verdict = document.prose.strip()
-            self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}',
-                        evidence=(order.owner,))
+        with self._caller.assigning(self.comms, unit, order.id):
+            if new:
+                self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
+                    problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
+                    order=order, request=request, review_at=review_at, commander=self.commander)))
+            for pid in [] if new else group:
+                self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
+                    problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
+                    assigner=self.incarnation, traced=traced,
+                    order=order, request=request, review_at=review_at, commander=self.commander)))
+            message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
+            sent = self.post(VerdictAudience((unit,)), message, answers)
+            # The message is each order's recorded link; a verdict citing it lands on that order.
+            for pid in group:
+                self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
+                    self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
+            for other, text in taken.items():
+                self.post(VerdictAudience((other,)), text)
+            print(f'{measured.summary}; review timer {review_at.clock()}')
+            print(order.id)
+            if replacing and not clean and struck_already:
+                print(f'{unit} already struck on this order of {group[0]}; '
+                      'the send-back counts that one miss once')
+            elif replacing and not clean and reassign.strikes_send_back:
+                # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
+                # Done here so the commander cannot send work back and forget either.
+                verdict = document.prose.strip()
+                self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}',
+                            evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
@@ -558,6 +568,7 @@ class Commander(CommanderContext):
             sys.exit('Refused: an edit list needs a tracked order and review timer; use order send with a JSON file.')
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
+        self._caller.reported(self.comms, units)
 
     def problem(self, order_file, unit, where, disk=False,
                 answers: tuple[MessageReference, ...] = ()):
@@ -568,8 +579,9 @@ class Commander(CommanderContext):
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
+        self.comms.goals.todos.require_unit(
+            self.comms.registry.require(unit).incarnation, self.incarnation)
+        pid = self.comms.goals.todos.allocate_problem()
         self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
@@ -749,10 +761,10 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
-        ThreadCaller | NoThreadCaller,
+        CommanderForkCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting commander's name"}
+            flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting commander's name"}
         ),
     ] = NoThreadCaller()
 
@@ -760,6 +772,8 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
         return self.fork.acting_name(ctx.commander)
 
     def apply(self, ctx: Commander) -> None:
+        self.require_commander(ctx.comms.registry.require(ctx.commander))
+        ctx = ctx.commanding(self.fork.commanding(ctx.comms, ctx.commander))
         self.gate(ctx)
         self.run(ctx)
 

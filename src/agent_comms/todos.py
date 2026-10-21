@@ -2300,6 +2300,9 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
+    def require_unit(self, db: sqlite3.Connection) -> None:
+        """Only assignment operations compete for a unit."""
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -2317,6 +2320,9 @@ class AssignTodo(TodoOperation):
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
+
+    def require_unit(self, db: sqlite3.Connection) -> None:
+        UnitAssignment.require(db, self.proposed.owner_identity, self.actor)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -3077,6 +3083,41 @@ def _participant(thread: Thread) -> ThreadIncarnation:
     return thread.incarnation
 
 
+@dataclass(frozen=True)
+class ProblemNumber(TypedTable):
+    """Allocated global problem numbers, including reservations not yet sent."""
+
+    number: Annotated[int, Column(primary_key=True, auto_increment=True)]
+
+    @classmethod
+    def reserve(cls, db: sqlite3.Connection, problem: str) -> None:
+        if re.fullmatch(r'P[1-9]\d*', problem):
+            cls(int(problem[1:])).insert_if_absent(db)
+
+    @classmethod
+    def allocate(cls, db: sqlite3.Connection) -> str:
+        cursor = db.execute(f'INSERT INTO "{cls.declared_name}" DEFAULT VALUES')
+        return f'P{cursor.lastrowid}'
+
+
+@dataclass(frozen=True)
+class UnitAssignment(TypedTable):
+    """One assigner reserves a unit across its fork's commander verbs."""
+
+    unit: Annotated[ThreadIncarnation, Column(primary_key=True)]
+    assigner: Annotated[ThreadIncarnation, Column(index=True)]
+    order: str
+
+    @classmethod
+    def require(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
+                assigner: ThreadIncarnation) -> None:
+        for held in cls.select(db, unit=unit):
+            if held.assigner != assigner:
+                raise TodoError(
+                    f"{unit.name} is being assigned by {held.assigner.name} "
+                    f"on open order {held.order}; finish that fork before assigning it again.")
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -3088,7 +3129,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, UnitAssignment, ProblemNumber)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3109,6 +3150,27 @@ class TodoStore(DurableStore):
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection
+
+    def allocate_problem(self) -> str:
+        with self.writing() as db:
+            return ProblemNumber.allocate(db)
+
+    def require_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
+        with self.snapshot() as db:
+            UnitAssignment.require(db, unit, assigner)
+
+    def take_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
+        with self.writing() as db:
+            UnitAssignment.require(db, unit, assigner)
+            UnitAssignment(unit, assigner, order).upsert(db)
+
+    def release_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
+        with self.writing() as db:
+            UnitAssignment.delete(db, unit=unit, assigner=assigner, order=order)
+
+    def release_assigner(self, assigner: ThreadIncarnation) -> None:
+        with self.writing() as db:
+            UnitAssignment.delete(db, assigner=assigner)
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3358,6 +3420,8 @@ class TodoStore(DurableStore):
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
             review_at, order, goal)
         with self.writing() as db:
+            UnitAssignment.require(db, assignee, identity)
+            ProblemNumber.reserve(db, todo_id)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -3366,6 +3430,7 @@ class TodoStore(DurableStore):
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
+            command.require_unit(db)
             current = self._current(db, todo_id)
             result = command.apply(current)
             if result == current:

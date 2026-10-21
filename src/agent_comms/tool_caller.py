@@ -3,12 +3,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from contextlib import contextmanager
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
+from .errors import RelationViolationError
+from .thread_execution import ExternalThreadExecution
+from .thread_status import RunningThreadStatus, ThreadStatus
+from .thread_text import ForkedParent
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 
@@ -52,6 +58,9 @@ class ToolCaller(ABC):
 
     def subject(self, named: str) -> str:
         return named or self.own_thread()
+
+    def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
+        return ThreadCaller(self.acting_name(commander))
 
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
@@ -134,3 +143,66 @@ class ThreadCaller(ToolCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         """An agent's message is only the bus record."""
+
+    @contextmanager
+    def assigning(self, comms: Comms, unit: str, order: str) -> Iterator[None]:
+        comms.goals.todos.take_unit(comms.registry.require(unit).incarnation,
+                                   comms.registry.require(self.name).incarnation, order)
+        try:
+            yield
+        finally:
+            self.assigned(comms, unit, order)
+
+    def assigned(self, comms: Comms, unit: str, order: str) -> None:
+        """A synchronous command releases its assignment when it returns."""
+        comms.goals.todos.release_unit(
+            comms.registry.require(unit).incarnation,
+            comms.registry.require(self.name).incarnation, order)
+
+    def reported(self, comms: Comms, target: str) -> None:
+        """An ordinary commander's post does not end its thread."""
+
+
+class CommanderForkExecution(ExternalThreadExecution):
+    """A commander fork reads its inbox through verbs, not a native agent or bridge."""
+
+    @classmethod
+    def registered_status(cls, thread, requested: ThreadStatus) -> ThreadStatus:
+        return requested
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(ThreadCaller):
+    """The first verb declares this child; its closing report ends its assignments."""
+
+    def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
+        registry = comms.registry
+        with registry.store.editing() as edit:
+            parent = edit.document.require(commander)
+            name = edit.document.canonical_name(self.name)
+            if name != self.name:
+                raise RelationViolationError(f"Commander fork {self.name!r} is an alias.")
+            existing = edit.document.threads.get(name)
+            if existing is not None:
+                if (existing.execution is not CommanderForkExecution
+                        or not existing.parent.named(parent.name)):
+                    raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
+                if not edit.document.status(name).receiving:
+                    raise RelationViolationError(f"Commander fork {name!r} has retired; use a new name.")
+            else:
+                thread = registry.new_thread(name, parent.tags, parent.worktree,
+                    parent=ForkedParent(parent.name), model=parent.model,
+                    thinking_level=parent.thinking_level, service_tier=parent.service_tier,
+                    goal=parent.goal, execution=CommanderForkExecution)
+                registry._commit_registration(edit, edit.document.prepare_registration(
+                    thread, RunningThreadStatus(), new_owner=False))
+        return self
+
+    def assigned(self, comms: Comms, unit: str, order: str) -> None:
+        """A fork keeps its units until its closing report, not a verb's return."""
+
+    def reported(self, comms: Comms, target: str) -> None:
+        if target == '#comms':
+            identity = comms.registry.require(self.name).incarnation
+            comms.registry.unregister(self.name)
+            comms.goals.todos.release_assigner(identity)
