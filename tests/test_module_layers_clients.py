@@ -20,7 +20,8 @@ def test_client_imports_root_reachability_and_name_missing_modules(tmp_path):
     client = tmp_path / "toad"
     write(
         client / "src/toad/session.py",
-        "from agent_comms.ingress import Ingress\nimport agent_comms.deleted\n",
+        "from agent_comms.ingress import Ingress\nimport agent_comms.deleted\n"
+        "import os\nimport agent_comms_hooks.watch\nimport agent_comms\n",
     )
 
     package = Package(core, (StackClient("toad", client),))
