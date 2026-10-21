@@ -78,7 +78,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                         raise AssertionError(await child.stderr_tail())
                     await asyncio.sleep(0.05)
             registered = comms.registry.require("headless")
-            assert registered.pid == child.pid
+            assert registered.require_process() == child.identity
             assert registered.worktree == str(project)
             client = CommsClient(comms)
             try:
