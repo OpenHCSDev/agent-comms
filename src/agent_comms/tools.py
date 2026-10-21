@@ -837,7 +837,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoListTool(ThreadReadTool):
     label = "Read problems"
-    description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
+    description = "Read the commander's canonical Todo orders, review timers, strikes and hunts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
@@ -865,8 +865,8 @@ class CommsStandingRulesTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
-    description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
-    order: OrderGoalAction = tool_field("Problem, request, expected_revision, deadline, commander")
+    description = "Reserve a Todo assignment and publish its Goal with the commander's review timer; does not replay input."
+    order: OrderGoalAction = tool_field("Problem, request, expected_revision, review_at, commander")
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
@@ -878,7 +878,7 @@ class CommsOrderTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoCreateTool(CommsOrderTool):
     label = "Create problem"
-    description = "Create a problem with its owner, checked order and deadline in one command."
+    description = "Create a problem with its owner, checked order and review timer in one command."
     order: CreateProblemGoalAction = tool_field("Typed problem creation and order")
 
 
@@ -905,7 +905,7 @@ class CommsOrderDoneTool(CommsTodoTool):
 class CommsOrderCheckTool(CommsTodoTool):
     label = "Correct order check"
     description = ("Replace the check of an open order, recording the old check, the new one and "
-                   "why; only its commander may invoke this tool, and the order keeps its deadline "
+                   "why; only its commander may invoke this tool, and the order keeps its review timer "
                    "and strikes.")
     check: OrderCheck = tool_field("The corrected check: directory, command and expected result")
     why: str = tool_field("Why the recorded check was wrong")
@@ -918,7 +918,7 @@ class CommsOrderCheckTool(CommsTodoTool):
 class CommsOrderServeTool(CommsTodoTool):
     label = "Name order phase"
     description = ("Name the plan phase an open order serves; only its commander may invoke this "
-                   "tool, and the order keeps its id, deadline and strikes.")
+                   "tool, and the order keeps its id, review timer and strikes.")
     serves: type[OrderPhase] = tool_field("The plan phase the order serves")
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:

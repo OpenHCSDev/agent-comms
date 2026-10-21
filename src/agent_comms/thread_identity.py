@@ -38,6 +38,8 @@ T = TypeVar("T")
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
+    hands_out_released_work: ClassVar[bool] = False
+    """Whether work this actor released goes to an idle unit without a commander turn."""
     name: str
 
     @property
@@ -94,9 +96,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
-
-    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
-        return assigned
 
     def selects_lookup(self, lookup: str) -> bool:
         return False
@@ -192,6 +191,11 @@ class BirthlessIncarnation(ThreadIncarnation):
     def renamed(self, name: str) -> Self:
         return type(self)(name)
 
+    @classmethod
+    def recorded_as(cls, name: str) -> BirthlessIncarnation:
+        """The member a stored name and this member's wire birth decode to."""
+        return cls(name)
+
 
 @dataclass(frozen=True)
 class DeletedThreadIncarnation(BirthlessIncarnation):
@@ -222,27 +226,29 @@ class UnrecordedThreadIncarnation(BirthlessIncarnation):
 
 
 @dataclass(frozen=True)
-class StallWatcherIncarnation(BirthlessIncarnation):
-    """Core's own stall watcher: it strikes and releases stalled orders, and is never a thread."""
+class CoreWatcherIncarnation(BirthlessIncarnation):
+    """Core's own watcher: it records failed order checks, releases struck-out orders and hands
+    them to idle units, and is never a thread. No clock makes it strike or release anything."""
 
     WIRE_BIRTH: ClassVar[float] = -2.0
+    hands_out_released_work: ClassVar[bool] = True
 
     def require_may_change(self, todo: Todo) -> None:
-        """The Core watcher may advance stalled orders without a commander turn."""
-
-    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
-        if previous.holder:
-            return previous.reassigned(assigned, self)
-        return assigned
+        """The Core watcher may advance released orders without a commander turn."""
 
     @classmethod
-    def watcher(cls) -> StallWatcherIncarnation:
-        """Named by its class: ``StallWatcherIncarnation`` is ``stall_watcher``."""
+    def watcher(cls) -> CoreWatcherIncarnation:
+        """Named by its class: ``CoreWatcherIncarnation`` is ``core_watcher``."""
         return cls(declared_words(cls.__name__.removesuffix("Incarnation")))
+
+    @classmethod
+    def recorded_as(cls, name: str) -> CoreWatcherIncarnation:
+        """The class owns the watcher's name; a stored spelling is never its identity."""
+        return cls.watcher()
 
     @property
     def birth_description(self) -> str:
-        return "Core's stall watcher"
+        return "Core's watcher"
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,7 +332,7 @@ class ThreadIncarnationRecord:
 
     def incarnation(self) -> ThreadIncarnation:
         if self.created_at in BirthlessIncarnation.members:
-            return BirthlessIncarnation.members[self.created_at](self.name)
+            return BirthlessIncarnation.members[self.created_at].recorded_as(self.name)
         return RecordedThreadIncarnation(self.name, self.created_at)
 
     @classmethod

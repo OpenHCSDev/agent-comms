@@ -44,27 +44,6 @@ class GeneratedTimestamp(FieldRepresentation):
         raise TypeError("A generated timestamp is read from its event, never written")
 
 
-@dataclass(frozen=True)
-class Lateness:
-    """How late one delivery was against its deadline, to the second."""
-
-    due: float
-    delivered: float
-
-    @property
-    def seconds(self) -> float:
-        return self.delivered - self.due
-
-    def late(self) -> bool:
-        return self.seconds > 0
-
-    def __str__(self) -> str:
-        due, delivered = (
-            time.strftime("%H:%M:%S", time.localtime(at)) for at in (self.due, self.delivered)
-        )
-        return f"late by {self.seconds:g} s: due {due}, delivered {delivered}"
-
-
 class EventTime(DeclaredFamily, affix="EventTime"):
     @classmethod
     def capture(cls, timestamp: float) -> EventTime:
@@ -90,13 +69,6 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def recorded_at(self, label: str) -> float:
         """The recorded instant; callers requiring a time cannot invent one."""
         raise UnrecordedTimeError(f"{label} requires a recorded time.")
-
-    def lateness(self, deadline: EventTime) -> Lateness:
-        """How late this delivery time is against ``deadline``; either unrecorded refuses."""
-        return Lateness(deadline.recorded_at("An order deadline"), self.recorded_at("A delivery"))
-
-    def require_deadline(self) -> None:
-        self.require_recorded("An order deadline")
 
     def require_delivery(self) -> None:
         self.require_recorded("A delivery")
@@ -130,11 +102,6 @@ class RecordedEventTime(EventTime):
 
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
-
-    @classmethod
-    def from_clock(cls, clock: str) -> RecordedEventTime:
-        """Decode an explicit local clock at the input boundary."""
-        return cls(time.time()).at_clock(clock)
 
     def at_clock(self, clock: str) -> RecordedEventTime:
         """The next local HH:MM minute, anchored to this recorded instant."""

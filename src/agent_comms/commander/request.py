@@ -64,7 +64,7 @@ class RequestListVerb(RequestVerb, declared_name="list"):
         for goal, served in requests:
             print(f"{goal.id} {goal.text}")
             for todo in served:
-                print(f"  {todo.id} due {todo.deadline.clock()}: {todo.text}")
+                print(f"  {todo.id} review {todo.review_at.clock()}: {todo.text}")
 
 
 def main(a: list[str], ctx: Commander) -> None:

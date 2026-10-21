@@ -5,6 +5,7 @@ import sys
 from importlib import import_module
 
 import agent_comms.commander as package
+from agent_comms.errors import ToolRefusedError
 
 from .order import Commander
 
@@ -26,4 +27,7 @@ def main() -> None:
     tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}
     if not argv or argv[0] not in tools:
         sys.exit(f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...')
-    tools[argv[0]].main(argv[1:], options.config)
+    try:
+        tools[argv[0]].main(argv[1:], options.config)
+    except ToolRefusedError as refused:
+        sys.exit(f'Refused: {refused}')
