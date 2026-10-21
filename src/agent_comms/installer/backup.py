@@ -196,6 +196,10 @@ class ResourceBackup(ABC):
     @abstractmethod
     def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
 
+    @abstractmethod
+    def spill_directory(self, configured: Path) -> Path:
+        """Carry originals share the snapshot's retention; no snapshot creates nothing."""
+
 
 @dataclass
 class StoreBackup(ResourceBackup):
@@ -204,6 +208,9 @@ class StoreBackup(ResourceBackup):
     route: Path
     path: Path
     kept: ClassVar[int] = 2
+
+    def spill_directory(self, configured: Path) -> Path:
+        return self.path
 
     def files(self) -> dict[str, str]:
         return FieldCodec.decode(dict[str, str],
@@ -376,6 +383,9 @@ class StoreBackup(ResourceBackup):
 
 class NoBackup(ResourceBackup):
     """A runtime-only install owns no files, paths or snapshot operations."""
+
+    def spill_directory(self, configured: Path) -> Path:
+        return configured
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
         return ()

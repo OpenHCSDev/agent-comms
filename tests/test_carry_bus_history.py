@@ -175,6 +175,10 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
             assert bus.claim(claim.row.seq) == claim.row.claim_transition.current()
             assert {type(bus.lookup(line.row.seq)) for line in rows} == set(
                 BusRecord.members_with(BusRecord))
+            with pytest.raises(
+                RelationViolationError, match="record differs from its declared template",
+            ):
+                claim.verify(PublicRecord.from_message(claim.row))
         else:
             with pytest.raises(UnclaimedError):
                 bus.claim(claim.row.seq)

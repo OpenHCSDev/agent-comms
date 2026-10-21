@@ -36,24 +36,18 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.cli_bridges.shared import Serve
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
 from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
-from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -67,7 +61,13 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryLedger
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -447,7 +447,9 @@ class Stack:
                      json.dumps(FieldCodec.encode(step)), cwd=tree.path,
                      env=self.environment(*tree.source_paths()))
         annotation = inspect.signature(operation, eval_str=True).return_annotation
-        return FieldCodec.decode(annotation, FieldCodec.parse(output.strip().splitlines()[-1]))
+        return cast(Result, FieldCodec.decode(
+            annotation, FieldCodec.parse(output.strip().splitlines()[-1]),
+        ))
 
     def backup_files(self, root: Path, pending: tuple[type[Carry], ...],
                      tree: TargetTree, spill_dir: Path) -> tuple[Path, ...]:
@@ -800,7 +802,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         Checkout(checkout).prepare()
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping,
-                                root, backup.path)
+                                root, backup.spill_directory(spill_dir))
         passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)

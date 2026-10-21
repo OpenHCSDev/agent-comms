@@ -3,13 +3,14 @@
 The retired envelope is decoded here only, never by the new bus readers.
 Applying through the installer is refused until it supplies the HDD staging path.
 """
+
 from __future__ import annotations
 
 import json
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, fields, replace
 from itertools import batched
 from pathlib import Path
@@ -23,8 +24,8 @@ from agent_comms.envelope_claim_transitions import (
     AcquiringClaim,
     ClaimIdentity,
     ClaimRelease,
+    ClaimScope,
     ClaimTransition,
-    RecordedScope,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
@@ -72,10 +73,14 @@ class HistoryMetadata:
     @classmethod
     def read(cls, root: Path) -> HistoryMetadata:
         data = FieldCodec.parse((root / cls.filename).read_bytes())
-        return FieldCodec.construct(cls, {
-            name: value for plan in FieldCodec.field_plans(cls)
-            for name, value in plan.decoded(data).items()
-        })
+        return FieldCodec.construct(
+            cls,
+            {
+                name: value
+                for plan in FieldCodec.field_plans(cls)
+                for name, value in plan.decoded(data).items()
+            },
+        )
 
 
 @dataclass(frozen=True)
@@ -96,16 +101,23 @@ class HistoryCatalogSource:
         path = HistoryArchive.path_in(root)
         if not path.exists():
             return ()
-        sources = FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(path.read_bytes()))
+        sources = FieldCodec.decode(
+            tuple[HistoryCatalogSource, ...],
+            FieldCodec.parse(path.read_bytes()),
+        )
         for source in sources:
             source.mapped_root(root, original_root)
             source.require_snapshot()
         return sources
 
     @classmethod
-    def publish(cls, root: Path, original_root: Path,
-                sources: tuple[HistoryCatalogSource, ...],
-                bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity]) -> Carried:
+    def publish(
+        cls,
+        root: Path,
+        original_root: Path,
+        sources: tuple[HistoryCatalogSource, ...],
+        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
+    ) -> Carried:
         path = HistoryArchive.path_in(root)
         if not path.exists():
             return Carried(0)
@@ -123,20 +135,29 @@ class HistoryCatalogSource:
 
     def require_snapshot(self) -> None:
         original = Path(self.root)
-        if (FileRevision.capture(original / BusHistory.filename) != self.snapshot_bus_revision
-                or FileRevision.capture(RegistryFile.path_in(original))
-                != self.snapshot_registry_revision):
+        if (
+            FileRevision.capture(original / BusHistory.filename) != self.snapshot_bus_revision
+            or FileRevision.capture(RegistryFile.path_in(original))
+            != self.snapshot_registry_revision
+        ):
             raise RelationViolationError(f"Retired archive changed before carrying: {original}")
 
-    def converted(self, root: Path, original_root: Path,
-                  bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity]) -> HistorySource:
+    def converted(
+        self,
+        root: Path,
+        original_root: Path,
+        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
+    ) -> HistorySource:
         mapped = self.mapped_root(root, original_root)
         bus = Bus(Bus.path_in(mapped))
         source = HistorySource(
-            str(mapped), self.original_root,
+            str(mapped),
+            self.original_root,
             bindings.get(self.bus_identity, self.bus_identity),
-            RecordedBusIdentity.capture(bus.path), bus.revision(),
-            FileRevision.capture(RegistryFile.path_in(mapped)), self.provenance,
+            RecordedBusIdentity.capture(bus.path),
+            bus.revision(),
+            FileRevision.capture(RegistryFile.path_in(mapped)),
+            self.provenance,
         )
         source.validate()
         return source
@@ -179,70 +200,93 @@ class HistoryManifest:
 
     def restored(self, record: PrivateRecord) -> HistoryManifest:
         return replace(
-            self, audience=record.audience, control=record.control,
-            decisions=tuple(FieldCodec.decode(HistoryDecision, item.to_wire())
-                            for item in record.decisions),
+            self,
+            audience=record.audience,
+            control=record.control,
+            decisions=tuple(HistoryDecision.from_wire(item.to_wire()) for item in record.decisions),
         )
 
     def capabilities(self) -> dict[str, object]:
-        return dict(audience=self.audience, control=self.control,
-                    decisions=tuple(item.decision() for item in self.decisions))
+        return dict(
+            audience=self.audience,
+            control=self.control,
+            decisions=tuple(item.decision() for item in self.decisions),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
-class HistorySideband(DeclaredFamily, ABC, affix="HistorySideband"):
+class HistorySideband[Record: PrivateRecord = PrivateRecord](
+    DeclaredFamily,
+    ABC,
+    affix="HistorySideband",
+):
     version: Literal[1]
     initial: HistoryManifest
 
     @abstractmethod
-    def record(self, message: Message) -> PrivateRecord: ...
+    def record(self, message: Message) -> Record: ...
 
-    def restored(self, record: PrivateRecord) -> HistorySideband:
+    def restored(self, record: Record) -> Self:
         return replace(self, initial=self.initial.restored(record))
 
 
-class InitialHistorySideband(HistorySideband):
+class InitialHistorySideband(HistorySideband[PrivateRecord]):
     def record(self, message: Message) -> PrivateRecord:
         return PrivateRecord.from_message(message, **self.initial.capabilities())
 
 
 @dataclass(frozen=True, kw_only=True)
-class ResponseHistorySideband(HistorySideband):
+class ResponseHistorySideband(HistorySideband[KeyedPrivateRecord]):
     response: KeyedResponseAcknowledgement
 
     def record(self, message: Message) -> KeyedPrivateRecord:
         return KeyedPrivateRecord.from_message(
-            message, acknowledgement=self.response, **self.initial.capabilities(),
+            message,
+            acknowledgement=self.response,
+            **self.initial.capabilities(),
         )
 
     def restored(self, record: KeyedPrivateRecord) -> ResponseHistorySideband:
         return replace(self, initial=self.initial.restored(record), response=record.acknowledgement)
 
 
-class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
+class HistoryRow[Record: BusRecord = BusRecord](
+    SubclassUnion,
+    Message,
+    ABC,
+    affix="HistoryRow",
+):
     """The unchanged public fields come from Message, not another field roster."""
 
     ascii: ClassVar[bool] = True
 
     @abstractmethod
-    def record(self) -> BusRecord: ...
+    def record(self) -> Record: ...
 
-    def restored(self, record: BusRecord) -> HistoryRow:
-        return replace(self, **{item.name: getattr(record, item.name) for item in fields(Message)})
+    def with_message(self, message: Message) -> Self:
+        return replace(self, **{item.name: getattr(message, item.name) for item in fields(Message)})
 
-    def located(self, number: int, offset: int, raw: bytes,
-                metadata: HistoryMetadata) -> HistoryLine:
-        return HistoryLine(number, offset, raw, self)
+    def restored(self, record: Record) -> Self:
+        return self.with_message(record)
+
+    def located(
+        self, number: int, offset: int, raw: bytes, metadata: HistoryMetadata
+    ) -> HistoryLine:
+        return StoredHistoryLine(number, offset, raw, self)
 
     def line(self) -> bytes:
         # The old writer put the two envelope identities before the declared fields.
-        return json.dumps(
-            {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)},
-            allow_nan=False, ensure_ascii=self.ascii,
-        ).encode("utf-8") + b"\n"
+        return (
+            json.dumps(
+                {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self)},
+                allow_nan=False,
+                ensure_ascii=self.ascii,
+            ).encode("utf-8")
+            + b"\n"
+        )
 
     @classmethod
-    def read(cls, raw: bytes, line: int) -> HistoryRow:
+    def read(cls, raw: bytes, line: int) -> Self:
         try:
             if not raw.endswith(b"\n"):
                 raise ValueError("incomplete final row")
@@ -255,7 +299,7 @@ class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
 
 
 @dataclass(frozen=True)
-class PublicHistoryRow(RecordMember, HistoryRow):
+class PublicHistoryRow(RecordMember, HistoryRow[PublicRecord]):
     # The old initializer wrote selected history with ensure_ascii=False.
     ascii: ClassVar[bool] = False
 
@@ -267,14 +311,17 @@ class OrderedHistoryMember(RecordMember):
     @classmethod
     def from_wire(cls, data: object) -> Self:
         row = FieldCodec.decode_record(cls, data)
-        # decode_record already proved that the external object is a mapping.
-        if tuple(cast(Mapping[str, object], data)) != tuple(FieldCodec.encode_fields(row)):
+        # Decode proved the mapping and required fields. Its compiled declaration
+        # owns order; re-encoding every nested value merely to obtain keys is waste.
+        source = cast(Mapping[str, object], data)
+        declared = tuple(key for _, key in FieldCodec.record_fields(cls) if key in source)
+        if tuple(source) != declared:
             raise MalformedRecord("Field order differs from this retired declaration")
         return row
 
 
 class HistoryScope(SubclassUnion, ABC, affix="HistoryScope"):
-    def restored(self, scope: RecordedScope) -> HistoryScope:
+    def restored(self, scope: ClaimScope) -> Self:
         return FieldCodec.decode_record(type(self), FieldCodec.encode(scope))
 
 
@@ -318,23 +365,38 @@ class ScopeInput:
 
 @dataclass(frozen=True)
 class EarlierWakeHistoryScope(
-    ScopeAttempt, ScopeTurn, ScopeOwner, ScopeOperation, ScopeSource,
-    OrderedHistoryMember, HistoryScope,
+    ScopeAttempt,
+    ScopeTurn,
+    ScopeOwner,
+    ScopeOperation,
+    ScopeSource,
+    OrderedHistoryMember,
+    HistoryScope,
 ):
     """Original wake claims placed the operation and owner inside the wake fields."""
 
 
 @dataclass(frozen=True)
 class WakeHistoryScope(
-    ScopeAttempt, ScopeSource, ScopeTurn, ScopeOperation, ScopeOwner,
-    OrderedHistoryMember, HistoryScope,
+    ScopeAttempt,
+    ScopeSource,
+    ScopeTurn,
+    ScopeOperation,
+    ScopeOwner,
+    OrderedHistoryMember,
+    HistoryScope,
 ):
     """Later wake claims inherit the common owner/operation/turn fields first."""
 
 
 @dataclass(frozen=True)
 class NativeHistoryScope(
-    ScopeInput, ScopeTurn, ScopeOperation, ScopeOwner, OrderedHistoryMember, HistoryScope,
+    ScopeInput,
+    ScopeTurn,
+    ScopeOperation,
+    ScopeOwner,
+    OrderedHistoryMember,
+    HistoryScope,
 ):
     """Native claims use the same owner/operation/turn group, then the input."""
 
@@ -343,9 +405,9 @@ class HistoryClaim(SubclassUnion, ClaimIdentity, ABC, affix="HistoryClaim"):
     """Retired field-group order is part of the original envelope's physical form."""
 
     def current(self) -> ClaimTransition:
-        return FieldCodec.decode(ClaimTransition, FieldCodec.encode(self))
+        return ClaimTransition.from_wire(FieldCodec.encode(self))
 
-    def restored(self, transition: ClaimTransition) -> HistoryClaim:
+    def restored(self, transition: ClaimTransition) -> Self:
         # The known old member owns layout; the new record supplies every value.
         return FieldCodec.decode_record(type(self), FieldCodec.encode(transition))
 
@@ -373,11 +435,12 @@ class ClaimGeneration:
 class ScopedClaimGeneration(ClaimGeneration, HistoryClaim, declared_name=None):
     scope: Annotated[HistoryScope, WireName("admission")]
 
-    def restored(self, transition: ClaimTransition) -> HistoryClaim:
+    def restored(self, transition: ClaimTransition) -> Self:
         # This retired member decoded an acquiring scope, never a release.
         acquiring = cast(AcquiringClaim, transition)
-        return replace(super().restored(transition),
-                       scope=self.scope.restored(acquiring.claim_scope))
+        return replace(
+            super().restored(transition), scope=self.scope.restored(acquiring.claim_scope)
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -392,59 +455,82 @@ class ExpiredPaths:
 
 @dataclass(frozen=True)
 class EarlierScopedHistoryClaim(
-    ScopedClaimGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+    ScopedClaimGeneration,
+    ReleasedPaths,
+    ClaimedPaths,
+    ExpiredPaths,
+    OrderedHistoryClaim,
 ):
     """The older writer placed acquired/released paths before their generation."""
 
 
 @dataclass(frozen=True)
 class ScopedHistoryClaim(
-    ReleasedPaths, ClaimedPaths, ExpiredPaths, ScopedClaimGeneration, OrderedHistoryClaim,
+    ReleasedPaths,
+    ClaimedPaths,
+    ExpiredPaths,
+    ScopedClaimGeneration,
+    OrderedHistoryClaim,
 ):
     """The later writer factored the scoped generation into its nominal parent."""
 
 
 @dataclass(frozen=True)
 class UnscopedHistoryClaim(
-    ClaimGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+    ClaimGeneration,
+    ReleasedPaths,
+    ClaimedPaths,
+    ExpiredPaths,
+    OrderedHistoryClaim,
 ):
     """Original tool claims before a scope was recorded."""
 
 
 @dataclass(frozen=True)
 class EarlierReleasedHistoryClaim(
-    ReleasedGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+    ReleasedGeneration,
+    ReleasedPaths,
+    ClaimedPaths,
+    ExpiredPaths,
+    OrderedHistoryClaim,
 ):
     """Earlier release originals encoded the empty claim side first."""
 
 
 @dataclass(frozen=True)
 class ReleasedHistoryClaim(
-    ReleasedGeneration, ClaimedPaths, ReleasedPaths, ExpiredPaths, OrderedHistoryClaim,
+    ReleasedGeneration,
+    ClaimedPaths,
+    ReleasedPaths,
+    ExpiredPaths,
+    OrderedHistoryClaim,
 ):
     """Release originals keep their release side first and mint no generation."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimHistoryRow(RecordMember, HistoryRow):
+class ClaimHistoryRow(RecordMember, HistoryRow[ClaimRecord]):
     claim_transition: Annotated[HistoryClaim, WireOrder(11)]
 
     def record(self) -> ClaimRecord:
         return ClaimRecord.of(self, self.claim_transition.current())
 
-    def located(self, number: int, offset: int, raw: bytes,
-                metadata: HistoryMetadata) -> HistoryLine:
+    def located(
+        self, number: int, offset: int, raw: bytes, metadata: HistoryMetadata
+    ) -> HistoryLine:
         if self.seq <= metadata.claimed_after_seq:
             return UnclaimedHistoryLine(number, offset, raw, self)
         return super().located(number, offset, raw, metadata)
 
     def restored(self, record: ClaimRecord) -> ClaimHistoryRow:
-        return replace(super().restored(record),
-                       claim_transition=self.claim_transition.restored(record.claim_transition))
+        return replace(
+            super().restored(record),
+            claim_transition=self.claim_transition.restored(record.claim_transition),
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
-class PrivateHistoryRow(RecordMember, HistoryRow):
+class PrivateHistoryRow(RecordMember, HistoryRow[PrivateRecord]):
     private: Annotated[HistorySideband, WireName("_agent_comms_private_v1"), WireOrder(15)]
 
     def record(self) -> PrivateRecord:
@@ -463,14 +549,14 @@ class HistoryOffset(TypedTable, SharedFileTables, DerivedTables):
 
 
 @dataclass(frozen=True)
-class HistoryLine:
+class HistoryLine[Row: Message = Message](ABC):
     number: int
     offset: int
     raw: bytes
-    row: HistoryRow
+    row: Row
 
     @classmethod
-    def rows(cls, source: Path, metadata: HistoryMetadata):
+    def rows(cls, source: Path, metadata: HistoryMetadata) -> Iterator[HistoryLine]:
         previous = 0
         number = 0
         with source.open("rb") as stream:
@@ -488,32 +574,47 @@ class HistoryLine:
                 f"Bus history ends at {previous}; retired marker declares {metadata.last_seq}"
             )
 
-    def record(self) -> BusRecord:
-        try:
-            return self.row.record()
-        except ValueError as error:
-            raise RelationViolationError(f"Bus history line {self.number}: {error}") from error
+    @abstractmethod
+    def record(self) -> BusRecord: ...
 
-    def restored(self, record: BusRecord) -> HistoryRow:
-        return self.row.restored(record)
+    @abstractmethod
+    def restored_line(self, record: BusRecord) -> bytes: ...
 
     def verify(self, record: BusRecord) -> None:
-        if self.restored(record).line() != self.raw:
+        if record != self.record():
+            raise RelationViolationError(
+                f"Bus history seq {self.row.seq}: record differs from its declared template"
+            )
+        if self.restored_line(record) != self.raw:
             raise RelationViolationError(
                 f"Bus history seq {self.row.seq}: record round trip differs"
             )
 
 
-class UnclaimedHistoryLine(HistoryLine):
+class StoredHistoryLine[Record: BusRecord](HistoryLine[HistoryRow[Record]]):
+    """The template's declared record kind also owns the typed readback."""
+
+    def record(self) -> Record:
+        try:
+            return self.row.record()
+        except ValueError as error:
+            raise RelationViolationError(f"Bus history line {self.number}: {error}") from error
+
+    def restored_line(self, record: BusRecord) -> bytes:
+        # verify compared the nominal value supplied by this template's factory.
+        return self.row.restored(cast(Record, record)).line()
+
+
+class UnclaimedHistoryLine(HistoryLine[ClaimHistoryRow]):
     """The retired boundary marks this claim as display history, not attestation."""
 
     def record(self) -> PublicRecord:
         return PublicRecord.from_message(self.row)
 
-    def restored(self, record: BusRecord) -> HistoryRow:
+    def restored_line(self, record: BusRecord) -> bytes:
         # The discarded attestation is only the old encoding template. Every
         # retained Message value must still come back from SQLite unchanged.
-        return HistoryRow.restored(self.row, record)
+        return self.row.with_message(record).line()
 
 
 @dataclass(frozen=True)
@@ -545,8 +646,9 @@ class HistoryInput:
             return ()
         if not source.is_file() or not original.is_file():
             raise RelationViolationError(f"History source or its original is absent: {source}")
-        return (cls(bus, source, HistoryMetadata.read(root),
-                    RecordedBusIdentity.capture(original)),)
+        return (
+            cls(bus, source, HistoryMetadata.read(root), RecordedBusIdentity.capture(original)),
+        )
 
     def moved(self, root: Path, spill: Path) -> HistoryInput:
         target = spill / self.source.relative_to(root)
@@ -569,8 +671,13 @@ class BusHistory(Carry):
         roots = (root, *(source.mapped_root(root, self.original_root) for source in sources))
         paths = {HistoryArchive.path_in(root)}
         for directory in roots:
-            paths.update((directory / self.filename, directory / HistoryMetadata.filename,
-                          ReadLedger.path_in(directory)))
+            paths.update(
+                (
+                    directory / self.filename,
+                    directory / HistoryMetadata.filename,
+                    ReadLedger.path_in(directory),
+                )
+            )
         for path in paths:
             self.require_confined(root, path)
         return tuple(sorted(paths))
@@ -593,24 +700,37 @@ class BusHistory(Carry):
             if rebound == document:
                 return Carried(0)
             ledger._publish_unlocked(rebound)
-        return Carried(1, detail={
-            "read_viewers_before": len(document.messages),
-            "read_viewers_after": len(rebound.messages),
-            "read_conversations_before": sum(
-                len(c.conversations) for c in document.messages.values()),
-            "read_conversations_after": sum(
-                len(c.conversations) for c in rebound.messages.values()),
-            "read_transcripts_before": len(document.transcripts),
-            "read_transcripts_after": len(rebound.transcripts),
-        }, rewritten=(ledger.filename,))
+        return Carried(
+            1,
+            detail={
+                "read_viewers_before": len(document.messages),
+                "read_viewers_after": len(rebound.messages),
+                "read_conversations_before": sum(
+                    len(c.conversations) for c in document.messages.values()
+                ),
+                "read_conversations_after": sum(
+                    len(c.conversations) for c in rebound.messages.values()
+                ),
+                "read_transcripts_before": len(document.transcripts),
+                "read_transcripts_after": len(rebound.transcripts),
+            },
+            rewritten=(ledger.filename,),
+        )
 
     def carry(self) -> Carried:
         with _store_lock(HistoryArchive.path_in(self.root)):
             catalog = HistoryCatalogSource.read(self.root, self.original_root)
-            roots = (self.root, *(source.mapped_root(self.root, self.original_root)
-                                  for source in catalog))
-            inputs = tuple(source for root in roots for source in HistoryInput.capture(
-                root, self.original_root / root.relative_to(self.root)))
+            roots = (
+                self.root,
+                *(source.mapped_root(self.root, self.original_root) for source in catalog),
+            )
+            inputs = tuple(
+                source
+                for root in roots
+                for source in HistoryInput.capture(
+                    root, self.original_root / root.relative_to(self.root)
+                )
+            )
             if not inputs:
                 return Carried(0)
             if not self.apply:
@@ -629,7 +749,7 @@ class BusHistory(Carry):
             results = []
             read_results = []
             bindings = {}
-            rewritten = set()
+            rewritten: set[str] = set()
             for source in staged:
                 result = self.transfer(source.source, source.bus, source.metadata)
                 read = self.rebind_reads(source.bus.path.parent, source.original_identity)
@@ -637,17 +757,28 @@ class BusHistory(Carry):
                 read_results.append(read)
                 bindings[source.original_identity] = RecordedBusIdentity.capture(source.bus.path)
                 directory = source.bus.path.parent.relative_to(self.root)
-                rewritten.update(str(directory / name) for name in (
-                    self.filename, HistoryMetadata.filename, *result.rewritten, *read.rewritten))
+                rewritten.update(
+                    str(directory / name)
+                    for name in (
+                        self.filename,
+                        HistoryMetadata.filename,
+                        *result.rewritten,
+                        *read.rewritten,
+                    )
+                )
             catalog_result = HistoryCatalogSource.publish(
-                self.root, self.original_root, catalog, bindings)
+                self.root, self.original_root, catalog, bindings
+            )
             rewritten.update(catalog_result.rewritten)
-            totals = {}
+            totals: dict[str, int] = {}
             for result in (*results, *read_results):
                 for key, value in result.detail.items():
                     totals[key] = totals.get(key, 0) + value
-            return Carried(sum(result.changed for result in results), detail=totals,
-                           rewritten=tuple(sorted(rewritten)))
+            return Carried(
+                sum(result.changed for result in results),
+                detail=totals,
+                rewritten=tuple(sorted(rewritten)),
+            )
 
     @classmethod
     def transfer(cls, source: Path, bus: Bus, metadata: HistoryMetadata) -> Carried:
@@ -700,5 +831,8 @@ class BusHistory(Carry):
                 raise RelationViolationError(
                     f"Bus history line count {count} differs from stored rows/offsets"
                 )
-        return Carried(changed, detail=dict(rows=count, continuous=count, round_tripped=count),
-                       rewritten=(bus.path.name,))
+        return Carried(
+            changed,
+            detail=dict(rows=count, continuous=count, round_tripped=count),
+            rewritten=(bus.path.name,),
+        )
