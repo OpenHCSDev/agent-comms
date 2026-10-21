@@ -511,10 +511,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        """An unfinished goal accepts the assignment; a finished one is replaced."""
-        if goal.state.terminal:
-            goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
-            return self.create(ctx)
+        return goal.state.accept_order(self, goal, ctx)
+
+    def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
         revision = goal.revision + 1
@@ -646,5 +645,4 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
-        generation = store.require_generation(goal.id)
-        generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
+        store.authorize_current_retry(goal.id, uuid4().hex)

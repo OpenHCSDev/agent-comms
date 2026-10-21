@@ -845,6 +845,11 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
             raise MissingGoalGenerationError(goal_id)
         return generation
 
+    def authorize_current_retry(self, goal_id: str, decision: str) -> None:
+        """The current generation owns how an explicit retry or fresh order proceeds."""
+        generation = self.require_generation(goal_id)
+        generation.lifecycle.authorize_retry(self, generation, decision)
+
     def _is_generation(self, generation: Generation) -> bool:
         return self.snapshot(generation.goal_id) == generation
 
@@ -1101,11 +1106,11 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
         attempt_id: str,
         user_decision_id: str,
     ) -> Generation:
-        """A separate explicit user retry decision retires uncertainty; resume alone cannot.
+        """An explicit retry or checked fresh order authorizes new work; resume alone cannot.
 
-        This records an authorization, not a provider acknowledgement. Integration must
-        route only a real user action here; same-UID user authentication is not
-        claimed by the ledger.
+        This records an authorization, not a provider acknowledgement or input replay.
+        Integration supplies the real retry decision or checked order's identity;
+        same-UID user authentication is not claimed by the ledger.
         """
         if not user_decision_id.strip():
             raise ValueError("An explicit user retry decision ID is required.")

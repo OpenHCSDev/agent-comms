@@ -71,6 +71,7 @@ class BusPageRow(PageIndexTable, TypedTable):
     indexes = (
         Index(("target", "seq")),
         Index(("offset",)),
+        Index(("timestamp",)),
     )
 
     def record(self, stream: BinaryIO, *, max_bytes: int) -> tuple[WireRecord, int]:
@@ -229,6 +230,24 @@ class BusPageIndex(TypedStore, DerivedTables):
             params.append(after_offset)
         yield from self._offsets(clauses, params, lower=lower, upper=upper,
                                  descending=descending, before_offset=before_offset)
+
+    def recent_offsets(
+        self, since: float, *, predicate: tuple[str, tuple], before_offset: int,
+    ) -> Generator[BusPageRow]:
+        """Seek the time index first, then visit only its candidates newest-first.
+
+        The inner time query uses the timestamp index without an ordering scan
+        over older rows; the outer primary-key query orders those candidates.
+        """
+        condition, bindings = predicate
+        table = BusPageRow.declared_name
+        with closing(BusPageRow.stream(
+            self.connection,
+            where=f'seq IN (SELECT seq FROM "{table}" WHERE timestamp>?) '
+                  f'AND offset<? AND ({condition})',
+            parameters=(since, before_offset, *bindings), order_by=("seq",), descending=True,
+        )) as rows:
+            yield from rows
 
     def sequence_offsets(
         self, sequences: frozenset[int], *, before_offset: int,
