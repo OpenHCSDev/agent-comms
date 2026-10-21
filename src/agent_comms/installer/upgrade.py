@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
-from agent_comms.cli_bridges.shared import Serve
+from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
@@ -325,9 +325,11 @@ class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+    unresumed: tuple[str, ...]
+    """Session bridges paused for the swap that did not come back."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines())
+        return (*super().lines(), *self.live.lines(), *self.unresumed)
 
 
 @dataclass(frozen=True)
@@ -619,9 +621,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
         install.announce(report)
-        result = InstalledUpgrade(current, target, root, names, rehearsal,
-                                  install.install(rehearsal), harnesses())
+        bridges = SessionBridgeResumes()
+        live_run = install.install(rehearsal, bridges)
+        result = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
+                                  harnesses(), bridges.lines())
         report.finished(result)
+        bridges.require_resumed()
         return result
     except UpgradeRefused as error:
         report.failed(error)
@@ -679,7 +684,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
 
-    def install(self, rehearsal: Rehearsed) -> LiveRun:
+    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -688,8 +693,8 @@ class Install[Rehearsed: Rehearsal](ABC):
         """
         with ExitStack() as resources:
             for bridge in Serve.running(self.installed.home):
-                for paused in bridge.pause(resources):
-                    resources.callback(paused.resume)
+                bridges.pause(bridge, resources)
+            resources.callback(bridges.resume)
             return self.live(rehearsal)
 
     @abstractmethod
