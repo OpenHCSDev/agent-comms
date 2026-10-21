@@ -168,8 +168,29 @@ END"""
         }
 
 
+_RETRY_BASIS = """SELECT e.execution_id,
+  CASE WHEN e.current_attempt_ordinal IS NOT NULL
+     AND e.current_attempt_ordinal < e.max_attempts
+     AND EXISTS (SELECT 1 FROM replay_assessments r
+       WHERE r.execution_id = e.execution_id AND r.retry_authorized = 1)
+     AND (e.origin != 'wire' OR (EXISTS (SELECT 1 FROM obligations o
+       WHERE o.execution_id=e.execution_id) AND NOT EXISTS (SELECT 1 FROM obligations o
+       WHERE o.execution_id=e.execution_id AND o.retryable != 1)))
+  THEN 1 ELSE 0 END AS authorized
+FROM executions e"""
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
+    retry_view = "retry_disposition_basis"
+
+    @classmethod
+    def schema_objects(cls, *, if_not_exists: bool = False):
+        """The retry basis view reads executions, so this row declares it."""
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        return super().schema_objects(if_not_exists=if_not_exists) | {
+            cls.retry_view: f"CREATE VIEW {existence}{cls.retry_view} AS\n" + _RETRY_BASIS}
+
     def retry_authorized(self, replay: ReplayAssessments | None, obligations) -> bool:
         if replay is None:
             return False

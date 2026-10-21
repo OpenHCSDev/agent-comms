@@ -13,7 +13,6 @@ import pytest
 from agent_comms.activity import (
     NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
 )
-from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
@@ -47,7 +46,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
             pass
     else:
         with sqlite3.connect(path) as db:
-            db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
+            db.execute("DROP TABLE claim_batch_members")
     try:
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
@@ -78,7 +77,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         with sqlite3.connect(path) as db:
             assert (
                 db.execute(
-                    "SELECT name FROM sqlite_master WHERE name=?", (CohortSchemaMeta.declared_name,)
+                    "SELECT name FROM sqlite_master WHERE name=?", ("claim_batch_members",)
                 ).fetchone()
                 is None
             )

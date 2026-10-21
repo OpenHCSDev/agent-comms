@@ -503,7 +503,7 @@ def test_sealed_index_with_a_stale_schema_is_rebuilt_from_the_bus(tmp_path: Path
     # An older runtime's index: one declared index missing, one table it no longer declares,
     # sealed by that runtime over the file as it wrote it.
     with sqlite3.connect(path) as db:
-        db.execute("DROP INDEX delivery_sources_1_idx")
+        db.execute("DROP INDEX delivery_sources_message_id_seq_idx")
         db.execute("CREATE TABLE retired_rows (offset INTEGER)")
     with _store_lock(log.path), closing(_connect(path, readonly=True)) as db:
         marker = log.private_marker_unlocked()

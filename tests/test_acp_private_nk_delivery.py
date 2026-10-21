@@ -135,7 +135,7 @@ async def test_missing_native_schema_refuses_cursor_metadata(tmp_path):
     comms, agent, _ = _session(tmp_path)
     assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
+        store.session._connection.execute("DROP TABLE native_runtime_triage_sources")
     with pytest.raises(PublicationActivationBlocked):
         await agent.sessions.metadata("beta")
 
