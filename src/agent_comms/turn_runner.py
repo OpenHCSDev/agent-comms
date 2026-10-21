@@ -407,19 +407,20 @@ class TurnRunner:
             owner = await Coordination.run_worker(partial(
                 self.comms.registry.require, execution.owner_name,
             ))
-            inbox = self.inputs.bind_native_turn(session_id, owner)
+            following = OwnerFollowingInputs(
+                self.inputs, session_id, owner, self.inputs.bind_native_turn(session_id, owner),
+            )
             self.turn_tasks[session_id] = task
             try:
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),
-                    following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
+                    following=following,
                 )
-                await following.pass_on_unread(self)
                 return result
             finally:
                 try:
-                    await self.inputs.finish_turn_inputs(session_id, inbox)
+                    await self.inputs.finish_turn_inputs(following)
                 finally:
                     if self.turn_tasks.get(session_id) is task:
                         self.turn_tasks.pop(session_id, None)

@@ -68,6 +68,8 @@ from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
+    from agent_comms.following_inputs import OwnerFollowingInputs
+
     from .turn_phase import TurnPhase
 
 AGENT_PREFIX = "!agent "
@@ -1049,10 +1051,9 @@ class InputDrain(InputObservation):
         with _store_lock(self.comms._wire_lock_path):
             return self.dispositions.settle_unbound(keys)
 
-    async def finish_turn_inputs(
-        self, session_id: str, inbox: TurnInbox
-    ) -> None:
-        """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
+    async def finish_turn_inputs(self, following: OwnerFollowingInputs) -> None:
+        """Retire the ending turn's existing input owner; retain UNKNOWN only as notices."""
+        session_id, inbox = following.session_id, following.inbox
         state = self.state(session_id)
         turn = state.retire_turn(inbox)
         if not turn.is_open:
@@ -1063,21 +1064,23 @@ class InputDrain(InputObservation):
         try:
             await turn.finish_original(self)
         finally:
-            # Even after cancellation, wait for the input write before releasing
-            # turn resources. Closing permissions and saving accepted queued
-            # input for the next turn do not depend on callback delivery.
-            state.following = {}
-            remaining, state.queued = state.queued, {}
-            for item in remaining.values():
-                await item.not_started(self)
-            if remaining:
-                state.restored.update(
-                    {
-                        key: restored
-                        for key, item in remaining.items()
-                        if (restored := item.restore_after_turn()) is not None
-                    }
-                )
+            try:
+                await following.pass_on_unread(self.effects.turns)
+            finally:
+                # Retire only after the old lease ended and live, unwritten
+                # acceptances had their handoff. UNKNOWN rows never grant it.
+                state.following = {}
+                remaining, state.queued = state.queued, {}
+                for item in remaining.values():
+                    await item.not_started(self)
+                if remaining:
+                    state.restored.update(
+                        {
+                            key: restored
+                            for key, item in remaining.items()
+                            for restored in item.restore_after_turn()
+                        }
+                    )
         await self.emit_input_delivery_changed(session_id)
         if remaining:
             await self.emit_queue_state(session_id)

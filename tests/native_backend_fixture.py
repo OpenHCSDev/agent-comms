@@ -187,13 +187,14 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
 
 @asynccontextmanager
-async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage):
+async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
+                                 provider_type: type[LoopbackProvider] = LoopbackProvider):
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path
-    provider = LoopbackProvider(status=200, text="Native response lifecycle.")
+    provider = provider_type(status=200, text="Native response lifecycle.")
     connections = set()
 
     async def serve(reader, writer):
