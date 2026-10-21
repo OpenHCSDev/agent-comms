@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from agent_comms.bus import Bus
-
 import argparse
 import faulthandler
 import json
@@ -12,6 +10,7 @@ from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event
 from pathlib import Path
 
+from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import Comms
 from agent_comms.storage_rules import StorageRoots
