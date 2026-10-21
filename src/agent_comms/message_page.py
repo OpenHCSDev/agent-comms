@@ -121,9 +121,6 @@ class MessageReadRequest[T](ABC):
 
     scope: MessageDisplayScope
 
-    def includes(self, message: Message) -> bool:
-        return self.scope.includes(message)
-
     @property
     @abstractmethod
     def empty(self) -> T: ...
@@ -148,7 +145,7 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         opposite = bool(traversal.opposite(source, self.scope, limit=1, kinds=self.kinds()))
         more = False
         for row in traversal.records(source, self.scope, limit=self.bounds.limit + 1, kinds=self.kinds()):
-            if self.includes(row) and not window.take(traversal, row):
+            if not window.take(traversal, row):
                 more = True
                 break
         return traversal.result(window, more, opposite)

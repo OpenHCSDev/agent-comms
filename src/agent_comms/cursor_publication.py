@@ -159,7 +159,7 @@ class CursorPublication:
         if not scope.matches_session(session_id):
             return unavailable
         try:
-            bus = MessageBus(WireLog.path_in(self.comms.root), self.comms.registry, ResponseWrites)
+            bus = MessageBus(self.comms.root, self.comms.registry, ResponseWrites)
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )

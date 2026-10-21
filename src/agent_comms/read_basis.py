@@ -804,7 +804,7 @@ class DMDisplayBasis:
 
 
 class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
-    """Captured inclusion and its sound candidate reduction for the page index."""
+    """Captured inclusion and its exact predicate on the bus capability tables."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(target).conversation_key(
@@ -830,18 +830,23 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
                            source: Bus, *, document,
                            audience: MessageDisplayScope, through: int) -> DisplayBasis:
         prefixes: dict[Conversation, int] = {}
-        for row in source.latest_conversations(*self.index_predicate, through):
-            if audience.includes_indexed(row):
-                conversation = self.read_key(row.sender, row.target, snapshot)
-                prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
+        predicate, parameters = self.intersection(audience)
+        for row in source.latest_conversations(predicate, parameters, through):
+            conversation = self.read_key(row.sender, row.target, snapshot)
+            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
             tuple(DisplayedConversation(conversation, (), sequence)
                   for conversation, sequence in prefixes.items()), RecordedBusIdentity.capture(source.path))
 
+    def intersection(self, other: MessageDisplayScope):
+        predicate, parameters = self.index_predicate
+        other_predicate, other_parameters = other.index_predicate
+        return f"({predicate}) AND ({other_predicate})", (*parameters, *other_parameters)
+
     @property
     @abstractmethod
     def index_predicate(self) -> tuple[str, tuple]:
-        """Declare the candidates covered by this scope's index query."""
+        """Select this scope's members before applying the sequence limit."""
 
     @property
     @abstractmethod
@@ -1024,9 +1029,8 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
                            source: Bus, *, document,
                            audience: MessageDisplayScope, through: int) -> DisplayBasis:
         # Partial channel selections acknowledge exact rows, never unseen prefixes.
-        rows = source.selected_sequences(*self.index_predicate, through)
-        return reads.capture(viewer, (row for row in rows if audience.includes_indexed(row)),
-                             snapshot, source, document=document)
+        rows = source.selected_sequences(*self.intersection(audience), through)
+        return reads.capture(viewer, rows, snapshot, source, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
@@ -1042,7 +1046,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
         target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
         return (f"target IN ({target_marks}) OR sender IN ({name_marks}) OR "
                 f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
-                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
+                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE json_extract(value,'$.thread') IN ({name_marks}))",
                 (*targets, *names, *names, *names))
 
     def includes(self, message: Message) -> bool:
