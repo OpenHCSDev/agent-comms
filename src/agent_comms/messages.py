@@ -590,6 +590,11 @@ class Message(Addressed, BusCapability):
 class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
 
+    @property
+    def publication_snapshot(self) -> Message:
+        """Delivery capabilities are not message content in a publication intent."""
+        return Message.from_message(self).publication_snapshot
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
