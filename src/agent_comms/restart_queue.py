@@ -261,26 +261,25 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
-    with _store_lock(comms._wire_lock_path):
-        snapshot = comms.registry.snapshot()
-        owner = selection.require_current(snapshot)
-        status = snapshot.status(owner.name)
-        owner.require_restart_owner(status)
-        launch = RetainedOwnerLaunch.capture(selection, snapshot)
-        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
-        target.require_available(comms)
-        # Queueing itself never signals or interrupts the owner, even if it is busy.
-        with queue.locked():
-            for previous in queue.active_for(owner.incarnation.require_recorded()):
-                result = previous.state.enqueue(previous, selection, target)
-                if result.state.active:
-                    break
-                queue.save(result)
-            else:
-                result = QueuedRestart(
-                    uuid.uuid4().hex, selection, target, PendingRestart()
-                )
-                queue.save(result)
+    snapshot = comms.registry.snapshot()
+    owner = selection.require_current(snapshot)
+    status = snapshot.status(owner.name)
+    owner.require_restart_owner(status)
+    launch = RetainedOwnerLaunch.capture(selection, snapshot)
+    target = RestartTarget.capture(comms, launch.environment, launch_runtime)
+    target.require_available(comms)
+    # Queueing itself never signals or interrupts the owner, even if it is busy.
+    with queue.locked():
+        for previous in queue.active_for(owner.incarnation.require_recorded()):
+            result = previous.state.enqueue(previous, selection, target)
+            if result.state.active:
+                break
+            queue.save(result)
+        else:
+            result = QueuedRestart(
+                uuid.uuid4().hex, selection, target, PendingRestart()
+            )
+            queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
     _start_watcher(comms.root, target)
     return result

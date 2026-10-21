@@ -108,7 +108,7 @@ class Goals:
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
-        """Caller holds wire; recover only this owner's original unused READY grant."""
+        """Caller holds registry; recover only this owner's original unused READY grant."""
         try:
             goal = GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
