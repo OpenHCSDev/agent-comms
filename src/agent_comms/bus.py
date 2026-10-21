@@ -1,4 +1,4 @@
-"""An append-only, capability-declared SQLite bus; no existing readers are wired here."""
+"""Append-only database history and capability-declared record queries."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from agent_comms.bus_tables import (
     BusTables,
     BusProjectionTables,
     KeyedPublication,
+    MessageIdentitySource,
     SentSource,
     ReceivedSource,
     AnsweredSource,
@@ -125,6 +126,12 @@ class Bus(StoreWriter, DurableFile):
             if not headers:
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
             return self._record(db, headers[0])
+
+    def lookup_message(self, message_id: str) -> BusRecord:
+        """Resolve one content identity; absent or ambiguous identities are refused."""
+        with self.observing() as db:
+            identity = MessageIdentitySource.require(db, message_id=message_id)
+            return self._record(db, BusRow.require(db, seq=identity.seq))
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:

@@ -353,7 +353,8 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     @projected(view="content", name="source")
     def content_source(self):
         return (self.source.key, self.source.original_root, self.source.bus_identity,
-                self.source.snapshot_bus_revision, self.source.snapshot_registry_revision)
+                self.source.snapshot_bus_identity, self.source.snapshot_bus_revision,
+                self.source.snapshot_registry_revision)
 
     @classmethod
     def resolve_source(cls, owner, name, source_runtime, historical_source):

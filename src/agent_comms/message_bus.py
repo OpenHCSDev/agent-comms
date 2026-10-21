@@ -93,10 +93,6 @@ class MessageBus[Writes: Publisher]:
         ) as basis:
             yield basis, self.bus
 
-    def page(self, *, before_seq: int, limit: int = 100):
-        """Newest-first public history follows the bus's exclusive sequence keyset."""
-        return self.bus.page(before_seq, limit)
-
     def inbox(
         self, name: str, target: CommandTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
