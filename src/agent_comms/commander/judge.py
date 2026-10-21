@@ -288,8 +288,9 @@ class DroppedVerb(VerdictVerb):
     help = "the unit discarded these edits; Core settles them only if git holds them on no ref"
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> DroppedVerdict:
-        return DroppedVerdict(todo.revision, ctx.incarnation, todo.held(), edit.id, path=edit.path,
-                              added=tuple(line for hunk in edit.hunks for line in hunk.new_text.splitlines()))
+        added = tuple(line for hunk in edit.hunks for line in hunk.new_text.splitlines())
+        return DroppedVerdict(todo.revision, ctx.incarnation, todo.held(), edit.id,
+                              path=edit.path, added=added)
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass

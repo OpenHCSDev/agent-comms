@@ -2714,29 +2714,36 @@ class DroppedVerdict(ToolCallVerdict):
     def prepare(self, goals, current):
         lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
         if not lines:
-            raise TodoError("An edit that adds no line cannot be shown dropped; judge it ok or back.")
-        checkout = Path(current.order.checked().check.directory)
-        if (holder := self.live_holder(checkout, lines)) is not None:
-            raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
+            raise TodoError(
+                "An edit that adds no line cannot be shown dropped; judge it ok or back.")
+        self.refuse_held(Path(current.order.checked().check.directory), lines)
         return self
 
-    def live_holder(self, checkout: Path, lines: tuple[str, ...]) -> str | None:
-        """The first place still holding every added line: the file on disk, then any ref or worktree HEAD."""
+    def refuse_held(self, checkout: Path, lines: tuple[str, ...]) -> None:
+        """Refuse while any place still holds every added line: the file on disk, then any
+        branch, remote branch or worktree HEAD of the checkout."""
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
-            return str(target)
-        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)", "refs/heads", "refs/remotes")
-        heads = [entry.removeprefix("HEAD ") for entry in self.git(checkout, "worktree", "list", "--porcelain")
+            self.refuse(str(target))
+        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)",
+                        "refs/heads", "refs/remotes")
+        heads = [entry.removeprefix("HEAD ")
+                 for entry in self.git(checkout, "worktree", "list", "--porcelain")
                  if entry.startswith("HEAD ")]
-        commits = sorted({*refs, *heads})
         patterns = [arg for line in lines for arg in ("-e", line)]
-        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns, *commits,
-                         "--", f":(glob)**/{target.name}", allowed=(0, 1))
-        return found[0].split(":", 1)[0] if found else None
+        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns,
+                         *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}",
+                         allowed=(0, 1))
+        if found:
+            self.refuse(found[0].split(":", 1)[0])
+
+    def refuse(self, holder: str) -> None:
+        raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
 
     @staticmethod
     def git(checkout: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> list[str]:
-        ran = subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True, timeout=120)
+        ran = subprocess.run(("git", "-C", str(checkout), *args),
+                             capture_output=True, text=True, timeout=120)
         if ran.returncode not in allowed:
             raise TodoError(ran.stderr.strip() or f"git {args[0]} failed in {checkout}.")
         return ran.stdout.splitlines()
