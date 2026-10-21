@@ -90,6 +90,24 @@ def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
     assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
 
 
+def test_prepare_rebuilds_a_store_with_no_origin_when_the_pin_moves(repository, tmp_path):
+    """fork-boundaries at install 34: a store with no remote cannot fetch the moved pin."""
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    (module,) = checkout.submodules()
+    git(module.path, "remote", "remove", "origin")
+    package = tmp_path / "package"
+    (package / "catalog.md").write_text("patterns, indexed\n")
+    git(package, "commit", "-q", "-am", "index")
+    moved = git(package, "rev-parse", "HEAD").strip()
+    git(checkout.path, "update-index", "--cacheinfo", f"160000,{moved},pinned")
+    git(checkout.path, "commit", "-q", "-m", "move the pin")
+    with pytest.raises(subprocess.CalledProcessError):
+        git(checkout.path, "submodule", "update", "--init", "--recursive", "--checkout")
+    checkout.prepare()
+    assert (module.path / "catalog.md").read_text() == "patterns, indexed\n"
+    assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
+
+
 def test_an_intact_checkout_prepares_without_reaching_its_source(repository, tmp_path):
     checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
     (module,) = checkout.submodules()
