@@ -6,7 +6,7 @@ import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import GitCommitText
@@ -14,6 +14,9 @@ from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeReso
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from agent_comms.todos import MergedProblemOrder, Todo
 
 
 class ProofBuildMismatchError(ValueError):
@@ -28,6 +31,39 @@ class UninstalledRepositoryError(ValueError):
     """The checkout's repository is not carried by the recorded installation."""
 
 
+class CommitInstallation(DeclaredFamily, affix="CommitInstallation"):
+    """Whether the installed build contains a set of delivered commits."""
+
+    @abstractmethod
+    def require(self) -> None: ...
+
+    @abstractmethod
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo: ...
+
+
+@dataclass(frozen=True)
+class InstalledCommitInstallation(CommitInstallation):
+    def require(self) -> None:
+        pass
+
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
+        return merged.closed_in(todo)
+
+
+@dataclass(frozen=True)
+class MissingCommitInstallation(CommitInstallation):
+    commit: str
+    installed: RecordedBuildIdentity
+
+    def require(self) -> None:
+        raise DeliveredCommitNotInstalledError(
+            f"Delivered commit {self.commit} is not contained in installed {self.installed}."
+        )
+
+    def after_merge(self, todo: Todo, merged: MergedProblemOrder) -> Todo:
+        return merged.waiting_in(todo)
+
+
 @dataclass(frozen=True)
 class RepositoryCommit:
     repository: RepositoryName
@@ -39,7 +75,7 @@ class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
     def recorded(self) -> RecordedBuildIdentity: ...
 
     @abstractmethod
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None: ...
+    def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation: ...
 
 
 @dataclass(frozen=True)
@@ -47,7 +83,7 @@ class UnrecordedBuildIdentity(BuildIdentity):
     def recorded(self) -> RecordedBuildIdentity:
         return RecordedBuildIdentity.installed()
 
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None:
+    def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
         installed = RecordedBuildIdentity.installed()
         raise ProofBuildMismatchError(
             f"Proof build is unrecorded; installed {installed}; run and record a new proof."
@@ -102,14 +138,17 @@ class RecordedBuildIdentity(BuildIdentity):
             result.check_returncode()
         return result.returncode == 0
 
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None:
+    def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
         installed = self.installed()
         if self != installed:
             raise ProofBuildMismatchError(
                 f"Proof build {self} differs from installed {installed}; run the proof again."
             )
-        for commit in commits:
-            if not installed.contains(commit, directory):
-                raise DeliveredCommitNotInstalledError(
-                    f"Delivered commit {commit} is not contained in installed {installed}."
-                )
+        return next(
+            (
+                MissingCommitInstallation(commit, installed)
+                for commit in commits
+                if not installed.contains(commit, directory)
+            ),
+            InstalledCommitInstallation(),
+        )
