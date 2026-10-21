@@ -91,20 +91,20 @@ class Detached(HolderCannotRun):
 
 @dataclass(frozen=True)
 class BlockedHolder(HolderCannotRun, declared_name=None):
-    """A holder whose blocked goal is idle; its attempt ledger decides what may follow."""
+    """An idle holder classified by its goal and original attempt ledger."""
 
     block_record: Path
     goal: Goal
 
     @staticmethod
     @abstractmethod
-    def accepts(generation: GenerationState) -> bool: ...
+    def accepts(goal: Goal, generation: GenerationState) -> bool: ...
 
     @classmethod
     def stalled(cls, comms: Comms, thread: Thread) -> bool:
         store = comms.goals.open_goal_store()
         return not thread.executing and any(
-            isinstance(goal.state, BlockedState) and cls.accepts(store.require_generation(goal.id).lifecycle)
+            cls.accepts(goal, store.require_generation(goal.id).lifecycle)
             for goal in thread.goal)
 
     @classmethod
@@ -119,7 +119,7 @@ class UnresolvedBlock(BlockedHolder):
     """An attempt with an unknown outcome: Core never retries it, so it is never replayed."""
 
     @staticmethod
-    def accepts(generation: GenerationState) -> bool:
+    def accepts(goal: Goal, generation: GenerationState) -> bool:
         return not isinstance(generation, RetryableGeneration)
 
     def line(self) -> str:
@@ -131,8 +131,8 @@ class UnresolvedBlock(BlockedHolder):
 @dataclass(frozen=True)
 class Blocked(BlockedHolder):
     @staticmethod
-    def accepts(generation: GenerationState) -> bool:
-        return isinstance(generation, RetryableGeneration)
+    def accepts(goal: Goal, generation: GenerationState) -> bool:
+        return isinstance(goal.state, BlockedState) and isinstance(generation, RetryableGeneration)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         observed = self.goal

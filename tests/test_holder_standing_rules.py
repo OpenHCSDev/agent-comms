@@ -27,9 +27,9 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
-from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_states import ActiveGoal, BlockedState
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goal_generation import GenerationState, ReadyGeneration, RetryableGeneration
+from agent_comms.goal_states import ActiveGoal, BlockedGoal
+from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
 from agent_comms.message_page import MessagePageRequest
@@ -100,20 +100,42 @@ def blocked_holder(comms):
     return reservation
 
 
-def test_a_block_over_an_attempt_with_an_unknown_result_is_reported_never_retried(held_bus):
+def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(held_bus):
     goal = held_bus.registry.require("worker").goal.require()
     store = held_bus.goals.open_goal_store()
     generation = store.require_generation(goal.id)
     store.recover_unreserved_ready(goal.id, generation.number)
     store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
-    held_bus.goals.update_goal("worker", BlockedGoalAction(progress="The attempt result is unknown"))
     reserved = store.require_generation(goal.id)
     assert Blocked.violations(held_bus, "lead") == ()
     violation, = UnresolvedBlock.violations(held_bus, "lead")
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
-    assert isinstance(held_bus.registry.require("worker").goal.require().state, BlockedState)
+    assert held_bus.registry.require("worker").goal.require() == goal
+    assert isinstance(goal.state, ActiveGoal)
     assert store.require_generation(goal.id) == reserved
+
+
+@pytest.fixture(params=[member() for member in GenerationState.members_with(GenerationState)])
+def holder_generation(request):
+    return request.param
+
+
+def test_unresolved_block_accepts_ledger_state_independently_of_goal_state(holder_generation):
+    generation = holder_generation
+    goal = Goal("Held work", "goal", published_seq=0)
+    expected = not isinstance(generation, RetryableGeneration)
+    assert UnresolvedBlock.accepts(goal, generation) == expected
+    blocked = replace(goal, state=BlockedGoal("Failed turn"))
+    assert UnresolvedBlock.accepts(blocked, generation) == expected
+
+
+def test_blocked_accepts_only_real_goal_blocks_with_retryable_generations(holder_generation):
+    generation = holder_generation
+    goal = Goal("Held work", "goal", published_seq=0)
+    assert not Blocked.accepts(goal, generation)
+    blocked = replace(goal, state=BlockedGoal("Failed turn"))
+    assert Blocked.accepts(blocked, generation) == isinstance(generation, RetryableGeneration)
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):

@@ -9,7 +9,6 @@ from . import store_order
 # File declarations must exist before a standalone inventory, not only after a
 # particular reader, native turn or background index has first been opened.
 from . import (  # noqa: F401
-    activity_checkpoint,
     native_prompt_binding,
     selected_write_plan,
     view_unread,
