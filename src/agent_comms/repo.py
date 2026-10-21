@@ -95,6 +95,13 @@ class CheckoutHoldsWorkError(Exception):
         super().__init__(f"{path} holds uncommitted work:\n{changes}")
 
 
+class CheckoutPrepareError(Exception):
+    """Git could not populate a checkout's pinned submodules; its own words say why."""
+
+    def __init__(self, path: Path, stderr: str):
+        super().__init__(f"{path}: git submodule update failed:\n{stderr}")
+
+
 @dataclass(frozen=True)
 class PinnedSubmodule:
     """One pinned submodule of a checkout: its working directory and git's stored repository.
@@ -121,27 +128,27 @@ class PinnedSubmodule:
         )
 
     def usable(self) -> bool:
-        return (
+        """A repository that can serve every later update: it holds a commit, and it has the
+        origin `submodule update` fetches a newly pinned commit from. A store borrowing its
+        objects through alternates with no remote and no refs answers the first and fails
+        the second the moment the pin moves ("transport 'file' not allowed")."""
+        return all(
             subprocess.run(
-                (
-                    "git",
-                    "--git-dir",
-                    str(self.store),
-                    "rev-parse",
-                    "--verify",
-                    "--quiet",
-                    "HEAD^{commit}",
-                ),
+                ("git", "--git-dir", str(self.store), *question),
                 capture_output=True,
                 timeout=30,
             ).returncode
             == 0
+            for question in (
+                ("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
+                ("remote", "get-url", "origin"),
+            )
         )
 
     def broken(self) -> bool:
         """Anything but a usable store or the empty directory `git worktree add` leaves: a
-        store without a repository, a `.git` pointing at one, a hand-copied directory or a
-        link standing where the clone belongs."""
+        store without a repository or without its origin, a `.git` pointing at one, a
+        hand-copied directory or a link standing where the clone belongs."""
         occupied = self.path.is_symlink() or (self.path.is_dir() and any(self.path.iterdir()))
         return (self.store.exists() or occupied) and not self.usable()
 
@@ -201,7 +208,7 @@ class Checkout:
         for module in modules:
             if module.broken():
                 module.clear()
-        subprocess.run(
+        update = subprocess.run(
             (
                 "git",
                 "-C",
@@ -214,9 +221,10 @@ class Checkout:
             ),
             capture_output=True,
             text=True,
-            check=True,
             timeout=300,
         )
+        if update.returncode:
+            raise CheckoutPrepareError(self.path, update.stderr)
 
     def held_work(self) -> str:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
