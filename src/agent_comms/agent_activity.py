@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 from .activity import (
     Activity,
-    ActivityStore,
     ActivityState,
+    ActivityStore,
     DrainDiagnostic,
     DrainObservation,
     NoDrainDiagnostic,

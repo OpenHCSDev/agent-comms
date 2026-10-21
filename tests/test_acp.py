@@ -423,6 +423,7 @@ class TestFullHistory:
 class TestActivityLayer:
     def test_emit_and_read_current(self, wired):
 
+        from agent_comms.presentation import WireRevision
         from agent_comms.turn_phase import ToolRunningPhase
 
         wired.registry.declare(wired.registry.new_thread(
@@ -431,12 +432,16 @@ class TestActivityLayer:
         ))
         owner = wired.agents.begin_turn("activity-owner", "activity-test")
         try:
+            before = WireRevision.capture(wired.views, expiry_tick=0)
             wired.agents.transition_turn(owner.thread.turn_lease, ToolRunningPhase(detail="bash: echo hi"))
             activity = wired.agents.activity_of(owner.thread.name, snapshot=wired.registry.snapshot())
             assert activity.state is ActivityState.WORKING
             assert activity.detail == "bash: echo hi"
+            working = WireRevision.capture(wired.views, expiry_tick=0)
+            assert working.activity != before.activity
         finally:
             wired.agents.finish_turn(owner.thread.turn_lease)
+        assert WireRevision.capture(wired.views, expiry_tick=0).activity != working.activity
 
     def test_idle_cannot_carry_detail(self, wired):
 

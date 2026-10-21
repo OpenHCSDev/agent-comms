@@ -867,7 +867,9 @@ class WireRevision(ReadState):
     ]
     activity: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: views.agents.activity.source_paths(views.root), *STATUS_SOURCE),
+        *revision_source(
+            lambda views: views.agents.activity.source_paths(views.root), *STATUS_SOURCE,
+        ),
     ]
     runtime_info: Annotated[
         tuple[FileRevision, ...],
