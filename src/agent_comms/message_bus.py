@@ -211,7 +211,8 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         maintenance = MaintenanceBarrier(self._registry.store.path)
 
         def admitted():
-            with maintenance.allow_input():
+            with self.locked():
+                maintenance.assert_open_unlocked()
                 return operation()
 
         while True:
