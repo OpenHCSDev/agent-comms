@@ -35,7 +35,6 @@ def connector_service(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     store = ConnectorStore.owned()
     store.update(lambda grants: grants)
-    launch = LaunchRoot.from_path(copied)
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]
@@ -44,7 +43,7 @@ def connector_service(comms, tmp_path, monkeypatch):
     readiness = ConnectorReadiness()
     environment = readiness.environment({**os.environ, "PYTHONPATH": str(project / "src")})
     command = (
-        sys.executable, "-u", str(Path(sys.executable).parent / "agent-comms-connector"),
+        sys.executable, str(Path(sys.executable).parent / "agent-comms-connector"),
         "serve", "--root", str(copied), "--port", str(port),
     )
 
@@ -58,18 +57,11 @@ def connector_service(comms, tmp_path, monkeypatch):
 
     class ManagedConnector(SystemdConnectorService, declared_name=None):
         @classmethod
-        def running(cls):
-            return tuple(
-                cls(launch=launch, store=store, port=port)
-                for process in children if process.poll() is None
-            )
-
-        @property
-        def pid(self) -> int:
-            return next(process.pid for process in children if process.poll() is None)
+        def pid(cls) -> int:
+            return next((process.pid for process in children if process.poll() is None), 0)
 
         def restart(self) -> None:
-            previous = next(process for process in children if process.pid == self.pid)
+            previous = next(process for process in children if process.pid == self.pid())
             previous.terminate()
             previous.wait(timeout=5)
             start()

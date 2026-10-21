@@ -121,20 +121,25 @@ class SystemdUserService(HostService, declared_name=None):
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
 
-    @property
-    def pid(self) -> int:
+    @classmethod
+    def pid(cls) -> int:
         return int(subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "MainPID", "--value", self.unit),
+            ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
             text=True,
         ))
 
     @classmethod
+    @abstractmethod
+    def from_process(cls, pid: int) -> Self:
+        """Read this instance's declared configuration from its running process."""
+
+    @classmethod
     def running(cls) -> tuple[Self, ...]:
-        instance = cls()
-        return () if instance.pid == 0 else (instance,)
+        pid = cls.pid()
+        return () if pid == 0 else (cls.from_process(pid),)
 
     def runtime(self) -> Path:
-        executable = Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]
+        executable = Path(f"/proc/{self.pid()}/cmdline").read_bytes().split(b"\0")[0]
         if not executable:
             raise ServiceNotServingError(f"{self} has no running command")
         return Path(os.fsdecode(executable))

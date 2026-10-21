@@ -801,7 +801,7 @@ class ConnectorVerb(
     def apply(self, ctx: ConnectorStore) -> int | str: ...
 
     @classmethod
-    def parse(cls, argv: Sequence[str] | None) -> ConnectorVerb:
+    def parse(cls, argv: Sequence[str] | None) -> Self:
         parser = argparse.ArgumentParser(
             prog=cls.program,
             description=__doc__,
