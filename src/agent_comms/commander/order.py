@@ -39,6 +39,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     Argument,
+    DecodedValue,
     FieldCodec,
     MalformedRecord,
     Normalize,
@@ -183,17 +184,28 @@ class CommandDeliverySource(DeliverySource, declared_name=None):
     @classmethod
     def from_text(cls, text: str) -> CommandDeliverySource:
         # Reserved arguments derive from declarations; every other token is a Git reference.
-        return ArgumentDeliverySource.member_or_default(text, SingleFieldValue).from_argument(text)
+        return ArgumentDeliverySource.member_or_default(text, ReferenceDeliverySource).from_argument(text)
 
 
 class ArgumentDeliverySource(CommandDeliverySource, declared_name=None):
     @classmethod
-    @abstractmethod
-    def from_argument(cls, text: str) -> Self: ...
+    def from_argument(cls, text: str) -> Self:
+        return cls()
 
 
 @dataclass(frozen=True)
-class NoDeliverySource(NullMember, CommandDeliverySource):
+class ReferenceDeliverySource(ArgumentDeliverySource, declared_name=None):
+    reference: str
+
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        if not text.strip():
+            raise ValueError("A commit delivery needs a nonempty Git reference.")
+        return cls(text)
+
+
+@dataclass(frozen=True)
+class NoDeliverySource(CommandDeliverySource):
     def require_report(self) -> None:
         pass
 
@@ -203,24 +215,12 @@ class NoDeliverySource(NullMember, CommandDeliverySource):
 
 @dataclass(frozen=True)
 class OpDeliverySource(ArgumentDeliverySource):
-    @classmethod
-    def from_argument(cls, text: str) -> Self:
-        return cls()
-
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
         return OperationDelivery(evidence=evidence)
 
 
 @dataclass(frozen=True)
-class CommitDeliverySource(SingleFieldValue, ArgumentDeliverySource):
-    reference: str
-
-    @classmethod
-    def from_argument(cls, text: str) -> Self:
-        if not text.strip():
-            raise ValueError("A commit delivery needs a nonempty Git reference.")
-        return cls(text)
-
+class CommitDeliverySource(ReferenceDeliverySource):
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
         delivered = Repo.git(repo, 'rev-parse', '--verify', f'{self.reference}^{{commit}}').strip()
         diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivered)
@@ -1001,7 +1001,7 @@ class DoneVerb(OrderVerb):
     ]
     sha: Annotated[
         CommandDeliverySource,
-        Normalize(FieldCodec.encode),
+        Normalize(DecodedValue),
         Argument(
             flags=("--sha",),
             options={"type": CommandDeliverySource.from_text, "choices": None,
