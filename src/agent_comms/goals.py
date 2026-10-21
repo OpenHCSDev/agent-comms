@@ -666,6 +666,13 @@ class GoalAuthority:
     goal_id: str
     state: GoalState
 
+    def admits(self, current: GoalAuthority | NoGoal) -> bool:
+        """Whether a turn granted this authority may keep working under the current goal."""
+        return current.continues(self)
+
+    def continues(self, captured: GoalAuthority) -> bool:
+        return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
+
 
 @dataclass(frozen=True)
 class GoalPeerChange:
@@ -844,6 +851,12 @@ class NoGoal(NullMember, GoalDeclaration):
     @property
     def authority(self) -> NoGoal:
         return self
+
+    def admits(self, current: GoalAuthority | NoGoal) -> bool:
+        return current == self
+
+    def continues(self, captured: GoalAuthority) -> bool:
+        return False
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
         return scope
