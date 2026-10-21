@@ -654,9 +654,10 @@ class Commander(CommanderContext):
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         unit = todo.held().owner
-        if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
+        directory = self.repo_directory(todo.order.check.directory)
+        if repo and self.repo_directory(repo) != directory:
             sys.exit('Refused: --repo must name the recorded order check directory.')
-        repo = todo.order.check.directory
+        repo = str(directory)
         operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
         if not operation:
             diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent',
