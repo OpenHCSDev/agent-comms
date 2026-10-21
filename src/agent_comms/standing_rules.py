@@ -20,6 +20,7 @@ from agent_comms.goals import GoalChangedError
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -341,6 +342,28 @@ class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
         receiving = comms.registry.snapshot().status(commander).receiving
         return None if receiving else f"{commander} is not receiving"
 
+
+@dataclass(frozen=True)
+class ServicePassFailing(DatedStandingRule):
+    """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
+
+    watch: str
+    since: float
+    error: str = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        failing = ServicePassStore.at(comms.root).read().failing
+        return tuple(cls(watch, failed.since, failed.error)
+                     for watch, failed in sorted(failing.items()))
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"SERVICE PASS FAILING: {self.watch} since "
+                f"{RecordedEventTime(self.since).clock()}: {self.error}"
+                " -> fix the owner of the failing read this wake")
 
 @dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):

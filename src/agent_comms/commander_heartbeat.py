@@ -20,16 +20,24 @@ if TYPE_CHECKING:
 
 @dataclass
 class CommanderReview:
-    """One commander's handled observations and its next review position."""
+    """One commander's handled observations, its last changed beat and next review position.
+
+    Seq 0 precedes every published message: no changed beat has been sent yet.
+    """
 
     violations: frozenset[StandingRule]
+    changed: int = 0
     turn: int = 0
 
     def wake(self, comms: Comms, sender: str, commander: Thread,
              rules: tuple[StandingRule, ...]) -> None:
+        """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
         found = frozenset(rules)
         previous = self.violations
-        if found == previous:
+        if found == previous and self.changed:
+            comms.messaging.send(sender, commander.name, (
+                f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
+                f" {len(found)} violations."))
             return
         # Mark the observation before any effect; an uncertain publication is not replayed.
         self.violations = found
@@ -52,7 +60,7 @@ class CommanderReview:
         lines.extend(rule.rejected_line() for rule in rules if rule in rejected)
         if not found:
             lines.append("Standing rules clear.")
-        comms.messaging.send(sender, commander.name, "\n".join(lines))
+        self.changed = comms.messaging.send(sender, commander.name, "\n".join(lines)).message.seq
 
 
 @dataclass(frozen=True)
