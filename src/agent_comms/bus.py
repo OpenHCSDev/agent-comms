@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_activity_index import BusActivityIndex
@@ -306,12 +306,25 @@ class Bus(BusReader, WalStore, DurableFile, Watched):
     def __init__(self, path: Path):
         super().__init__(path)
 
-    def _prepare_schema(self, db: sqlite3.Connection) -> None:
-        if not SQLiteTableName.stored(db):
-            with self.write_transaction(db):
+    @classmethod
+    def install(cls, path: Path) -> Self:
+        """Create a fresh bus during installation; never migrate an existing file.
+
+        Changes to existing history or its projections belong to a declared carry,
+        with its backup and rewritten-file accounting, not ordinary attachment.
+        """
+        bus = cls(path)
+        with bus.writer_connection() as db:
+            with bus.write_transaction(db):
                 if not SQLiteTableName.stored(db):
                     BusTables.create_schema(db)
                     BusProjectionTables.create_schema(db)
+                cls.require_schema(db)
+        return bus
+
+    @classmethod
+    def require_schema(cls, db: sqlite3.Connection) -> None:
+        """Installation validates both families sharing this physical file."""
         BusTables.require_schema(db)
         BusProjectionTables.require_schema(db)
 
@@ -319,8 +332,6 @@ class Bus(BusReader, WalStore, DurableFile, Watched):
     def observing(self) -> Iterator[sqlite3.Connection]:
         """Borrow one existing read-only snapshot, including for an archived bus."""
         with self._attached(lambda: CoordinationStore.observing(self.path)) as db:
-            BusTables.require_schema(db)
-            BusProjectionTables.require_schema(db)
             yield db
 
     def backup(self, destination: Path) -> None:

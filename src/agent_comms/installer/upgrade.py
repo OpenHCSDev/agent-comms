@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.bus import Bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
@@ -580,6 +581,10 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
     steps = (*stopping, *carry_all(root, pending, staged, tree))
+    # A missing converter must fail, not create an empty replacement history.
+    # Existing-file changes belong to carries and their backup/rewrite records.
+    with Bus(Bus.path_in(root)).observing() as db:
+        Bus.require_schema(db)
     files = carried(root, before, steps, RehearsalFiles.declared(steps))
     return CarriedPass(steps, files, reader.verify(root))
 
@@ -744,6 +749,7 @@ class FreshInstall(Install[FreshRehearsal]):
         Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        Bus.install(Bus.path_in(self.root))
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
         CarryLedger(self.root).start(self.chain)
         self.staged.publish()

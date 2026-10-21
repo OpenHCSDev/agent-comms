@@ -33,7 +33,6 @@ class Comms:
     ) -> None:
         self.route = resolve_comms_route(root)
         self.route.observe_root()
-        publisher.prepare_root(self.root)
         self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
             self.root,
