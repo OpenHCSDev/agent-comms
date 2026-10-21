@@ -33,7 +33,7 @@ from typing import (
     get_origin,
 )
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -1293,9 +1293,9 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeFile):
     file instead of rebuilding this one under the writer's lock.
     """
 
-    stem: ClassVar[str]
-
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         schema = json.dumps(cls.declared_schema(), sort_keys=True).encode()
-        cls.filename = f"{cls.stem}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
+        cls.filename = (
+            f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
+        )
