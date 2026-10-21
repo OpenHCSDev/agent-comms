@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.bus import Bus
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -26,7 +27,7 @@ from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
+    WakeCandidateIndex,
 )
 from agent_comms.thread_model import DeclaredModel
 
@@ -38,6 +39,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -49,7 +51,7 @@ def _root(
     root_id = comms.messaging.initialize_private_initial_protocol()
     store = Coordination(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
-    return comms, store, WakeCandidateIndex(comms.bus.log), root_id
+    return comms, store, WakeCandidateIndex(comms.bus.bus), root_id
 
 
 def _accepted(
@@ -93,7 +95,7 @@ def _projection(
         index,
         after_seq,
         through_seq,
-        registry=Registration(index.log.path.with_name("registry.json")),
+        registry=Registration(index.bus.path.with_name("registry.json")),
         expected_participant_generation=store.participants.get(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup
         ).participant_generation,
@@ -106,7 +108,6 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "work")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         store.executions.create(
             "reply000",
@@ -137,18 +138,15 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         store.close()
 
 
-def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) -> None:
+def test_committed_index_unsealed_candidate_and_replaced_owner(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert not _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
-        index.maintain(start=RebuildIndex())
         assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
 
         second = publish_initial(comms, "sender", "member000", "not yet sealed")
-        index.maintain()
-        # The page checkpoint can outrun the caller's minimum source watermark.
+        # The committed prefix can outrun the caller's minimum source watermark.
         # It must include the later candidate or omit the whole supplement.
         assert not _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
@@ -176,7 +174,6 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
                 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, delivery),),
             )
-        index.maintain(start=RebuildIndex())
         current = store.assignments.get(new_claim.assignment_id)
         # Only the newer selected row lies after the cursor, but both exact
         # response obligations are still open and must be represented.
@@ -193,7 +190,6 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "original")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).complete
@@ -215,7 +211,6 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
         store.participants.advance_generation(
             assignment.recipient_lookup, "member000", expected_generation=1
         )
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         # Even a newly captured SQL gen2+registry turn cannot assign a gen1
         # frozen claim to gen2: no per-claim generation was sealed at accept.
@@ -243,7 +238,6 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             old_claim.recipient_lookup, "member000", expected_generation=1
         )
         current, assignment = _accepted(comms, store, root_id, "member000", "new pending")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, assignment, owner
@@ -267,7 +261,6 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         store.participants.register(lookup, "member000", "member000", committed=True)
         store.participants.advance_generation(lookup, "member000", expected_generation=1)
         initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
@@ -285,7 +278,6 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
     try:
         prior, _ = _accepted(comms, store, root_id, "member000", "prior")
         initial, assignment = _accepted(comms, store, root_id, "member000", "current")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).complete
@@ -319,7 +311,6 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(acknowledgement.assignments) == 1
         current_claim = acknowledgement.assignments[0]
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, current_claim, owner
@@ -339,7 +330,6 @@ def test_other_owner_decision_never_enters_selected_context(tmp_path: Path) -> N
     try:
         _accepted(comms, store, root_id, "member001", "foreign-owner-message")
         initial, assignment = _accepted(comms, store, root_id, "member000", "ours")
-        index.maintain(start=RebuildIndex())
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
@@ -361,7 +351,6 @@ def test_many_frozen_members_do_not_become_selected_authority(
         # The chosen owner has one selected source among the large frozen N;
         # no-wake members remain absent from its mandatory selected context.
         initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 do this")
-        index.maintain(start=RebuildIndex(), max_bytes=8 * 1024 * 1024)
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
@@ -381,7 +370,6 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
             publish_initial(comms, "sender", "member001", f"other owner {number}")
         initial, assignment = _accepted(comms, store, root_id, "member000", "current work")
         assert initial.message.seq == 101
-        assert index.maintain(start=RebuildIndex(), max_rows=256, max_bytes=8 * 1024 * 1024)
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
@@ -427,7 +415,6 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         assignment = store.assignments.get(assignment.assignment_id)
-        index.maintain(start=RebuildIndex())
         builder = _projection(index, store, owner, 0, notice.seq)
         wire_before = comms.bus.log.path.read_bytes()
         assignments_before = WakeAssignment.select(store.session._connection)
@@ -491,7 +478,6 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
     try:
         for number in range(100):
             initial, assignment = _accepted(comms, store, root_id, "member000", f"work {number}")
-        index.maintain(start=RebuildIndex(), max_rows=128)
         owner = _owner(comms, "member000")
         newest = _projection(index, store, owner, initial.message.seq - 1, initial.message.seq)
         assert newest(initial, assignment, owner).complete

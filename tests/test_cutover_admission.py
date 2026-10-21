@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -18,9 +19,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.cursor_owner import ActivationFloorCursor
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
-)
 from test_private_human_ingress import _root
 
 
@@ -46,7 +44,6 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
             reopened = Comms(comms.root)
-            WakeCandidateIndex(reopened.bus.log).maintain(start=RebuildIndex())
             assert (
                 await _accept_visible_deliveries(
                     reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
@@ -99,7 +96,9 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
     sent = source.messaging.send("alice", "bob", "retained message").message.message_id
-    reader = Comms(tmp_path / "reader")
+    reader_root = tmp_path / "reader"
+    Bus.install(Bus.path_in(reader_root))
+    reader = Comms(reader_root)
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()

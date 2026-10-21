@@ -7,7 +7,6 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +27,6 @@ from .goal_waits import (
     GoalInputReview,
     GoalWait,
     GoalWaits,
-    NoGoalWait,
     RecordedGoalWait,
     StandbyReview,
 )
@@ -38,6 +36,7 @@ from .registration import Registration
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .message_reference import MessageReference
+    from .messages import Message
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
 from .goal_presentation import (
@@ -55,11 +54,10 @@ from .input_attempt import (
 )
 from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
-from .store_files import SharedLock, _store_lock
 from .threads import Thread
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
-from .wire_log import ConversationSourceWindowRequest
+from .bus_tables import DirectReplySource
 
 _LOG = logging.getLogger(__name__)
 
@@ -70,7 +68,6 @@ class Goals:
         self.registry = registry
         self.bus = bus
         self.agents = agents
-        self._wire_lock_path = root / "wire"
         self.waits = GoalWaits.at(root)
         self.goal_store: GoalAttemptStore | None = None
 
@@ -85,9 +82,7 @@ class Goals:
         return operation.prepare(self, current).record(self, problem)
 
     def apply_problem(self, problem: str, operation: TodoCommand) -> Todo:
-        with _store_lock(self._wire_lock_path):
-            applied: Todo = self.todos.apply(problem, operation)
-            return applied
+        return self.todos.apply(problem, operation)
 
     def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
@@ -100,8 +95,7 @@ class Goals:
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
         actor = self.registry.require(commander).incarnation
         store: TodoStore = self.todos
-        with _store_lock(self._wire_lock_path):
-            return store.fire(unit, actor, reason)
+        return store.fire(unit, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -113,7 +107,7 @@ class Goals:
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
-        """Caller holds wire; recover only this owner's original unused READY grant."""
+        """Caller holds registry; recover only this owner's original unused READY grant."""
         try:
             goal = GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
@@ -132,13 +126,12 @@ class Goals:
 
     def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            rows = (
-                InputDispositions(self.root)
-                .unresolved(aliases := self.registry.entry(name).entry.names)
-                .unknown(aliases)
-            )
-            return tuple(UnresolvedInput.of(row) for row in rows)
+        rows = (
+            InputDispositions(self.root)
+            .unresolved(aliases := self.registry.entry(name).entry.names)
+            .unknown(aliases)
+        )
+        return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
         self,
@@ -148,31 +141,28 @@ class Goals:
         scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            aliases = self.registry.entry(name).entry.names
-            return (
-                InputDispositions(self.root)
-                .unresolved(aliases)
-                .delivery_overview(
-                    aliases, include_history=include_history, scope=scope
-                )
+        aliases = self.registry.entry(name).entry.names
+        return (
+            InputDispositions(self.root)
+            .unresolved(aliases)
+            .delivery_overview(
+                aliases, include_history=include_history, scope=scope
             )
+        )
 
     def dismiss_historical_inputs(
         self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        with _store_lock(self._wire_lock_path):
-            aliases = self.registry.entry(name).entry.names
-            return InputDispositions(self.root).dismiss_historical(
-                aliases, scope=scope
-            )
+        aliases = self.registry.entry(name).entry.names
+        return InputDispositions(self.root).dismiss_historical(
+            aliases, scope=scope
+        )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:
         """Project exact review eligibility for one current goal and dependency set."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
-            return review.standby_review()
+        review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
+        return review.standby_review()
 
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
@@ -199,19 +189,27 @@ class Goals:
             sequence for row in unknown.values()
             for sequence in row.bus_sequences_through(after_seq)
         })
-        request = ConversationSourceWindowRequest(
-            sequences=sequences, limit=len(sequences), ascending=True,
-        )
-        earlier = request.capture_many(self.bus.log, lookup, (request,))[0] if sequences else ()
-        # Keep older UNKNOWN inputs, but look for new replies only after this
-        # dependency's recorded wait. Capture checks both participant identities.
-        replies = {
-            InputDispositions.bus_key(original.message, thread): original.message
-            for original in chain(
-                earlier, self.bus.log.addressed_sources(lookup, after_seq=after_seq)
-            )
-            if original.direct_for(lookup) and any(target.sent(original) for target in targets)
-        }
+        senders = tuple(target.incarnation.lookup for target in targets)
+        replies: dict[str, Message] = {}
+        with self.bus.bus.reading() as source:
+            # Preserve older UNKNOWN rows; new inputs begin at this wait's own cursor.
+            # Both selections use the same frozen recipient and sender projections.
+            page = source.received(
+                lookup, sequences=sequences, limit=len(sequences), descending=False,
+                sender_lookups=senders, source=DirectReplySource,
+            ) if sequences else ()
+            while True:
+                replies.update({
+                    InputDispositions.bus_key(original.message, thread): original.message
+                    for record in page for original in record.deliveries()
+                })
+                page = source.received(
+                    lookup, after=after_seq, limit=100, descending=False,
+                    sender_lookups=senders, source=DirectReplySource,
+                )
+                if not page:
+                    break
+                after_seq = page[-1].seq
         document = dispositions.read(tuple(replies))
         for key, message in replies.items():
             row = document.lookup(key)
@@ -241,8 +239,7 @@ class Goals:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            return self.registry.goal_history(name, goal_id=goal_id)
+        return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
@@ -255,7 +252,7 @@ class Goals:
         scheduler pass may continue the still-active goal only if its private
         attempt ledger has a fresh READY grant.
         """
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             snapshot = self.registry.snapshot()
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads.get(canonical)
@@ -275,7 +272,7 @@ class Goals:
         if not closed:
             return ()
         # An unreadable bus remains a drain diagnostic, never evidence of silence.
-        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
             return ()
         names = ", ".join(f"@{member}" for member in closed)
         note = (
@@ -298,7 +295,7 @@ class Goals:
         `settled` event. A later turn (even already finished) invalidates the
         old fence; a rename or unrelated metadata edit does not.
         """
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             snapshot = self.registry.snapshot()
             sources = fence.idle_sources(snapshot)
             if not sources:
@@ -335,7 +332,7 @@ class Goals:
             return False
         if any(self.agents.is_working(target.incarnation, snapshot) for target in wait.targets):
             return False
-        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+        if wait.has_reply(self.bus.bus, owner.incarnation.require_recorded()):
             return False
         diagnostic = (
             f"Declared dependency @{canonical} finished without a qualifying direct "
@@ -366,8 +363,7 @@ class Goals:
 
     def goal_snapshot(self, name: str) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            return self._goal_snapshot(name)
+        return self._goal_snapshot(name)
 
     def _goal_snapshot(self, name: str) -> GoalSnapshot:
         snapshot = self.registry.snapshot()
@@ -377,7 +373,7 @@ class Goals:
         return GoalSnapshot(goal, execution)
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
-        """Called under the send-boundary wire lock after reserving an attempt."""
+        """Consume the exact wait after reserving its original attempt."""
         goal = self.registry.require(name).goal.active()
         return goal.clear_wait(self.waits, wait_id=wait_id)
 
@@ -387,7 +383,7 @@ class Goals:
         Selected handling calls this after corroborated completion, never after
         fetching, triage preparation or a failed/UNKNOWN native send.
         """
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
             goal = current.continuation_goal(owner.thread)
@@ -430,7 +426,7 @@ class Goals:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
 
     def block_failed_origin(self, name: str, goal: Goal) -> GoalDeclaration:
@@ -448,7 +444,7 @@ class Goals:
         diagnostic: str,
     ) -> GoalDeclaration:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             current = thread.goal.matching(started_goal.id)
             if thread.worktree != expected_worktree:

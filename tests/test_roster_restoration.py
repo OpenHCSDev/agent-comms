@@ -1,5 +1,7 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
+from agent_comms.bus import Bus
+
 import os
 from dataclasses import replace
 
@@ -27,7 +29,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     missing = old.agents.begin_turn("missing", "old-turn").thread
     old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title=GivenThreadText("Current live title")))
-    current.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(current.root))
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
     bus = current.bus.log.path.read_bytes()

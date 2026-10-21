@@ -1,6 +1,5 @@
 """Real bus/SQL reply delivery, awareness and missing-native-proof boundaries."""
 
-from agent_comms.wake_candidate_index import RebuildIndex
 from agent_comms.wire_record import WireRecord
 
 from pathlib import Path
@@ -61,8 +60,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         # Optional scheduling hints consume the same canonical reply declaration.
         from agent_comms.wake_candidate_index import WakeCandidateIndex
 
-        candidates = WakeCandidateIndex(case.bus.log)
-        assert candidates.maintain(start=RebuildIndex())
+        candidates = WakeCandidateIndex(case.bus.bus)
         page = candidates.page(
             root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
             required_through_seq=response.seq,

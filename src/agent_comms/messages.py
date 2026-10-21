@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import hashlib
 import re
+import sqlite3
 import time
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
@@ -13,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability
+from agent_comms.bus_tables import Addressed, BusCapability, HeldResources
 from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
@@ -44,10 +45,8 @@ from .ui_model.message_category import InboundCategory, MessageCategory, OtherCa
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import ClaimCommits
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
-    from .typed_table import TypedTable
 
 
 class MessageKind(DeclaredFamily, affix="Kind"):
@@ -59,6 +58,12 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     """
 
     conversation_message: ClassVar[bool] = True
+
+    @classmethod
+    def route_rows(cls, message):
+        from .bus_route_counts import BusRouteCounts
+
+        return (BusRouteCounts.from_message(message),)
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -82,6 +87,10 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
+
+    @classmethod
+    def route_rows(cls, message):
+        return ()
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -224,6 +233,9 @@ class InformationalMessage:
     def counts_as_conversation(self):
         return False
 
+    def activity_rows(self, message):
+        return ()
+
     def wake_mode(self, target, recipient, mentions, control):
         return PassiveWake()
 
@@ -240,6 +252,11 @@ class ConversationRole(SendableRole):
 
     def counts_as_conversation(self):
         return True
+
+    def activity_rows(self, message):
+        from .bus_activity_index import SentActivity
+
+        return (SentActivity(message.sender, message.timestamp),)
 
     def as_historical(self):
         return HistoricalConversationRole()
@@ -347,7 +364,7 @@ class Message(Addressed, BusCapability):
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
-    timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
+    timestamp: Annotated[float, WireName("ts"), WireOrder(4), Column(index=True)] = (
         field(default_factory=time.time)
     )
     seq: Annotated[int, WireOrder(0), PublicationExclude()] = (
@@ -375,12 +392,34 @@ class Message(Addressed, BusCapability):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
+    def projections(self):
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield BusActivityIndex.from_message(self, target=self.target)
+        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
+                        *(mention.thread for mention in self.mentions)}
+        for participant in participants:
+            yield BusDisplayIndex.from_message(self, participant=participant)
+        yield from self.role.activity_rows(self)
+        yield from self.type.route_rows(self)
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
+        for original in self.answers:
+            yield AnsweredSource(original, self.seq)
+
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
         return FieldCodec.construct(cls, {
             **{item.name: getattr(message, item.name) for item in fields(Message)},
             **capabilities,
         })
+
+    @property
+    def sender_lookup(self) -> str:
+        """Public history has no frozen participant incarnation."""
+        return ""
 
     @property
     def message(self) -> Self:
@@ -431,18 +470,8 @@ class Message(Addressed, BusCapability):
         """Retain display facts, never another root's resource-claim authority."""
         return self
 
-    def checkpoint_rows(self, previous_sequence: int):
-        """The envelope declares both publication and optional claim facts."""
-        from .private_bus_checkpoint import ClaimCommits, PublicMessages
-
-        yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-        yield from self.claim_rows(ClaimCommits)
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return ()
-
     def require_claim_transition(self) -> ClaimTransition:
-        raise RelationViolationError("Original wire message has no claim transition")
+        raise RelationViolationError("Message has no claim transition")
 
     def retained_task_facts(self):
         yield from self.sender_role.user_task_facts(self)
@@ -565,12 +594,34 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
 
+    @property
+    def publication_snapshot(self) -> Message:
+        """A bus record adds delivery capabilities to the declared Message content."""
+        return Message.from_message(self).publication_snapshot
+
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimMessage(Message):
-    """An original claim envelope, distinct from a fresh conversation message."""
+class Claimed(BusCapability):
+    """The transition attesting this row, stored in its append transaction."""
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
+
+    def require_claim_transition(self) -> ClaimTransition:
+        return self.claim_transition
+
+    def replay_claim(self, db: sqlite3.Connection) -> None:
+        """Append and the shared derived rebuild replay this same original transition."""
+        projected = HeldResources.project(db, self.claim_transition)
+        HeldResources.apply(db, self.claim_transition, projected)
+
+    def project_into(self, db: sqlite3.Connection) -> None:
+        super().project_into(db)
+        self.replay_claim(db)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimMessage(Claimed, Message):
+    """A claimed message binds its transition to its public envelope identity."""
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> Self:
@@ -590,12 +641,6 @@ class ClaimMessage(Message):
             **{item.name: getattr(self, item.name) for item in fields(Message)},
             "type": ClaimHistoryKind,
         })
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return (table(self.claim_transition),)
-
-    def require_claim_transition(self) -> ClaimTransition:
-        return self.claim_transition
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact

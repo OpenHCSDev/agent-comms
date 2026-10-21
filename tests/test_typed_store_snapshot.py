@@ -10,16 +10,13 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.wake_candidate_index import WakeCandidateIndex
-from agent_comms.wire_log import WireLog
 
 
 @pytest.mark.parametrize("make_store", (
     InputDispositions,
     OwnerReleaseStore,
     lambda root: ExternalTranscript(root, RecordedThreadIncarnation("cli", 1.0)),
-    lambda root: WakeCandidateIndex(WireLog(root / "bus.jsonl")),
-), ids=("inputs", "releases", "transcript", "wake"))
+), ids=("inputs", "releases", "transcript"))
 def test_missing_snapshot_has_declared_read_only_schema_without_creating_root(tmp_path, make_store):
     root = tmp_path / "never-written"
     store = make_store(root)
@@ -53,8 +50,9 @@ def test_first_write_does_not_change_the_opened_empty_snapshot(tmp_path):
 def test_change_marker_publishes_only_committed_row_changes(tmp_path):
     store = InputDispositions(tmp_path)
     marker, = store.source_paths(tmp_path)
-    with store.writing():
-        pass
+    with store.writing() as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert not marker.exists()
     store.record("first", seq=None, owner="kid", claim_scope=1, target="kid", text="first")
     changed = marker.stat().st_mtime_ns

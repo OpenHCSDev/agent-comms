@@ -4,19 +4,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
-    from .bus_page_index import BusPageIndex, BusPageRow
+    from .bus import BusReader
+    from .messages import Message
     from .message_page import MessagePage, PageWindow
     from .read_basis import MessageDisplayScope
-
-
-type PageOffsets = Generator[BusPageRow]
 
 
 class PageCursor(SubclassUnion, affix=""):
@@ -95,14 +92,14 @@ class PageTraversal(ABC):
         return self if current else type(self)()
 
     @abstractmethod
-    def offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets: ...
+    def records(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
+    ) -> tuple[Message, ...]: ...
 
     @abstractmethod
-    def opposite_offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets: ...
+    def opposite(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
+    ) -> tuple[Message, ...]: ...
 
     @staticmethod
     @abstractmethod
@@ -123,20 +120,13 @@ class OlderTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, -1, -1)
 
-    def offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets:
-        yield from scope.offsets(
-            index, lower=None, upper=self.cursor, descending=True, before_offset=boundary
-        )
+    def records(self, source, scope, *, limit, kinds=()):
+        return scope.records(source, upper=self.cursor, descending=True, limit=limit, kinds=kinds)
 
-    def opposite_offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets:
-        if self.cursor is not None:
-            yield from scope.offsets(
-                index, lower=self.cursor - 1, upper=None, descending=True, before_offset=boundary
-            )
+    def opposite(self, source, scope, *, limit, kinds=()):
+        if self.cursor is None:
+            return ()
+        return scope.records(source, lower=self.cursor - 1, limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> OlderTraversal | None:
         cursor = page.oldest_cursor
@@ -156,17 +146,11 @@ class NewerTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, count)
 
-    def offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets:
-        yield from scope.offsets(
-            index, lower=self.cursor, upper=None, descending=False, before_offset=boundary
-        )
+    def records(self, source, scope, *, limit, kinds=()):
+        return scope.records(source, lower=self.cursor, limit=limit, kinds=kinds)
 
-    def opposite_offsets(
-        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
-    ) -> PageOffsets:
-        return OlderTraversal(self.cursor + 1).offsets(index, scope, boundary)
+    def opposite(self, source, scope, *, limit, kinds=()):
+        return OlderTraversal(self.cursor + 1).records(source, scope, limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> NewerTraversal | None:
         cursor = page.newest_cursor

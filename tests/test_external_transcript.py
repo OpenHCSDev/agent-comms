@@ -2,12 +2,19 @@ import asyncio
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
+
+
+@pytest.fixture(autouse=True)
+def installed_bus(tmp_path):
+    """Install the base bus; the external transcript store remains lazy."""
+    Bus.install(Bus.path_in(tmp_path / "wire"))
 
 
 def test_finished_cli_items_append_once_and_page(tmp_path):
@@ -77,15 +84,14 @@ def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
 @pytest.mark.asyncio
 async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
     from agent_comms.external_transcript import TurnDraftPublication
-    from agent_comms.wire_watch import WatchSource, open_wire_watcher
+    from agent_comms.watched import ChangeSignal, FileSource
 
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
     marker, = transcript.source_paths(comms.root)
-    watcher = open_wire_watcher(WatchSource.modified_file(marker))
-    await watcher.prepare()
-    try:
+    async with ChangeSignal.opened(FileSource(marker)) as watcher:
+        watcher.prepare()
         with transcript.writer_connection(check_same_thread=False) as connection:
             publication = TurnDraftPublication(transcript, connection, 'turn')
             publication.begin_message(1.0)
@@ -96,8 +102,35 @@ async def test_turn_owned_draft_commit_reaches_a_watching_reader(tmp_path):
                 draft = reader.current_draft(transcript.root, transcript.incarnation)
             assert draft.events[0].text == 'Streaming'
             publication.retire_message()
+
+
+@pytest.mark.asyncio
+async def test_earlier_page_requests_reach_initial_and_committed_watch_observations(tmp_path):
+    from agent_comms.cli_protocol import EarlierItems
+    from agent_comms.external_transcript import EarlierPage
+    from agent_comms.runtime_updates import FinishedItem
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external("cli")
+    transcript.publish_page((FinishedItem("turn", "newest", ()),), EarlierPage("first"))
+    emitted = asyncio.Queue()
+    watching = asyncio.create_task(transcript.watch_requests(emitted.put_nowait))
+    try:
+        with transcript.reading() as records:
+            assert records.request_earlier(0)
+        first = await asyncio.wait_for(emitted.get(), 2)
+        assert first.earlier.cursor == "first"
+        transcript.prepend(EarlierItems.from_row(first),
+                           (FinishedItem("turn", "older", ()),), EarlierPage("second"))
+        with transcript.reading() as records:
+            assert records.request_earlier(-1)
+        second = await asyncio.wait_for(emitted.get(), 2)
+        assert second.earlier.cursor == "second" and second.seq < first.seq
     finally:
-        watcher.close()
+        watching.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await watching
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):

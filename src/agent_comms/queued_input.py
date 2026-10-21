@@ -30,7 +30,6 @@ from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
@@ -178,7 +177,7 @@ class QueuedInput:
                 sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
-                    with _store_lock(inputs.comms._wire_lock_path):
+                    with inputs.comms.registry.store.locked():
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
@@ -212,13 +211,12 @@ class QueuedInput:
                 self.require_live_source(inputs, session_id)
 
                 def verify():
-                    with _store_lock(inputs.comms._wire_lock_path):
-                        snapshot = inputs.comms.registry.snapshot()
-                        canonical = snapshot.canonical_name(name)
-                        self.require_handoff(
-                            snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
-                        )
-                        return canonical
+                    snapshot = inputs.comms.registry.snapshot()
+                    canonical = snapshot.canonical_name(name)
+                    self.require_handoff(
+                        snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
+                    )
+                    return canonical
 
                 canonical = await Coordination.run_worker(verify)
                 self.require_live_source(inputs, session_id)
@@ -332,7 +330,7 @@ class DeliveredInput(QueuedInput):
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
     ) -> None:
-        """Fill the original reservation scope in a joined, wire-locked worker.
+        """Fill the original reservation scope under its current registry owner.
 
         The caller owns ``reserved`` and its AsyncExitStack before work starts,
         so cancellation cannot lose a successfully paused but unplaced input.
@@ -343,7 +341,7 @@ class DeliveredInput(QueuedInput):
         from .routing import ScheduledTurn
         from .turn_context import TurnContext
 
-        with _store_lock(inputs.comms._wire_lock_path):
+        with inputs.comms.registry.store.locked():
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
@@ -433,7 +431,7 @@ class DeliveredInput(QueuedInput):
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
-        with _store_lock(comms._wire_lock_path):
+        with comms.registry.store.locked():
             entry = comms.registry.entry(name).entry
             owner = entry.thread
             document = dispositions.unresolved(entry.names)

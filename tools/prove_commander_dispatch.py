@@ -5,6 +5,8 @@ No fake transport, provider or history is used. Failed attempts remain retained.
 
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import argparse
 import asyncio
 import json
@@ -40,7 +42,7 @@ from agent_comms.todos import ReportDelivery, PendingProblemOrder, TriageScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
-from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms.watched import FileSource
 from agent_comms.work_dispatch import CheckedPhaseTask
 
 
@@ -76,10 +78,7 @@ class ReceivedReply(Reply):
 async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Message:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.bus.log.path),
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch()
         ) as changes:
             async for _ in changes:
                 observed = Reply.read(comms, commander, unit, token)
@@ -93,9 +92,7 @@ async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Me
 async def stop_after_turn(comms: Comms, unit: str) -> None:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch_sources(FileSource(comms.registry.store.path))
         ) as changes:
             async for _ in changes:
                 turn = comms.registry.require(unit).turn_record.read()
@@ -137,7 +134,7 @@ class RunProofCommand(ProofCommand):
         home = root.parent / "home"
         home.mkdir(parents=True)
         comms = Comms(root)
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         # A fresh interpreter acquires the scratch commander configuration.
         # Keep the actual storage declaration across its isolated HOME.
         (root / "storage.json").write_text(

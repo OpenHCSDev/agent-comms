@@ -182,7 +182,6 @@ def publish_selected_resource_claim(
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         return bus.publisher._publish_acquisition_unlocked(
-            bus_lock,
             registry,
             owner,
             resource,
@@ -278,9 +277,8 @@ def write_selected_claimed_file(
         with _selected_claim_boundary(comms, scoped, claim_scope, owner_name,
                                       scoped.session.writing) as (bus, bus_lock, marker, registry, owner):
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
-            with bus_lock.current_source(bus.log, marker) as source:
-                if claimed.claim_scope != claim_scope or source.claim(normalized) != claimed:
-                    raise IdentityConflict("Selected write has no current exact resource claim")
+            if claimed.claim_scope != claim_scope or bus.bus.resource_owner(normalized) != claimed:
+                raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
                 view = memoryview(contents)

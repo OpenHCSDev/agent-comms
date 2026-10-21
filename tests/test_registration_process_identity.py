@@ -46,6 +46,47 @@ def test_bridge_releases_during_maintenance_without_allowing_a_new_owner(tmp_pat
     assert registry.require('bridge').process_identity == NoProcess()
 
 
+def test_concurrent_starters_reserve_one_current_owner(tmp_path):
+    import subprocess
+    import sys
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import ExitStack
+
+    registry = wire(tmp_path).registry
+    original = registry.declare(registry.new_thread("owner", frozenset(), str(tmp_path)))
+    title = GivenThreadText("metadata changed during launch preparation")
+    registry.register(replace(original, title=title))
+    before = registry.snapshot()
+    ready = threading.Barrier(2)
+
+    def reserve(process):
+        ready.wait(timeout=5)
+        return registry.reserve_owner(original, process)
+
+    with ExitStack() as children, ThreadPoolExecutor(max_workers=2) as workers:
+        processes = tuple(children.enter_context(subprocess.Popen(
+            (sys.executable, "-c", "import sys; sys.stdin.buffer.read()"),
+            stdin=subprocess.PIPE,
+        )) for _ in range(2))
+        attempts = tuple(workers.submit(reserve, ProcessIdentity.capture(child.pid))
+                         for child in processes)
+        accepted, refused = [], []
+        for attempt in attempts:
+            try:
+                accepted.append(attempt.result(timeout=10))
+            except RelationViolationError as error:
+                refused.append(error)
+        assert len(accepted) == len(refused) == 1
+        (owner,) = accepted
+        current = registry.require("owner")
+        assert current == owner.thread and current.title == title
+        assert current.process_identity in tuple(ProcessIdentity.capture(child.pid)
+                                                for child in processes)
+        assert owner.claimed_generation == before.claim_generation("owner") + 1
+        assert registry.snapshot().claim_generation("owner") == owner.claimed_generation
+
+
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     comms = wire(tmp_path)
     owner = comms.threads.claim_thread(

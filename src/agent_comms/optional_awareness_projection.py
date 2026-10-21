@@ -29,7 +29,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .child_process import ProcessIdentity
 from .cohort_schema import (
     AwarenessClaimGenerations,
@@ -103,14 +103,14 @@ class OptionalAwarenessProjection:
         generation: int,
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.checked_read() as source:
-            after_seq = source.marker.claimed_after_seq
-        return cls(index, after_seq, through_seq, generation, claimed_generation,
+        # No native cursor is supplied here: include the unstarted prefix,
+        # never infer recipient progress from a sender's resource claim.
+        return cls(index, 0, through_seq, generation, claimed_generation,
                    registry=registry)
 
     async def segments(
         self,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> tuple[ContextSegment, ...]:
@@ -148,7 +148,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness text budget is outside the bounded read")
 
     def __call__(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -169,7 +169,7 @@ class OptionalAwarenessProjection:
             return OmittedAwareness.capture(reason=type(error).__name__)
 
     def _build(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         if owner.process_identity != ProcessIdentity.capture(os.getpid()):
             raise ProjectionUnavailableError("selected owner is not this process")
@@ -191,10 +191,10 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source changed")
         if not self.after_seq < initial.message.seq <= self.through_seq:
             raise ProjectionUnavailableError("selected source is outside the captured window")
-        _require_no_private_owner_rename(self.index.log.path.parent)
+        _require_no_private_owner_rename(self.index.root)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
-        root_id = initial.wire_root_id
+        root_id = self.index.bus.activation.root_id
         lookup = assignment.recipient_lookup
         page = self.index.page(
             root_id=root_id,
@@ -206,7 +206,7 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = CoordinationStore.path_in(self.index.log.path.parent)
+        path = CoordinationStore.path_in(self.index.root)
         with CoordinationStore.observing(path) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
@@ -270,7 +270,7 @@ class OptionalAwarenessProjection:
         return result
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
-        _require_no_private_owner_rename(self.index.log.path.parent)
+        _require_no_private_owner_rename(self.index.root)
         registry = self.registry
         with _store_lock(registry.store.path, blocking=False):
             snapshot = registry.store.read_snapshot_unlocked()
@@ -291,12 +291,12 @@ class OptionalAwarenessProjection:
             )
             if rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
                 raise ProjectionUnavailableError("current participant generation changed")
-        _require_no_private_owner_rename(self.index.log.path.parent)
+        _require_no_private_owner_rename(self.index.root)
 
     def _verify_schema_and_owner(
         self,
         db: sqlite3.Connection,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> None:

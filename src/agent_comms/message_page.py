@@ -4,24 +4,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import deque
-from contextlib import closing
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
-from .messages import Message
+from .messages import Message, MessageKind
 from .page_traversal import OlderTraversal, PageCursor, PageTraversal
 from .read_basis import (
     DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
 )
-from .wire_log import WireSnapshot
+from .bus import BusReader
 
 @dataclass(frozen=True, slots=True)
 class MessagePage:
     """A bounded, ascending page from the durable message log.
 
-    Cursors are message sequence numbers and are exclusive when passed back as
-    ``before`` or ``after``. A single oversized message is returned by itself
-    so every cursor can make progress despite the byte budget.
+    Cursors are exclusive message sequence numbers. Page size counts messages.
     """
 
     messages: tuple[Message, ...]
@@ -29,7 +26,6 @@ class MessagePage:
     has_newer: bool
     selection: SelectedDisplay
     source_pages: tuple[MessagePage, ...] = ()
-    bytes_read: int = 0
 
     def select(self, sequences) -> MessagePage:
         """Keep only painted messages and the corresponding original read proof."""
@@ -41,7 +37,7 @@ class MessagePage:
         return replace(
             latest, messages=tuple(message for page in pages for message in page.messages),
             has_older=pages[0].has_older, has_newer=pages[-1].has_newer,
-            source_pages=pages, bytes_read=sum(page.bytes_read for page in pages),
+            source_pages=pages,
         )
 
     def evidence_for(self, message: Message) -> MessagePage | None:
@@ -75,32 +71,20 @@ class MessagePage:
         return self.messages[-1].seq if self.messages else None
 
 
-@dataclass(frozen=True, slots=True)
-class MessagePageRow:
-    message: Message
-    size: int
-
-
 @dataclass(slots=True)
 class PageWindow:
-    """One budget authority; a single oversized row always makes progress."""
+    """One message-count bound, independent of the storage representation."""
 
     bounds: PageBounds
-    rows: deque[MessagePageRow] = field(default_factory=deque)
-    bytes: int = 0
-
-    @property
-    def messages(self) -> tuple[Message, ...]:
-        return tuple(row.message for row in self.rows)
+    rows: deque[Message] = field(default_factory=deque)
 
     def page(self, has_older: bool, has_newer: bool) -> MessagePage:
-        return MessagePage(self.messages, has_older, has_newer, NoDisplaySelection(), bytes_read=self.bytes)
+        return MessagePage(tuple(self.rows), has_older, has_newer, NoDisplaySelection())
 
-    def take(self, traversal: PageTraversal, row: MessagePageRow) -> bool:
-        if not self.bounds.fits(len(self.rows) + 1, self.bytes + row.size):
+    def take(self, traversal: PageTraversal, row: Message) -> bool:
+        if not self.bounds.fits(len(self.rows) + 1):
             return False
         traversal.append(self.rows, row)
-        self.bytes += row.size
         return True
 
 
@@ -110,22 +94,19 @@ class PageBounds:
 
     traversal: PageTraversal = OlderTraversal()
     limit: int = 100
-    max_bytes: int = 256 * 1024
 
     def __post_init__(self) -> None:
         if self.limit <= 0:
             raise ValueError("History page limit must be positive.")
-        if self.max_bytes <= 0:
-            raise ValueError("History page byte budget must be positive.")
 
-    def fits(self, count: int, size: int) -> bool:
-        return count <= self.limit and (count <= 1 or size <= self.max_bytes)
+    def fits(self, count: int) -> bool:
+        return count <= self.limit
 
     def after(self, page: MessagePage) -> PageBounds | None:
         traversal = self.traversal.continuation(page)
-        limit, size = self.limit - len(page.messages), self.max_bytes - page.bytes_read
-        return (replace(self, traversal=traversal, limit=limit, max_bytes=size)
-                if traversal is not None and limit > 0 and size > 0 else None)
+        limit = self.limit - len(page.messages)
+        return (replace(self, traversal=traversal, limit=limit)
+                if traversal is not None and limit > 0 else None)
 
     def conversation(self, scope: MessageDisplayScope) -> ConversationMessagePageRequest:
         return ConversationMessagePageRequest(scope, self)
@@ -140,23 +121,12 @@ class MessageReadRequest[T](ABC):
 
     scope: MessageDisplayScope
 
-    def includes(self, message: Message) -> bool:
-        return self.scope.includes(message)
-
     @property
     @abstractmethod
     def empty(self) -> T: ...
 
     @abstractmethod
-    def indexed(self, index, source: WireSnapshot) -> T: ...
-
-    def read_opened(self, source: WireSnapshot) -> T:
-        return source.query_page_index(lambda index: self.indexed(index, source))
-
-    def indexed_records(self, source, rows):
-        for message, size in source.indexed_records(rows, before_offset=source.boundary):
-            if self.includes(message):
-                yield MessagePageRow(message, size)
+    def read_opened(self, source: BusReader) -> T: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,33 +136,33 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     bounds: PageBounds = NEWEST_PAGE
     empty: ClassVar[MessagePage] = MessagePage((), False, False, NoDisplaySelection())
 
-    def indexed(self, index, source: WireSnapshot) -> MessagePage:
+    def kinds(self):
+        return MessageKind.members_with(MessageKind)
+
+    def read_opened(self, source: BusReader) -> MessagePage:
         traversal = self.bounds.traversal
         window = PageWindow(self.bounds)
-        opposite = more = False
-        with closing(traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
-            opposite = any(True for _ in self.indexed_records(source, rows))
-        with closing(traversal.offsets(index, self.scope, source.boundary)) as rows:
-            for row in self.indexed_records(source, rows):
+        with source.reading() as reader:
+            opposite = bool(traversal.opposite(reader, self.scope, limit=1, kinds=self.kinds()))
+            more = False
+            for row in traversal.records(reader, self.scope, limit=self.bounds.limit + 1, kinds=self.kinds()):
                 if not window.take(traversal, row):
                     more = True
                     break
         return traversal.result(window, more, opposite)
 
     def displayed(self, reads, document, viewer, snapshot, conversation_snapshot, source):
-        def read(index):
-            page = self.indexed(index, source)
-            return DisplayedMessagePage(page, reads.capture_indexed(
-                viewer, page.messages, snapshot, source, index,
-                conversation_snapshot=conversation_snapshot, document=document))
-        return source.query_page_index(read)
+        page = self.read_opened(source)
+        return DisplayedMessagePage(page, reads.capture(
+            viewer, page.messages, snapshot, source,
+            conversation_snapshot=conversation_snapshot, document=document))
 
 
 class ConversationMessagePageRequest(MessagePageRequest):
     """A presented conversation excludes declaration-owned state records."""
 
-    def includes(self, message: Message) -> bool:
-        return message.type.conversation_message and super().includes(message)
+    def kinds(self):
+        return tuple(kind for kind in super().kinds() if kind.conversation_message)
 
 
 @dataclass(frozen=True, slots=True)

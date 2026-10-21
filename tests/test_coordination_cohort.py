@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 from bus_history import read_history
 from conftest import declare_test_bus, publish_initial
 import json
@@ -396,7 +398,7 @@ def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     gated = Comms(root)
     before = (root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError):
-        gated.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(gated.root))
     assert (root / "bus.jsonl").read_bytes() == before
 
 
@@ -417,7 +419,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     open_parent.chmod(0o777)
     try:
         with pytest.raises(RelationViolationError):
-            Comms(root).messaging.initialize_private_initial_protocol()
+            Bus.install(Bus.path_in(Comms(root).root))
         assert not (root / "bus_meta.json").exists()
     finally:
         open_parent.chmod(0o700)

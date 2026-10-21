@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
@@ -28,9 +29,6 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordinator import Coordination
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
-)
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.thread_text import GivenThreadText
@@ -54,6 +52,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
@@ -77,9 +76,6 @@ def _root(
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
-    # The global fixture deliberately disables background candidate workers.
-    # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     return root, root_id, comms, initial, people
 
 

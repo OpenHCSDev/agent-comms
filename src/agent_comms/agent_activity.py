@@ -10,7 +10,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .locked_store import RegistryFile
 from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
 
@@ -38,7 +37,6 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
-from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
@@ -115,7 +113,6 @@ class LiveRecipientActivity(RecipientActivity):
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
-        self._wire_lock_path = root / "wire"
         self.activity = ActivityStore.at(root)
         self.runtime_info = RuntimeInfoStore.at(root)
 
@@ -123,10 +120,9 @@ class AgentActivity:
         """Declare a thread's current activity (thinking/working/idle)."""
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            # A tool-use hook runs outside any watch; maintenance refuses it like a send.
-            MaintenanceBarrier(RegistryFile.path_in(self._wire_lock_path.parent)).assert_open_unlocked()
-            self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
+        # A tool-use hook runs outside any watch; maintenance refuses it like a send.
+        MaintenanceBarrier(self.registry.store.path).assert_open_unlocked()
+        self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
         participant = snapshot.require(thread)
@@ -158,7 +154,7 @@ class AgentActivity:
             active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
         claims = self.registry.storage_rule.room_ledger.claims(
-            self._wire_lock_path.parent, requested.values())
+            self.registry.store.path.parent, requested.values())
         observed = {name: self._observed(thread, snapshot.owner_identity(name), events[name])
                     for name, thread in requested.items()}
         for name, claim in claims.items():
@@ -192,29 +188,28 @@ class AgentActivity:
         *, source_error: BaseException | None = None,
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            snapshot = self.registry.snapshot()
-            if snapshot.owner_identity(thread) != owner:
-                return False
-            if diagnostic.owner != owner:
-                raise RelationViolationError("Drain diagnostic belongs to another owner.")
-            if source_error is not None:
-                from .diagnostics import record_drain_failure
+        snapshot = self.registry.snapshot()
+        if snapshot.owner_identity(thread) != owner:
+            return False
+        if diagnostic.owner != owner:
+            raise RelationViolationError("Drain diagnostic belongs to another owner.")
+        if source_error is not None:
+            from .diagnostics import record_drain_failure
 
-                path = record_drain_failure(
-                    self._wire_lock_path.parent,
-                    thread=thread, diagnostic=diagnostic, source_error=source_error,
-                )
-                diagnostic = replace(diagnostic, reason=f"{source_error} · Diagnostic: {path}")
-            participant = snapshot.threads[owner.incarnation.name]
+            path = record_drain_failure(
+                self.registry.store.path.parent,
+                thread=thread, diagnostic=diagnostic, source_error=source_error,
+            )
+            diagnostic = replace(diagnostic, reason=f"{source_error} · Diagnostic: {path}")
+        participant = snapshot.threads[owner.incarnation.name]
 
-            def record(event: Activity) -> Activity | None:
-                current = self._observed(participant, owner, event)
-                if current.readiness.source_diagnostic() == diagnostic:
-                    return None
-                return replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
+        def record(event: Activity) -> Activity | None:
+            current = self._observed(participant, owner, event)
+            if current.readiness.source_diagnostic() == diagnostic:
+                return None
+            return replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
 
-            return self.activity.update(participant.name, record)
+        return self.activity.update(participant.name, record)
 
     async def recover_drain(
         self, thread: str, owner: OwnerIdentity, observed: ObservedActivity,
@@ -233,22 +228,21 @@ class AgentActivity:
     def _recover_drain(
         self, thread: str, owner: OwnerIdentity, expected: DrainObservation,
     ) -> bool:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            snapshot = self.registry.snapshot()
-            if snapshot.owner_identity(thread) != owner:
-                return False
-            participant = snapshot.threads[owner.incarnation.name]
+        snapshot = self.registry.snapshot()
+        if snapshot.owner_identity(thread) != owner:
+            return False
+        participant = snapshot.threads[owner.incarnation.name]
 
-            def recover(event: Activity) -> Activity | None:
-                current = self._observed(participant, owner, event)
-                diagnostic = current.readiness.source_diagnostic()
-                if not diagnostic.same_occurrence(expected):
-                    return None
-                return replace(
-                    current.source_event(), diagnostic=NoDrainDiagnostic(), timestamp=time.time()
-                )
+        def recover(event: Activity) -> Activity | None:
+            current = self._observed(participant, owner, event)
+            diagnostic = current.readiness.source_diagnostic()
+            if not diagnostic.same_occurrence(expected):
+                return None
+            return replace(
+                current.source_event(), diagnostic=NoDrainDiagnostic(), timestamp=time.time()
+            )
 
-            return self.activity.update(participant.name, recover)
+        return self.activity.update(participant.name, recover)
 
     def recover_completed_turn(self, lease: TurnLeaseFence, backend: type[AgentBackend]) -> bool:
         """A successful later backend turn disproves only an older drain failure."""
@@ -266,24 +260,22 @@ class AgentActivity:
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
     ) -> RegistryOwner:
         """Return the exact owner installed by this atomic begin, including its lease."""
-        with _store_lock(self._wire_lock_path):
-            leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
-            lease = leased.require_turn_lease()
-            try:
-                phase = PreparingPhase(detail)
-                lease.record.transition(lease, phase)
-                self._emit_activity(phase.activity_event(leased.name))
-            except BaseException:
-                self.registry.release_turn(lease)
-                raise
-            return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
+        leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
+        lease = leased.require_turn_lease()
+        try:
+            phase = PreparingPhase(detail)
+            lease.record.transition(lease, phase)
+            self._emit_activity(phase.activity_event(leased.name))
+        except BaseException:
+            self.registry.release_turn(lease)
+            raise
+        return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
     def _turn_phase_effects(
         self, lease: TurnLeaseFence, phase: TurnPhase,
         transition: Callable[[TurnLeaseFence, TurnPhase], tuple[TurnState, ...]],
     ) -> tuple[TurnState, ...]:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = transition(lease, phase)
+        effects = transition(lease, phase)
         for state in effects:
             state.active.phase.phase_effects(self, lease)
         return effects
@@ -296,18 +288,16 @@ class AgentActivity:
 
     def finish_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
         """Persist this lease's terminal identity before publishing idle activity."""
-        with _store_lock(self._wire_lock_path):
-            released, fence = self.registry.release_turn(lease)
-            if not released:
-                return NoFinishedTurn()
-            self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
-            return fence
+        released, fence = self.registry.release_turn(lease)
+        if not released:
+            return NoFinishedTurn()
+        self._emit_activity(IdlePhase().activity_event(lease.identity.incarnation.name))
+        return fence
 
     def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
         """Serialize the original observation with thread rename/retirement."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            canonical = self.registry.require(thread).name
-            self.runtime_info.observe(canonical, time.time(), observation)
+        canonical = self.registry.require(thread).name
+        self.runtime_info.observe(canonical, time.time(), observation)
 
     def agent_info_of(self, thread: str) -> RuntimeInfo:
         return self.runtime_info.for_thread(self.registry.require(thread).name)

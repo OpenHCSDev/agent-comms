@@ -1,5 +1,7 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
+from agent_comms.bus import Bus
+
 import subprocess
 import sys
 from dataclasses import dataclass, replace
@@ -232,7 +234,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         if graph.repository.github == CorePackage.repository
     )
     source = Comms(tmp_path / "bus")
-    source.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
             source.registry.new_thread(

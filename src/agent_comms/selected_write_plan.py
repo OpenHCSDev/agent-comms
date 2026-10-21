@@ -35,7 +35,6 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from .threads import Thread
 
@@ -186,7 +185,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         raw = contents.encode("utf-8")
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
-        with _store_lock(self.comms._wire_lock_path):
+        with self.comms.registry.store.locked():
             with self.comms.bus.log.locked():
                 marker = self.comms.bus.log.private_marker_unlocked()
             if marker.root_id != self.root_id or not marker.claims:

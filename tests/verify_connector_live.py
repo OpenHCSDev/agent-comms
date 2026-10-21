@@ -1,9 +1,11 @@
-"""Real scratch-bus connector/curl and maintenance proof; no test doubles.
+"""Real scratch-bus connector/curl proof; no test doubles.
 
 PYTHONPATH=src python -X faulthandler tests/verify_connector_live.py <owned-scratch>
 The caller selects scratch; each subprocess run retires its temporary directory.
 """
 from __future__ import annotations
+
+from agent_comms.bus import Bus
 
 import json
 import os
@@ -12,14 +14,12 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
-from agent_comms import candidate_maintenance as maintenance
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.wake_candidate_index import WakeCandidateIndex, OutdatedCheckpoint
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -33,67 +33,17 @@ def curl_call(port, token, body, *, arguments=None):
     ], capture_output=True, text=True, check=True).stdout
 
 
-def maintenance_proof(comms):
-    log = comms.bus.log
-    # A real committed original is indexed by the normal background worker.
-    message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    maintenance.drain_candidate_catchup(comms.root)
-    index = WakeCandidateIndex(log)
-    root_id = log.private_marker_unlocked().root_id
-    before = index._verified_checkpoint(root_id)
-    replacement = log.path.with_name("replacement.jsonl")
-    replacement.write_bytes(log.path.read_bytes())
-    replacement.chmod(0o600)
-    replacement.replace(log.path)
-    # The canonical source owner, not the projection, approves the same prefix
-    # at its replacement inode, exactly as the source barrier requires.
-    with log.checked_read() as checked:
-        checked.require_current()
-    assert isinstance(index._captured_checkpoint(root_id), OutdatedCheckpoint)
-    print(f"source replacement: old inode={before.inode}, new inode={log.path.stat().st_ino}; outdated checkpoint")
-    failures = []
-    observed = []
-    entered = threading.Event()
-    old_hook = threading.excepthook
-
-    def failed(args):
-        failures.append(f"{args.exc_type.__name__}: {args.exc_value}")
-
-    def profile(frame, event, arg):
-        if frame.f_code is maintenance.CandidateMaintenance.run.__code__ and event == "call":
-            observed.append(threading.current_thread())
-            entered.set()
-
-    threading.excepthook = failed
-    threading.setprofile(profile)
-    try:
-        maintenance.schedule_candidate_catchup(log, log.path.stat().st_size)
-        assert entered.wait(5)
-        worker, = observed
-        worker.join(timeout=15)
-        assert not worker.is_alive(), "maintenance did not finish its drain"
-    finally:
-        threading.setprofile(None)
-        threading.excepthook = old_hook
-    print(f"maintenance threads started={len(observed)}, failures={failures}")
-    assert not failures
-    after = index._verified_checkpoint(root_id)
-    assert after.inode == log.path.stat().st_ino and after.last_seq == message.seq
-    assert after.byte_offset == log.path.stat().st_size
-    assert log.path.parent not in maintenance._pending
-    print(f"same maintenance thread completed normally: last_seq={after.last_seq}, caught_up=True, no restart")
-
-
 def main(scratch: Path):
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="live-", dir=scratch) as directory:
         base = Path(directory)
         root = base / "wire"
         root.mkdir(mode=0o700)
+        Bus.install(Bus.path_in(root))
         comms = Comms(root)
         for name in ("claude-ai", "worker"):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(base)))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)
@@ -170,7 +120,6 @@ def main(scratch: Path):
             errors.close()
             readiness.close()
             print("connector stopped; HTTP handler tracebacks=" + str(error_path.read_text().count("Error handling request")))
-        maintenance_proof(comms)
 
 
 if __name__ == "__main__":

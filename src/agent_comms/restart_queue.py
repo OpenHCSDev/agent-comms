@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 
+from .bus import Bus
 from .child_process import ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
@@ -39,7 +40,7 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
-from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
+from .watched import ChangeSignal, DirectorySource, FileSource
 
 DIRECTORY = "owner-restart-queue"
 
@@ -259,26 +260,25 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
-    with _store_lock(comms._wire_lock_path):
-        snapshot = comms.registry.snapshot()
-        owner = selection.require_current(snapshot)
-        status = snapshot.status(owner.name)
-        owner.require_restart_owner(status)
-        launch = RetainedOwnerLaunch.capture(selection, snapshot)
-        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
-        target.require_available(comms)
-        # Queueing itself never signals or interrupts the owner, even if it is busy.
-        with queue.locked():
-            for previous in queue.active_for(owner.incarnation.require_recorded()):
-                result = previous.state.enqueue(previous, selection, target)
-                if result.state.active:
-                    break
-                queue.save(result)
-            else:
-                result = QueuedRestart(
-                    uuid.uuid4().hex, selection, target, PendingRestart()
-                )
-                queue.save(result)
+    snapshot = comms.registry.snapshot()
+    owner = selection.require_current(snapshot)
+    status = snapshot.status(owner.name)
+    owner.require_restart_owner(status)
+    launch = RetainedOwnerLaunch.capture(selection, snapshot)
+    target = RestartTarget.capture(comms, launch.environment, launch_runtime)
+    target.require_available(comms)
+    # Queueing itself never signals or interrupts the owner, even if it is busy.
+    with queue.locked():
+        for previous in queue.active_for(owner.incarnation.require_recorded()):
+            result = previous.state.enqueue(previous, selection, target)
+            if result.state.active:
+                break
+            queue.save(result)
+        else:
+            result = QueuedRestart(
+                uuid.uuid4().hex, selection, target, PendingRestart()
+            )
+            queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
     _start_watcher(comms.root, target)
     return result
@@ -385,31 +385,26 @@ async def run(comms: Comms) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        # Watch before the first step, so no turn settlement can be missed.
-        async for _ in WireWatch.observations(
-            WatchSource.file(comms.registry.store.path),
-            WatchSource.file(comms.registry.store.guard_path),
-            WatchSource.file(CoordinationStore.path_in(comms.root)),
-            WatchSource.file(comms.root / "coordination.sqlite3-wal"),
-            DirectoryWatchSource(queue.active_directory),
-        ):
-            await Coordination.run_worker(lambda: step(comms))
-            # Check emptiness and release under enqueue's lock, so a new
-            # request cannot slip between the empty check and release.
-            def release_if_empty():
-                with queue.locked():
-                    pending = tuple(record for record in queue.active_records() if record.state.pending)
-                    if any(record.target.is_current_watcher for record in pending):
-                        return False
-                    fcntl.flock(lock, fcntl.LOCK_UN)
-                    # Enqueue may have raced this older runtime's watcher. Its
-                    # lock loser cannot service a newer target; hand it over.
-                    if pending:
-                        _start_watcher(comms.root, pending[0].target)
-                    return True
+        def release_if_empty():
+            # Enqueue and release share this lock, so no request is orphaned.
+            with queue.locked():
+                pending = tuple(record for record in queue.active_records() if record.state.pending)
+                if any(record.target.is_current_watcher for record in pending):
+                    return False
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                if pending:
+                    _start_watcher(comms.root, pending[0].target)
+                return True
 
-            if await Coordination.run_worker(release_if_empty):
-                return
+        sources = tuple(FileSource(path) for path in comms.bus.bus.source_paths(comms.root))
+        async with ChangeSignal.opened(DirectorySource(queue.active_directory), *sources) as changes:
+            while True:
+                # Admit the committed source before checking the queued owners.
+                changes.prepare()
+                await Coordination.run_worker(lambda: step(comms))
+                if await Coordination.run_worker(release_if_empty):
+                    return
+                await changes.wait()
     finally:
         os.close(lock)
 

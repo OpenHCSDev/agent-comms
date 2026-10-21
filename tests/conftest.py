@@ -7,8 +7,8 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from collections.abc import Awaitable, Iterator
-from contextlib import AsyncExitStack, contextmanager
+from collections.abc import Awaitable
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 import pytest
@@ -16,8 +16,8 @@ from xdist import is_xdist_worker
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 
-from agent_comms import candidate_maintenance
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_tool_transport import ToolListener
@@ -206,22 +206,6 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
         yield
 
 
-@contextmanager
-def _root_lifetime(root: Path) -> Iterator[Path]:
-    """Keep each directory's bus workers inside the directory's actual lifetime."""
-    try:
-        yield root
-    finally:
-        candidate_maintenance.drain_candidate_catchup(root)
-
-
-@pytest.fixture
-def tmp_path(tmp_path: Path) -> Iterator[Path]:
-    """Join bus workers before pytest applies its passed-directory retention policy."""
-    with _root_lifetime(tmp_path) as root:
-        yield root
-
-
 @pytest.fixture
 def scratch_root(tmp_path_factory):
     from agent_comms.storage_rules import StorageRule
@@ -231,16 +215,13 @@ def scratch_root(tmp_path_factory):
     if not base.resolve().is_relative_to(scratch):
         base = scratch / "pytest"
         base.mkdir(parents=True, exist_ok=True)
-    with (
-        tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory,
-        _root_lifetime(Path(directory)) as root,
-    ):
-        yield root
+    with tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory:
+        yield Path(directory)
 
 
 @pytest.fixture
 def private_directory():
-    """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
+    """An owner-only throwaway directory for isolated runtime checks."""
     if (
         os.name != "posix"
         or not Path("/var/tmp").is_dir()
@@ -248,35 +229,25 @@ def private_directory():
         or Path("/var/tmp").is_symlink()
     ):
         pytest.skip("a private bus needs a physical /var/tmp")
-    with (
-        tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory,
-        _root_lifetime(Path(directory)) as root,
-    ):
-        yield root
+    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
+        yield Path(directory)
 
 
 @pytest.fixture
 def private_comms(private_directory):
-    """One throwaway private bus, built as production builds one.
-
-    Its launch derives like any private root's: the marker installed here
-    gives the root ID, this installation the package.
-    """
+    """Install one isolated SQLite bus and select it for this check's lifetime."""
     root = private_directory / "wire"
-    root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
     from agent_comms.launch_root import LaunchRoot
 
-    LaunchRoot.from_path(root).install()
-    comms.route.launch().require_private().check()
-    return comms
+    with LaunchRoot.from_path(root).selected():
+        yield comms
 
 
 @pytest.fixture
-def root(tmp_path: Path) -> Iterator[Path]:
-    with _root_lifetime(tmp_path / "comms") as root:
-        yield root
+def root(tmp_path: Path) -> Path:
+    return tmp_path / "comms"
 
 
 @pytest.fixture
@@ -339,7 +310,14 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
+    Bus.install(Bus.path_in(root))
     return Comms(root)
+
+
+@pytest.fixture
+def bus(tmp_path):
+    """A freshly installed bus, shared by the record and recipient test families."""
+    return Bus.install(Bus.path_in(tmp_path))
 
 
 @pytest.fixture

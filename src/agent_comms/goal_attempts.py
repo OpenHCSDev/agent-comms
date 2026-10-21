@@ -54,7 +54,7 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from .locked_store import DurableFile, SQLiteFile
+from .locked_store import DurableFile, PublishedSQLiteFile, WireWakeFile
 from agent_comms.goal_turn_permit import GoalTurnPermit
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
@@ -642,7 +642,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore(DurableFile, SQLiteFile):
+class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
@@ -769,20 +769,21 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
         """A failed commit, sync, or readback is never a launch authorization."""
         with closing(self._connect()) as conn:
             try:
-                with self.write_transaction(conn):
-                    result = operation(conn)
-                self._sync()
+                with self.publishing_changes(conn, self.path):
+                    with self.write_transaction(conn):
+                        result = operation(conn)
+                    self._sync()
+                    try:
+                        if not verify(result):
+                            raise StorageUncertainError("Goal attempt readback does not attest the write.")
+                    except sqlite3.Error as error:
+                        raise StorageUncertainError("Goal attempt readback failed.") from error
             except GoalAttemptError:
                 raise
             except (sqlite3.Error, OSError) as error:
                 raise StorageUncertainError(
                     "Goal attempt write durability is uncertain."
                 ) from error
-        try:
-            if not verify(result):
-                raise StorageUncertainError("Goal attempt readback does not attest the write.")
-        except sqlite3.Error as error:
-            raise StorageUncertainError("Goal attempt readback failed.") from error
         return result
 
     def snapshot(self, goal_id: str) -> Generation | None:

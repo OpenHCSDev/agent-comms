@@ -28,9 +28,6 @@ from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
-)
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
@@ -59,7 +56,6 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=DeclaredModel("selected-offline/fixture"), thinking_level=LowThinkingLevel))
-    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []
@@ -229,7 +225,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         assert not comms.registry.require("beta").active_turn.executing
         assert phases and 'preparing' not in phases
         if not selected_write:
-            assert not comms.bus.log.claim_projection()
+            assert not comms.bus.bus.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
             assignment = store.assignments.get(outcome.assignment_ids[0])
             snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
@@ -238,13 +234,12 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert assignment.wire_seq == initial.message.seq
-            cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+            state = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
                 owner_name="beta", source_reads=source_reads
             )
-            assert cursor is not None
-            assert cursor.injected_seq == initial.message.seq
-            assert cursor.covered_seq >= cursor.injected_seq
-            assert cursor.input_id == outcome.input_id
+            assert state.injected_seq == initial.message.seq
+            assert state.covered_seq >= state.injected_seq
+            assert state.proves_input(outcome.input_id)
             proofs = read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
