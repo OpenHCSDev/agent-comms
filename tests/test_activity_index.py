@@ -1,127 +1,63 @@
-"""Append-aware activity snapshots preserve the existing JSONL recovery contract."""
+"""Current activity has one row; writers serialize each transition exactly once."""
 
-import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from threading import Barrier
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.field_codec import FieldCodec
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.activity import Activity, ActivityRow, ActivityState, ActivityStore
 
 
-def encoded(name="a", detail="before"):
-    return json.dumps(FieldCodec.encode(Activity(name, ActivityState.WORKING, detail)))
+@pytest.fixture
+def activity_store(tmp_path):
+    return ActivityStore.at(tmp_path)
 
 
-def test_fresh_reader_preserves_latest_threads_and_sees_append(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
-    previous = ActivityLog(path).all_current()
-    assert set(previous) == {f"worker-{index}" for index in range(10)}
-    assert ActivityLog(path).all_current() == previous
-    appended = Activity("new-worker", ActivityState.THINKING, "latest")
-    ActivityLog(path).emit(appended)
-    assert ActivityLog(path).all_current() == {**previous, "new-worker": appended}
+def test_emit_and_current_return_the_declared_activity_row(activity_store):
+    first = Activity("worker", ActivityState.THINKING)
+    activity_store.emit(first)
+    assert activity_store.current("worker") == ActivityRow.of(first)
+    latest = first.with_status(ActivityState.WORKING, "read source")
+    activity_store.emit(latest)
+    assert ActivityStore.at(activity_store.root).current("worker") == ActivityRow.of(latest)
+    with activity_store.snapshot() as db:
+        assert ActivityRow.count(db) == 1
 
 
-def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    path.write_text(encoded("a") + "\n")
-    assert set(ActivityLog(path).all_current()) == {"a"}
-    path.write_text(encoded("b") + "\n")
-    ActivityLog(path).emit(Activity("c", ActivityState.THINKING, "new"))
-    assert set(ActivityLog(path).all_current()) == {"b", "c"}
+def test_retiring_activity_removes_the_row(activity_store):
+    activity_store.emit(Activity("worker", ActivityState.WORKING, "read source"))
+    activity_store.emit(Activity("worker", ActivityState.DELETED))
+    assert activity_store.all_current() == {}
+    assert activity_store.current("worker") == Activity.absent("worker")
 
 
-def test_partial_and_valid_unterminated_tails_are_retried(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    path.write_text(encoded(detail="before") + "\n")
-    reader = ActivityLog(path)
-    assert reader.current("a").detail == "before"
-    tail = encoded(detail="after")
-    with path.open("a") as stream:
-        stream.write(tail[:20])
-    assert reader.current("a").detail == "before"
-    with path.open("a") as stream:
-        stream.write(tail[20:])
-    assert reader.current("a").detail == "after"
-    # An uncommitted EOF record must not contaminate the complete-prefix cache.
-    with path.open("a") as stream:
-        stream.write(" invalid")
-    assert reader.current("a").detail == "before"
-    ActivityLog(path).emit(Activity("a", ActivityState.THINKING, "recovered"))
-    assert reader.current("a").detail == "recovered"
-    assert path.with_name("activity.jsonl.corrupt").exists()
+def test_rename_moves_current_activity_without_changing_its_fields(activity_store):
+    event = Activity("before", ActivityState.WORKING, "read source")
+    activity_store.emit(event)
+    activity_store.rename_thread("before", "after")
+    assert activity_store.current("before") == Activity.absent("before")
+    assert activity_store.current("after") == ActivityRow.of(replace(event, thread="after"))
+    with activity_store.snapshot() as db:
+        assert ActivityRow.count(db) == 1
 
 
-def test_blank_lines_and_valid_tail_completion_keep_exact_cursor(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    path.write_text("\n  \n" + encoded("a") + "\n\n" + encoded("b"))
-    reader = ActivityLog(path)
-    assert set(reader.all_current()) == {"a", "b"}
-    ActivityLog(path).emit(Activity("c", ActivityState.THINKING, "new"))
-    assert set(reader.all_current()) == {"a", "b", "c"}
+def test_concurrent_update_applies_each_transition_once(activity_store):
+    activity_store.emit(Activity("worker", ActivityState.WORKING, "0"))
+    start = Barrier(2)
 
+    def write():
+        observations = []
 
-def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_path, *, thread_registration):
-    path = tmp_path / "activity.jsonl"
-    reader, writer = ActivityLog(path), ActivityLog(path)
-    writer.emit(Activity("a", ActivityState.THINKING, "old"))
-    writer.emit(Activity("b", ActivityState.THINKING, "old"))
-    assert set(reader.all_current()) == {"a", "b"}
-    writer.rename_thread("a", "renamed")
-    assert set(reader.all_current()) == {"renamed", "b"}
-    writer.remove_threads((thread_registration.new_thread('b', frozenset(), str(tmp_path)),))
-    assert set(reader.all_current()) == {"renamed"}
-    path.write_text(encoded("c") + "\n")
-    assert set(reader.all_current()) == {"c"}
-    _atomic_write_text(path, encoded("d") + "\n")
-    assert set(reader.all_current()) == {"d"}
-    path.unlink()
-    assert reader.all_current() == {}
+        def advance(current):
+            observations.append(current.detail)
+            return current.with_status(ActivityState.WORKING, str(int(current.detail) + 1))
 
+        start.wait(timeout=5)
+        assert ActivityStore.at(activity_store.root).update("worker", advance)
+        return observations
 
-def test_malformed_complete_record_never_returns_stale_success(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    path.write_text(encoded() + "\n")
-    reader = ActivityLog(path)
-    reader.all_current()
-    with path.open("a") as stream:
-        stream.write("{bad json}\n")
-    for _ in range(2):
-        with pytest.raises(json.JSONDecodeError):
-            reader.all_current()
-    before = path.read_bytes()
-    with pytest.raises(json.JSONDecodeError):
-        reader.emit(Activity("new", ActivityState.THINKING))
-    assert path.read_bytes() == before
-    _atomic_write_text(path, encoded("fixed") + "\n")
-    assert set(reader.all_current()) == {"fixed"}
-
-
-def test_reading_new_events_does_not_wait_for_checkpoint_writer(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    log = ActivityLog(path)
-    log.emit(Activity("a", ActivityState.THINKING))
-    with path.open("a") as stream:
-        stream.write(encoded("b") + "\n")
-    # A cold observer must neither lock nor publish the disposable document.
-    from agent_comms.activity import ActivityReadState
-    from agent_comms.store_files import _store_lock
-    log._read = ActivityReadState()
-    with ThreadPoolExecutor(max_workers=1) as readers:
-        with _store_lock(log.checkpoint.path):
-            assert set(readers.submit(log.all_current).result(2)) == {"a", "b"}
-    assert set(log.checkpoint.read().latest) == {"a"}
-
-
-def test_failed_checkpoint_reports_error_without_erasing_the_committed_event(tmp_path):
-    path = tmp_path / "activity.jsonl"
-    log = ActivityLog(path)
-    log.checkpoint.path.mkdir()
-    event = Activity("a", ActivityState.WORKING, "already recorded")
-    with pytest.raises(OSError):
-        log.emit(event)
-    assert log.current("a", active=True) == event
-    assert [Activity.from_wire(json.loads(line)) for line in path.read_text().splitlines()] == [event]
+    with ThreadPoolExecutor(max_workers=2) as writers:
+        written = tuple(writers.map(lambda _: write(), range(2)))
+    assert sorted(written) == [["0"], ["1"]]
+    assert activity_store.current("worker").detail == "2"
