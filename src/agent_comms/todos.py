@@ -2674,8 +2674,8 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
         """Only a judgment of a commit clears review of that immutable head."""
         return ()
 
-    @abstractmethod
-    def judged(self, current: Todo) -> Todo: ...
+    def judged(self, current: Todo) -> Todo:
+        return current
 
     @property
     @abstractmethod
@@ -2715,7 +2715,7 @@ class QuotedVerdict(OrderVerdict, declared_name=None):
 
     def judged(self, current: Todo) -> Todo:
         self.require_quote(current.order.instructions(current))
-        return current
+        return super().judged(current)
 
 
 @dataclass(frozen=True)
@@ -2733,9 +2733,10 @@ class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class ReviewedHeadVerdict(QuotedVerdict):
-    """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
+class HeadVerdict(QuotedVerdict, TodoOperation, declared_name=None):
+    """One judgment of immutable code; its members own only their GitHub result."""
     context: ClassVar[str] = "agent-comms/review"
+    state: ClassVar[str]
     head: str
 
     def __post_init__(self) -> None:
@@ -2747,22 +2748,34 @@ class ReviewedHeadVerdict(QuotedVerdict):
 
     @property
     def line(self) -> str:
-        return f"Reviewed head {self.head}"
+        return f"{self.state} head {self.head}"
+
+    def prepare(self, goals: Goals, current: Todo) -> Self:
+        requests = PullRequests((current,)).listed(current.repo, ListedPullRequest, current)
+        if not any(request.head == self.head for request in requests):
+            raise TodoError("The verdict must name a linked pull request's current head; read it again.")
+        return super().prepare(goals, current)
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
-        if self.actor != reviewer:
-            raise TodoError("The verdict actor must be the connector reviewer recording it.")
         current = goals.todos.get(problem)
-        recorded = self.prepare(goals, current).record(goals, problem)
+        if self.actor != reviewer:
+            current.require_commander(self.actor)
+        return self.prepare(goals, current).record(goals, problem)
+
+    def after_record(self, goals: Goals, recorded: Todo) -> None:
         posted = subprocess.run(
             ("gh", "api", "--method", "POST", f"repos/{recorded.repo.to_wire()}/statuses/{self.head}",
-             "-f", "state=success", "-f", f"context={self.context}",
-             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
+             "-f", f"state={self.state}", "-f", f"context={self.context}",
+             "-f", f"description=Reviewed by {self.actor.name} on {recorded.id}"),
             capture_output=True, text=True, timeout=60,
         )
         if posted.returncode:
             raise TodoError(posted.stderr.strip() or f"Review status on {self.head} failed.")
-        return recorded
+
+
+@dataclass(frozen=True)
+class AcceptedHeadVerdict(HeadVerdict):
+    state = "success"
 
 
 @dataclass(frozen=True)
@@ -2811,8 +2824,8 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(ToolCallVerdict, CitedStrike):
-    """The tool call goes back; the same write strikes the holder and revises the order Goal."""
+class RejectingVerdict(OrderVerdict, CitedStrike, declared_name=None):
+    """Shared strike and goal revision, for current heads and stored tool-call history."""
     reason: StrikeReason
 
     @property
@@ -2831,7 +2844,19 @@ class SendBackVerdict(ToolCallVerdict, CitedStrike):
         return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:
-        return goals.send_back(problem, self)
+        changed = goals.send_back(problem, self)
+        self.after_record(goals, changed)
+        return changed
+
+
+@dataclass(frozen=True)
+class RejectedHeadVerdict(HeadVerdict, RejectingVerdict):
+    state = "failure"
+
+
+@dataclass(frozen=True)
+class SendBackVerdict(ToolCallVerdict, RejectingVerdict):
+    """Stored tool-call verdicts still decode; judge no longer writes this form."""
 
 
 @dataclass(frozen=True)

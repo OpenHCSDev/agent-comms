@@ -61,7 +61,7 @@ from .messages import Message, QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
-from .todos import DirectiveText, ReviewedHeadVerdict
+from .todos import AcceptedHeadVerdict, DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import (
     CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
@@ -98,7 +98,7 @@ class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declare
     label = "Review PR head"
     description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
     id: Annotated[str, *tool_field("Problem ID")]
-    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
+    operation: Annotated[AcceptedHeadVerdict, *tool_field("Accepted PR-head verdict")]
 
     def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
         todo = self.operation.reviewed(

@@ -47,7 +47,7 @@ from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
+from .todos import GoalRef, PendingProblemOrder, RejectingVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -392,7 +392,7 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class SentBackOrderGoalAction(HeldOrderGoalAction):
-    operation: SendBackVerdict
+    operation: RejectingVerdict
 
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal

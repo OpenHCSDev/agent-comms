@@ -57,7 +57,7 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
+from .todos import RejectingVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
 from .wire_log import ConversationSourceWindowRequest
 
@@ -89,7 +89,7 @@ class Goals:
             applied: Todo = self.todos.apply(problem, operation)
             return applied
 
-    def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
+    def send_back(self, problem: str, verdict: RejectingVerdict) -> Todo:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
