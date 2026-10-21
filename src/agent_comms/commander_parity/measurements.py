@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from sys import monitoring
 from types import CodeType, MethodType
 
-from ..commander.config import CommanderConfig
-from ..comms import Comms
-from ..standing_rules import DiskLow, StandingRule
-from ..storage_rules import UnitStorage
-from . import ParityComparison, UnverifiedParity
-from .load import LoadComparison, state_files
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander_parity import ParityComparison, UnverifiedParity
+from agent_comms.commander_parity.load import LoadComparison, state_files
+from agent_comms.comms import Comms
+from agent_comms.standing_rules import DiskLow, StandingRule
+from agent_comms.storage_rules import StorageViolation
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ class StorageComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> StorageComparison:
-        return cls(RuleComparison.read(UnitStorage), RuleComparison.read(DiskLow))
+        return cls(RuleComparison.read(StorageViolation), RuleComparison.read(DiskLow))
 
 
 def measured_load() -> ParityComparison:
