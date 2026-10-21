@@ -1,5 +1,6 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
 from contextlib import closing
+from pathlib import Path
 from dataclasses import replace
 import os
 import sqlite3
@@ -199,7 +200,7 @@ def legacy_decision_table(comms):
     store = comms.goals.open_goal_store()
     goal = comms.registry.require("worker").goal.require()
     generation = store.require_generation(goal.id)
-    with closing(CoordinationStore.writer(store.path)) as db:
+    with closing(GoalAttemptStore.database(store.path)) as db:
         with SQLiteFile.write_transaction(db):
             GoalWorkDecision(goal.id, "recorded-decision", generation.number).claim(db)
             db.execute(f'ALTER TABLE "{GoalWorkDecision.declared_name}" RENAME TO "{RETIRED_TABLE}"')
@@ -228,23 +229,27 @@ def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
 
 def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
     path = legacy_decision_table(held_bus)
-    with closing(CoordinationStore.writer(path)) as db:
+    with closing(GoalAttemptStore.database(path)) as db:
         GoalWorkDecision.create(db)
         db.commit()
+    ledger = CarryLedger(held_bus.root)
+    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
     before = path.read_bytes()
     with pytest.raises(RelationViolationError):
-        GoalWorkDecisions.carry(held_bus.root, apply=True)
+        ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
     assert path.read_bytes() == before
+    assert GoalWorkDecisions.name() not in ledger.applied()
 
 
 def test_install_discovers_and_records_decision_cutover_once(held_bus):
-    from pathlib import Path
-
     chain = CarryChain.at(Path(__file__).resolve().parents[1])
     assert GoalWorkDecisions in chain.steps
+    legacy_decision_table(held_bus)
     ledger = CarryLedger(held_bus.root)
+    ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
+    assert GoalWorkDecisions in chain.pending(ledger.applied())
     first = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
-    assert first.changed == 0  # this bus was created with the new declaration
+    assert first.changed == 1 and ledger.filename in first.rewritten
     second = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
     assert second.changed == 0 and second.rewritten == ()
     assert GoalWorkDecisions not in chain.pending(ledger.applied())

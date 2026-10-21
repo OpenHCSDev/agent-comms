@@ -12,6 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
+from agent_comms.typed_table import SqlValue
 
 
 RETIRED_TABLE = "goal_human_decision"
@@ -39,14 +40,15 @@ class GoalWorkDecisions(Carry):
             return Carried(0)
         with closing(GoalAttemptStore.database(path)) as db:
             with SQLiteFile.write_transaction(db):
-                names = {name for name, in db.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
-                    (RETIRED_TABLE, GoalWorkDecision.declared_name),
-                )}
-                if RETIRED_TABLE in names and GoalWorkDecision.declared_name in names:
+                retired_present = SqlValue.for_annotation(bool).read(db.execute(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+                    (RETIRED_TABLE,),
+                ))[0]
+                current_present = GoalWorkDecision.present(db)
+                if retired_present and current_present:
                     raise RelationViolationError("Both goal decision tables exist; refuse to choose rows")
-                if RETIRED_TABLE not in names:
-                    if GoalWorkDecision.declared_name not in names:
+                if not retired_present:
+                    if not current_present:
                         raise RelationViolationError("The goal ledger has no decision table")
                     return Carried(0)
                 if apply:
