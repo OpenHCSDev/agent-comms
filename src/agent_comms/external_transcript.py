@@ -181,14 +181,21 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 
     @classmethod
     def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
-        """Yield identities newest first without decoding bodies or grouping the full history."""
-        identities: set[str] = set()
+        """Yield turn starts newest first, using the existing per-turn position index.
+
+        A later item in an older turn must not move that turn ahead of a newer start:
+        continuation windows compare first-event times, not latest activity.
+        """
+        table = f'"{cls.declared_name}"'
+        first_item = (
+            f'NOT EXISTS (SELECT 1 FROM {table} AS previous '
+            f'WHERE previous.thread={table}.thread AND previous.turn_id={table}.turn_id '
+            f'AND previous.seq<{table}.seq)'
+        )
         with closing(cls.stream(connection, row_type=ExternalTurn, thread=thread,
-                                order_by=("seq",), descending=True)) as rows:
+                                where=first_item, order_by=("seq",), descending=True)) as rows:
             for row in rows:
-                if row.turn_id not in identities:
-                    identities.add(row.turn_id)
-                    yield row.turn_id
+                yield row.turn_id
 
 
 @dataclass(frozen=True)

@@ -83,7 +83,7 @@ from .task_sources import (
 )
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
-from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
+from .turn_digests import LastTurns, OrderEditsRead, ThreadTurns, TurnBound, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
@@ -941,12 +941,13 @@ class CommsProblemCloseTool(CommsTodoTool):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsTurnsTool(ThreadReadTool):
-    label = "Recent turns"
-    description = "Read a unit's recent turns with ordered original transcript facts."
-    last: int = tool_field("Number of newest turns", default=LastTurns.count)
+    label = "Read turns"
+    description = ("Read a unit's ordered original transcript facts in bounded pages. "
+                   "Send the returned older window to read the next older page.")
+    window: TurnBound = tool_field("Turn window; send back older for the next page", default_factory=LastTurns)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+        return comms.transcripts.turns(caller.subject(self.thread), self.window)
 
 
 @dataclass(frozen=True, kw_only=True)
