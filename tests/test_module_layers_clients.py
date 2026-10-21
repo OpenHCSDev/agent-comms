@@ -45,12 +45,11 @@ def test_client_names_must_be_defined_by_their_module(tmp_path):
         "if True:\n    def current(): ...\n"
         "DEFAULT, OTHER = 1, 2\n",
     )
-    write(core / "src/agent_comms/lazy.py", "def __getattr__(name): ...\n")
     client = tmp_path / "toad"
     write(
         client / "tests/test_routes.py",
         "from agent_comms.routes import Route, current, env, OTHER, implicit\n"
-        "from agent_comms.lazy import anything\n"
+        "from agent_comms.routes import *\n"
         "from agent_comms import routes\n",
     )
 

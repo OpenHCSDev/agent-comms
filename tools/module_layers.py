@@ -137,6 +137,8 @@ class ClientImportNames(ModuleReferences):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         match node:
+            case ast.ImportFrom(module=str(module), level=0, names=[ast.alias(name="*")]):
+                self.record(node, module)
             case ast.ImportFrom(module=str(module), level=0):
                 self.record(node, module, tuple(alias.name for alias in node.names))
 
@@ -357,9 +359,8 @@ class Package:
         return tuple(entry for entry in self.client_imports if not self.provides(entry.module))
 
     def defined_names(self, module: str) -> frozenset[str]:
-        """Names a module binds at its top level, re-exports included; a module defining
-        __getattr__ answers every name."""
-        path = self.root if module == PACKAGE else self.files[module]
+        """The names a module binds at its top level, re-exports included."""
+        path = self.modules[module]
         return TopLevelNames.of(ast.parse(path.read_text(), str(path)))
 
     @cached_property
@@ -371,14 +372,10 @@ class Package:
             if not self.provides(entry.module):
                 continue
             defined = self.defined_names(entry.module)
-            if "__getattr__" in defined:
-                continue
             found += [
                 (entry, name)
                 for name in entry.names
-                if name != "*"
-                and name not in defined
-                and f"{entry.module}.{name}" not in self.files
+                if name not in defined and f"{entry.module}.{name}" not in self.files
             ]
         return tuple(found)
 
