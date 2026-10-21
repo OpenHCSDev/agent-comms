@@ -40,7 +40,7 @@ from agent_comms.todos import ReportDelivery, PendingProblemOrder, TriageScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
-from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms.watched import FileSource
 from agent_comms.work_dispatch import CheckedPhaseTask
 
 
@@ -76,10 +76,7 @@ class ReceivedReply(Reply):
 async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Message:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.bus.log.path),
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch()
         ) as changes:
             async for _ in changes:
                 observed = Reply.read(comms, commander, unit, token)
@@ -93,9 +90,7 @@ async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Me
 async def stop_after_turn(comms: Comms, unit: str) -> None:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch_sources(FileSource(comms.registry.store.path))
         ) as changes:
             async for _ in changes:
                 turn = comms.registry.require(unit).turn_record.read()

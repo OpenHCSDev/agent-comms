@@ -863,7 +863,7 @@ class WireRevision(ReadState):
     native_unread: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.transcript_reads.index_path,), StoresView, SidebarView
+            lambda views: views.transcript_reads.source_paths(views.root), StoresView, SidebarView
         ),
     ]
     goal_waits: Annotated[
