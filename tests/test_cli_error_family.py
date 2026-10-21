@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
-from agent_comms.cli_bridges.shared import Binding, DeliveryRow
+from agent_comms.cli_bridges.shared import Binding, DeliveryRow, StoredBinding
 from agent_comms.cli_protocol import (
     WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
@@ -86,7 +86,7 @@ with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, factory=Pa
 print('opened', flush=True)
 '''
 
-    async def open_together():
+    async def open_together(*, fresh):
         children = []
         try:
             for _ in range(2):
@@ -94,9 +94,11 @@ print('opened', flush=True)
                     sys.executable, '-c', worker, str(tmp_path),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE))
-            ready = await asyncio.wait_for(asyncio.gather(
-                *(child.stdout.readline() for child in children)), 20)
-            assert ready == [b'ready\n', b'ready\n']
+                if fresh and len(children) == 1:
+                    # The first opener holds its write transaction at CREATE TABLE
+                    # while the second opens; the second waits, then finds the schema.
+                    ready = await asyncio.wait_for(children[0].stdout.readline(), 20)
+                    assert ready == b'ready\n'
             results = await asyncio.wait_for(asyncio.gather(
                 *(child.communicate(b'go\n') for child in children)), 20)
             assert [(child.returncode, out, err) for child, (out, err)
@@ -107,18 +109,18 @@ print('opened', flush=True)
                     child.kill()
                 await child.wait()
 
-    await open_together()
+    await open_together(fresh=True)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
     pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
     with Binding.open(tmp_path) as db:
-        assert Binding.bind(db, binding) == binding
+        assert binding.bind(db) == binding
         with db:
             assert pending.insert_if_absent(db).rowcount
-    await open_together()
+    await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
-        assert Binding.bind(db, None) == binding
+        assert StoredBinding().bind(db) == binding
         assert DeliveryRow.select(db) == [pending]
 
 
@@ -139,12 +141,12 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
     with Binding.open(tmp_path) as db:
         winner, = Binding.select(db)
         assert winner in (first, other)
-        assert Binding.bind(db, None) == Binding.bind(db, winner) == winner
+        assert StoredBinding().bind(db) == winner.bind(db) == winner
         loser = other if winner == first else first
         with pytest.raises(ValueError):
-            Binding.bind(db, loser)
+            loser.bind(db)
         with db:
-            assert not DeliveryRow(message.message_id, 'unused', DeliveredOutcome).insert_if_absent(db).rowcount
+            assert not DeliveryRow(message.message_id, json.dumps(message.to_wire()), DeliveredOutcome).insert_if_absent(db).rowcount
         assert DeliveryRow.select(db) == [pending]
         assert Binding.select(db) == [winner]
 
@@ -152,12 +154,12 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
 def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
     with Binding.open(tmp_path) as db:
-        assert Binding.bind(db, binding) == binding
+        assert binding.bind(db) == binding
         statements = []
         db.set_trace_callback(statements.append)
         with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
-            assert Binding.bind(db, None) == binding
+            assert StoredBinding().bind(db) == binding
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 

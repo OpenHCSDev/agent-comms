@@ -1,6 +1,8 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
+from contextlib import closing
 from html import escape
 import json
+import sqlite3
 
 import pytest
 
@@ -10,9 +12,10 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
+    BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch,
 )
+from agent_comms.errors import RelationViolationError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -50,7 +53,7 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
             acknowledgments.extend(references)
     with Binding.open(state) as db:
         binding=Binding(str(tmp_path),'viewer','session')
-        Binding.bind(db, binding)
+        binding.bind(db)
         bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
         bridge.comms=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
@@ -172,3 +175,46 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert {m.reference for m in wired.bus.inbox('fixer')}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
     assert [m.reference for m in wired.bus.inbox('fixer')]==[second.reference]
+
+
+# delivery.sqlite3 as bridges wrote it before the sequence index was declared:
+# its outcome index held the name the sequence index now declares.
+_OLD_DELIVERY_FILE = (
+    'CREATE TABLE "binding" ("root" TEXT NOT NULL, "bus" TEXT NOT NULL, "thread" TEXT NOT NULL) STRICT',
+    'CREATE TABLE "delivery" ("id" TEXT NOT NULL, "payload" TEXT NOT NULL, "outcome" TEXT NOT NULL'
+    ' CHECK ("outcome" IN (\'filtered\', \'unconfirmed\', \'delivered\', \'emitted\')),'
+    ' "monitor" TEXT NOT NULL, PRIMARY KEY ("id")) STRICT',
+    'CREATE INDEX "delivery_0_idx" ON "delivery" ("outcome")',
+    'CREATE INDEX "delivery_sequence" ON "delivery" (json_extract(payload, \'$.seq\'))',
+    'CREATE TABLE "observed_part" ("id" TEXT NOT NULL, "number" INTEGER NOT NULL, "sender" TEXT NOT NULL,'
+    ' "body" TEXT NOT NULL, "record_id" TEXT NOT NULL, "timestamp" REAL NOT NULL,'
+    ' PRIMARY KEY ("id", "number")) STRICT',
+)
+
+
+_OLD_DELIVERY_ROWS = (
+    ('binding', ('/root', 'viewer', 'session')),
+    ('delivery', ('m1', '{"seq":7}\n', 'unconfirmed', '{"kind":"receiving","total":1}')),
+    ('delivery', ('m2', '{"seq":8}\n', 'emitted', '{"kind":"unrecorded"}')),
+    ('observed_part', ('m1', 1, 'peer', 'part one', 'record-1', 12.5)),
+)
+
+
+def _old_delivery_file(state):
+    path = state / BridgeStateTable.filename
+    with closing(sqlite3.connect(path)) as db:
+        for statement in _OLD_DELIVERY_FILE:
+            db.execute(statement)
+        for table, values in _OLD_DELIVERY_ROWS:
+            db.execute(f'INSERT INTO "{table}" VALUES ({",".join("?" for _ in values)})', values)
+        db.commit()
+    return path
+
+
+def test_old_delivery_index_set_is_refused_not_kept(tmp_path):
+    path = _old_delivery_file(tmp_path)
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError, match='BridgeStateTable differs'):
+        with Binding.open(tmp_path):
+            pass
+    assert path.read_bytes() == before
