@@ -3,7 +3,7 @@
 set -euo pipefail
 unset NODE_OPTIONS NODE_PATH
 STOCK=${PI_STOCK_DIR:?PI_STOCK_DIR must name the package fetched by prepare-pi-native}
-[[ $# -eq 1 ]] || { echo 'Usage: prepare-copied-pi.sh PINNED_NPM_SPEC' >&2; exit 2; }
+[[ $# -eq 1 && -n "$1" ]] || { echo 'Usage: prepare-copied-pi.sh PINNED_NPM_SPEC' >&2; exit 2; }
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 node -e '
 const stock = require(process.argv[1]);
