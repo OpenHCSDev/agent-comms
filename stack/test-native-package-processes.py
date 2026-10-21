@@ -17,7 +17,7 @@ def main() -> None:
     package = Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve(strict=True)
     node = shutil.which("node")
     assert node
-    deny = runpy.run_path(str(stack / "native-import-rpc.py"))["network_denial"]()
+    deny = runpy.run_path(str(stack / "test-native-import-rpc.py"))["network_denial"]()
     with tempfile.TemporaryDirectory(prefix="native-package-processes-") as directory:
         root = Path(directory)
         (root / "home").mkdir()

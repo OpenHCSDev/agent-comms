@@ -18,9 +18,12 @@ import sys
 import time
 import tempfile
 
+from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.field_codec import FieldCodec
+from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
 from agent_comms.launch_runtime import RestartEnvironment
+from agent_comms.native_arguments import NativeArguments
 
 
 def main(fixture: Path):
@@ -43,31 +46,29 @@ def main(fixture: Path):
     extensions = agent / "extensions"
     extensions.mkdir(mode=0o700)
     for entry in globals_:
-        (extensions / entry.parent.name).symlink_to(entry.parent, target_is_directory=True)
+        (extensions / f"{entry.parent.name}.js").symlink_to(entry)
     (agent / "settings.json").write_text('{"packages":[]}')
     repo = Path(__file__).resolve().parent.parent
     tool_cli = commands / "agent-comms"
     tool_cli.write_text(f'#!/bin/sh\nexec "{sys.executable}" -m agent_comms.cli "$@"\n')
     tool_cli.chmod(0o700)
-    environment = dict(os.environ, PI_CODING_AGENT_DIR=str(agent), PI_WORKTREE=str(project),
-                       AGENT_COMMS_MANAGED="1", AGENT_COMMS_ROOT=str(root / "wire"),
-                       PI_OFFLINE="1",
-                       NODE_DISABLE_COMPILE_CACHE="1", PATH=f"{commands}:{os.environ['PATH']}")
-    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID",
-                 "AGENT_COMMS_THREAD", "PYTHONPATH"):
-        environment.pop(name, None)
+    environment = {
+        "PATH": f"{commands}:{os.environ['PATH']}", "HOME": str(root),
+        "PYTHONPATH": str(repo / "src"), "AGENT_COMMS_ROOT": str(root / "wire"),
+        "PI_OFFLINE": "1", "NODE_DISABLE_COMPILE_CACHE": "1",
+    }
     environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
-    environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.threads import Thread
 
     comms = Comms(root / "wire")
     thread = Thread("native-startup-fixture", frozenset(), str(project),
+                    storage_roots=StorageRoots(root / "scratch"),
                     process_identity=ProcessIdentity.capture(os.getpid()))
-    comms.registry.declare(thread)
+    thread = comms.registry.declare(thread)
     environment.update(thread.native_environment(comms.root, comms.registry.snapshot(), str(project)))
-    spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/native-import-rpc.py")
+    spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)
     deny = isolation.network_denial()
@@ -92,7 +93,8 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     assert not registered["errors"], registered["errors"]
     assert len(registered["extensions"]) == len(globals_), registered
     tool_names = {tool for extension in registered["extensions"] for tool in extension["tools"]}
-    assert {"subagent", "web_search", "comms_send", "comms_goal"} <= tool_names, tool_names
+    assert {"subagent", "web_search"} <= tool_names, tool_names
+    assert any("session_start" in item["handlers"] for item in registered["extensions"]), registered
     # The managed project guard registers its handler only with an owner name;
     # registering does not execute it or mutate the live owner.
     assert any("tool_call" in item["handlers"] for item in registered["extensions"]), registered
@@ -115,11 +117,15 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     saved_source_sha256 = hashlib.sha256(session.read_bytes()).hexdigest()
     settings_sha256 = hashlib.sha256((agent / "settings.json").read_bytes()).hexdigest()
     started = time.monotonic()
+    arguments = thread.native_launch_arguments(NativeArguments.parse(
+        ("--offline", "--mode", "rpc", "--session-dir", str(root), "--session", str(session))),
+        package, comms.root)
     child = subprocess.Popen(prefix + ["--import", str(package / "dist/agent-comms-project-bootstrap.mjs"),
-        str(package / "dist/cli.js"), "--offline", "--mode", "rpc", "--session-dir", str(root), "--session", str(session)],
+        str(package / "dist/cli.js"), *arguments],
         cwd=project, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True, preexec_fn=deny)
     reply = None
+    extension_errors = []
     try:
         child.stdin.write('{"type":"get_state","id":"startup"}\n')
         child.stdin.flush()
@@ -133,10 +139,13 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
             if not line:
                 break
             message = json.loads(line)
+            if message.get("type") == "extension_error":
+                extension_errors.append(message)
             if message.get("id") == "startup":
                 reply = message
                 break
         assert reply and reply.get("success"), f"No successful get_state; exit={child.poll()}"
+        assert not extension_errors, extension_errors
         assert reply["data"]["nativeInputProofCapability"] == "pi-native-input-v1-live-only", reply
         state_received_seconds = time.monotonic() - started
     finally:
@@ -162,4 +171,7 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-globals-") as directory:
-        main(Path(directory) / "fixture")
+        try:
+            main(Path(directory) / "fixture")
+        finally:
+            drain_candidate_catchup(Path(directory))

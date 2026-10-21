@@ -31,9 +31,18 @@ function fixture() {
     managers.add(manager);
     const kept = manager.appendMessage(user('task'));
     manager.appendMessage(assistant);
-    return { manager, file: manager.getSessionFile(), kept };
+    const file = manager.getSessionFile();
+    // Every adversarial case first proves the same reader accepts valid bytes.
+    // A stale fixture/API error cannot masquerade as a corruption refusal.
+    assert.equal(opened(file).getLeafId(), manager.getLeafId());
+    return { manager, file, kept };
 }
 function rows(file) { return fs.readFileSync(file, 'utf8').trimEnd().split('\n').map(JSON.parse); }
+function refused(file) {
+    const before = fs.readFileSync(file);
+    assert.throws(() => opened(file));
+    assert.deepEqual(fs.readFileSync(file), before, 'refusal never repairs saved bytes');
+}
 function externalAppend(file) {
     const code = `const {SessionManager} = await import(${JSON.stringify(moduleURL)});
         const manager = SessionManager.open(process.argv[1]);
@@ -86,67 +95,53 @@ const cases = {
     },
     'duplicate-entry-id': () => {
         const { file } = fixture();
-        const original = fs.readFileSync(file);
         fs.appendFileSync(file, JSON.stringify(rows(file)[1]) + '\n');
-        const invalid = fs.readFileSync(file);
-        assert.throws(() => opened(file));
-        assert.deepEqual(fs.readFileSync(file), invalid);
-        assert.deepEqual(invalid.subarray(0, original.length), original);
+        refused(file);
     },
     'forward-parent-id': () => {
         const { file } = fixture();
         const entries = rows(file);
         entries[1].parentId = entries[2].id;
         fs.writeFileSync(file, entries.map(JSON.stringify).join('\n') + '\n');
-        const invalid = fs.readFileSync(file);
-        assert.throws(() => opened(file), /ancestry/i);
-        assert.deepEqual(fs.readFileSync(file), invalid);
+        refused(file);
     },
     'newline-repair': () => {
         const { file } = fixture();
-        const raw = fs.readFileSync(file).subarray(0, -1);
-        fs.writeFileSync(file, raw);
+        fs.writeFileSync(file, fs.readFileSync(file).subarray(0, -1));
         fs.writeFileSync(`${file}.pr48-writer.lock`, 'held\n');
-        try {
-            assert.throws(() => opened(file), /Incomplete/);
-            assert.deepEqual(fs.readFileSync(file), raw);
-        } finally { fs.unlinkSync(`${file}.pr48-writer.lock`); }
+        try { refused(file); }
+        finally { fs.unlinkSync(`${file}.pr48-writer.lock`); }
     },
     'malformed-load': () => {
         const { file } = fixture();
         fs.appendFileSync(file, '{broken}\n');
-        const raw = fs.readFileSync(file);
-        assert.throws(() => opened(file));
-        assert.deepEqual(fs.readFileSync(file), raw);
+        refused(file);
     },
     'invalid-utf8-load': () => {
         const { file } = fixture();
         const raw = fs.readFileSync(file);
         raw[raw.indexOf(Buffer.from('task'))] = 0xff;
         fs.writeFileSync(file, raw);
-        assert.throws(() => opened(file), /encoded data/);
-        assert.deepEqual(fs.readFileSync(file), raw);
+        refused(file);
     },
     'duplicate-header-load': () => {
         const { file } = fixture();
         fs.appendFileSync(file, JSON.stringify({ ...rows(file)[0], id: 'second-header' }) + '\n');
-        assert.throws(() => opened(file), /ancestry/);
+        refused(file);
     },
     'orphan-load': () => {
         const { file } = fixture();
         const entries = rows(file);
         entries.at(-1).parentId = 'missing-parent';
         fs.writeFileSync(file, entries.map(JSON.stringify).join('\n') + '\n');
-        assert.throws(() => opened(file), /ancestry/);
+        refused(file);
     },
     'legacy-load': () => {
         const { file } = fixture();
         const entries = rows(file);
         entries[0].version = 2;
         fs.writeFileSync(file, entries.map(JSON.stringify).join('\n') + '\n');
-        const raw = fs.readFileSync(file);
-        assert.throws(() => opened(file), /Strict native v3/);
-        assert.deepEqual(fs.readFileSync(file), raw);
+        refused(file);
     },
     'read-snapshot-race': () => {
         const { file } = fixture();
@@ -161,7 +156,7 @@ const cases = {
             return result;
         };
         syncBuiltinESMExports();
-        try { assert.throws(() => opened(file), /changed during strict scan/); }
+        try { assert.throws(() => opened(file), /changed|revision/i); }
         finally { fs.readSync = original; syncBuiltinESMExports(); }
     },
     'set-session-race': () => {

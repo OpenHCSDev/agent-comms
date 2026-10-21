@@ -61,7 +61,7 @@ includes package-source admission, unlike the earlier module-only integration.
 
 ## Provider-free evidence and scope
 
-`native-import-rpc.py` uses the exact copied canonical launcher, disposable
+`test-native-import-rpc.py` uses the exact copied canonical launcher, disposable
 HOME/agent/project and actual `pi install` of the in-root PR77 package. It checks
 the saved installation path resolves to that package, observes `mcp-status` and
 approval-command registration via `get_commands`, and invokes `/mcp-status` as a

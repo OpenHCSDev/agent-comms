@@ -26,8 +26,9 @@ assert.ok(pkg,'Prepared native package required');
 const requests=[];
 let overflowSent=false;
 let replyCount=0;
-// The declared cap reads each response's own usage right after it completes.
-const replyUsage=()=> mode!=='cap' ? 1200 : (++replyCount===2 ? 319995 : 1200);
+// The next input reads the completed response's reported usage.
+const replyUsage=()=> mode!=='cap' ? 1200 : (++replyCount===2
+    ? settings.getCompactionSettings().retainedContextTokens+1 : 1200);
 const chunk=(text,promptTokens)=>'data: '+JSON.stringify({id:'local',object:'chat.completion.chunk',created:1,
     model:'pi-compaction',choices:[{index:0,delta:{content:text},finish_reason:'stop'}],
     usage:{prompt_tokens:promptTokens,completion_tokens:5,total_tokens:promptTokens+5}})+'\n\ndata: [DONE]\n\n';
@@ -53,7 +54,7 @@ const server=createServer(async(request,response)=>{
     response.end(chunk('TRACKED_REPLY',replyUsage()));
 });
 const root=mkdtempSync(join(tmpdir(),'native-pi-compaction-'));
-let manager,session;
+let manager,session,settings;
 try {
     process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
     process.env.PI_TASK='TASK_BRIEF_FIXTURE';
@@ -73,13 +74,14 @@ try {
     const runtime=await pi.ModelRuntime.create({authPath:join(root,'auth.json'),modelsPath:join(root,'models.json'),modelsStorePath:join(root,'models-store.json')});
     await runtime.setRuntimeApiKey('compaction-local','local-only');
     const model=runtime.getModel('compaction-local','pi-compaction');
-    const settings=pi.SettingsManager.inMemory({compaction:{enabled:mode!=='cap',reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    settings=pi.SettingsManager.inMemory({compaction:{enabled:mode!=='cap',reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
     if(mode==='cap'){
         const budget=settings.getCompactionSettings();
         assert.equal(settings.getCompactionEnabled(),true,'the Core budget cannot be disabled per thread');
-        assert.equal(budget.retainedContextTokens,300000,'the payload budget owns the one global threshold');
-        assert.equal(pi.shouldCompact(300000,1000000,budget),false,'the exact threshold still fits');
-        assert.equal(pi.shouldCompact(300001,1000000,budget),true,'one token over the threshold compacts');
+        assert.ok(budget.retainedContextTokens<model.contextWindow-budget.reserveTokens,
+            'Core retains less than the advertised model window');
+        assert.equal(pi.shouldCompact(budget.retainedContextTokens,model.contextWindow,budget),false,'the exact threshold still fits');
+        assert.equal(pi.shouldCompact(budget.retainedContextTokens+1,model.contextWindow,budget),true,'one token over the threshold compacts');
     }
     const loader=new pi.DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:settings,noExtensions:true,noSkills:true,noPromptTemplates:true});
     await loader.reload();
@@ -88,7 +90,9 @@ try {
     manager.appendModelChange(model.provider,model.id);
     // Old history (summarized) followed by a recent turn (kept). The last
     // assistant usage puts the context past Pi's threshold (window - reserve).
-    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='cap' ? 250000 : 30000);
+    const budget=settings.getCompactionSettings();
+    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='cap'
+        ? budget.retainedContextTokens-budget.reserveTokens : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
         const historyRepeats=mode==='oversized' ? 25000 : 1500;
@@ -120,13 +124,15 @@ try {
         await session.prompt('UNDER_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,0,'context under the declared cap does not compact');
         assert.ok(!requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the request used the full session');
-        // The second reply's own usage crosses the retained-context threshold
-        // (still far below the model window); Pi compacts after that response.
+        // A completed answer settles first. AgentSession.prompt owns threshold
+        // compaction at the next input boundary, never withholding this answer.
         await session.prompt('OVER_CAP',{inputId:randomBytes(16).toString('hex')});
-        assert.equal(compactions().length,1,'the declared cap compacts right after the crossing response');
-        assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
-        // The next turn resumes from the compaction summary.
+        assert.equal(compactions().length,0,'the completed answer is not held behind compaction');
+        assert.equal(events.at(-1).type,'agent_settled');
+        assert.equal(manager.getLeafEntry().message.content[0].text,'TRACKED_REPLY');
         await session.prompt('RESUME',{inputId:randomBytes(16).toString('hex')});
+        assert.equal(compactions().length,1,'the next input compacts the retained crossing response');
+        assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
         assert.ok(requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the next request resumed from the compaction summary');
         assert.ok(!requests.at(-1).text.includes('OLD_FACT_0'),'summarized history left the context');
     } else if(mode==='manual'||mode==='oversized'){
