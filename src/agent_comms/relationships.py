@@ -35,7 +35,6 @@ from .peer_relevance import (
 )
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
-from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -688,7 +687,6 @@ class ThreadRelationships:
         self.registry = registry
         self.bus = bus
         self.views = views
-        self._wire_lock_path = root / "wire"
         self.store = RelationshipStore.at(root)
 
     def revision(self) -> presentation.WireRevision:
@@ -696,11 +694,10 @@ class ThreadRelationships:
         return self.views.revision()
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
 
     @staticmethod
     def _goal_contacts(
@@ -735,22 +732,20 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            contacts, diagnostics = self._goal_contacts(registry)
-            return (
-                tuple(row for row in contacts if row.counterpart(thread) is not None),
-                tuple(row for row in diagnostics if row.owner == thread.name),
-            )
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        contacts, diagnostics = self._goal_contacts(registry)
+        return (
+            tuple(row for row in contacts if row.counterpart(thread) is not None),
+            tuple(row for row in diagnostics if row.owner == thread.name),
+        )
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            contacts, _ = self._goal_contacts(registry)
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        contacts, _ = self._goal_contacts(registry)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
         records: dict[ThreadIncarnation, list[RelationRecord]] = {}
         for peer in registry.threads.values():
@@ -780,10 +775,9 @@ class ThreadRelationships:
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = registry.require(owner)
-            relations = self.peer_relations(owner)
+        registry = self.registry.snapshot()
+        thread = registry.require(owner)
+        relations = self.peer_relations(owner)
         messages, _ = self._recent_messages()
         correspondents: dict[str, float] = {}
         for message in messages:
@@ -806,56 +800,53 @@ class ThreadRelationships:
 
     def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = self.registry.require(owner)
-            edges = self.store.read().resolved(registry).collaborations
-            explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
-            contacts, diagnostics = self._goal_contacts(registry)
-            visible: dict[ThreadIncarnation, RelationshipEntry] = {}
-            for relation in (*explicit, *contacts):
-                identity = relation.counterpart(thread)
-                if identity is None:
-                    continue
-                visible[identity] = relation.entry(
-                    identity, None, identity.current(registry), visible.get(identity),
-                )
-            return Contacts(
-                explicit,
-                tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
-                tuple(row for row in diagnostics if row.owner == thread.name),
+        registry = self.registry.snapshot()
+        thread = self.registry.require(owner)
+        edges = self.store.read().resolved(registry).collaborations
+        explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
+        contacts, diagnostics = self._goal_contacts(registry)
+        visible: dict[ThreadIncarnation, RelationshipEntry] = {}
+        for relation in (*explicit, *contacts):
+            identity = relation.counterpart(thread)
+            if identity is None:
+                continue
+            visible[identity] = relation.entry(
+                identity, None, identity.current(registry), visible.get(identity),
             )
+        return Contacts(
+            explicit,
+            tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
+            tuple(row for row in diagnostics if row.owner == thread.name),
+        )
 
     def edit(
         self, owner: str, action: type[RelationshipEdit], peer: str, note: str = ""
     ) -> Collaboration | None:
         command = action(note)
-        with _store_lock(self._wire_lock_path):
-            first = self.registry.require(owner)
-            first.role.require_executable(ValueError("Collaborations relate agent threads"))
-            registry = self.registry.snapshot()
-            peer = registry.canonical_name(peer)
-            result = None
+        first = self.registry.require(owner)
+        first.role.require_executable(ValueError("Collaborations relate agent threads"))
+        registry = self.registry.snapshot()
+        peer = registry.canonical_name(peer)
+        result = None
 
-            def change(document: RelationshipDocument) -> RelationshipDocument:
-                nonlocal result
-                resolved = document.resolved(registry)
-                changed, result = command.apply(
-                    RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
-                )
-                return document if changed == document else changed
+        def change(document: RelationshipDocument) -> RelationshipDocument:
+            nonlocal result
+            resolved = document.resolved(registry)
+            changed, result = command.apply(
+                RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
+            )
+            return document if changed == document else changed
 
-            self.store.update(change)
-            return result
+        self.store.update(change)
+        return result
 
     def set_order(self, owner: str, group: type[SortableRelationshipGroup],
                   order: type[ThreadSort]) -> type[ThreadSort]:
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(owner)
-            registry = self.registry.snapshot()
-            self.store.update(
-                lambda document: group.ordered(document.resolved(registry), thread, order)
-            )
+        thread = self.registry.require(owner)
+        registry = self.registry.snapshot()
+        self.store.update(
+            lambda document: group.ordered(document.resolved(registry), thread, order)
+        )
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
@@ -866,13 +857,12 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            registry = self.registry.snapshot()
-            thread = registry.require(owner)
-            state = self.store.read().resolved(registry)
-            edges = state.collaborations
-            goal_contacts, goal_diagnostics = self._goal_contacts(registry)
-            delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
+        registry = self.registry.snapshot()
+        thread = registry.require(owner)
+        state = self.store.read().resolved(registry)
+        edges = state.collaborations
+        goal_contacts, goal_diagnostics = self._goal_contacts(registry)
+        delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
             for view in self.views.thread_views(RosterVisibility(archived=True))

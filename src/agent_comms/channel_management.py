@@ -18,7 +18,6 @@ from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MembershipConversationRole
 from .registration import Registration
-from .store_files import _store_lock
 from .threads import Thread
 from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
@@ -60,7 +59,7 @@ class KeepThreadsTagDisposition(TagDisposition):
         return f"Remove {self.tag_names(tag)} from their threads? Threads, saved views and history remain."
 
     def apply(self, channels, tag, cohort):
-        channels._change_tag_unlocked(tag, None, cohort)
+        channels._apply_tag_change(tag, None, cohort)
         return TagChangeResult(tag, True)
 
 
@@ -87,7 +86,7 @@ class DeleteThreadsTagDisposition(TagDisposition):
     def apply(self, channels, tag, cohort):
         selected = self.deletion_cohort(channels, tag, cohort)
         channels.threads._delete_unlocked(selected)
-        channels._change_tag_unlocked(tag, None, tuple(thread for thread in cohort
+        channels._apply_tag_change(tag, None, tuple(thread for thread in cohort
                                                      if thread not in selected))
         return TagChangeResult(tag, True, tuple(thread.incarnation for thread in selected))
 
@@ -131,7 +130,6 @@ class ChannelManagement:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self._wire_lock_path = root / "wire"
         self.threads = threads
         self.catalog = threads.catalog
 
@@ -145,7 +143,7 @@ class ChannelManagement:
 
     def create_tag(self, name: str) -> Tag:
         tag = Tag(name)
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.catalog.editing() as document:
             document.create_tag(tag.name)
         return tag
 
@@ -154,18 +152,18 @@ class ChannelManagement:
     ) -> Thread:
         for tag in add | remove:
             Tag.validate(tag)
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            return self._update_tags_locked(name, add=add, remove=remove)
+        with guard_original_root_write(self.root):
+            return self._update_tags(name, add=add, remove=remove)
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
             Tag.validate(tag)
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root):
             thread = self.registry.require(name)
-            return self._update_tags_locked(thread.name, add=tags - thread.tags,
+            return self._update_tags(thread.name, add=tags - thread.tags,
                                             remove=thread.tags - tags)
 
-    def _update_tags_locked(self, name, *, add, remove) -> Thread:
+    def _update_tags(self, name, *, add, remove) -> Thread:
         self._require_available_new_tags(add)
         thread = self.registry.require(name)
         previous_channels = self.bus.channel_declarations()
@@ -195,43 +193,43 @@ class ChannelManagement:
         return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             document.set_view(view, activity)
             result = document.saved_views[view.name]
         return result
 
     def delete_saved_view(self, name: str) -> None:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.catalog.editing() as document:
             document.delete_view(name)
 
     def set_channel_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             return document.set_metadata(name, activity, parent=parent, archived=archived)
 
     def set_channel_archived(self, name: str, archived: bool) -> Channel:
-        with self.bus.opened_activity() as activity, guard_original_root_write(self.root), _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, guard_original_root_write(self.root), self.catalog.editing() as document:
             channel = document.require_channel(name, activity)
             return document.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             return document.set_any_mode(name, enabled, activity)
 
     def set_channel_sort(self, name: str, order: type[ThreadSort]) -> Channel:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             return document.set_preferences(name, activity, order=order)
 
     def set_channel_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.catalog.editing() as document:
             document.list_order = order
         return order
 
     def set_channel_pinned(self, name: str, pinned: bool) -> Channel:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+        with self.bus.opened_activity() as activity, self.catalog.editing() as document:
             return document.set_preferences(name, activity, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path):
+        with self.bus.opened_activity() as activity:
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
             with self.catalog.editing() as document:
@@ -260,7 +258,7 @@ class ChannelManagement:
         Tag.validate(name)
         if disposition.requires_confirmation and not confirmed:
             raise ValueError(disposition.confirmation(name))
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root):
             snapshot = self.registry.snapshot()
             if name not in self.catalog.read().tags:
                 raise ValueError(f"Unknown tag: {name!r}")
@@ -269,7 +267,7 @@ class ChannelManagement:
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag.validate(name)
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root):
             if name not in self.catalog.read().tags:
                 raise ValueError(f"Unknown tag: {name!r}")
             if replacement is not None:
@@ -278,9 +276,9 @@ class ChannelManagement:
                 )
 
             cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
-            self._change_tag_unlocked(name, replacement, cohort)
+            self._apply_tag_change(name, replacement, cohort)
 
-    def _change_tag_unlocked(self, name: str, replacement: str | None,
+    def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
         with self.catalog.editing() as document:
             document.change_tag(name, replacement)
