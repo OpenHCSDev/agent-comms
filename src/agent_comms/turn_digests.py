@@ -46,9 +46,10 @@ class TurnBound(DeclaredFamily):
         return len(turns)
 
     def older(self, turns: tuple[TurnDigest, ...]) -> TurnBound:
-        """Continue from the oldest recorded start, retaining undated turns in the answer."""
-        return next((TurnsBefore(at=at, count=self.page_count(turns))
-                     for turn in reversed(turns) for at in turn.start.timestamps()), self)
+        """A recorded identity continues even across undated or equal-time turns."""
+        if not turns:
+            return self
+        return TurnsOlderThan(turn_id=turns[-1].turn_id, count=self.page_count(turns))
 
     @abstractmethod
     def includes(self, turn: TurnDigest) -> bool:
@@ -96,6 +97,20 @@ class TurnsBefore(LastTurns):
 
     def skips(self, turn: TurnDigest) -> bool:
         return not turn.starts_before(self.at)
+
+
+@dataclass(frozen=True)
+class TurnsOlderThan(LastTurns):
+    """Read older than an already returned original turn, not an offset from the newest."""
+
+    turn_id: str = field(kw_only=True)
+
+    def take(self, turns: Iterable[TurnDigest]) -> tuple[TurnDigest, ...]:
+        remaining = iter(turns)
+        for turn in remaining:
+            if turn.turn_id == self.turn_id:
+                return super().take(remaining)
+        raise ToolRefusedError(f"Continuation turn {self.turn_id!r} is not in the recorded transcript.")
 
 
 @dataclass(frozen=True)
