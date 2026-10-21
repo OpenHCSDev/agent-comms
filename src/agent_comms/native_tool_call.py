@@ -51,7 +51,9 @@ class CoordinationBusy(SelectedToolDenied):
 
 
 class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
-    def accepts_current_request(self, call, candidate) -> bool:
+    def accepts_current_request(self, call: NativeToolCall, candidate: NativeToolCall) -> bool:
+        if self.items_with(Complete, call):
+            return False
         call.correlate(candidate)
         return True
 

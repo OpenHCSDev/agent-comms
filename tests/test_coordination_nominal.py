@@ -179,7 +179,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 FailedAssignment,
                 expected_revision=1,
             ).value
-            settled.lifecycle.require_failure()
+            settled.lifecycle.require_failure(ValueError("failure required"))
             assert settled.lifecycle.mode == assignment.lifecycle.mode
             assert store.assignments.get("assignment") == settled
     finally:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IntegrityViolationError, IdentityConflict
@@ -12,6 +12,10 @@ from .field_codec import NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
+
+if TYPE_CHECKING:
+    from .coordination_session import CoordinationSession
+    from .coordination_tables.responses import ResponseObligation
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +56,12 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
 
     def require_publishing(self) -> None:
         raise IdentityConflict("no frozen publishing intent for current owner")
+
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
+        """Only a deferred response needs to reengage."""
 
     def require_nonpublication(self) -> None:
         if not self.retryable:
@@ -100,6 +110,21 @@ class PublishingResponse(ResponseState):
 
 class DeferredResponse(Deferred, ResponseState):
     retryable = True
+
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
+        from .coordination_tables.responses import ResponseObligation
+        from .reason_codes import NoReasonCode
+
+        ResponseObligation.update(
+            session._connection,
+            where="execution_id=? AND exact_target=?",
+            parameters=(execution_id, obligation.exact_target),
+            lifecycle=PendingResponse(), revision=obligation.revision + 1,
+            reason_code=NoReasonCode(), updated_at_ms=session.now(obligation.updated_at_ms),
+        )
 
     @classmethod
     def successors(cls):

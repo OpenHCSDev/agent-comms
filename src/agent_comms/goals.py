@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
+from agent_comms.lifecycle_capability import Active, Settled
 
 import json
 import os
@@ -557,8 +557,8 @@ class RequestGoalOrder(GoalOrder):
         pass
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        for previous in goal.state.unsettled_items(goal):
-            raise ValueError(f"Request {previous.id} is still open; mark it done first.")
+        if not goal.state.items_with(Settled, goal):
+            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         if self.serving(goal, goals, owner):
@@ -572,8 +572,8 @@ class RequestGoalOrder(GoalOrder):
 
     def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
         """A closed request is replaced by one the directive opens; an open one records it."""
-        for previous in goal.state.unsettled_items(goal):
-            return replace(previous, revision=previous.revision + 1, order=replace(
+        if not goal.state.items_with(Settled, goal):
+            return replace(goal, revision=goal.revision + 1, order=replace(
                 self, directives=(*self.directives, directive.directive())))
         return directive.request(goal, ctx)
 

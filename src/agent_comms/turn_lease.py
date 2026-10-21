@@ -445,9 +445,6 @@ class NoTurnRecord(NullMember, TurnRecord):
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
-    def executing_items[T](self, *items: T) -> tuple[T, ...]:
-        raise RelationViolationError("Turn reference must be bound by its registry")
-
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity)
 

@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .coordination_session import CoordinationSession
-    from .coordination_tables.responses import ResponseObligation
-    from .native_tool_call import NativeToolCall
-
-
 class LifecycleCapability:
     """The neutral behavior shared by lifecycle families, without another registry."""
 
     @classmethod
-    def require_nonatomic_advance(cls) -> None:
+    def require_nonatomic_advance(cls, refusal: type[Exception]) -> None:
         """An unfinished state may be recorded before atomic settlement."""
 
     @classmethod
@@ -38,14 +30,6 @@ class LifecycleCapability:
         return items if issubclass(cls, capability) else ()
 
     @classmethod
-    def executing_items[T](cls, *items: T) -> tuple[T, ...]:
-        return ()
-
-    @classmethod
-    def unsettled_items[T](cls, *items: T) -> tuple[T, ...]:
-        return items
-
-    @classmethod
     def require_no_pending(cls, refusal: Exception) -> None:
         pass
 
@@ -53,25 +37,15 @@ class LifecycleCapability:
     def require_review(cls) -> None:
         raise ValueError("Reviewed inputs changed; inspect them again.")
 
-    def require_failure(self) -> None:
-        from .goal_attempt_identity import FailureNotObserved
-
-        raise FailureNotObserved("missing_binding")
+    def require_failure(self, refusal: Exception) -> None:
+        raise refusal
 
     def accepts_interrupted_execution(self) -> bool:
         return False
 
-    @classmethod
-    def resume_response(
-        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
-    ) -> None:
-        """A response that was not deferred has nothing to reengage."""
-
 
 class Settled(LifecycleCapability):
-    @classmethod
-    def unsettled_items[T](cls, *items: T) -> tuple[T, ...]:
-        return ()
+    pass
 
 
 class Terminal(Settled):
@@ -82,16 +56,14 @@ class Terminal(Settled):
         return ()
 
     @classmethod
-    def require_nonatomic_advance(cls) -> None:
-        from .coordination_errors import IdentityConflict
-
-        raise IdentityConflict("terminal phases require atomic settlement")
+    def require_nonatomic_advance(cls, refusal: type[Exception]) -> None:
+        raise refusal("terminal phases require atomic settlement")
 
 
 class Failed(LifecycleCapability):
     """Failure evidence can support an interrupted execution, including a retry."""
 
-    def require_failure(self) -> None:
+    def require_failure(self, refusal: Exception) -> None:
         pass
 
     def accepts_interrupted_execution(self) -> bool:
@@ -110,10 +82,6 @@ class Active(LifecycleCapability):
 
 
 class Executing(LifecycleCapability):
-    @classmethod
-    def executing_items[T](cls, *items: T) -> tuple[T, ...]:
-        return items
-
     def require_executing(self) -> None:
         """An observed execution satisfies its owner's start requirement."""
 
@@ -125,31 +93,12 @@ class Unresolved(LifecycleCapability):
 
 
 class Deferred(LifecycleCapability):
-    @classmethod
-    def resume_response(
-        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
-    ) -> None:
-        from .coordination_tables.responses import ResponseObligation
-        from .obligation_states import PendingResponse
-        from .reason_codes import NoReasonCode
-
-        ResponseObligation.update(
-            session._connection,
-            where="execution_id=? AND exact_target=?",
-            parameters=(execution_id, obligation.exact_target),
-            lifecycle=PendingResponse(), revision=obligation.revision + 1,
-            reason_code=NoReasonCode(), updated_at_ms=session.now(obligation.updated_at_ms),
-        )
+    pass
 
 
 class Complete(Settled):
     def assert_complete(self) -> None:
         """The outcome has been recorded; no uncertain work remains."""
-
-    def accepts_current_request(
-        self, call: NativeToolCall, candidate: NativeToolCall
-    ) -> bool:
-        return False
 
 
 class Successful(Terminal):

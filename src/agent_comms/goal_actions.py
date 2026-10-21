@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .lifecycle_capability import Settled
+
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
@@ -417,12 +419,11 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
         # Revoke the old protected goal before replacing its registry identity.
         attempts = ctx.goals.open_goal_store()
         generation = attempts.snapshot(goal.id)
-        if generation is not None:
-            for previous in generation.lifecycle.unsettled_items(generation):
-                attempts.retire_goal(
-                    goal.id, expected_generation=previous.number,
-                    attempt_id=previous.attempt_id,
-                )
+        if generation is not None and not generation.lifecycle.items_with(Settled, generation):
+            attempts.retire_goal(
+                goal.id, expected_generation=generation.number,
+                attempt_id=generation.attempt_id,
+            )
 
 
 @dataclass(frozen=True, kw_only=True)

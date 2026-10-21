@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from agent_comms.lifecycle_capability import Executing
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution
@@ -398,7 +399,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            return any(not bool(state.active.executing_items(state.active)) and state.finished_turn_id for state in states)
+            return any(not bool(state.active.items_with(Executing, state.active)) and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(

@@ -142,7 +142,7 @@ class AttemptStore:
     ) -> Applied[StartResult]:
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
-        phase.require_nonatomic_advance()
+        phase.require_nonatomic_advance(IdentityConflict)
         with self.session.writing():
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:

@@ -202,7 +202,7 @@ class FailedTurnProjection:
             attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
             if attempt is None:
                 return cls("unavailable", "missing_binding")
-            attempt.phase.require_failure()
+            attempt.phase.require_failure(FailureNotObserved())
         except FailureNotObserved as error:
             return cls("unavailable", str(error))
         row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)

@@ -9,6 +9,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import ExecutionState
 from agent_comms.goal_generation import GenerationState
+from agent_comms.goal_attempt_identity import FailureNotObserved
 from agent_comms.goal_states import GoalState
 from agent_comms.lifecycle_capability import (
     Active, Complete, Deferred, Executing, Failed, Pending, Successful, Terminal, Unresolved,
@@ -51,7 +52,7 @@ def test_terminal_states_require_atomic_settlement(family):
         # CompletedGoal alone declares an idempotent self-transition; it cannot resume.
         assert all(successor is member for successor in member.successors())
         with pytest.raises(IdentityConflict, match="atomic settlement"):
-            member.require_nonatomic_advance()
+            member.require_nonatomic_advance(IdentityConflict)
 
 
 @pytest.mark.parametrize("family", [PiStopReason, ResponseState])
@@ -66,7 +67,7 @@ def test_successful_states_contribute_and_refuse_failure_evidence(family):
 def test_failed_attempts_support_interrupted_executions():
     for member in AttemptState.members_with(Failed):
         state = member.load(None, True, True)
-        state.require_failure()
+        state.require_failure(FailureNotObserved())
         assert state.accepts_interrupted_execution()
 
 
@@ -89,7 +90,7 @@ def test_executing_turns_satisfy_execution_requirement():
     for member in TurnDeclaration.members_with(Executing):
         turn = member("turn", 1)
         turn.require_executing()
-        assert turn.executing_items(turn) == (turn,)
+        assert turn.items_with(Executing, turn) == (turn,)
 
 
 def test_unresolved_incidents_remain_available_for_review():
@@ -103,7 +104,6 @@ def test_complete_goals_have_no_unsettled_work():
     for member in GoalState.members_with(Complete):
         state = member()
         state.assert_complete()
-        assert not state.unsettled_items(state)
         assert state.items_with(Complete, state) == (state,)
 
 

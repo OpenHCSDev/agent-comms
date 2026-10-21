@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
+from agent_comms.lifecycle_capability import Executing
 
 from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
@@ -217,7 +218,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
-    assert not bool(comms.registry.require('owner').turn_state.active.executing_items(comms.registry.require('owner').turn_state.active))
+    assert not bool(comms.registry.require('owner').turn_state.active.items_with(Executing, comms.registry.require('owner').turn_state.active))
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
@@ -254,7 +255,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     current = comms.registry.require("owner")
     # A claim linearized before the pause is visible for explicit drain; a
     # claim after pause is denied. Neither is silently retried or erased.
-    assert bool(current.turn_state.active.executing_items(current.turn_state.active)) == (result == "claimed")
+    assert bool(current.turn_state.active.items_with(Executing, current.turn_state.active)) == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")

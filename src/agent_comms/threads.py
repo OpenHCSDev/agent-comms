@@ -25,6 +25,7 @@ from .goals import (
     NoGoal,
 )
 from .launch_root import LaunchRoot
+from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
 from .native_arguments import NativeArguments
 from .native_tools import NativeRequestTools
@@ -488,7 +489,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def executing(self) -> bool:
-        return bool(self.turn_record.executing_items(self))
+        return bool(self.turn_record.items_with(Executing, self))
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""

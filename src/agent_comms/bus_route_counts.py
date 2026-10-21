@@ -635,5 +635,5 @@ class CompletingRouteCounts(OpenedRouteCounts):
 
     def _prepare(self) -> None:
         self._preparation = self.sync(self.source, self._decode)
-        while self._preparation.unsettled_items(self):
+        while not self._preparation.items_with(Complete, self):
             self._preparation = self.sync(self.source, self._decode)
