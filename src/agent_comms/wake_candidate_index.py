@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from .delivery_policy import KeyedResponseAcknowledgement
+from .delivery_policy import ResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
@@ -191,7 +191,7 @@ class CandidateCatchUp:
 class _ParsedRow:
     seq: int
     recipients: tuple[Candidate, ...]
-    response: KeyedResponseAcknowledgement | None
+    response: ResponseAcknowledgement
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,8 +332,7 @@ class WakeCandidateIndex(TypedStore, DerivedTables):
             parsed = cls._parse_row(record, source.metadata.root_id, last_seq)
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
-            if parsed.response is not None:
-                response_keys.append(CandidateResponseKey(parsed.response.publication_key))
+            response_keys.extend(map(CandidateResponseKey, parsed.response.publication_keys()))
             through = end
         return _ReplayBatch(through, last_seq, tuple(rows), tuple(response_keys))
 

@@ -590,11 +590,8 @@ class CheckedRead:
             return None
         # IDs can repeat across senders; only this publication key selects the answer.
         for original in DeliverySources.by_message_id(self, intent.expected_message_id):
-            acknowledgement = original.acknowledgement
-            if not acknowledgement or acknowledgement.publication_key != intent.publication_key:
+            if not original.acknowledgement.answers(intent.publication_key, intent.execution_id):
                 continue
-            if acknowledgement.execution_id != intent.execution_id:
-                raise RelationViolationError("Response publication identity conflicts.")
             if not intent.matches_publication(original.message):
                 raise RelationViolationError("Response publication intent conflicts.")
             self.require_current()

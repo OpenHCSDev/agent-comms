@@ -4,18 +4,52 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Self
 
 from .audience_manifest import FrozenAudience
 from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .wake import ControlClassification, resolve_wake_cohort
 from .wake_policy import MessageAudience, WakeDecision
 
 
+class ResponseAcknowledgement(SubclassUnion, affix="ResponseAcknowledgement"):
+    """A keyed response's acknowledgement, or null on an original delivery."""
+
+    @abstractmethod
+    def require(self, root_id, message) -> Self:
+        """This acknowledgement, proved against its wire root and public envelope."""
+
+    @abstractmethod
+    def add_unique(self, seen_keys: set[str]) -> None: ...
+
+    @abstractmethod
+    def publication_keys(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def answers(self, publication_key: str, execution_id: str) -> bool:
+        """Whether this acknowledges that publication; one key under another execution conflicts."""
+
+
 @dataclass(frozen=True)
-class KeyedResponseAcknowledgement:
+class NoResponseAcknowledgement(NullMember, ResponseAcknowledgement):
+    def require(self, root_id, message) -> Self:
+        return self
+
+    def add_unique(self, seen_keys: set[str]) -> None:
+        """An original delivery carries no response key."""
+
+    def publication_keys(self) -> tuple[str, ...]:
+        return ()
+
+    def answers(self, publication_key: str, execution_id: str) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class KeyedResponseAcknowledgement(RecordMember, ResponseAcknowledgement):
     wire_root_id: str
     execution_id: str
     publication_key: str
@@ -36,6 +70,16 @@ class KeyedResponseAcknowledgement:
         if self.publication_key in seen_keys:
             raise MalformedRecord("Duplicate response publication key.")
         seen_keys.add(self.publication_key)
+
+    def publication_keys(self) -> tuple[str, ...]:
+        return (self.publication_key,)
+
+    def answers(self, publication_key: str, execution_id: str) -> bool:
+        if self.publication_key != publication_key:
+            return False
+        if self.execution_id != execution_id:
+            raise RelationViolationError("Response publication identity conflicts.")
+        return True
 
 
 @dataclass(frozen=True)
@@ -66,12 +110,12 @@ class DeliveryPolicy(DeclaredFamily, affix="DeliveryPolicy"):
     @abstractmethod
     def resolve(message, audience, control): ...
 
-    def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement | None:
-        return None
+    def require_acknowledgement(self, root_id, message) -> ResponseAcknowledgement:
+        return NoResponseAcknowledgement()
 
     @property
-    def acknowledgement(self) -> KeyedResponseAcknowledgement | None:
-        return None
+    def acknowledgement(self) -> ResponseAcknowledgement:
+        return NoResponseAcknowledgement()
 
 
 class InitialDeliveryPolicy(DeliveryPolicy):

@@ -9,19 +9,19 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
+from .delivery_policy import NoResponseAcknowledgement, ResponseAcknowledgement
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .delivery_policy import KeyedResponseAcknowledgement
     from .wire_metadata import WireMetadata
 
 
 class WireRecord(ABC):
     __slots__ = ()
-    acknowledgement: KeyedResponseAcknowledgement | None = None
+    acknowledgement: ResponseAcknowledgement = NoResponseAcknowledgement()
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
@@ -83,8 +83,7 @@ class WireRecord(ABC):
                      if message.type.conversation_message)
 
     def record_key(self, seen: set[str]) -> None:
-        if self.acknowledgement is not None:
-            self.acknowledgement.add_unique(seen)
+        self.acknowledgement.add_unique(seen)
 
     @abstractmethod
     def require_claim(self, metadata: WireMetadata) -> None: ...
@@ -152,5 +151,3 @@ class WireScan:
         except MalformedRecord as error:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
-
-from .delivery_policy import KeyedResponseAcknowledgement
