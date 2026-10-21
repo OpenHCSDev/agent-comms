@@ -9,7 +9,7 @@ from agent_comms.bus import Bus, PrivateRecord, PublicRecord
 from agent_comms.candidate_maintenance import drain_candidate_catchup, schedule_candidate_catchup
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -32,9 +32,9 @@ def peer():
     return RecordedThreadIncarnation("peer", 1001.0)
 
 
-def append_reply(bus, sender, recipient, body="reply"):
-    def build(seq):
-        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq)
+def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole()):
+    def build(seq, db):
+        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq, role=role)
         audience = freeze_audience(
             message, (FrozenRecipient(recipient.lookup, recipient.name),), "c" * 64,
             sender_lookup=sender.lookup, sender_name=sender.name)
@@ -70,7 +70,7 @@ def test_rebuild_recreates_the_same_candidate_rows(bus, owner, peer):
 
 def test_scan_progress_includes_non_candidate_suffix_and_is_bounded(bus, owner, peer):
     first = append_reply(bus, peer, owner)
-    public = tuple(bus.append(lambda seq: PublicRecord.from_message(
+    public = tuple(bus.append(lambda seq, db: PublicRecord.from_message(
         Message("external", "owner", "public", InfoKind, seq=seq))) for _ in range(3))
     index = WakeCandidateIndex(bus)
     hint = CommittedAppendHint.capture("a" * 32, public[-1].seq)
@@ -97,7 +97,7 @@ def test_background_maintenance_coalesces_committed_sequences(bus, owner, peer):
 
 
 def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
-    messages = tuple(bus.append(lambda seq, target=target: PublicRecord.from_message(
+    messages = tuple(bus.append(lambda seq, db, target=target: PublicRecord.from_message(
         Message("sender", target, "visible", InfoKind, seq=seq)))
         for target in ("#team", "#elsewhere", "#team", "#team"))
     first, _, middle, last = messages
@@ -116,10 +116,14 @@ def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, pee
         targets=(GoalWaitTarget(peer),), owner=owner, target_turn_generations=(None,),
         report_turn_id=None, report_turn_generation=None)
     assert not wait.has_reply(bus, owner)
-    bus.append(lambda seq: PublicRecord.from_message(
+    bus.append(lambda seq, db: PublicRecord.from_message(
         Message("other", owner.name, "not a private dependency reply", InfoKind, seq=seq)))
-    reply = append_reply(bus, peer, owner)
-    assert wait.has_reply(bus, owner)
+    append_reply(bus, peer, owner, "notice is not a dependency reply", role=NoticeRole())
+    append_reply(bus, RecordedThreadIncarnation("other", 1002.0), owner, "unrelated private reply")
+    assert not wait.has_reply(bus, owner)
+    renamed_owner = replace(owner, name="renamed-owner")
+    reply = append_reply(bus, peer, renamed_owner)
+    assert wait.has_reply(bus, renamed_owner)
     assert not replace(wait, after_seq=reply.seq).has_reply(bus, owner)
     assert not replace(wait, targets=(GoalWaitTarget(
         RecordedThreadIncarnation(peer.name, 2000.0)),)).has_reply(bus, owner)

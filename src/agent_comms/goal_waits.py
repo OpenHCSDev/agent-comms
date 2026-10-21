@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_publication import CommittedDelivery
+from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .goal_presentation import (
@@ -199,16 +200,15 @@ class RecordedGoalWait(GoalWait):
     def has_reply(self, bus: Bus, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):
             return False
-        after = self.after_seq
-        while records := bus.received(
-            owner.lookup, after=after, limit=1, descending=False,
-            sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
-        ):
-            record, = records
-            if any(self.matches(original, owner) for original in record.deliveries()):
-                return True
-            after = record.seq
-        return False
+        return any(
+            self.matches(original, owner)
+            for record in bus.received(
+                owner.lookup, after=self.after_seq, limit=1, descending=False,
+                sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
+                source=DirectReplySource,
+            )
+            for original in record.deliveries()
+        )
 
 
 class InputExclusion(DeclaredFamily, affix="Exclusion"):
