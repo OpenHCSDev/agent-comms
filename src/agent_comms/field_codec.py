@@ -402,6 +402,9 @@ class Argument(FieldDirective):
     def description(self, name: str) -> str:
         return FieldCodec.decode(str, self.options.get("help", name.replace("_", " ").capitalize()))
 
+    def flags_for(self, name: str) -> tuple[str, ...]:
+        return self.flags or ("--" + name.replace("_", "-"),)
+
     def add_to(
         self,
         parser: argparse.ArgumentParser,
@@ -415,7 +418,7 @@ class Argument(FieldDirective):
             **self.options,
         }
         self.default.apply(options, plan)
-        flags = self.flags or ("--" + plan.name.replace("_", "-"),)
+        flags = self.flags_for(plan.name)
         if any(flag.startswith("-") for flag in flags):
             options["dest"] = plan.key
         else:

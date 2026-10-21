@@ -97,7 +97,7 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
 
 def test_connector_unit_owns_exec_start_and_readiness(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    root = tmp_path / "bus with spaces"
+    root = tmp_path / "bus with spaces %and $value"
     command = ConnectorVerb.parse((
         "install-service", "--root", str(root), "--port", "18821",
         "--issuer", "https://connector.example.test",
@@ -109,7 +109,7 @@ def test_connector_unit_owns_exec_start_and_readiness(tmp_path, monkeypatch):
     text = service.unit_text(service.exec_arguments(command.issuer))
     expected = (
         f'ExecStart="{LaunchRuntime.current_pointer()}/bin/agent-comms-connector" '
-        f'"serve" "--root" "{root}" "--port" "18821" '
+        f'"serve" "--root" "{tmp_path}/bus with spaces %%and $$value" "--port" "18821" '
         '"--issuer" "https://connector.example.test"'
     )
     assert expected in text.splitlines()

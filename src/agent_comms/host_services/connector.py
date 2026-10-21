@@ -76,11 +76,11 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
 
     def exec_arguments(self, issuer: str) -> tuple[str, ...]:
         endpoint = ServeVerb(root=self.launch.path, port=self.port, issuer=issuer)
-        return (ServeVerb.declared_name, *endpoint.command_arguments())
+        return endpoint.command_arguments()
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstallServiceVerb(ConnectorOptions, ConnectorVerb, declared_name="install-service"):
+class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
     """Write and enable the connector's declared unit without starting it."""
 
     help = "Install the complete user service unit through the current runtime"

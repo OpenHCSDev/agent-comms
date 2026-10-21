@@ -815,7 +815,7 @@ class ConnectorVerb(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorOptions(DeclaredOptions):
+class ConnectorOptions(ConnectorVerb, declared_name=None):
     """The endpoint's CLI fields and their declared argument spelling."""
 
     root: Annotated[
@@ -837,13 +837,13 @@ class ConnectorOptions(DeclaredOptions):
     ] = f"http://{LOOPBACK}:{PORT}"
 
     def command_arguments(self) -> tuple[str, ...]:
-        return tuple(word for plan in FieldCodec.field_plans(type(self))
-                     for word in (Argument.declared(plan.annotation).flags[0],
-                                  str(plan.current(self))))
+        return (self.declared_name, *(word for plan in FieldCodec.field_plans(type(self))
+                for word in (Argument.declared(plan.annotation).flags_for(plan.name)[0],
+                             str(plan.current(self)))))
 
 
 @dataclass(frozen=True, kw_only=True)
-class ServeVerb(ConnectorOptions, ConnectorVerb):
+class ServeVerb(ConnectorOptions):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
