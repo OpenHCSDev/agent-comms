@@ -9,6 +9,9 @@ permissions:
   contents: read
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build and validate distributions
     runs-on: ubuntu-latest
@@ -35,7 +38,7 @@ jobs:
   publish:
     name: Publish distribution to PyPI
     if: github.event_name == 'release'
-    needs: build
+    needs: [ci, build]
     runs-on: ubuntu-latest
     environment:
       name: pypi

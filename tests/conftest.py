@@ -121,8 +121,9 @@ def pytest_sessionstart(session):
 
     prepare-pi-native keys its build by the pin and reuses a verified one, so an
     unchanged pin costs nothing and a changed pin rebuilds without anyone remembering.
+    Collection loads declarations only; it neither starts workers nor needs a native build.
     """
-    if is_xdist_worker(session) or pinned_location().is_dir():
+    if session.config.option.collectonly or is_xdist_worker(session) or pinned_location().is_dir():
         return
     root = Path(__file__).resolve().parents[1]
     subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
