@@ -766,7 +766,8 @@ class DeclaredSpellings:
         call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
     class_word: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+")
-    type_variable: typing.ClassVar[str] = typing.TypeVar.__name__
+    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
+    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
     entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
@@ -847,17 +848,18 @@ class DeclaredSpellings:
                               keywords=keywords) if call == self.type_variable:
                     expressions.extend(arguments[1:])
                     expressions.extend(keyword.value for keyword in keywords)
-        typed = {id(part) for expression in filter(None, expressions) for part in ast.walk(expression)}
+        typed = {id(part) for expression in filter(None, expressions)
+                 for part in ast.walk(expression)}
         metadata = {id(part) for node in ast.walk(tree) if id(node) in typed
                     for part in self.annotated_metadata(node)}
         return typed - metadata
 
-    @staticmethod
-    def annotated_metadata(node: ast.AST) -> Iterator[ast.AST]:
+    @classmethod
+    def annotated_metadata(cls, node: ast.AST) -> Iterator[ast.AST]:
         """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
         match node:
             case ast.Subscript(value=ast.Name(id=name) | ast.Attribute(attr=name),
-                               slice=ast.Tuple(elts=[_, *extras])) if name == Annotated.__name__:
+                               slice=ast.Tuple(elts=[_, *extras])) if name == cls.annotated:
                 for extra in extras:
                     yield from ast.walk(extra)
 
