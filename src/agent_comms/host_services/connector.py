@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.request
 from dataclasses import dataclass, field
@@ -78,8 +77,7 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
     @classmethod
     def from_process(cls, pid: int) -> Self:
         # Our installed console script's argv is interpreter, script, verb, options.
-        arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[:-1]
-        endpoint = ServeVerb.parse(tuple(os.fsdecode(word) for word in arguments[2:]))
+        endpoint = ServeVerb.parse(cls.process_arguments(pid)[2:])
         return cls(launch=LaunchRoot.from_path(endpoint.root), port=endpoint.port)
 
     def exec_arguments(self, issuer: str) -> tuple[str, ...]:
