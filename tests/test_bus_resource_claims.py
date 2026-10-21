@@ -26,7 +26,7 @@ from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.typed_table import StoreCommittedError, TypedTable
-from test_bus import record_from
+from bus_record_fixture import record_from
 
 
 @dataclass(frozen=True)

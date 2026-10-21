@@ -7,17 +7,16 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import fields, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.bus_publication import Delivered
+from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_tables import (
     Addressed,
     BusRow,
     BusTables,
     BusProjectionTables,
-    KeyedPublication,
     ClaimOperations,
     HeldResources,
     MessageIdentitySource,
@@ -83,18 +82,6 @@ class BusReader(ABC):
         with self.observing() as db:
             return ClaimOperations.used(db, operation_id)
 
-    @staticmethod
-    def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
-        member = header.kind
-        values = {}
-        for table in member.tables():
-            rows = table.select(db, seq=header.seq)
-            if not rows:
-                raise RelationViolationError(
-                    f"Bus row {header.seq} lacks {table.declared_name}")
-            values.update({item.name: getattr(rows[0], item.name) for item in fields(table)})
-        return FieldCodec.construct(member, values)
-
     def claim(self, seq: int) -> ClaimTransition:
         """Read attestation from the row's capability, never a retained-history floor."""
         with self.observing() as db:
@@ -108,24 +95,32 @@ class BusReader(ABC):
             headers = BusRow.select(db, seq=seq)
             if not headers:
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
-            return self._record(db, headers[0])
+            return headers[0].kind.read_from(db, headers[0].seq)
 
     def lookup_message(self, message_id: str) -> BusRecord:
         """Resolve one content identity; absent or ambiguous identities are refused."""
         with self.observing() as db:
             identity = MessageIdentitySource.require(db, message_id=message_id)
-            return self._record(db, BusRow.require(db, seq=identity.seq))
+            header = BusRow.require(db, seq=identity.seq)
+            return header.kind.read_from(db, header.seq)
+
+    def keyed_messages(self, publication_key: str) -> tuple[BusRecord, ...]:
+        """Read at most the one original bound to this publication key."""
+        with self.observing() as db:
+            headers = (BusRow.require(db, seq=seq) for seq in
+                       KeyedPublication.publication_sequences(db, publication_key))
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return tuple(self._record(db, row) for row in BusRow.select(
+            return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
 
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
         with self.observing() as db:
-            return tuple(self._record(db, row) for row in BusRow.select(
+            return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
                 db, where="{seq} > ?", parameters=(after,),
                 order_by=("seq",), limit=limit))
 
@@ -134,7 +129,7 @@ class BusReader(ABC):
             addressed = Addressed.table.select(
                 db, where="{seq} > ?", parameters=(after,), order_by=("seq",), limit=limit,
                 target=target)
-            return tuple(self._record(db, header) for row in addressed
+            return tuple(header.kind.read_from(db, header.seq) for row in addressed
                          for header in BusRow.select(db, seq=row.seq))
 
     def scoped_page(
@@ -155,8 +150,8 @@ class BusReader(ABC):
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
-            return tuple(self._record(db, BusRow.require(
-                db, seq=FieldCodec.decode(int, row[0]))) for row in rows)
+            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def latest_conversations(self, predicate: str, parameters: tuple, through: int):
         """One prefix per addressed conversation, without materializing its history."""
@@ -171,7 +166,8 @@ class BusReader(ABC):
 
     def messages_for_references(self, references):
         with self.observing() as db:
-            records = tuple(self._record(db, BusRow.require(db, seq=ref.seq)) for ref in references)
+            headers = (BusRow.require(db, seq=ref.seq) for ref in references)
+            records = tuple(header.kind.read_from(db, header.seq) for header in headers)
         for reference, record in zip(references, records, strict=True):
             if record.reference != reference:
                 raise RelationViolationError("Message reference does not match its bus record")
@@ -194,8 +190,8 @@ class BusReader(ABC):
                 f"ORDER BY seq {order} LIMIT ?",
                 (*parameters, after, before, *sequences, limit),
             )
-            return tuple(self._record(db, BusRow.require(
-                db, seq=FieldCodec.decode(int, row[0]))) for row in rows)
+            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def conversation(self, lookup: str, *, after=0, before=None, limit=100,
                      descending=True, sequences=()):
@@ -229,7 +225,8 @@ class BusReader(ABC):
         with self.observing() as db:
             sequences = {row.seq for original in references
                          for row in AnsweredSource.select(db, original=original)}
-            return tuple(self._record(db, BusRow.require(db, seq=seq)) for seq in sorted(sequences))
+            headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def changed_names(self, after: int) -> frozenset[str]:
         with self.observing() as db:
@@ -317,7 +314,8 @@ class Bus(BusReader, WalStore, DurableFile, Watched):
         with ExitStack() as writes:
             db = writes.enter_context(self.writing())
             MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
-            committed = self._record(db, BusRow.require(db, seq=operation(db)))
+            header = BusRow.require(db, seq=operation(db))
+            committed = header.kind.read_from(db, header.seq)
             try:
                 writes.close()
             except StoreCommittedError as error:
