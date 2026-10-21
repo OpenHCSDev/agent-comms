@@ -66,18 +66,6 @@ def _sql_members(family, predicate=lambda member: True):
     )
 
 
-def _sql_edges(family, column):
-    return (
-        " OR ".join(
-            f"({column.format(row='OLD')} = {_sql_values((name,))} "
-            f"AND {column.format(row='NEW')} IN ({_sql_values(sorted(edges))}))"
-            for name, edges in family.transition_table().items()
-            if edges
-        )
-        or "0"
-    )
-
-
 _CONTEXT_FAMILIES: Final = (
     ExecutionState, AttemptState, AssignmentState, WakePolicy, ResponseState, RecoveryCondition,
 )
@@ -93,10 +81,6 @@ def _schema_context(*members):
         wake_names=_sql_members(WakePolicy),
         response_names=_sql_members(ResponseState),
         recovery_names=_sql_members(RecoveryCondition),
-        execution_edges=_sql_edges(ExecutionState, "json_extract({row}.lifecycle, '$.kind')"),
-        attempt_edges=_sql_edges(AttemptState, "json_extract({row}.lifecycle, '$.kind')"),
-        assignment_edges=_sql_edges(AssignmentState, "json_extract({row}.lifecycle, '$.kind')"),
-        obligation_edges=_sql_edges(ResponseState, "json_extract({row}.lifecycle, '$.kind')"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         failed_attempt_phases=_sql_members(AttemptState, lambda member: member.failed),
         retry_attempt_phases=_sql_values(

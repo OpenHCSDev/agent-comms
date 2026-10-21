@@ -22,7 +22,7 @@ from agent_comms.typed_table import (
     Generated,
     GuardedColumns,
     GuardedInserts,
-    GuardedUpdates,
+    GuardedUpdateMembership,
     IncrementingColumn,
     LifecycleChanges,
     LifecycleTransitions,
@@ -36,13 +36,13 @@ from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseObligation(LifecycleTransitions, LifecycleChanges, IncrementingColumn, MonotoneColumns, ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
+class ResponseObligation(LifecycleTransitions, LifecycleChanges, IncrementingColumn, MonotoneColumns, ExecutionReference, RetryPartition, GuardedUpdateMembership, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
     column_orders = (NonDecreasing(('updated_at_ms',)),)
 
     """One original reply-route obligation within an execution."""
 
     immutable_columns = ('execution_id', 'exact_target', 'created_at_ms')
-    update_condition = """(json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1
+    update_membership_condition = """(json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1
         FROM publication_intents WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target )) OR
         (json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS ( SELECT 1 FROM publication_receipts
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND message_id =

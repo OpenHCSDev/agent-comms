@@ -4,22 +4,23 @@ from contextlib import closing
 
 import pytest
 
-from cutover.carry_table_triggers import TableTriggers
+from tools.cutover.carry_table_triggers import TableTriggers
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import PromptBinding
 from agent_comms.private_sidecar import create_sidecar_file
-from agent_comms.typed_table import SQLiteTableName, TableSchema
+from agent_comms.typed_table import SQLiteTableName, TableSchema, TypedTable
 
 
 def saved_rows(db):
-    return {table.name: tuple(db.execute(f'SELECT * FROM "{table.name}"'))
+    return {table.name: tuple(tuple(values) for values in db.execute(f'SELECT * FROM "{table.name}"'))
             for table in SQLiteTableName.stored(db)}
 
 
 def test_trigger_rewrite_preserves_rows_and_is_idempotent(tmp_path):
+    tuple(TypedTable.__registry__.values())
     path = tmp_path / "coordination.sqlite3"
     with closing(CoordinationStore.writer(path)) as db:
         CoordinatorTable.create_schema(db)

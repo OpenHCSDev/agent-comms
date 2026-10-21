@@ -27,7 +27,7 @@ from .typed_table import (
     ImmutableRows,
     Index,
     NoDelete,
-    OneWayColumn,
+    InitialOneWayColumn,
     SQLiteJournalMode,
     SharedFileTables,
     TypedTable,
@@ -55,16 +55,15 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchAcknowledgements(OneWayColumn, GuardedInserts, FrozenColumns, GuardedColumns, NoDelete, CohortTable, TypedTable, declared_name="claim_batch_receipts"):
+class ClaimBatchAcknowledgements(InitialOneWayColumn, FrozenColumns, GuardedColumns, NoDelete, CohortTable, TypedTable, declared_name="claim_batch_receipts"):
 
     transition_column = 'sealed'
     transition_from = 0
     transition_to = 1
 
-    insert_condition = """NEW.sealed != 0"""
     immutable_columns = ('wire_root_id', 'wire_seq', 'message_id', 'exact_target', 'envelope_digest', 'audience_digest', 'decisions_digest', 'member_count', 'claim_count', 'manifest_codec', 'resolver_version', 'policy_version', 'accepted_at_ms')
     column_guards = (
-        ColumnGuard(('sealed',), """(OLD.sealed = 0 AND NEW.sealed = 1) AND (((SELECT COUNT(*) FROM cohort_delivery_receipts d WHERE
+        ColumnGuard(('sealed',), """(((SELECT COUNT(*) FROM cohort_delivery_receipts d WHERE
         d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq) != OLD.member_count OR (SELECT COUNT(*)
         FROM cohort_delivery_receipts d WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq AND
         d.kind = 'selected') != OLD.claim_count) OR ((SELECT COUNT(*) FROM claim_batch_members m WHERE

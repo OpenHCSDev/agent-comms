@@ -1,20 +1,27 @@
 """Raw SQLite mutations exercise the declaration-derived capability family."""
 from contextlib import closing
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.execution_states import (
+    ActiveExecution, CompletedExecution, DeferredExecution, ExecutionState, PendingExecution,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.lifecycle import LifecycleState
 from agent_comms.typed_table import (
-    AccumulatingBits, Column, ColumnGuard, FinalizedLifecycle, FirstValueState,
-    FrozenColumns, GuardedColumns, ImmutableRows, IncrementingColumn, LifecycleChanges,
+    AccumulatingBits, Column, ColumnGuard, FinalizedColumn, FinalizedLifecycle, FirstValueState,
+    FrozenColumns, Generated, GuardedAfterWrites, GuardedColumns, GuardedInserts, GuardedRelatedInserts,
+    GuardedUpdateMembership, InitialOneWayColumn,
+    ImmutableRows, IncrementingColumn, LifecycleChanges,
     LifecycleTransitions, MonotoneColumns, NonDecreasing, NonDecreasingWhenPresent,
-    NonIncreasing, OneWayColumn, RequiredColumn, TypedTable, WriteOnceColumns,
+    NonIncreasing, OrdinalTransitions, RequiredColumn, RequiredUpdateColumns, StableReferenceColumns, TypedTable,
+    ValidatedInserts, WriteOnceColumns,
 )
 import sqlite3
 
@@ -36,7 +43,7 @@ class OrderedRow(IncrementingColumn, FrozenColumns, MonotoneColumns, Accumulatin
 
 
 @dataclass(frozen=True)
-class SealedRow(OneWayColumn, TypedTable):
+class SealedRow(InitialOneWayColumn, TypedTable):
     sealed: int
     transition_column = "sealed"
     transition_from = 0
@@ -52,6 +59,50 @@ class FrozenRow(ImmutableRows, TypedTable):
 class GuardedRow(GuardedColumns, TypedTable):
     value: int
     column_guards = (ColumnGuard(("value",)),)
+
+
+@dataclass(frozen=True)
+class InsertCheckedRow(GuardedInserts, GuardedUpdateMembership, TypedTable):
+    value: int
+    insert_condition = "NEW.value < 0"
+    update_membership_condition = "NEW.value < 0"
+
+
+@dataclass(frozen=True)
+class RelatedGuardRow(GuardedRelatedInserts, TypedTable):
+    value: int
+    related_insert_target = InsertCheckedRow
+    related_insert_condition = "NEW.value > 10"
+
+
+@dataclass(frozen=True)
+class AfterWriteRow(GuardedAfterWrites, TypedTable):
+    value: int
+    after_write_condition = "NEW.value < 0"
+
+
+@dataclass(frozen=True)
+class ValidatedRow(ValidatedInserts, TypedTable):
+    value: int
+    validator_function = "test_positive"
+
+
+@dataclass(frozen=True)
+class ProofRow(WriteOnceColumns, RequiredUpdateColumns, FinalizedColumn, TypedTable):
+    claim: int | None
+    session: str | None
+    proof: int | None
+    write_once_columns = ("claim", "session")
+    required_update_columns = ("claim",)
+    finalized_column = "proof"
+
+
+@dataclass(frozen=True)
+class PointerRow(StableReferenceColumns, TypedTable):
+    ordinal: int
+    value: int | None
+    reference_column = "ordinal"
+    stable_reference_columns = ("value",)
 
 
 class Phase(DeclaredFamily, LifecycleState, affix="Phase"):
@@ -84,6 +135,13 @@ class ChangingRow(LifecycleChanges, PhasedRow):
 
 
 @dataclass(frozen=True)
+class OrdinalRow(LifecycleTransitions, OrdinalTransitions, TypedTable):
+    lifecycle: ExecutionState
+    current_attempt_ordinal: ClassVar[Generated] = vars(ExecutionRecord)["current_attempt_ordinal"]
+    max_attempts: int = 3
+
+
+@dataclass(frozen=True)
 class ReferencedRow(WriteOnceColumns, FirstValueState, RequiredColumn, TypedTable):
     lifecycle: Phase
     value: int | None
@@ -98,8 +156,11 @@ class ReferencedRow(WriteOnceColumns, FirstValueState, RequiredColumn, TypedTabl
 @pytest.fixture
 def db():
     with closing(CoordinationStore.writer(":memory:", isolation_level=None)) as connection:
-        for row in (OrderedRow, SealedRow, FrozenRow, GuardedRow, PhasedRow, ChangingRow, ReferencedRow):
+        for row in (OrderedRow, SealedRow, FrozenRow, GuardedRow, PhasedRow, ChangingRow,
+                    ReferencedRow, InsertCheckedRow, RelatedGuardRow, AfterWriteRow, ValidatedRow,
+                    OrdinalRow, ProofRow, PointerRow):
             row.create(connection)
+        connection.create_function("test_positive", 1, lambda value: int(value > 0))
         yield connection
 
 
@@ -121,6 +182,8 @@ def test_ordered_columns_accept_progress_and_optional_retirement(db):
 
 
 def test_one_way_column_consumes_the_declared_transition(db):
+    with pytest.raises(sqlite3.IntegrityError):
+        SealedRow(1).insert(db)
     SealedRow(0).insert(db)
     SealedRow.update(db, where="1", sealed=1)
     for value in (0, 1):
@@ -163,6 +226,71 @@ def test_nullable_reference_is_written_once_in_its_declared_state(db):
     ReferencedRow(EndPhase(), None, 2).insert(db)
     with pytest.raises(sqlite3.IntegrityError):
         ReferencedRow.update(db, where="1", value=1)
+
+
+@pytest.mark.parametrize("previous, following, allowed", [
+    (PendingExecution(), ActiveExecution(1), True),
+    (PendingExecution(), ActiveExecution(2), False),
+    (ActiveExecution(1), CompletedExecution(2), False),
+    (DeferredExecution(1), ActiveExecution(2), True),
+])
+def test_python_and_sql_use_the_state_ordinal_declaration(db, previous, following, allowed):
+    assert following.accepts_previous(previous) is allowed
+    OrdinalRow(previous).insert(db)
+    if allowed:
+        OrdinalRow.update(db, where="1", lifecycle=following)
+    else:
+        with pytest.raises(sqlite3.IntegrityError):
+            OrdinalRow.update(db, where="1", lifecycle=following)
+
+
+@pytest.mark.parametrize("value", [-1, 11])
+def test_insert_and_related_membership_are_composed(db, value):
+    with pytest.raises(sqlite3.IntegrityError):
+        InsertCheckedRow(value).insert(db)
+    InsertCheckedRow(1).insert(db)
+
+
+def test_update_membership_is_guarded(db):
+    InsertCheckedRow(1).insert(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        InsertCheckedRow.update(db, where="1", value=-1)
+
+
+def test_proof_requires_its_reference_and_then_freezes_the_row(db):
+    ProofRow(None, None, None).insert(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        ProofRow.update(db, where="1", session="session")
+    ProofRow.update(db, where="1", claim=1)
+    ProofRow.update(db, where="1", session="session")
+    with pytest.raises(sqlite3.IntegrityError):
+        ProofRow.update(db, where="1", session="different")
+    ProofRow.update(db, where="1", proof=1)
+    with pytest.raises(sqlite3.IntegrityError):
+        ProofRow.update(db, where="1", claim=1)
+
+
+def test_pointer_values_require_a_new_reference(db):
+    PointerRow(0, None).insert(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        PointerRow.update(db, where="1", value=1)
+    PointerRow.update(db, where="1", ordinal=1, value=1)
+    assert PointerRow.select(db) == [PointerRow(1, 1)]
+
+
+def test_after_write_guard_refuses_both_events(db):
+    with pytest.raises(sqlite3.IntegrityError):
+        AfterWriteRow(-1).insert(db)
+    AfterWriteRow(1).insert(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        AfterWriteRow.update(db, where="1", value=-1)
+
+
+def test_declared_insert_validator_receives_the_field_values(db):
+    with pytest.raises(sqlite3.IntegrityError):
+        ValidatedRow(-1).insert(db)
+    ValidatedRow(1).insert(db)
+    assert ValidatedRow.select(db) == [ValidatedRow(1)]
 
 
 def test_owner_counter_refuses_skipping_a_generation():

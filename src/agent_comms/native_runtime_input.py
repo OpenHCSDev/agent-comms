@@ -41,7 +41,10 @@ from .typed_table import (
     Column,
     DurableTables,
     FrozenColumns,
-    GuardedUpdates,
+    FinalizedColumn,
+    RequiredUpdateColumns,
+    StableReferenceColumns,
+    WriteOnceColumns,
     IntegerStorage,
     MonotoneColumns,
     NoDelete,
@@ -86,13 +89,11 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(GuardedUpdates, FrozenColumns, NoDelete, NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(WriteOnceColumns, FinalizedColumn, RequiredUpdateColumns, FrozenColumns, NoDelete, NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
     immutable_columns = ('input_id', 'stage', 'execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest')
-    update_condition = """(OLD.{sent_owner_claimed_generation} IS NOT NULL AND NEW.{sent_owner_claimed_generation} IS NOT
-        OLD.{sent_owner_claimed_generation}) OR (NEW.{sent_owner_claimed_generation} IS NULL AND NEW.session_id IS
-        NOT NULL) OR (OLD.session_id IS NOT NULL AND (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS
-        NOT OLD.session_file)) OR OLD.session_entry_id IS NOT NULL OR (NEW.session_id IS NULL AND
-        NEW.{sent_owner_claimed_generation} IS NULL)"""
+    write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
+    finalized_column = 'session_entry_id'
+    required_update_columns = ('sent_owner_claimed_generation',)
 
     @classmethod
     def source_membership_sql(cls) -> str:
@@ -314,11 +315,12 @@ class NativeRuntimeInput(GuardedUpdates, FrozenColumns, NoDelete, NativeInputRec
             raise StaleFence("native proof was previously committed")
 
 @dataclass(frozen=True)
-class CurrentNativeCursor(MonotoneColumns, GuardedUpdates, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(MonotoneColumns, StableReferenceColumns, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
     column_orders = (NonDecreasing(('covered_seq', 'injected_seq')),)
 
     immutable_columns = ('wire_root_id', 'recipient_lookup', 'owner_thread', 'owner_generation', 'owner_claimed_generation')
-    update_condition = """(NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)"""
+    reference_column = 'injected_seq'
+    stable_reference_columns = ('input_id',)
 
     @property
     def context_anchor(self) -> NativeColumn:

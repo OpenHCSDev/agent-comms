@@ -763,6 +763,15 @@ class OneWayColumn(MutationCapability):
             row, when=condition, suffix="_one_way", message="Column transition is one-way"),)
 
 
+class InitialOneWayColumn(OneWayColumn):
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.transition_column,))
+        return (RowMutation.INSERT.abort_trigger(
+            row, when=f"NEW.{column} IS NOT {row.transition_from}", suffix="_initial_value",
+            message="Initial value must precede its transition"),)
+
+
 class IncrementingColumn(MutationCapability):
     revision_column: ClassVar[str] = "revision"
 
@@ -848,6 +857,43 @@ class WriteOnceColumns(MutationCapability):
             for field in row._fields_named(row.write_once_columns))
         return (RowMutation.UPDATE.abort_trigger(
             row, when=condition, suffix="_write_once", message="Recorded values are immutable"),)
+
+
+class RequiredUpdateColumns(MutationCapability):
+    required_update_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        condition = " OR ".join(f"{field.reference('NEW')} IS NULL"
+                                for field in row._fields_named(row.required_update_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_present", message="Update requires recorded references"),)
+
+
+class FinalizedColumn(MutationCapability):
+    finalized_column: ClassVar[str]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (field,) = row._fields_named((row.finalized_column,))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{field.reference('OLD')} IS NOT NULL", suffix="_recorded",
+            message="Recorded row cannot be changed"),)
+
+
+class StableReferenceColumns(MutationCapability):
+    reference_column: ClassVar[str]
+    stable_reference_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        (reference,) = row._fields_named((row.reference_column,))
+        changes = " OR ".join(
+            f"{field.reference('NEW')} IS NOT {field.reference('OLD')}"
+            for field in row._fields_named(row.stable_reference_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"{reference.reference('NEW')} IS {reference.reference('OLD')} AND ({changes})",
+            suffix="_reference", message="Values require a new reference"),)
 
 
 class RequiredColumn(MutationCapability):
@@ -975,13 +1021,14 @@ class CounterAdvance(MutationCapability):
             row, when=condition, suffix="_counter", message="Counter advance has live dependents"),)
 
 
-class GuardedUpdates(MutationCapability):
-    update_condition: ClassVar[str]
+class GuardedUpdateMembership(MutationCapability):
+    update_membership_condition: ClassVar[str]
 
     @classmethod
     def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
         return (RowMutation.UPDATE.abort_trigger(
-            row, when=row.update_condition, message="Update violates row invariants"),)
+            row, when=row.update_membership_condition, suffix="_membership",
+            message="Update requires published membership"),)
 
 
 class GuardedInserts(MutationCapability):
@@ -1001,6 +1048,7 @@ class GuardedRelatedInserts(MutationCapability):
     def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
         return (RowMutation.INSERT.abort_trigger(
             row.related_insert_target, when=row.related_insert_condition,
+            suffix=f"_related_{row.declared_name}",
             message="Insert violates related row membership"),)
 
 
