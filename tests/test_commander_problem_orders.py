@@ -103,11 +103,5 @@ def stray(commander, problem, generation):
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 
 
-VERDICT_LINES = {
-    'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
-    'superseded': "e1:ab --line one --why 'The task moved to a different implementation owner' --by m2",
-    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop IDEN-5"
-            " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
-}
 
 
