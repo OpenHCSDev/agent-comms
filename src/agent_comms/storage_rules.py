@@ -16,9 +16,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.problem_number import ProblemNumber
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule

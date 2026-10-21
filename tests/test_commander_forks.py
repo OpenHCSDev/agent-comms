@@ -16,7 +16,7 @@ import pytest
 from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
 from agent_comms.commander.cli import main
-from agent_comms.commander.order import Commander, OrderFile
+from agent_comms.commander.order import Commander, CommanderContext, OrderFile
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.external_transcript import ExternalTranscript
@@ -139,7 +139,8 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     with store.snapshot() as db:
         store.require_unit_in(db, saved.held().owner_identity, reissuer)
     print(f'Core send actor: {saved.held().parent}; problem commander: {saved.creator}')
-    ctx = Commander.read_root(comms.root).model_copy(update={'actor': CommanderForkCaller(fork.name)})
+    ctx = CommanderContext.read_root(comms.root).model_copy(update={'actor': CommanderForkCaller(fork.name)})
+    assert ctx.board_text() == Commander.read_root(comms.root).board_text()
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
