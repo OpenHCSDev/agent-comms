@@ -65,6 +65,8 @@ Crossing: 1.1 and 2.2 both touch `typed_table.py` and `field_codec.py`, so 1.1 l
 
 ## Done means
 
+Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
+
 Each surface's guard is at zero on `main`, its deleted code is gone with no alias left behind, and the census at the new head shows the measure down by the surface's count. Report lines deleted first.
 
 ## Order of work
