@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Any, Literal, Annotated, Self
 
 
 from .child_process import NoProcess, ProcessIdentity
@@ -710,14 +710,18 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     _claimed_generations: Mapping[str, int] = field(repr=False)
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
-    def __getstate__(self) -> list[dict[str, object]]:
-        """Dataclass state crosses preparation processes as ordinary mappings."""
-        return [dict(getattr(self, declaration.name)) for declaration in fields(self)]
+    def __post_init__(self) -> None:
+        """Every construction owns and freezes its declared registry maps."""
+        for declaration in fields(self):
+            object.__setattr__(
+                self, declaration.name, MappingProxyType(dict(getattr(self, declaration.name)))
+            )
 
-    def __setstate__(self, state: list[dict[str, object]]) -> None:
-        """Restore every declared map as immutable, without a second field roster."""
-        for declaration, values in zip(fields(self), state, strict=True):
-            object.__setattr__(self, declaration.name, MappingProxyType(values))
+    def __reduce__(self) -> tuple[type[Self], tuple[dict[str, object], ...]]:
+        """Preparation workers restore snapshots through their constructor."""
+        return type(self), tuple(
+            dict(getattr(self, declaration.name)) for declaration in fields(self)
+        )
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
@@ -754,13 +758,13 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 raise RelationViolationError("Registry creation identities collide.")
             indexed[lookup] = thread
         return cls(
-            threads=MappingProxyType(dict(document.threads)),
-            statuses=MappingProxyType(dict(document.statuses)),
-            last_seen=MappingProxyType(dict(document.last_seen)),
-            aliases=MappingProxyType(dict(document.aliases)),
-            owner_generations=MappingProxyType(dict(document.owners.generations)),
-            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
-            by_lookup=MappingProxyType(indexed),
+            threads=document.threads,
+            statuses=document.statuses,
+            last_seen=document.last_seen,
+            aliases=document.aliases,
+            owner_generations=document.owners.generations,
+            _claimed_generations=document.claims.generations,
+            by_lookup=indexed,
         )
 
     def observed_activity(

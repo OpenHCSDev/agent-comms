@@ -1,6 +1,7 @@
 """Sidebar states answer the same questions before and after a real read."""
 
 import pickle
+from dataclasses import fields, replace
 
 import pytest
 
@@ -39,6 +40,20 @@ def declare_reference(comms):
             name=name, tags=frozenset(), worktree=str(comms.root.parent),
         ), status=status)
     return declare
+
+
+def test_registry_snapshot_constructor_and_pickle_own_immutable_maps(comms, declare_reference):
+    original = declare_reference()
+    captured = comms.registry.snapshot()
+    supplied = dict(captured.threads)
+    snapshot = replace(captured, threads=supplied)
+    supplied.clear()
+    for restored in (snapshot, pickle.loads(pickle.dumps(snapshot, protocol=5))):
+        assert restored.threads[original.name] == original
+        assert restored.by_lookup[original.incarnation.require_recorded().lookup] == original
+        for declaration in fields(restored):
+            with pytest.raises(TypeError):
+                getattr(restored, declaration.name)["unowned"] = None
 
 
 def test_current_reference_resolves_original_birth_after_registry_rename(comms, declare_reference):
