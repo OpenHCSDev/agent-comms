@@ -1,4 +1,4 @@
-/** The .input-proof authority is one transactional indexed journal, not a cache.
+/** Native context proof is one bus-owned transactional journal, not a cache.
  * Recovery reserves generations only; it never emits live input acceptance.
  * The original native session remains authoritative for input claims/UNKNOWN.
  */
@@ -7,13 +7,43 @@ import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, openSync, rename
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { nativeProofSchema } from './native-proof-schema.js';
+import { NativeFileUnavailable, PrivateNativeFile } from './native-private-file.js';
 
-export class NativeProofJournal {
+export class NativeProof {
+    static fromPath(file, sessionId) {
+        return file === undefined ? UnconfiguredNativeProof.shared : new NativeProofJournal(file, sessionId);
+    }
+    available(manager) {
+        try { this.require(manager); return true; }
+        catch (error) {
+            if (error instanceof NativeFileUnavailable) return false;
+            throw error;
+        }
+    }
+}
+
+class UnconfiguredNativeProof extends NativeProof {
+    static shared = Object.freeze(new UnconfiguredNativeProof());
+    recover() { return 0; }
+    require() { throw new NativeFileUnavailable('Core has not selected native proof storage'); }
+}
+
+export class NativeProofJournal extends PrivateNativeFile(NativeProof) {
     constructor(file, sessionId) {
+        super();
         this.file = file;
         this.sessionId = sessionId;
+        Object.freeze(this);
+    }
+    require(manager) {
+        if (manager.getSessionId() !== this.sessionId)
+            throw new NativeFileUnavailable('Native proof selection belongs to another saved session');
+        manager.assertNativeInputSafe();
+        this.requirePrivateNativeFile();
+        return this;
     }
     #open() {
+        this.requirePrivateNativeFile();
         this.#finishPublication();
         const info = lstatSync(this.file);
         if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||
@@ -81,7 +111,9 @@ export class NativeProofJournal {
         if (session && session.id !== this.sessionId)
             throw new Error('Native proof journal belongs to another session');
     }
-    recover(entryStore) {
+    recover(manager) {
+        this.require(manager);
+        const entryStore = manager.entryStore;
         if (!existsSync(this.file)) return 0;
         const db = this.#open();
         try {
@@ -96,6 +128,7 @@ export class NativeProofJournal {
         finally { db.close(); }
     }
     commit(tracked, digest) {
+        this.requirePrivateNativeFile();
         if (!existsSync(this.file)) this.#initialize();
         const db = this.#open();
         try {

@@ -267,10 +267,7 @@ class DeliveryRow(BridgeStateTable, TypedTable):
         return messages.Message.from_wire(json.loads(self.payload))
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
-        outcome = self.outcome.followed_by(outcome)
-        with bridge.db:
-            replace(self, outcome=outcome).upsert(bridge.db)
-        await outcome.acknowledge(bridge, self.message)
+        await self.outcome.finish(bridge, self, outcome)
 
 
 BridgeOptions = TypeVar("BridgeOptions", bound=Options)
@@ -714,8 +711,6 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
-            delivery, = DeliveryRow.select(self.db, id=message.message_id)
-            await delivery.outcome.acknowledge(self, message)
             return
         result = await self.deliver(message) if conversation else outcome
         delivery, = DeliveryRow.select(self.db, id=message.message_id)

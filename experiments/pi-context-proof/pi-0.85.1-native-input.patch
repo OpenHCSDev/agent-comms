@@ -1,27 +1,209 @@
+diff --git a/dist/cli/args.d.ts b/dist/cli/args.d.ts
+index 7e4e4ec..a1b185e 100644
+--- a/dist/cli/args.d.ts
++++ b/dist/cli/args.d.ts
+@@ -20,6 +20,7 @@ export interface Args {
+     name?: string;
+     noSession?: boolean;
+     session?: string;
++    nativeInputProof?: string;
+     sessionId?: string;
+     fork?: string;
+     sessionDir?: string;
+diff --git a/dist/cli/args.js b/dist/cli/args.js
+index 763b93f..081bfc9 100644
+--- a/dist/cli/args.js
++++ b/dist/cli/args.js
+@@ -79,6 +79,10 @@ export function parseArgs(args) {
+         else if (arg === "--session" && i + 1 < args.length) {
+             result.session = args[++i];
+         }
++        else if (arg === "--native-input-proof") {
++            if (i + 1 >= args.length) throw new Error("--native-input-proof requires Core's exact path");
++            result.nativeInputProof = args[++i];
++        }
+         else if (arg === "--session-id" && i + 1 < args.length) {
+             result.sessionId = args[++i];
+         }
+diff --git a/dist/core/agent-session-services.d.ts b/dist/core/agent-session-services.d.ts
+index 0b1c83f..2e737a4 100644
+--- a/dist/core/agent-session-services.d.ts
++++ b/dist/core/agent-session-services.d.ts
+@@ -1,6 +1,3 @@
+-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+-import type { Model } from "@earendil-works/pi-ai";
+-import type { SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+ import { ModelRuntime } from "./model-runtime.ts";
+ import { type DefaultResourceLoaderOptions, type ResourceLoader, type ResourceLoaderReloadOptions } from "./resource-loader.ts";
+ import { type CreateAgentSessionOptions, type CreateAgentSessionResult } from "./sdk.ts";
+@@ -40,20 +37,9 @@ export interface CreateAgentSessionServicesOptions {
+  * Use this after services exist and any cwd-bound model/tool/session options
+  * have been resolved against those services.
+  */
+-export interface CreateAgentSessionFromServicesOptions {
++export interface CreateAgentSessionFromServicesOptions extends Omit<CreateAgentSessionOptions, keyof AgentSessionServices> {
+     services: AgentSessionServices;
+     sessionManager: SessionManager;
+-    sessionStartEvent?: SessionStartEvent;
+-    model?: Model<any>;
+-    thinkingLevel?: ThinkingLevel;
+-    scopedModels?: Array<{
+-        model: Model<any>;
+-        thinkingLevel?: ThinkingLevel;
+-    }>;
+-    tools?: string[];
+-    excludeTools?: CreateAgentSessionOptions["excludeTools"];
+-    noTools?: CreateAgentSessionOptions["noTools"];
+-    customTools?: ToolDefinition[];
+ }
+ /**
+  * Coherent cwd-bound runtime services for one effective session cwd.
+diff --git a/dist/core/agent-session-services.js b/dist/core/agent-session-services.js
+index 5362422..5cecae0 100644
+--- a/dist/core/agent-session-services.js
++++ b/dist/core/agent-session-services.js
+@@ -114,21 +114,14 @@ export async function createAgentSessionServices(options) {
+  * cwd before constructing the session.
+  */
+ export async function createAgentSessionFromServices(options) {
++    const { services, ...sessionOptions } = options;
+     return createAgentSession({
+-        cwd: options.services.cwd,
+-        agentDir: options.services.agentDir,
+-        modelRuntime: options.services.modelRuntime,
+-        settingsManager: options.services.settingsManager,
+-        resourceLoader: options.services.resourceLoader,
+-        sessionManager: options.sessionManager,
+-        model: options.model,
+-        thinkingLevel: options.thinkingLevel,
+-        scopedModels: options.scopedModels,
+-        tools: options.tools,
+-        excludeTools: options.excludeTools,
+-        noTools: options.noTools,
+-        customTools: options.customTools,
+-        sessionStartEvent: options.sessionStartEvent,
++        ...sessionOptions,
++        cwd: services.cwd,
++        agentDir: services.agentDir,
++        modelRuntime: services.modelRuntime,
++        settingsManager: services.settingsManager,
++        resourceLoader: services.resourceLoader,
+     });
+ }
+ //# sourceMappingURL=agent-session-services.js.map
+\ No newline at end of file
+diff --git a/dist/core/agent-session.d.ts b/dist/core/agent-session.d.ts
+index 89f96e8..0b886b3 100644
+--- a/dist/core/agent-session.d.ts
++++ b/dist/core/agent-session.d.ts
+@@ -19,6 +19,7 @@ import { type CompactionResult } from "./compaction/index.ts";
+ import { type ContextUsage, type ExtensionCommandContextActions, type ExtensionErrorListener, type ExtensionMode, ExtensionRunner, type ExtensionUIContext, type InputSource, type ReplacedSessionContext, type SessionStartEvent, type ShutdownHandler, type ToolDefinition, type ToolInfo } from "./extensions/index.ts";
+ import type { CustomMessage } from "./messages.ts";
+ import type { ModelRuntime } from "./model-runtime.ts";
++import type { NativeProofConfiguration } from "./native-proof-journal.js";
+ import { type PromptTemplate } from "./prompt-templates.ts";
+ import type { ResourceLoader } from "./resource-loader.ts";
+ import type { BranchSummaryEntry, SessionEntry, SessionManager } from "./session-manager.ts";
+@@ -45,6 +46,19 @@ export type AgentSessionEvent = Exclude<AgentEvent, {
+     willRetry: boolean;
+ } | {
+     type: "agent_settled";
++} | {
++    type: "input_committed";
++    sessionId: string;
++    inputId: string;
++    sessionEntryId: string;
++} | {
++    type: "context_committed";
++    sessionId: string;
++    inputId: string;
++    sessionEntryId: string;
++    requestGeneration: number;
++    llmContextDigest: string;
++    committedAtMs: number;
+ } | {
+     type: "queue_update";
+     steering: readonly string[];
+@@ -101,7 +115,7 @@ export type AgentSessionEvent = Exclude<AgentEvent, {
+ };
+ /** Listener function for agent session events */
+ export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
+-export interface AgentSessionConfig {
++export interface AgentSessionConfig extends NativeProofConfiguration {
+     agent: Agent;
+     sessionManager: SessionManager;
+     settingsManager: SettingsManager;
+@@ -155,6 +169,8 @@ export interface PromptOptions {
+     streamingBehavior?: "steer" | "followUp";
+     /** Source of input for extension input event handlers. Defaults to "interactive". */
+     source?: InputSource;
++    /** Separate native 128-bit lowercase hex attempt identity; not the RPC command id. */
++    inputId?: string;
+     /** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
+     preflightResult?: (success: boolean) => void;
+ }
+@@ -189,6 +205,7 @@ export interface SessionStats {
+     cost: number;
+     contextUsage?: ContextUsage;
+ }
++export interface AgentSession extends Required<NativeProofConfiguration> {}
+ export declare class AgentSession {
+     readonly agent: Agent;
+     readonly sessionManager: SessionManager;
+@@ -372,7 +389,7 @@ export declare class AgentSession {
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    steer(text: string, images?: ImageContent[]): Promise<void>;
++    steer(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
+     /**
+      * Queue a follow-up message to be processed after the agent finishes.
+      * Delivered only when agent has no more tool calls or steering messages.
+@@ -380,7 +397,7 @@ export declare class AgentSession {
+      * @param images Optional image attachments to include with the message
+      * @throws Error if text is an extension command
+      */
+-    followUp(text: string, images?: ImageContent[]): Promise<void>;
++    followUp(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
+     private _queueSteer;
+     private _queueFollowUp;
+     /**
+diff --git a/dist/core/agent-session.js b/dist/core/agent-session.js
+index 66e874e..2f95059 100644
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
 @@ -13,6 +13,9 @@
   * Modes use this class and add their own I/O layer on top.
   */
  import { readFileSync } from "node:fs";
-+import { NativeProofJournal } from "./native-proof-journal.js";
++import { NativeProof } from "./native-proof-journal.js";
 +import { createHash } from "node:crypto";
 +import { inspect } from "node:util";
  import { basename, dirname } from "node:path";
  import { contentText } from "@earendil-works/pi-ai";
  import { clampThinkingLevel, cleanupSessionResources, getSupportedThinkingLevels, isContextOverflow, isRecoverableLength, isRetryableAssistantError, modelsAreEqual, resetApiProviders, streamSimple, } from "@earendil-works/pi-ai/compat";
-@@ -89,6 +92,10 @@
+@@ -89,6 +92,11 @@ export class AgentSession {
      _steeringMessages = [];
      /** Tracks pending follow-up messages for UI display. Removed when delivered. */
      _followUpMessages = [];
 +    /** Native identity is separate from the RPC acceptance-command id. */
++    nativeInputProof;
 +    _nativeInputClaims = new Map();
 +    _awaitingNativeInputIds = new Set();
 +    _nativeRunHadTrackedInput = false;
      /** Messages queued to be included with the next user prompt as context ("asides"). */
      _pendingNextTurnMessages = [];
      /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
-@@ -153,6 +160,8 @@
+@@ -138,6 +146,8 @@ export class AgentSession {
+     constructor(config) {
+         this.agent = config.agent;
+         this.sessionManager = config.sessionManager;
++        const { nativeInputProof = NativeProof.fromPath(undefined, this.sessionId) } = config;
++        this.nativeInputProof = nativeInputProof;
+         this.settingsManager = config.settingsManager;
+         this._scopedModels = config.scopedModels ?? [];
+         this._resourceLoader = config.resourceLoader;
+@@ -153,6 +163,8 @@ export class AgentSession {
          // Always subscribe to agent events for internal handling
          // (session persistence, extensions, auto-compaction, retry logic)
          this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
@@ -30,41 +212,20 @@
          this._installAgentToolHooks();
          this._installAgentNextTurnRefresh();
          this._buildRuntime({
-@@ -160,6 +169,99 @@
+@@ -160,6 +172,77 @@ export class AgentSession {
              includeAllExtensionTools: true,
          });
      }
-+    _nativeProofPath() {
-+        const file = this.sessionManager.getSessionFile();
-+        if (!this.sessionManager.isPersisted() || !file) {
-+            throw new Error("Native input proof requires a persistent Pi session");
-+        }
-+        this.sessionManager.assertNativeInputSafe();
-+        return `${file}.input-proof`;
-+    }
 +    _loadNativeInputState() {
-+        // SessionManager's historical index owns durable claims on every branch.
-+        // This map holds only newly admitted, not-yet-committed live requests.
-+        for (const entry of this.sessionManager.entryStore.trackedMetadata()) {
-+            const { inputId, inputDigest } = entry;
-+            if (entry.role !== "user" || typeof inputId !== "string" || typeof inputDigest !== "string" ||
-+                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
-+                this.sessionManager.entryStore.trackedInputMetadata(inputId)?.id !== entry.id) {
-+                throw new Error("Invalid or duplicate native input in persisted Pi session");
-+            }
-+        }
-+        if (!this.sessionManager.isPersisted()) return;
-+        // Recover the current committed generation only. SQLite rolls back a torn
-+        // context transaction; neither recovery nor historical rows emit receipts.
-+        new NativeProofJournal(this._nativeProofPath(), this.sessionId)
-+            .recover(this.sessionManager.entryStore);
++        // Recovery corroborates stored rows; it never emits or replays an input.
++        this.nativeInputProof.recover(this.sessionManager);
 +    }
 +    _claimNativeInput(inputId, request) {
 +        if (inputId === undefined) return false;
 +        if (typeof inputId !== "string" || !/^[a-f0-9]{32}$/.test(inputId)) {
 +            throw new Error("Native input ID must be 128-bit lowercase hex");
 +        }
-+        this._nativeProofPath();
++        this.nativeInputProof.require(this.sessionManager);
 +        const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
 +        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest
 +            ?? this._nativeInputClaims.get(inputId);
@@ -117,8 +278,7 @@
 +        if (tracked.length === 0) return;
 +        const digest = createHash("sha256")
 +            .update(`pi-assembled-context-v1\n${JSON.stringify(llmContext)}`).digest("hex");
-+        const records = new NativeProofJournal(this._nativeProofPath(), this.sessionId)
-+            .commit(tracked, digest);
++        const records = this.nativeInputProof.require(this.sessionManager).commit(tracked, digest);
 +        const generation = records[0].requestGeneration;
 +        for (const record of records) {
 +            const { inputId, sessionEntryId } = record;
@@ -130,7 +290,7 @@
      get modelRuntime() {
          return this._modelRuntime;
      }
-@@ -315,12 +417,22 @@
+@@ -315,12 +398,22 @@ export class AgentSession {
              l(event);
          }
      }
@@ -158,7 +318,7 @@
      }
      async _emitSessionCompactFailed(event) {
          if (this._extensionRunner.hasHandlers("session_compact_failed")) {
-@@ -361,21 +473,28 @@
+@@ -361,21 +454,28 @@ export class AgentSession {
          // When a user message starts, check if it's from either queue and remove it BEFORE emitting
          // This ensures the UI sees the updated queue state
          if (event.type === "message_start" && event.message.role === "user") {
@@ -191,7 +351,7 @@
                      }
                  }
              }
-@@ -383,7 +502,13 @@
+@@ -383,7 +483,13 @@ export class AgentSession {
          // Emit to extensions first
          await this._emitExtensionEvent(event);
          // Notify all listeners
@@ -206,7 +366,7 @@
          // Handle session persistence
          if (event.type === "message_end") {
              // Check if this is a custom message from extensions
-@@ -395,7 +520,23 @@
+@@ -395,7 +501,23 @@ export class AgentSession {
                  event.message.role === "assistant" ||
                  event.message.role === "toolResult") {
                  // Regular LLM message - persist as SessionMessageEntry
@@ -231,7 +391,7 @@
              }
              // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
              // Track assistant message for auto-compaction (checked on agent_end)
-@@ -427,6 +568,7 @@
+@@ -427,6 +549,7 @@ export class AgentSession {
          }
      };
      _willRetryAfterAgentEnd(event) {
@@ -239,7 +399,7 @@
          const settings = this.settingsManager.getRetrySettings();
          if (!settings.enabled || this._retryAttempt >= settings.maxRetries) {
              return false;
-@@ -522,6 +664,10 @@
+@@ -522,6 +645,10 @@ export class AgentSession {
                      replacement.content == null
                      ? { ...replacement, content: [] }
                      : replacement;
@@ -250,7 +410,7 @@
                  this._replaceMessageInPlace(event.message, normalized);
              }
          }
-@@ -770,6 +916,21 @@
+@@ -770,6 +897,21 @@ export class AgentSession {
      // Prompting
      // =========================================================================
      async _runAgentPrompt(messages) {
@@ -272,7 +432,8 @@
          this._isAgentRunActive = true;
          try {
              await this.agent.prompt(messages);
-@@ -778,6 +939,15 @@
+@@ -777,7 +919,16 @@ export class AgentSession {
+                 await this.agent.continue();
              }
          }
 +        catch (error) {
@@ -288,7 +449,7 @@
              this._systemPromptOverride = undefined;
              this._flushPendingBashMessages();
              this._flushPendingCustomMessages();
-@@ -790,6 +956,19 @@
+@@ -790,6 +941,19 @@ export class AgentSession {
          if (!msg) {
              return false;
          }
@@ -308,7 +469,7 @@
          if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
              return true;
          }
-@@ -822,13 +1001,37 @@
+@@ -822,13 +986,37 @@ export class AgentSession {
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
@@ -346,7 +507,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -842,6 +1045,10 @@
+@@ -842,6 +1030,10 @@ export class AgentSession {
              if (this._extensionRunner.hasHandlers("input")) {
                  const inputResult = await this._extensionRunner.emitInput(currentText, currentImages, options?.source ?? "interactive", this.isStreaming ? options?.streamingBehavior : undefined);
                  if (inputResult.action === "handled") {
@@ -357,7 +518,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -862,11 +1069,12 @@
+@@ -862,11 +1054,12 @@ export class AgentSession {
                      throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
                  }
                  if (options.streamingBehavior === "followUp") {
@@ -372,7 +533,7 @@
                  preflightResult?.(true);
                  return;
              }
-@@ -905,6 +1113,8 @@
+@@ -905,6 +1098,8 @@ export class AgentSession {
                  role: "user",
                  content: userContent,
                  timestamp: Date.now(),
@@ -381,7 +542,7 @@
              });
              // Inject any pending "nextTurn" messages as context alongside the user message
              for (const msg of this._pendingNextTurnMessages) {
-@@ -939,14 +1149,24 @@
+@@ -939,14 +1134,24 @@ export class AgentSession {
              }
          }
          catch (error) {
@@ -409,7 +570,7 @@
      }
      /**
       * Try to execute an extension command. Returns true if command was found and executed.
-@@ -1013,15 +1233,25 @@
+@@ -1013,15 +1218,25 @@ export class AgentSession {
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -441,7 +602,7 @@
      }
      /**
       * Queue a follow-up message to be processed after the agent finishes.
-@@ -1030,47 +1260,66 @@
+@@ -1030,47 +1245,66 @@ export class AgentSession {
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -530,7 +691,7 @@
      }
      /**
       * Throw an error if the text is an extension command.
-@@ -1193,11 +1442,19 @@
+@@ -1193,11 +1427,19 @@ export class AgentSession {
       * @returns Object with steering and followUp arrays
       */
      clearQueue() {
@@ -553,7 +714,7 @@
          this._emitQueueUpdate();
          return { steering, followUp };
      }
-@@ -1207,11 +1464,11 @@
+@@ -1207,11 +1449,11 @@ export class AgentSession {
      }
      /** Get pending steering messages (read-only) */
      getSteeringMessages() {
@@ -567,10 +728,59 @@
      }
      get resourceLoader() {
          return this._resourceLoader;
+diff --git a/dist/core/sdk.d.ts b/dist/core/sdk.d.ts
+index 040051f..562492d 100644
+--- a/dist/core/sdk.d.ts
++++ b/dist/core/sdk.d.ts
+@@ -1,13 +1,14 @@
+ import { type ThinkingLevel } from "@earendil-works/pi-agent-core";
+ import { type Model } from "@earendil-works/pi-ai/compat";
+ import { AgentSession } from "./agent-session.ts";
++import type { NativeProofConfiguration } from "./native-proof-journal.js";
+ import type { LoadExtensionsResult, SessionStartEvent, ToolDefinition } from "./extensions/index.ts";
+ import { ModelRuntime } from "./model-runtime.ts";
+ import type { ResourceLoader } from "./resource-loader.ts";
+ import { SessionManager } from "./session-manager.ts";
+ import { SettingsManager } from "./settings-manager.ts";
+ import { createBashTool, createCodingTools, createEditTool, createFindTool, createGrepTool, createLsTool, createPowerShellTool, createReadOnlyTools, createReadTool, createWriteTool, withFileMutationQueue } from "./tools/index.ts";
+-export interface CreateAgentSessionOptions {
++export interface CreateAgentSessionOptions extends NativeProofConfiguration {
+     /** Working directory for project-local discovery. Default: process.cwd() */
+     cwd?: string;
+     /** Global config directory. Default: ~/.pi/agent */
+diff --git a/dist/core/sdk.js b/dist/core/sdk.js
+index 8bb4595..5c1dca3 100644
+--- a/dist/core/sdk.js
++++ b/dist/core/sdk.js
+@@ -264,6 +264,7 @@ export async function createAgentSession(options = {}) {
+         excludedToolNames,
+         extensionRunnerRef,
+         sessionStartEvent: options.sessionStartEvent,
++        nativeInputProof: options.nativeInputProof,
+     });
+     const extensionsResult = resourceLoader.getExtensions();
+     return {
+diff --git a/dist/core/session-manager.d.ts b/dist/core/session-manager.d.ts
+index a8d1415..4931574 100644
+--- a/dist/core/session-manager.d.ts
++++ b/dist/core/session-manager.d.ts
+@@ -215,6 +215,9 @@ export declare class SessionManager {
+      * so it is easier to find them.
+      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
+      */
++    assertNativeInputSafe(): boolean;
++    getTrackedInput(inputId: string): SessionMessageEntry | undefined;
++    flushInputDurably(inputId?: string): string;
+     appendMessage(message: Message | CustomMessage | BashExecutionMessage): string;
+     /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */
+     appendThinkingLevelChange(thinkingLevel: string): string;
+diff --git a/dist/core/session-manager.js b/dist/core/session-manager.js
+index fbb784f..898c828 100644
 --- a/dist/core/session-manager.js
 +++ b/dist/core/session-manager.js
-@@ -1,8 +1,8 @@
+@@ -1,8 +1,9 @@
  import { uuidv7 } from "@earendil-works/pi-ai";
++import { NativeFileUnavailable, PrivateNativeFile } from "./native-private-file.js";
  import { randomUUID } from "crypto";
 -import { appendFileSync, closeSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
 +import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
@@ -580,7 +790,7 @@
  import { createInterface } from "readline";
  import { StringDecoder } from "string_decoder";
  import { APP_NAME, getAgentDir as getDefaultAgentDir, getSessionsDir } from "../config.js";
-@@ -248,7 +248,7 @@
+@@ -248,7 +249,7 @@ function getDefaultSessionDirPath(cwd, agentDir = getDefaultAgentDir()) {
  export function getDefaultSessionDir(cwd, agentDir = getDefaultAgentDir()) {
      const sessionDir = getDefaultSessionDirPath(cwd, agentDir);
      if (!existsSync(sessionDir)) {
@@ -589,7 +799,21 @@
      }
      return sessionDir;
  }
-@@ -600,7 +600,7 @@
+@@ -583,7 +584,7 @@ async function listSessionsFromDir(dir, onProgress, progressOffset = 0, progress
+  * Use buildSessionContext() to get the resolved message list for the LLM, which
+  * handles compaction summaries and follows the path from root to current leaf.
+  */
+-export class SessionManager {
++export class SessionManager extends PrivateNativeFile(Object) {
+     sessionId = "";
+     sessionFile;
+     sessionDir;
+@@ -596,11 +597,12 @@ export class SessionManager {
+     labelTimestampsById = new Map();
+     leafId = null;
+     constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
++        super();
+         this.cwd = resolvePath(cwd);
          this.sessionDir = normalizePath(sessionDir);
          this.persist = persist;
          if (persist && this.sessionDir && !existsSync(this.sessionDir)) {
@@ -598,7 +822,7 @@
          }
          if (sessionFile) {
              this._setSessionFile(sessionFile, preloadedFileEntries);
-@@ -708,7 +708,7 @@
+@@ -708,7 +710,7 @@ export class SessionManager {
      _rewriteFile() {
          if (!this.persist || !this.sessionFile)
              return;
@@ -607,7 +831,7 @@
          try {
              for (const entry of this.fileEntries) {
                  writeFileSync(fd, `${JSON.stringify(entry)}\n`);
-@@ -751,7 +751,7 @@
+@@ -751,7 +753,7 @@ export class SessionManager {
              return;
          }
          if (!this.flushed) {
@@ -616,47 +840,16 @@
              try {
                  for (const e of this.fileEntries) {
                      writeFileSync(fd, `${JSON.stringify(e)}\n`);
-@@ -772,6 +772,103 @@
+@@ -772,6 +774,72 @@ export class SessionManager {
          this.leafId = entry.id;
          this._persist(entry);
      }
-+    /** Tracked metadata is private even if this Pi session began with an untracked turn. */
++    get file() { return this.sessionFile; }
++    /** A proof and its transcript share privacy policy, not physical placement. */
 +    assertNativeInputSafe() {
-+        if (!this.persist || !this.sessionFile || typeof process.getuid !== "function") {
-+            throw new Error("Native input proof requires a persisted owner-controlled session");
-+        }
-+        const uid = process.getuid();
-+        let directory = dirname(this.sessionFile);
-+        let sessionDir = true;
-+        while (true) {
-+            const info = lstatSync(directory);
-+            const stickyRoot = info.uid === 0 && (info.mode & 0o1000) !== 0;
-+            if (!info.isDirectory() || info.uid !== uid && info.uid !== 0 ||
-+                (info.mode & 0o022) !== 0 && !stickyRoot ||
-+                sessionDir && (info.uid !== uid || (info.mode & 0o777) !== 0o700)) {
-+                throw new Error("Native input session directory is not private");
-+            }
-+            const parent = dirname(directory);
-+            if (parent === directory) break;
-+            directory = parent;
-+            sessionDir = false;
-+        }
-+        for (const file of [this.sessionFile, `${this.sessionFile}.input-proof`]) {
-+            let info;
-+            try { info = lstatSync(file); }
-+            catch (error) {
-+                if (error?.code === "ENOENT") continue;
-+                throw error;
-+            }
-+            if (!info.isFile() || info.uid !== uid || (info.mode & 0o777) !== 0o600) {
-+                throw new Error("Native input evidence file is not owner-only");
-+            }
-+        }
-+        return true;
-+    }
-+    nativeInputProofAvailable() {
-+        try { return this.assertNativeInputSafe(); }
-+        catch { return false; }
++        if (!this.persist || !this.sessionFile)
++            throw new NativeFileUnavailable("Native input requires a persisted owner-controlled session");
++        return this.requirePrivateNativeFile();
 +    }
 +    /** Find exactly one durable or pending native tracked input, including old branches. */
 +    getTrackedInput(inputId) {
@@ -720,7 +913,7 @@
      /** Append a message as child of current leaf, then advance leaf. Returns entry id.
       * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
       * Reason: we want these to be top-level entries in the session, not message session entries,
-@@ -779,6 +876,9 @@
+@@ -779,6 +847,9 @@ export class SessionManager {
       * These need to be appended via appendCompaction() and appendBranchSummary() methods.
       */
      appendMessage(message) {
@@ -730,7 +923,7 @@
          const entry = {
              type: "message",
              id: generateId(this.byId),
-@@ -1274,7 +1374,7 @@
+@@ -1274,7 +1345,7 @@ export class SessionManager {
          }
          const dir = sessionDir ? normalizePath(sessionDir) : getDefaultSessionDir(resolvedTargetCwd);
          if (!existsSync(dir)) {
@@ -739,7 +932,7 @@
          }
          // Create new session file with new ID but forked content
          if (options?.id !== undefined) {
-@@ -1293,7 +1393,7 @@
+@@ -1293,7 +1364,7 @@ export class SessionManager {
              cwd: resolvedTargetCwd,
              parentSession: resolvedSourcePath,
          };
@@ -748,9 +941,40 @@
          // Copy all non-header entries from source
          for (const entry of sourceEntries) {
              if (entry.type !== "session") {
+diff --git a/dist/main.js b/dist/main.js
+index bb7c8c3..404cf53 100644
+--- a/dist/main.js
++++ b/dist/main.js
+@@ -27,6 +27,7 @@ import { exportFromFile } from "./core/export-html/index.js";
+ import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dispatcher.js";
+ import { resolveCliModel, resolveModelScope } from "./core/model-resolver.js";
+ import { ModelRuntime } from "./core/model-runtime.js";
++import { NativeProof } from "./core/native-proof-journal.js";
+ import { restoreStdout, takeOverStdout } from "./core/output-guard.js";
+ import { resolveProjectTrusted } from "./core/project-trust.js";
+ import { formatMissingSessionCwdPrompt, getMissingSessionCwdIssue, MissingSessionCwdError, } from "./core/session-cwd.js";
+@@ -556,6 +557,8 @@ export async function main(args, options) {
+         sessionManager.appendSessionInfo(name);
+     }
+     time("createSessionManager");
++    // Hold Core's exact file with the initially selected identity across runtime replacements.
++    const nativeInputProof = NativeProof.fromPath(parsed.nativeInputProof, sessionManager.getSessionId());
+     const trustStore = new ProjectTrustStore(agentDir);
+     const sessionCwd = sessionManager.getCwd();
+     const autoTrustOnReloadCwd = parsed.projectTrustOverride === undefined && !hasTrustRequiringProjectResources(sessionCwd)
+@@ -661,6 +664,7 @@ export async function main(args, options) {
+             excludeTools: sessionOptions.excludeTools,
+             noTools: sessionOptions.noTools,
+             customTools: sessionOptions.customTools,
++            nativeInputProof,
+         });
+         const cliThinkingOverride = parsed.thinking !== undefined || cliThinkingFromModel;
+         if (created.session.model && cliThinkingOverride) {
+diff --git a/dist/modes/rpc/rpc-mode.js b/dist/modes/rpc/rpc-mode.js
+index b8b3c60..9416e51 100644
 --- a/dist/modes/rpc/rpc-mode.js
 +++ b/dist/modes/rpc/rpc-mode.js
-@@ -304,6 +304,7 @@
+@@ -304,6 +304,7 @@ export async function runRpcMode(runtimeHost) {
                      images: command.images,
                      streamingBehavior: command.streamingBehavior,
                      source: "rpc",
@@ -758,7 +982,7 @@
                      preflightResult: (didSucceed) => {
                          if (didSucceed) {
                              preflightSucceeded = true;
-@@ -319,11 +320,11 @@
+@@ -319,11 +320,11 @@ export async function runRpcMode(runtimeHost) {
                  return undefined;
              }
              case "steer": {
@@ -772,147 +996,19 @@
                  return success(id, "follow_up");
              }
              case "abort": {
-@@ -358,6 +359,7 @@
+@@ -358,6 +359,7 @@ export async function runRpcMode(runtimeHost) {
                      autoCompactionEnabled: session.autoCompactionEnabled,
                      messageCount: session.messages.length,
                      pendingMessageCount: session.pendingMessageCount,
-+                    nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
++                    nativeInputProofCapability: session.nativeInputProof.available(session.sessionManager) ? "pi-native-input-v1-live-only" : null,
                  };
                  return success(id, "get_state", state);
              }
---- a/node_modules/@earendil-works/pi-agent-core/dist/agent.js
-+++ b/node_modules/@earendil-works/pi-agent-core/dist/agent.js
-@@ -74,7 +74,9 @@
-         return [first];
-     }
-     clear() {
-+        const removed = this.messages;
-         this.messages = [];
-+        return removed;
-     }
- }
- /**
-@@ -94,6 +96,7 @@
-     getApiKey;
-     onPayload;
-     onResponse;
-+    onContextReady;
-     beforeToolCall;
-     afterToolCall;
-     shouldStopAfterTurn;
-@@ -120,6 +123,7 @@
-         this.getApiKey = runtimeOptions.getApiKey;
-         this.onPayload = runtimeOptions.onPayload;
-         this.onResponse = runtimeOptions.onResponse;
-+        this.onContextReady = runtimeOptions.onContextReady;
-         this.beforeToolCall = runtimeOptions.beforeToolCall;
-         this.afterToolCall = runtimeOptions.afterToolCall;
-         this.shouldStopAfterTurn = runtimeOptions.shouldStopAfterTurn;
-@@ -179,16 +183,15 @@
-     }
-     /** Remove all queued steering messages. */
-     clearSteeringQueue() {
--        this.steeringQueue.clear();
-+        return this.steeringQueue.clear();
-     }
-     /** Remove all queued follow-up messages. */
-     clearFollowUpQueue() {
--        this.followUpQueue.clear();
-+        return this.followUpQueue.clear();
-     }
-     /** Remove all queued steering and follow-up messages. */
-     clearAllQueues() {
--        this.clearSteeringQueue();
--        this.clearFollowUpQueue();
-+        return { steering: this.clearSteeringQueue(), followUp: this.clearFollowUpQueue() };
-     }
-     /** Returns true when either queue still contains pending messages. */
-     hasQueuedMessages() {
-@@ -293,6 +296,7 @@
-             sessionId: this.sessionId,
-             onPayload: this.onPayload,
-             onResponse: this.onResponse,
-+            onContextReady: this.onContextReady,
-             transport: this.transport,
-             thinkingBudgets: this.thinkingBudgets,
-             maxRetryDelayMs: this.maxRetryDelayMs,
---- a/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
-+++ b/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
-@@ -187,6 +187,9 @@
-         messages: llmMessages,
-         tools: context.tools,
-     };
-+    // Trusted native boundary: the final transformed and converted Pi context is
-+    // present. This callback MUST be awaited and allowed to fail before transport.
-+    await config.onContextReady?.(llmContext);
-     // Resolve API key (important for expiring tokens)
-     const resolvedApiKey = (config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
-     const response = await streamFunction(config.model, llmContext, {
---- a/dist/core/agent-session.d.ts
-+++ b/dist/core/agent-session.d.ts
-@@ -45,6 +45,19 @@
-     willRetry: boolean;
- } | {
-     type: "agent_settled";
-+} | {
-+    type: "input_committed";
-+    sessionId: string;
-+    inputId: string;
-+    sessionEntryId: string;
-+} | {
-+    type: "context_committed";
-+    sessionId: string;
-+    inputId: string;
-+    sessionEntryId: string;
-+    requestGeneration: number;
-+    llmContextDigest: string;
-+    committedAtMs: number;
- } | {
-     type: "queue_update";
-     steering: readonly string[];
-@@ -155,6 +168,8 @@
-     streamingBehavior?: "steer" | "followUp";
-     /** Source of input for extension input event handlers. Defaults to "interactive". */
-     source?: InputSource;
-+    /** Separate native 128-bit lowercase hex attempt identity; not the RPC command id. */
-+    inputId?: string;
-     /** Internal hook used by RPC mode to observe prompt preflight acceptance or rejection. */
-     preflightResult?: (success: boolean) => void;
- }
-@@ -372,7 +386,7 @@
-      * @param images Optional image attachments to include with the message
-      * @throws Error if text is an extension command
-      */
--    steer(text: string, images?: ImageContent[]): Promise<void>;
-+    steer(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
-     /**
-      * Queue a follow-up message to be processed after the agent finishes.
-      * Delivered only when agent has no more tool calls or steering messages.
-@@ -380,7 +394,7 @@
-      * @param images Optional image attachments to include with the message
-      * @throws Error if text is an extension command
-      */
--    followUp(text: string, images?: ImageContent[]): Promise<void>;
-+    followUp(text: string, images?: ImageContent[], inputId?: string): Promise<void>;
-     private _queueSteer;
-     private _queueFollowUp;
-     /**
---- a/dist/core/session-manager.d.ts
-+++ b/dist/core/session-manager.d.ts
-@@ -215,6 +215,10 @@
-      * so it is easier to find them.
-      * These need to be appended via appendCompaction() and appendBranchSummary() methods.
-      */
-+    assertNativeInputSafe(): boolean;
-+    nativeInputProofAvailable(): boolean;
-+    getTrackedInput(inputId: string): SessionMessageEntry | undefined;
-+    flushInputDurably(inputId?: string): string;
-     appendMessage(message: Message | CustomMessage | BashExecutionMessage): string;
-     /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */
-     appendThinkingLevelChange(thinkingLevel: string): string;
+diff --git a/dist/modes/rpc/rpc-types.d.ts b/dist/modes/rpc/rpc-types.d.ts
+index 82b5793..a665d14 100644
 --- a/dist/modes/rpc/rpc-types.d.ts
 +++ b/dist/modes/rpc/rpc-types.d.ts
-@@ -14,17 +14,20 @@
+@@ -14,17 +14,20 @@ import type { SourceInfo } from "../../core/source-info.ts";
  export type RpcCommand = {
      id?: string;
      type: "prompt";
@@ -933,7 +1029,7 @@
      message: string;
      images?: ImageContent[];
  } | {
-@@ -154,6 +157,7 @@
+@@ -154,6 +157,7 @@ export interface RpcSessionState {
      followUpMode: "all" | "one-at-a-time";
      sessionFile?: string;
      sessionId: string;
@@ -941,9 +1037,25 @@
      sessionName?: string;
      autoCompactionEnabled: boolean;
      messageCount: number;
+diff --git a/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js b/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+index ca1186c..7718bce 100644
+--- a/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
++++ b/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
+@@ -187,6 +187,9 @@ async function streamAssistantResponse(context, config, signal, emit, streamFunc
+         messages: llmMessages,
+         tools: context.tools,
+     };
++    // Trusted native boundary: the final transformed and converted Pi context is
++    // present. This callback MUST be awaited and allowed to fail before transport.
++    await config.onContextReady?.(llmContext);
+     // Resolve API key (important for expiring tokens)
+     const resolvedApiKey = (config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+     const response = await streamFunction(config.model, llmContext, {
+diff --git a/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts b/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
+index 42e1eab..6d66c85 100644
 --- a/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
 +++ b/node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
-@@ -10,6 +10,7 @@
+@@ -10,6 +10,7 @@ export interface AgentOptions {
      getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
      onPayload?: SimpleStreamOptions["onPayload"];
      onResponse?: SimpleStreamOptions["onResponse"];
@@ -951,7 +1063,7 @@
      beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
      afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
      shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext, signal?: AbortSignal) => boolean | Promise<boolean>;
-@@ -45,6 +46,7 @@
+@@ -45,6 +46,7 @@ export declare class Agent {
      shouldStopAfterTurn?: (context: ShouldStopAfterTurnContext, signal?: AbortSignal) => boolean | Promise<boolean>;
      prepareNextTurn?: (signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
      prepareNextTurnWithContext?: (context: PrepareNextTurnContext, signal?: AbortSignal) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
@@ -959,9 +1071,69 @@
      private activeRun?;
      /** Session identifier forwarded to providers for cache-aware backends. */
      sessionId?: string;
+diff --git a/node_modules/@earendil-works/pi-agent-core/dist/agent.js b/node_modules/@earendil-works/pi-agent-core/dist/agent.js
+index ee4f225..24c5dae 100644
+--- a/node_modules/@earendil-works/pi-agent-core/dist/agent.js
++++ b/node_modules/@earendil-works/pi-agent-core/dist/agent.js
+@@ -74,7 +74,9 @@ class PendingMessageQueue {
+         return [first];
+     }
+     clear() {
++        const removed = this.messages;
+         this.messages = [];
++        return removed;
+     }
+ }
+ /**
+@@ -94,6 +96,7 @@ export class Agent {
+     getApiKey;
+     onPayload;
+     onResponse;
++    onContextReady;
+     beforeToolCall;
+     afterToolCall;
+     shouldStopAfterTurn;
+@@ -120,6 +123,7 @@ export class Agent {
+         this.getApiKey = runtimeOptions.getApiKey;
+         this.onPayload = runtimeOptions.onPayload;
+         this.onResponse = runtimeOptions.onResponse;
++        this.onContextReady = runtimeOptions.onContextReady;
+         this.beforeToolCall = runtimeOptions.beforeToolCall;
+         this.afterToolCall = runtimeOptions.afterToolCall;
+         this.shouldStopAfterTurn = runtimeOptions.shouldStopAfterTurn;
+@@ -179,16 +183,15 @@ export class Agent {
+     }
+     /** Remove all queued steering messages. */
+     clearSteeringQueue() {
+-        this.steeringQueue.clear();
++        return this.steeringQueue.clear();
+     }
+     /** Remove all queued follow-up messages. */
+     clearFollowUpQueue() {
+-        this.followUpQueue.clear();
++        return this.followUpQueue.clear();
+     }
+     /** Remove all queued steering and follow-up messages. */
+     clearAllQueues() {
+-        this.clearSteeringQueue();
+-        this.clearFollowUpQueue();
++        return { steering: this.clearSteeringQueue(), followUp: this.clearFollowUpQueue() };
+     }
+     /** Returns true when either queue still contains pending messages. */
+     hasQueuedMessages() {
+@@ -293,6 +296,7 @@ export class Agent {
+             sessionId: this.sessionId,
+             onPayload: this.onPayload,
+             onResponse: this.onResponse,
++            onContextReady: this.onContextReady,
+             transport: this.transport,
+             thinkingBudgets: this.thinkingBudgets,
+             maxRetryDelayMs: this.maxRetryDelayMs,
+diff --git a/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts b/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
+index 4942001..79091dd 100644
 --- a/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
 +++ b/node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
-@@ -148,6 +148,8 @@
+@@ -148,6 +148,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
       * ```
       */
      convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
@@ -970,9 +1142,24 @@
      /**
       * Optional transform applied to the context before `convertToLlm`.
       *
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js b/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+index 6bc6312..b0dee53 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+@@ -46,6 +46,8 @@ export const stream = (model, context, options = {}) => {
+         const optionsProfile = options.profile || options.env?.AWS_PROFILE;
+         const config = {
+             profile: optionsProfile || getProviderEnvValue("AWS_PROFILE", options.env),
++            // AWS SDK otherwise retries internally before Pi sees an assistant error.
++            ...(options.maxRetries === 0 ? { maxAttempts: 1 } : {}),
+         };
+         const configuredRegion = getConfiguredBedrockRegion(options);
+         const hasAmbientConfiguredProfile = Boolean(getProviderEnvValue("AWS_PROFILE"));
+diff --git a/node_modules/@earendil-works/pi-ai/dist/types.d.ts b/node_modules/@earendil-works/pi-ai/dist/types.d.ts
+index f61c9ea..e6e19c9 100644
 --- a/node_modules/@earendil-works/pi-ai/dist/types.d.ts
 +++ b/node_modules/@earendil-works/pi-ai/dist/types.d.ts
-@@ -303,6 +303,10 @@
+@@ -303,6 +303,10 @@ export interface UserMessage {
      role: "user";
      content: string | (TextContent | ImageContent)[];
      timestamp: number;
@@ -983,14 +1170,3 @@
  }
  export interface AssistantMessage {
      role: "assistant";
---- a/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
-+++ b/node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
-@@ -46,6 +46,8 @@
-         const optionsProfile = options.profile || options.env?.AWS_PROFILE;
-         const config = {
-             profile: optionsProfile || getProviderEnvValue("AWS_PROFILE", options.env),
-+            // AWS SDK otherwise retries internally before Pi sees an assistant error.
-+            ...(options.maxRetries === 0 ? { maxAttempts: 1 } : {}),
-         };
-         const configuredRegion = getConfiguredBedrockRegion(options);
-         const hasAmbientConfiguredProfile = Boolean(getProviderEnvValue("AWS_PROFILE"));

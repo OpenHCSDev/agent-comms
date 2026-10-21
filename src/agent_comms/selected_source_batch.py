@@ -9,7 +9,7 @@ from .bus_publication import CommittedDelivery
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .messages import InfoKind, Message
-from .native_pi import NativePiUnavailable
+from .native_failures import NativePiUnavailable
 from .turn_context import ReplyRouteSegment, WireProvenance
 
 if TYPE_CHECKING:

@@ -12,7 +12,8 @@ from test_native_pi import INPUT_ID, _evidence
 
 @pytest.mark.parametrize('newest_first', [True, False])
 def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_first):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     newer = 'e' * 32
     user = json.loads(session.read_text().splitlines()[1])
     user['id'] = 'newer'
@@ -21,7 +22,7 @@ def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_fi
                newer: session.stat().st_size}
     with session.open('a') as stream:
         stream.write(json.dumps(user) + '\n')
-    write_proof_rows(session, [dict(
+    write_proof_rows(files, [dict(
         schema=2, type='context_committed', sessionId='sid', inputId=input_id,
         sessionEntryId=entry_id, requestGeneration=generation,
         llmContextDigest='c' * 64, committedAtMs=1_791_964_800_001 + generation,
@@ -31,7 +32,7 @@ def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_fi
         evidence = scope.for_source(session)
         NativeSessionIdentity.from_evidence(evidence)
         order = (newer, INPUT_ID) if newest_first else (INPUT_ID, newer)
-        proofs = [NativeContextProof.read_evidence(session, input_id, evidence=evidence,
+        proofs = [NativeContextProof.read_evidence(files, input_id, evidence=evidence,
                                                   session_entry_start=offsets[input_id])
                   for input_id in order]
         assert {proof.input_id for proof in proofs} == {INPUT_ID, newer}

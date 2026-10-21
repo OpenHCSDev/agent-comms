@@ -13,6 +13,7 @@ from agent_comms.pi_payloads import RequestId
 from . import pi_commands as commands
 from . import turn_failure as failures
 from .native_pi import CAPABILITY
+from .native_failures import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_events import PiEvent
 from .pi_payloads import StateData
@@ -53,6 +54,9 @@ class NativeAttestation(ABC):
 
     def require_identity(self) -> NativeSessionIdentity:
         raise ValueError("Native child has not attested an original session identity")
+
+    def require_state(self) -> StateData:
+        raise NativePiUnavailable("Native child has not reported its original state")
 
     @property
     def diagnostic_evidence(self):
@@ -145,6 +149,9 @@ class KnownSessionAttestation(NativeAttestation):
 class ObservedAttestation(NativeAttestation):
     state: StateData
     observed = True
+
+    def require_state(self) -> StateData:
+        return self.state
 
     @property
     def diagnostic_evidence(self):

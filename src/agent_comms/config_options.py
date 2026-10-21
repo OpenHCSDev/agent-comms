@@ -31,7 +31,8 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import ConfiguredBinary, InheritedArguments, NativeArguments
 from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_failures import NativePiUnavailable
 from .pi_vocabulary import ThinkingChoice
 from .thread_model import ThreadModel
 from .threads import ChosenModel, NextTurnConfiguration, Thread

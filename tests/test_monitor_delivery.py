@@ -6,6 +6,10 @@ import sqlite3
 
 import pytest
 
+from conftest import declare_test_bus
+
+from agent_comms.installer.practice import practice_copy
+
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
@@ -13,12 +17,38 @@ from agent_comms.cli_bridges.claude_protocol import (
 )
 from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, Operation,
 )
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import MessageAcknowledgmentError, RelationViolationError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
+
+
+@pytest.fixture
+def bridge(comms, tmp_path):
+    declare_test_bus(comms, threads=tuple(
+        comms.registry.new_thread(name, frozenset(), str(tmp_path))
+        for name in ('claude-code', 'viewer', 'peer')
+    ))
+    with practice_copy(comms.root, tmp_path / 'copied-bus') as (root, _measurement):
+        state = tmp_path / 'bridge-state'
+        binding = Binding(str(root), 'viewer', 'session')
+        with Binding.open(state) as db:
+            binding.bind(db)
+            yield ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+
+
+@pytest.fixture
+def emitted_delivery(bridge):
+    def emit(body, target='viewer'):
+        message = bridge.comms.messaging.send('claude-code', target, body).message
+        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire()),
+            EmittedOutcome, ReceivingMonitor(len(bridge.incoming_frame(message).parts)))
+        with bridge.db:
+            delivery.insert(bridge.db)
+        return delivery
+    return emit
 
 
 def decoded_record(data):
@@ -43,49 +73,67 @@ def attachment_notification(line, record_id='notification-record'):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('record_factory', (notification, attachment_notification))
-async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, record_factory):
-    state=tmp_path/'state'
-    acknowledgments=[]
-    class Core:
-        def __init__(self):
-            self.messaging=self
-        def acknowledge(self,thread,references):
-            acknowledgments.extend(references)
+async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_delivery, record_factory):
+    delivery = emitted_delivery('x' * 3000)
+    message = delivery.message
+    state, binding = bridge.options.state, bridge.binding
+    lines = [bridge.encode(part) for part in bridge.incoming_frame(message).parts]
+    assert len(lines) == 7
+    assert all(len(line.encode('utf-16-le')) // 2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
+    # Out-of-order observations and repeated history must not count twice.
+    for number in (6, 1, 3, 1, 5, 2):
+        for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
+            await update.observed(bridge)
+    assert [item.reference for item in bridge.comms.bus.inbox(binding.bus)] == [message.reference]
+    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
+    bridge.db.close()
     with Binding.open(state) as db:
-        binding=Binding(str(tmp_path),'viewer','session')
-        binding.bind(db)
-        bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
-        bridge.comms=Core()
-        message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
-        with db:
-            assert DeliveryRow(message.message_id,json.dumps(message.to_wire()),UnconfirmedOutcome).insert_if_absent(db).rowcount
-        parts=ClaudeMonitorFrame(message).parts
-        with db:
-            DeliveryRow.update(db, where='id=?', parameters=(message.message_id,), monitor=ReceivingMonitor(len(parts)), outcome=EmittedOutcome)
-        lines=[json.dumps(part,ensure_ascii=False) for part in parts]
-        assert len(lines)==7
-        assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
-        # Out-of-order observations and repeated history must not count twice.
-        for number in (6,1,3,1,5,2):
-            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
-                await update.observed(bridge)
-        assert not acknowledgments
-        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
-    with Binding.open(state) as db:
-        bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
-        bridge.comms=Core()
-        for number in (0,4):
-            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
-                await update.observed(bridge)
-        assert acknowledgments==[message.reference]
+        reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+        for number in (0, 4):
+            for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
+                await update.observed(reopened)
+        assert reopened.comms.bus.inbox(binding.bus) == []
         for line in lines:
-            for update in record_factory(line,record_id='later-overlap').updates(ClaudeSession()):
-                await update.observed(bridge)
-        assert acknowledgments==[message.reference]
+            for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
+                await update.observed(reopened)
+        assert reopened.comms.bus.inbox(binding.bus) == []
+        # Confirmation can beat the final socket-drain emission report.
+        confirmed, = DeliveryRow.select(db, id=message.message_id)
+        await confirmed.finish(reopened, EmittedOutcome)
     with Binding.open(state) as db:
         assert DeliveryRow.select(db)[0].outcome is DeliveredOutcome
-        assert DeliveryRow.select(db)[0].monitor==ObservedMonitor('record-4',1792168805.123)
-        assert len(ObservedPart.select(db))==7
+        assert DeliveryRow.select(db)[0].monitor == ObservedMonitor('record-4', 1792168805.123)
+        assert len(ObservedPart.select(db)) == 7
+
+
+@pytest.mark.asyncio
+async def test_failed_core_acknowledgment_stays_unconfirmed_and_is_logged(bridge, emitted_delivery, capsys):
+    delivery = emitted_delivery('not routed to this viewer', target='peer')
+    lines = [bridge.encode(part) for part in bridge.incoming_frame(delivery.message).parts]
+    before = bridge.comms.bus.reads.read()
+
+    class Confirm(Operation):
+        @classmethod
+        def serves(cls, bridge_type):
+            return False  # This controlled transcript operation is not a CLI command.
+
+        async def execute(self, selected):
+            for number, line in enumerate(lines):
+                for update in notification(line, record_id=f'failed-{number}').updates(ClaudeSession()):
+                    await update.observed(selected)
+
+    bridge.options.operation = Confirm()
+    with pytest.raises(ExceptionGroup) as caught:
+        await bridge.run()
+    assert tuple(type(error) for error in caught.value.exceptions) == (MessageAcknowledgmentError,)
+    error, = caught.value.exceptions
+    assert error.recipient == bridge.binding.bus
+    assert error.references == (delivery.message.reference,)
+    saved, = DeliveryRow.select(bridge.db, id=delivery.id)
+    assert saved.outcome is EmittedOutcome
+    assert saved.monitor == delivery.monitor
+    assert bridge.comms.bus.reads.read() == before
+    assert delivery.id in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
@@ -128,29 +176,23 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
 
 
 @pytest.mark.asyncio
-async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_path,capsys):
-    with Binding.open(tmp_path) as db:
-        binding=Binding(str(tmp_path),'viewer','session')
-        bridge=ClaudeBridge(Options(Watch(),None,tmp_path),binding,db)
-        message=Message(sender='peer',target='viewer',type=InfoKind,body='original',timestamp=1.,seq=1)
-        with db:
-            DeliveryRow(message.message_id,json.dumps(message.to_wire()),EmittedOutcome,ReceivingMonitor(1)).insert(db)
-        frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='different')
-        await frame.confirm(bridge,ObservedMonitor('record',1.))
-        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
-        assert isinstance(DeliveryRow.select(db)[0].monitor,MismatchedMonitor)
-        assert 'message remains pending' in capsys.readouterr().err
+async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(bridge, emitted_delivery, capsys):
+    delivery = emitted_delivery('original')
+    frame = MonitorPart(id=delivery.id, sender=delivery.message.sender, number=1, total=1, body='different')
+    await frame.confirm(bridge, ObservedMonitor('record', 1.))
+    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
+    assert isinstance(DeliveryRow.select(bridge.db)[0].monitor, MismatchedMonitor)
+    assert 'message remains pending' in capsys.readouterr().err
 
 
-def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
-    message=Message(sender='peer',target='viewer',type=InfoKind,body='retained',timestamp=1.,seq=1)
-    with Binding.open(tmp_path) as db:
-        DeliveryRow(message.message_id,json.dumps(message.to_wire()),EmittedOutcome).insert(db)
-        frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='retained')
-        assert isinstance(DeliveryRow.select(db)[0].monitor,UnrecordedMonitor)
-        assert not DeliveryRow(message.message_id,json.dumps(message.to_wire()),UnconfirmedOutcome).insert_if_absent(db).rowcount
-        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
-        assert ObservedPart.select(db)==[]
+def test_old_emission_has_no_invented_evidence_or_replay(bridge):
+    message = bridge.comms.messaging.send('peer', 'viewer', 'retained').message
+    with bridge.db:
+        DeliveryRow(message.message_id, json.dumps(message.to_wire()), EmittedOutcome).insert(bridge.db)
+    assert isinstance(DeliveryRow.select(bridge.db)[0].monitor, UnrecordedMonitor)
+    assert not DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome).insert_if_absent(bridge.db).rowcount
+    assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
+    assert ObservedPart.select(bridge.db) == []
 
 
 @pytest.mark.asyncio

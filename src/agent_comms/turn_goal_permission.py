@@ -32,7 +32,7 @@ class OwnerGoalPermission(GoalPermission):
     goal: GoalDeclaration
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return current == self.goal
+        return current.authority == self.goal.authority
 
 
 class PublishedGoalPermission(OwnerGoalPermission):

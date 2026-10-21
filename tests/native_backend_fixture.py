@@ -19,6 +19,7 @@ from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.native_child import PiSessionChild
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput
@@ -41,8 +42,11 @@ class NativeBackendFixture:
         self.config = config
         self.package = package
         self.persistent = PersistentPiSession()
+        self.participant = Comms(root).registry.new_thread(
+            'direct-native', frozenset(), str(project),
+        ).incarnation.require_recorded()
         self.starts = []
-        self.children = []
+        self.children: list[PiSessionChild] = []
         self.observed = []
 
     async def author_history(self):
@@ -85,7 +89,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         session_id = await self.attach_saved_owner(agent, project=project, session=session)
         original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
         await agent.turns.backend_for(session_id, original).prepare(original)
-        child = agent.turns.persistent_backends[session_id].child_state.child.proc
+        child = agent.turns.persistent_backends[session_id].child_state.child
         self.children.append(child)
         return session_id
 
@@ -142,10 +146,10 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
-        child = backend.TurnSession.active[asyncio.current_task()].native.proc
+        child = backend.TurnSession.active[asyncio.current_task()].native
         # Cleanup already belongs to the saved-session owner at native input start;
         # there is no later copy from transient TurnSession process fields.
-        assert self.persistent.child_state.child.proc is child
+        assert self.persistent.child_state.child is child
         assert self.persistent.child_state.child.reader is not None
         if child not in self.children:
             self.children.append(child)
@@ -160,7 +164,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 self.native_arguments(),
                 text,
                 str(self.project),
-                root=self.root, session_file=str(self.session),
+                root=self.root, owner=self.participant, session_file=str(self.session),
                 persistent_session=self.persistent,
                 package=self.package,
                 tool_mode=NoSelectedTools(),
@@ -273,16 +277,22 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
                     async with AsyncExitStack() as retirement:
                         retirement.push_async_callback(close_server)
                         for child in owner.children:
-                            retirement.push_async_callback(child.stop)
+                            retirement.push_async_callback(child.shutdown)
                         retirement.push_async_callback(owner.persistent.close)
                 finally:
                     assert all(child.retired for child in owner.children)
                     print(json.dumps({
                         "saved_native_fixture": str(root),
                         "localhost_posts": provider.posts,
-                        "native_input_proofs": len(read_proof_rows(session))
-                            if Path(str(session) + ".input-proof").is_file() else 0,
-                        "children": [FieldCodec.encode(child.identity) for child in owner.children],
+                        "native_input_proofs": sum(
+                            len(read_proof_rows(files))
+                            for files in {
+                                child.key[0].session.files(child.key[0].root)
+                                for child in owner.children
+                            }
+                            if files.input_proof.is_file()
+                        ),
+                        "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
                         "children_retired": True,
                     }))
 

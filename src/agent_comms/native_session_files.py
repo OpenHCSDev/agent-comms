@@ -1,13 +1,20 @@
-"""A saved native session file and the sidecars kept beside it."""
+"""Native transcript resources and bus-owned input proofs."""
 
 from __future__ import annotations
 
+import hashlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Self
 
 from .errors import RelationViolationError
-from .locked_store import DurableFile, PatternFile
+from .native_failures import NativePiUnavailable
+from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
+from agent_comms.field_codec import Id128Text
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 
 
 class SessionFiles:
@@ -95,28 +102,14 @@ class SessionFiles:
         return freed
 
 
-@dataclass(frozen=True, slots=True)
-class NativeSessionFiles(SessionFiles):
-    """One saved session: the transcript, its input-proof journal and writer lock.
+class NativeTranscriptFiles(SessionFiles):
+    """Share native transcript/writer-lock lifetime without owning proof storage."""
 
-    The input proof is a SQLite journal written by the native process; its
-    rollback/WAL companions belong to it. Any other file sharing the session's
-    name is unexpected and refuses deletion.
-    """
-
-    session: Path
-
-    @classmethod
-    def of(cls, session_file: str) -> NativeSessionFiles:
-        return cls(Path(session_file).resolve())
-
-    @property
-    def input_proof(self) -> Path:
-        return Path(f"{self.session}.input-proof")
+    __slots__ = ()
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:
-        return (self.input_proof,)
+        return ()
 
     @property
     def writer_lock(self) -> Path:
@@ -124,26 +117,111 @@ class NativeSessionFiles(SessionFiles):
 
     @property
     def members(self) -> tuple[Path, ...]:
-        proof = self.input_proof
-        return (
-            self.session,
-            proof,
-            *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
-            self.writer_lock,
+        return self.session, self.writer_lock
+
+
+@dataclass(frozen=True, slots=True)
+class NativeSessionLocks(NativeTranscriptFiles):
+    """A transcript whose caller needs only its native writer lock."""
+
+    session: Path
+
+    @classmethod
+    def of(cls, session_file: str) -> NativeSessionLocks:
+        return cls(Path(session_file).resolve())
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
+    """Bind the existing saved identity to its bus and participant namespace."""
+
+    root: Path
+    owner: ParticipantIdentity
+
+    @classmethod
+    def for_identity(
+        cls, identity: NativeSessionIdentity, *, root: Path, owner: ParticipantIdentity,
+    ) -> Self:
+        return cls(*(getattr(identity, declaration.name)
+                     for declaration in fields(NativeSessionIdentity)), root=root, owner=owner)
+
+    @staticmethod
+    def require_private_directory(directory: Path) -> None:
+        if ".." in directory.parts:
+            raise NativePiUnavailable("Native Pi session directory is not lexical")
+        try:
+            TrustedAncestorRole.require_path(directory)
+        except ValueError as error:
+            raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
+        try:
+            PrivateDirectoryRole.require(directory.lstat())
+        except RelationViolationError as error:
+            raise NativePiUnavailable("Native Pi session directory must be owner-only") from error
+
+    @classmethod
+    def prepare_private_directory(cls, directory: Path) -> None:
+        """Commit creation and re-sync the owner-private ancestor chain on reuse."""
+        missing: list[Path] = []
+        current = directory
+        while True:
+            try:
+                current.lstat()
+            except FileNotFoundError:
+                missing.append(current)
+                current = current.parent
+            else:
+                break
+        try:
+            for path in reversed(missing):
+                path.mkdir(mode=0o700, exist_ok=True)
+                cls.require_private_directory(path)
+                fsync_directory(path.parent)
+            cls.require_private_directory(directory)
+            parent = directory.parent
+            while True:
+                fsync_directory(parent)
+                if parent == parent.parent:
+                    break
+                try:
+                    PrivateDirectoryRole.require(parent.lstat())
+                except RelationViolationError:
+                    break
+                parent = parent.parent
+        except OSError as error:
+            raise NativePiUnavailable("Native Pi session directory could not be committed") from error
+
+    @property
+    def session(self) -> Path:
+        return self.path
+
+    @property
+    def input_proof(self) -> Path:
+        # Native IDs are opaque header data, not trusted path components. Hashing
+        # keeps the key stable across transcript moves and confined to one file.
+        key = hashlib.sha256(self.session_id.encode()).hexdigest()
+        return NativeInputProof.path_in(
+            self.root, lookup=Id128Text.decode(self.owner.lookup), name=key,
         )
 
 
+class NativeInputProof(DurableFile, SQLiteFile, PatternFile):
+    """One thread's native-session proof, retained and copied with its bus."""
+
+    __slots__ = ()
+    filename = "input-proofs/{lookup}/{name}.sqlite"
+
+
 class SavedSessionFile(PatternFile):
-    """A bus location holding saved native sessions, each with its input proof beside it."""
+    """A bus location holding saved native transcripts and their writer locks."""
 
     __slots__ = ()
 
     @classmethod
-    def sessions_in(cls, root: Path) -> tuple[NativeSessionFiles, ...]:
+    def sessions_in(cls, root: Path) -> tuple[NativeSessionLocks, ...]:
         """Every saved session under ``root``, found relative to it, so a practice copy's
         sessions are its own and never the live bus the copied registry still names."""
         return tuple(
-            NativeSessionFiles(path)
+            NativeSessionLocks(path)
             for owner, directory in cls.declarations_in(root)
             for path in sorted(owner.matching_in(directory))
         )

@@ -15,6 +15,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
 
 
+from agent_comms.participant_identity import ParticipantIdentity
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
@@ -126,7 +127,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
 
 @dataclass(frozen=True)
-class RecordedThreadIncarnation(ThreadIncarnation):
+class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     """The recorded creation owns identity; names remain registry-resolved routes.
 
     Equality and hashing use the same birth as ``lookup``. Registry operations

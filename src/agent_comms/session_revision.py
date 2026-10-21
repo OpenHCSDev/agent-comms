@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 
 from .declared_family import DeclaredFamily
 from .native_session_files import NativeSessionFiles
@@ -57,14 +56,12 @@ class SessionRevision(SessionObservation):
     input_proof: InputProofRevision
 
     @classmethod
-    def observe(cls, session_file: str | None) -> SessionObservation:
-        if not isinstance(session_file, str) or not session_file:
-            return UnavailableSessionObservation(ValueError("No selected native session"))
+    def observe(cls, files: NativeSessionFiles) -> SessionObservation:
         try:
-            native = FileRevision.from_stat(Path(session_file).stat())
+            native = FileRevision.from_stat(files.session.stat())
             try:
                 proof = PresentInputProofRevision(
-                    FileRevision.from_stat(NativeSessionFiles(Path(session_file)).input_proof.stat())
+                    FileRevision.from_stat(files.input_proof.stat())
                 )
             except FileNotFoundError:
                 proof = MissingInputProofRevision()
@@ -79,5 +76,5 @@ class SessionRevision(SessionObservation):
     def matches(self, reserved: SessionRevision) -> bool:
         return self == reserved
 
-    def current(self, session_file: str | None) -> bool:
-        return self.observe(session_file).matches(self)
+    def current(self, files: NativeSessionFiles) -> bool:
+        return self.observe(files).matches(self)

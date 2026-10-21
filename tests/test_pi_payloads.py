@@ -142,7 +142,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_failures import NativePiUnavailable
     from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
@@ -201,7 +201,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     ],
 )
 def test_final_content_owns_native_text_claim(content, expected):
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_failures import NativePiUnavailable
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "stopReason": "stop", "content": content,

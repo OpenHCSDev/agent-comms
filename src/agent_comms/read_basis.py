@@ -26,6 +26,7 @@ from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, Historic
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .recorded_bus import RecordedBusIdentity
 from .store_files import SharedLock, _store_lock
@@ -580,6 +581,11 @@ class DisplayBasis:
     @property
     def message_count(self) -> int:
         return sum(len(item.sequences) for item in self.conversations)
+
+    def uncovered(self, references: Collection[MessageReference]) -> tuple[MessageReference, ...]:
+        """References whose public positions this captured display does not cover."""
+        sequences = frozenset(sequence for item in self.conversations for sequence in item.sequences)
+        return tuple(reference for reference in references if reference.seq not in sequences)
 
     @property
     def tail(self) -> DisplayedTail:

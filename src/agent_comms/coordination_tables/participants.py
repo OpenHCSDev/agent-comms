@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from dataclasses import dataclass
 
+from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     Column,
@@ -84,7 +85,7 @@ END"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerGenerations(CoordinatorTable, TypedTable):
+class OwnerGenerations(ParticipantIdentity, CoordinatorTable, TypedTable):
     owner_lookup: Annotated[str, Column(primary_key=True)]
     owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
@@ -92,6 +93,10 @@ class OwnerGenerations(CoordinatorTable, TypedTable):
     @classmethod
     def references(cls):
         return (ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),)
+
+    @property
+    def lookup(self) -> str:
+        return self.owner_lookup
 
     @classmethod
     def trigger_bodies(cls):

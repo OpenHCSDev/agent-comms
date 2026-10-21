@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.native_session_files import NativeSessionFiles
+from .native_failures import NativePiUnavailable
+
 import os
 import shutil
 import time
@@ -288,7 +291,7 @@ class RecoveryMonitorCapability:
     def recover_released_native_attempt(cls, store, execution_id):
         """Settle the old input without re-running it or fabricating delivery."""
         from .native_entries import NativeEntry
-        from .native_pi import NativeContextProof, NativePiUnavailable
+        from .native_pi import NativeContextProof
         from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision, MissingFile
@@ -315,7 +318,9 @@ class RecoveryMonitorCapability:
                     raise RecoveryBlocked("native recovery input does not match its binding")
                 try:
                     proof = NativeContextProof.read_evidence(
-                        session.path, source.input_id, evidence=evidence,
+                        NativeSessionFiles.for_identity(session, root=store.session.path.parent,
+                                           owner=source.owner_identity),
+                        source.input_id, evidence=evidence,
                         session_entry_start=source.require_context_proof().session_entry_start,
                     )
                 except (NativePiUnavailable, UnrecordedNativeContext):
@@ -427,7 +432,9 @@ class RecoveryMonitorCapability:
                 if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")
                 proof = NativeContextProof.read_evidence(
-                    session_file, reserved.input_id, evidence=evidence,
+                    NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
+                                       owner=reserved.owner_identity),
+                    reserved.input_id, evidence=evidence,
                     session_entry_start=reserved.require_context_proof().session_entry_start,
                 )
                 original_session.require_context(proof)

@@ -8,7 +8,7 @@ from pathlib import Path
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin
 from .change_report import NoChangeReport, ReportEvidence
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
@@ -180,8 +180,16 @@ class Messaging:
         wire writers such as a maintenance cutover out of that one write, while
         page readers proceed. The ledger merges sequences under its own lock and
         rejects a replaced bus, so another reader or acknowledgment loses nothing.
+        Every distinct reference must be newly deliverable; an incomplete basis
+        raises MessageAcknowledgmentError before any read fact is committed.
         """
-        basis = self.bus.delivered(name, references)
+        references = tuple(dict.fromkeys(references))
+        try:
+            basis = self.bus.delivered(name, references)
+        except RelationViolationError as error:
+            raise MessageAcknowledgmentError(self.registry.require(name).name, references) from error
+        if basis.message_count != len(references):
+            raise MessageAcknowledgmentError(basis.viewer, basis.uncovered(references))
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             self.bus.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count

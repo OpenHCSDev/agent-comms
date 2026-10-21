@@ -10,7 +10,8 @@ from functools import partial
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
 from .drain_failures import UNAVAILABLE_DRAIN_ERRORS
-from .native_pi import NativePiTerminalFailure, NativeRequestFailure
+from .native_pi import NativePiTerminalFailure
+from .native_failures import NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure
@@ -76,12 +77,8 @@ class SelectedRequest:
     async def _native_failure(self, error):
         if not await self._settle_unknown():
             return
-        sent = await Coordination.run_worker(partial(publish_native_failure,
-            self.participant,
-            self.claim_scope.input_id,
-            error.public_failure,
-            native_response=error.rejected_response,
-            source_error=error,
+        sent = await Coordination.run_worker(partial(error.publish,
+            partial(publish_native_failure, self.participant, self.claim_scope.input_id),
         ))
         for notice in sent.notices:
             error.add_note(notice)

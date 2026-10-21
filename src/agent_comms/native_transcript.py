@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
+from agent_comms.native_session_files import NativeSessionFiles
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
@@ -236,9 +237,7 @@ class NativeTranscript(TranscriptSource):
         producer may also prepend model/settings records. Stop at conversation;
         never scan the remaining history or claim this was a model request.
         """
-        from .session_revision import SessionRevision
-
-        revision = SessionRevision.observe(str(self.path)).require_available()
+        revision = FileRevision.from_stat(self.path.stat())
         with self.path.open("rb") as stream:
             header = NativeEntry.read(stream.readline())
             if not isinstance(header, SessionEntry):
@@ -250,7 +249,7 @@ class NativeTranscript(TranscriptSource):
                 if entry.is_message:
                     break
                 sources.extend(entry.imported_sources())
-        if not revision.current(str(self.path)):
+        if FileRevision.from_stat(self.path.stat()) != revision:
             raise ValueError("Imported context saved source changed while reading")
         return tuple(sources)
 
@@ -308,7 +307,7 @@ class NativeTranscript(TranscriptSource):
                      if (identity := record.annotation_id) is not None)
 
     def require_publication_context(
-        self, user: NativeEntry, *, session_entry_start: int,
+        self, user: NativeEntry, *, session_entry_start: int, files: NativeSessionFiles,
     ) -> NativeContextProof:
         """Corroborate the existing native producer's context, without replay.
 
@@ -317,15 +316,15 @@ class NativeTranscript(TranscriptSource):
         journal owns context inclusion for the actual header/input/entry identity;
         this bounded indexed lookup does not guess a request kind or options.
         """
-        from .native_pi import NativeContextJournal, _private_session_dir
+        from .native_pi import NativeContextJournal
 
-        _private_session_dir(self.path.parent)
+        files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = NativeEntry.read(stream.readline())
         if not isinstance(header, SessionEntry):
             raise MalformedRecord("Native publication has no original session header")
         header.require_header()
-        with NativeContextJournal.open_evidence(self.path.absolute()) as db:
+        with NativeContextJournal.open_evidence(files) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
                 raise MalformedRecord("Native publication has no committed context inclusion")
@@ -375,7 +374,7 @@ class NativeTranscript(TranscriptSource):
         """Follow the native record's parents to find the user input that started it."""
         return self.inputs_for((record,))[0]
 
-    def publication_input(self, *, after: int, through: int):
+    def publication_input(self, *, after: int, through: int, files: NativeSessionFiles):
         """Return the final producer and its actual tracked input ancestry.
 
         This bounded reverse walk runs before any BUS/registry lock is acquired.
@@ -393,7 +392,7 @@ class NativeTranscript(TranscriptSource):
             if user is None:
                 raise RelationViolationError("Native publication has no tracked input ancestry")
             entry = user.entry.require_tracked_user()
-            self.require_publication_context(entry, session_entry_start=user.start)
+            self.require_publication_context(entry, session_entry_start=user.start, files=files)
             return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
 

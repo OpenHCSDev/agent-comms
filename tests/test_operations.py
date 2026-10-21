@@ -16,7 +16,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
@@ -59,7 +59,29 @@ class TestMessaging:
         references = tuple(message.reference for message in messages)
         assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer") == 0
-        assert wired.messaging.acknowledge("fixer", references) == 0
+        with pytest.raises(MessageAcknowledgmentError) as caught:
+            wired.messaging.acknowledge("fixer", references)
+        assert caught.value.references == references
+        assert wired.messaging.acknowledge("fixer", ()) == 0
+
+    def test_ack_refuses_partial_selection_before_changing_reads(self, wired):
+        incoming = wired.messaging.send("PR111", "fixer", "incoming").message
+        outgoing = wired.messaging.send("fixer", "PR111", "not delivered to fixer").message
+        before = wired.bus.reads.read()
+        with pytest.raises(MessageAcknowledgmentError) as caught:
+            wired.messaging.acknowledge("fixer", (incoming.reference, outgoing.reference))
+        assert caught.value.recipient == "fixer"
+        assert caught.value.references == (outgoing.reference,)
+        assert wired.bus.reads.read() == before
+        assert [message.reference for message in wired.bus.inbox("fixer")] == [incoming.reference]
+
+    def test_ack_names_an_invalid_original_reference(self, wired):
+        incoming = wired.messaging.send("PR111", "fixer", "incoming").message
+        invalid = replace(incoming.reference, message_id="not-the-original")
+        with pytest.raises(MessageAcknowledgmentError) as caught:
+            wired.messaging.acknowledge("fixer", (invalid,))
+        assert caught.value.references == (invalid,)
+        assert [message.reference for message in wired.bus.inbox("fixer")] == [incoming.reference]
 
     def test_scoped_ack_only_clears_selected_conversation(self, wired):
         wired.messaging.send("PR111", "fixer", "direct").message.message_id

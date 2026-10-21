@@ -29,7 +29,6 @@ from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import DurableFile, SQLiteFile
-from agent_comms.native_session_files import SavedSessionFile
 from agent_comms.typed_table import (
     DerivedTables,
     SQLiteSchemaObject,
@@ -199,9 +198,7 @@ def stores(root: Path) -> tuple[StoredFile, ...]:
     registry's absolute paths, which on a practice copy name the live bus, are never read."""
     declared = {path for owner, directory in SQLiteFile.declarations_in(root)
                 if issubclass(owner, DurableFile) for path in owner.matching_in(directory)}
-    proofs = {path for session in SavedSessionFile.sessions_in(root)
-              for path in session.schema_paths if path.is_file()}
-    return tuple(map(StoredFile.read, sorted(declared | proofs)))
+    return tuple(map(StoredFile.read, sorted(declared)))
 
 
 def pending(root: Path) -> tuple[StoredFile, ...]:
