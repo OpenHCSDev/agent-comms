@@ -7,6 +7,10 @@ on:
 env:
   AC_NATIVE_STACK_BIN: ${{ github.workspace }}/stack/bin/pi-native
 
+defaults:
+  run:
+    shell: bash .github/run-step.sh {0}
+
 jobs:
   stack:
     runs-on: ubuntu-latest
@@ -79,13 +83,13 @@ jobs:
       # executable. They never use credentials or an external model endpoint.
 
       - name: Install pinned Pi loopback fixture
-        shell: bash
         run: |
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
 
       # The durable host imports pi-durable, pi-ai and chord from beside it.
       - name: Install locked runtime host dependencies
         working-directory: src/agent_comms
+        shell: bash
         run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
 
       - name: Run tests with coverage (85% enforced on Linux)
