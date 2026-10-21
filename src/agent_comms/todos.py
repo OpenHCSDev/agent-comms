@@ -2569,6 +2569,8 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def line(self) -> str: ...
 
     def apply(self, current: Todo) -> Todo:
+        # A verdict's time bounds which edits it judges, so the write refuses one it cannot date.
+        self.at.require_recorded("A verdict")
         current.require_revision(self.expected_revision)
         current.require_assignment(self.previous)
         judged = self.judged(current)
