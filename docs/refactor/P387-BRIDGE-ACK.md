@@ -46,3 +46,30 @@ owner/import/consumer evidence and minimal reproduction log are retained in
 `/home/ts/.cache/agent-scratch/fork-external/P387-before-source.txt` and
 `P387-reproduction.txt`. Dynamic receiver spellings are not a static dispatch
 proof. SQLite and Claude wire contracts were read semantically.
+
+## Repair and copied application result
+
+`Messaging.acknowledge` rejects a short display basis before writing any reads;
+`MessageAcknowledgmentError` carries the recipient and unmatched references.
+`DisplayBasis.uncovered` derives those references from its captured positions;
+the bus has already checked the original sequence/id pairs. Invalid original
+references also propagate as that declared acknowledgement error.
+
+`Outcome.finish` now owns acknowledgement followed by the SQLite confirmation.
+The already-confirmed `FilteredOutcome` does nothing on a later observation,
+including the real race where transcript confirmation precedes socket drain.
+The replaced `followed_by` methods and duplicate-message re-acknowledgement are
+deleted. Both monitor siblings consume this shared outcome behavior.
+
+The monitor fixture uses a real practice-copied bus instead of a fake Core.
+Both task-record formats still test split, out-of-order, duplicate and reopened
+history; the failed ACK runs through the real bridge error logger and remains
+emitted, not confirmed. Partial batches change no canonical reads.
+
+Targeted result before publication: **67 passed in 7.11 seconds**. The retained
+full-bus copy also completed a fresh successful notification: Core reported it
+read and the bridge stored delivered. A separately fresh, wrongly routed
+notification raised the declared error, retained emitted and left reads
+unchanged. Both runs use the bridge's actual line encoder; an earlier probe's
+incorrect generic JSON encoding was rejected as foreign input and is retained
+as a failed probe, never retried. No historical or live backlog was replayed.
