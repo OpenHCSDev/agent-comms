@@ -13,7 +13,7 @@ import pytest
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.thread_status import ArchivedThreadStatus
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.installer.carry import (
     STEPS, Carried, CarryChain, CarryLedger,
 )
@@ -163,7 +163,9 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, st
     comms.messaging.initialize_private_initial_protocol()
     names = ["failed", "other", "last"]
     for name in names[1:]:
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(
+            comms.registry.new_thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
+        )
 
     # The first real CLI request fails; both other children must finish their writes
     # before owners propagates that failure. No replacement Stack.cli is involved.

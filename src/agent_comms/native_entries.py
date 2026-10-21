@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
+from collections.abc import Iterable
+from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,14 +40,45 @@ class TranscriptProjection:
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
-    """Original external ancestry fields; opaque entries project this same owner."""
-    id: str | None = None
-    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
-    timestamp: Annotated[RecordedTimestamp, TimestampText]
+    """Shared message projection; each journal declares its own identity and clock."""
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
+
+    @property
+    def annotation_id(self) -> str | None:
+        return None
+
+    @property
+    def input_boundary(self):
+        return any(message.user for message in self.messages)
+
+    def require_entry_id(self) -> str:
+        return self.source_coordinates.original_id
+
+    @property
+    def source_coordinates(self):
+        return self
+
+    @abstractmethod
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]: ...
+
+    def project_messages(self, context: TranscriptProjection, timestamps: Iterable[float]) -> list[TranscriptEvent]:
+        return [event for message, timestamp in zip(self.messages, timestamps, strict=True)
+                for event in message.transcript_events(context, timestamp)]
+
+    @property
+    @abstractmethod
+    def original_id(self) -> str: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
+    wire_tag = "type"
+    id: str | None = None
+    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    timestamp: Annotated[RecordedTimestamp, TimestampText]
 
     @property
     def child_parent(self) -> object:
@@ -59,37 +92,17 @@ class RecordedEntry(PiPayload):
         }
 
     @property
-    def input_boundary(self):
-        return any(message.user for message in self.messages)
-
-    def require_entry_id(self) -> str:
-        return self.source_coordinates.original_id
-
-    @property
-    def source_coordinates(self):
-        return self
+    def original_id(self) -> str:
+        if not self.id:
+            raise ValueError("Native publication requires an original entry ID")
+        return self.id
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        """Project one journal clock onto every display part without inventing time.
-
-        Decode it once, before splitting into message/tool/routing events; ACP
-        consumers receive Unix seconds.
-        """
+        """Every part of a native record shares its original journal clock."""
         return self._events(context, self.timestamp.at.timestamp())
 
     def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
-        return [event for message in self.messages for event in message.transcript_events(context, timestamp)]
-
-    @property
-    def original_id(self):
-        if not self.id:
-            raise ValueError("Native publication requires an original entry ID")
-        return str(self.id)
-
-
-@dataclass(frozen=True, kw_only=True)
-class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
-    wire_tag = "type"
+        return self.project_messages(context, repeat(timestamp, len(self.messages)))
 
     def imported_sources(self):
         return ()
@@ -529,6 +542,10 @@ class MessageEntry(NativeEntry):
     is_message = True
 
     @property
+    def annotation_id(self) -> str | None:
+        return self.id
+
+    @property
     def messages(self):
         return (self.message,)
 
@@ -580,8 +597,18 @@ class CompactionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
-    id: int = field()
+    id: int
     messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
+
+    @property
+    def original_id(self) -> str:
+        return str(self.id)
+
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Durable entries have no clock; their individual model messages do."""
+        return self.project_messages(context, (
+            message.timestamp.recorded_at("Durable message") for message in self.messages
+        ))
 
 
 class CustomEntry(NativeEntry):

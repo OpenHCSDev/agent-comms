@@ -336,14 +336,14 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
 
 
 def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
-    """Real forge observations, copied SQLite stores, board and commander close entrypoint."""
+    """Local forge fixture, copied SQLite stores, board and real commander close entrypoint."""
     ctx = pr_commander
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     worker = thread("merge-worker", ctx.root, 2.0)
     ctx.comms.registry.register(worker)
     planned = "Read the copied board and confirm its application order remains assigned after merge"
-    link = PullRequestLink(source.github, 2347)  # retained real merge, already in this checkout
+    link = PullRequestLink(source.github, 1)  # the fixture's locally contained merge
     originals = tuple(
         ctx.comms.goals.todos.create(
             f"P{index}", source.github, "Keep application work held until its run is recorded",

@@ -32,6 +32,7 @@ from .pi_vocabulary import (
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
 from .send_result import CorrectionResult, CorrectionUnreported
+from .recorded_time import EventTime, RecordedEventMilliseconds, UnrecordedEventTime
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -585,6 +586,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     stop_reason: type[PiStopReason] = wire_field("stopReason", UnreportedStopReason)
     error_message: str | None = wire_field("errorMessage")
     diagnostics: tuple[PiDiagnostic, ...] = ()
+    timestamp: Annotated[EventTime, RecordedEventMilliseconds] = wire_field("timestamp", UnrecordedEventTime())
 
     def __post_init__(self):
         if isinstance(self.stop_reason, str):

@@ -49,7 +49,8 @@ try {
     for (let index = 0; index < 260; index++) {
       const role = index % 2 ? 'assistant' : 'user';
       await tx.appendEntry(root.id, {kind: `pi.${role}`, data: null,
-        model: [{role, content: [{type: 'text', text: `entry ${index}`}]} ]});
+        model: [{role, timestamp: 1760000000000 + index,
+                 content: [{type: 'text', text: `entry ${index}`}]} ]});
     }
   }, context);
 } finally { await harness.close(context); }
@@ -78,6 +79,9 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                     records = tuple(reader.reverse(cut.offset))
                     assert len(records) == 260
                     assert [r.events[0].text for r in records[:4]] == ['entry 259', 'entry 258', 'entry 257', 'entry 256']
+                    assert [r.events[0].timestamp for r in records[:4]] == [
+                        (1760000000000 + index) / 1000 for index in range(259, 255, -1)
+                    ]
                     forward = tuple(reader.forward(0, cut.offset))
                     assert forward == tuple(reversed(records))
                     with reader.projection(None, None) as project:

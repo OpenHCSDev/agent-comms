@@ -7,6 +7,7 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from math import isfinite
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
@@ -14,15 +15,27 @@ from .field_codec import FieldCodec, FieldRepresentation
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""
 
+    units_per_second: ClassVar[int] = 1
+
     @classmethod
     def decode(cls, value: object) -> RecordedEventTime:
-        return RecordedEventTime(FieldCodec.decode(float, value))
+        return RecordedEventTime(FieldCodec.decode(float, value) / cls.units_per_second)
 
     @classmethod
     def encode(cls, value: object) -> float:
         if not isinstance(value, RecordedEventTime):
             raise TypeError("A Unix-seconds field requires a recorded event time")
-        return value.at
+        return value.at * cls.units_per_second
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(float)
+
+
+class RecordedEventMilliseconds(RecordedEventSeconds):
+    """Pi message clocks use milliseconds; owned event time remains Unix seconds."""
+
+    units_per_second = 1000
 
 
 class UnrecordedTimeError(ValueError):
