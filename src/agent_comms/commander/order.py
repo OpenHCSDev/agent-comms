@@ -548,7 +548,7 @@ class Commander(CommanderContext):
                answers: tuple[MessageReference, ...] = ()) -> None:
         """Publish a strike Core already recorded on the task's Todo to #comms."""
         n = struck(todo, unit)
-        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
+        line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
@@ -801,7 +801,7 @@ class UnstrikeVerb(OrderVerb):
     pid: str = option("pid")
     why: str = option("--why")
     at: str | None = option("--at", default=None,
-                            help="HH:MM the strike was recorded; default the newest")
+                            help="HH:MM:SS the strike was recorded, as its #comms line prints it; default the newest")
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
