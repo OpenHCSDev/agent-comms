@@ -7,16 +7,23 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, replace
 from itertools import batched
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, Self, cast
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PrivateRecord, PublicRecord
 from agent_comms.bus_tables import BusRow
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.envelope_claim_transitions import ClaimTransition
+from agent_comms.envelope_claim_transitions import (
+    AcquiringClaim,
+    ClaimIdentity,
+    ClaimRelease,
+    ClaimTransition,
+    RecordedScope,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -24,6 +31,7 @@ from agent_comms.field_codec import (
     RecordMember,
     SubclassUnion,
     WireName,
+    WireOmitDefault,
     WireOrder,
 )
 from agent_comms.installer.carry import Carried, Carry
@@ -157,15 +165,178 @@ class PublicHistoryRow(RecordMember, HistoryRow):
         return PublicRecord.from_message(self)
 
 
+class OrderedHistoryMember(RecordMember):
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        row = FieldCodec.decode_record(cls, data)
+        # decode_record already proved that the external object is a mapping.
+        if tuple(cast(Mapping[str, object], data)) != tuple(FieldCodec.encode_fields(row)):
+            raise MalformedRecord("Field order differs from this retired declaration")
+        return row
+
+
+class HistoryScope(SubclassUnion, ABC, affix="HistoryScope"):
+    def restored(self, scope: RecordedScope) -> HistoryScope:
+        return FieldCodec.decode_record(type(self), FieldCodec.encode(scope))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeOwner:
+    owner_generation: Annotated[int, WireName("owner_admission_generation")]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeOperation:
+    operation_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeTurn:
+    turn_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeSource:
+    wire_root_id: str
+    source_seq: int
+    source_message_id: str
+    wake_claim_id: str
+    wake_revision: int
+    recipient_lookup: str
+    execution_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeAttempt:
+    participant_generation: int
+    attempt_ordinal: int
+    version: Literal[1]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopeInput:
+    input_id: str
+
+
+@dataclass(frozen=True)
+class EarlierWakeHistoryScope(
+    ScopeAttempt, ScopeTurn, ScopeOwner, ScopeOperation, ScopeSource,
+    OrderedHistoryMember, HistoryScope,
+):
+    """Original wake claims placed the operation and owner inside the wake fields."""
+
+
+@dataclass(frozen=True)
+class WakeHistoryScope(
+    ScopeAttempt, ScopeSource, ScopeTurn, ScopeOperation, ScopeOwner,
+    OrderedHistoryMember, HistoryScope,
+):
+    """Later wake claims inherit the common owner/operation/turn fields first."""
+
+
+@dataclass(frozen=True)
+class NativeHistoryScope(
+    ScopeInput, ScopeTurn, ScopeOperation, ScopeOwner, OrderedHistoryMember, HistoryScope,
+):
+    """Native claims use the same owner/operation/turn group, then the input."""
+
+
+class HistoryClaim(SubclassUnion, ClaimIdentity, ABC, affix="HistoryClaim"):
+    """Retired field-group order is part of the original envelope's physical form."""
+
+    def current(self) -> ClaimTransition:
+        return FieldCodec.decode(ClaimTransition, FieldCodec.encode(self))
+
+    def restored(self, transition: ClaimTransition) -> HistoryClaim:
+        # The known old member owns layout; the new record supplies every value.
+        return FieldCodec.decode_record(type(self), FieldCodec.encode(transition))
+
+
+class OrderedHistoryClaim(OrderedHistoryMember, HistoryClaim, declared_name=None):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimedPaths:
+    claims: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReleasedPaths:
+    releases: tuple[ClaimRelease, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimGeneration:
+    generation: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScopedClaimGeneration(ClaimGeneration, HistoryClaim, declared_name=None):
+    scope: Annotated[HistoryScope, WireName("admission")]
+
+    def restored(self, transition: ClaimTransition) -> HistoryClaim:
+        # This retired member decoded an acquiring scope, never a release.
+        acquiring = cast(AcquiringClaim, transition)
+        return replace(super().restored(transition),
+                       scope=self.scope.restored(acquiring.claim_scope))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReleasedGeneration:
+    generation: None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExpiredPaths:
+    expired: Annotated[tuple[str, ...], WireOmitDefault()] = field(default=())
+
+
+@dataclass(frozen=True)
+class EarlierScopedHistoryClaim(
+    ScopedClaimGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+):
+    """The older writer placed acquired/released paths before their generation."""
+
+
+@dataclass(frozen=True)
+class ScopedHistoryClaim(
+    ReleasedPaths, ClaimedPaths, ExpiredPaths, ScopedClaimGeneration, OrderedHistoryClaim,
+):
+    """The later writer factored the scoped generation into its nominal parent."""
+
+
+@dataclass(frozen=True)
+class UnscopedHistoryClaim(
+    ClaimGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+):
+    """Original tool claims before a scope was recorded."""
+
+
+@dataclass(frozen=True)
+class EarlierReleasedHistoryClaim(
+    ReleasedGeneration, ReleasedPaths, ClaimedPaths, ExpiredPaths, OrderedHistoryClaim,
+):
+    """Earlier release originals encoded the empty claim side first."""
+
+
+@dataclass(frozen=True)
+class ReleasedHistoryClaim(
+    ReleasedGeneration, ClaimedPaths, ReleasedPaths, ExpiredPaths, OrderedHistoryClaim,
+):
+    """Release originals keep their release side first and mint no generation."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class ClaimHistoryRow(RecordMember, HistoryRow):
-    claim_transition: Annotated[ClaimTransition, WireOrder(11)]
+    claim_transition: Annotated[HistoryClaim, WireOrder(11)]
 
     def record(self) -> ClaimRecord:
-        return ClaimRecord.from_message(self, claim_transition=self.claim_transition)
+        return ClaimRecord.from_message(self, claim_transition=self.claim_transition.current())
 
     def restored(self, record: ClaimRecord) -> ClaimHistoryRow:
-        return replace(super().restored(record), claim_transition=record.claim_transition)
+        return replace(super().restored(record),
+                       claim_transition=self.claim_transition.restored(record.claim_transition))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -209,6 +380,12 @@ class HistoryLine:
                 yield cls(number, stream.tell() - len(raw), raw, row)
                 previous = row.seq
 
+    def record(self) -> BusRecord:
+        try:
+            return self.row.record()
+        except ValueError as error:
+            raise RelationViolationError(f"Bus history line {self.number}: {error}") from error
+
     def verify(self, record: BusRecord) -> None:
         if self.row.restored(record).line() != self.raw:
             raise RelationViolationError(
@@ -238,7 +415,7 @@ class BusHistory(Carry):
             )
         count = 0
         for line in HistoryLine.rows(source):
-            line.verify(line.row.record())
+            line.verify(line.record())
             count = line.number
         return Carried(0, detail=dict(rows=count, continuous=count, round_tripped=count))
 
@@ -262,7 +439,7 @@ class BusHistory(Carry):
         changed = 0
         # File reads, field decoding and record construction happen outside the write lock.
         for batch in batched(HistoryLine.rows(source), 1000, strict=False):
-            records = tuple(line.row.record() for line in batch)
+            records = tuple(line.record() for line in batch)
             for line in batch:
                 if line.row.seq <= committed:
                     line.verify(bus.lookup(line.row.seq))
