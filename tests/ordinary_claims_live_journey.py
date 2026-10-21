@@ -126,7 +126,7 @@ async def journey(arguments):
                     stop = f'{type(error).__name__}: {error}'
                     if outcome != 'failed':
                         raise
-                await until(lambda: not comms.registry.require(name).turn_record.executing)
+                await until(lambda: not comms.registry.require(name).executing)
                 current = comms.bus.log.claim_projection().get(str(target))
                 row = dict(outcome=outcome, stop=stop, claim_remaining=current is not None,
                            acquired_seq=acquired.seq, actual_file=target.read_text(),
