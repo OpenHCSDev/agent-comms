@@ -138,6 +138,16 @@ class SavedSessionFile(PatternFile):
 
     __slots__ = ()
 
+    @classmethod
+    def sessions_in(cls, root: Path) -> tuple[NativeSessionFiles, ...]:
+        """Every saved session under ``root``, found relative to it, so a practice copy's
+        sessions are its own and never the live bus the copied registry still names."""
+        return tuple(
+            NativeSessionFiles(path)
+            for owner, directory in cls.declarations_in(root)
+            for path in sorted(owner.matching_in(directory))
+        )
+
 
 class PrivateSession(DurableFile, SavedSessionFile):
     """A thread's own session, created fresh for it."""
