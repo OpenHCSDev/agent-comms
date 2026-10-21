@@ -25,10 +25,13 @@ from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.tools import CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import (
-    DeclarationDerivation, GoalRef, PendingProblemOrder, ProblemNumber, ReleaseTodo,
+    DeclarationDerivation, GoalRef, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
     Slop, StrikeReason, Todo, TodoError,
 )
 
@@ -120,6 +123,24 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     held = comms.goals.todos.held_for_commander(fork.incarnation)
     assert [todo.id for todo in held] == ['P41']
     original = held[0]
+    worker = comms.registry.require('worker')
+    assert comms.goals.todos.holds_pending(worker.incarnation)
+    assert comms.goals.todos.for_goal(worker.incarnation, original.held().generation) == (original,)
+    assert comms.goals.todos.for_goal(worker.incarnation, 'another-goal') == ()
+    other_birth = RecordedThreadIncarnation(worker.name, worker.created_at + 1)
+    assert not comms.goals.todos.holds_pending(other_birth)
+    assert comms.goals.todos.for_goal(other_birth, original.held().generation) == ()
+    with comms.goals.todos.snapshot() as db:
+        queries = []
+        db.set_trace_callback(queries.append)
+        assert Todo.held_by(db, '1', (), unit=worker.incarnation) == (original,)
+        db.set_trace_callback(None)
+        plan = db.execute('EXPLAIN QUERY PLAN ' + queries[0]).fetchall()
+        print('Open assignment query plan:', [tuple(row) for row in plan])
+    copied = Commander.read_root(comms.root).model_copy(update={'commander': fork.name})
+    assert copied.model_copy(deep=True).call(CommsTodoListTool()).todos == (original,)
+    result = command(comms, 'order', 'retire')
+    assert result.returncode != 0 and 'Only a commander fork can retire' in result.stderr
     second = document(tmp_path / 'second.json', replace(order, id='second-order'))
     refusal = 'worker is assigned by fork-one on open order first-order (P41)'
     for prefix in (('--fork', 'fork-two'), ()):
@@ -173,6 +194,8 @@ def test_fork_orders_refuse_from_todos_and_retirement_is_explicit(fork_bus, tmp_
     comms.goals.todos.apply('P41', ReleaseTodo(
         original.revision, fork.incarnation, original.held(),
         StrikeReason('The fixture releases its actual original order after the completed review.')))
+    assert not comms.goals.todos.holds_pending(worker.incarnation)
+    assert comms.goals.todos.for_goal(worker.incarnation, original.held().generation) == ()
     result = command(comms, 'order', 'problem', second, '--to', 'worker',
                      '--where', 'owner.py:2')
     assert result.returncode == 0, result.stderr
@@ -213,17 +236,73 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     print(refused.stderr.strip())
 
 
-def test_retained_store_carry_preserves_orders_and_seeds_global_numbers(fork_bus):
+def test_retained_store_carry_preserves_original_identities(fork_bus):
     from cutover.carry_problem_numbers import ProblemNumbers
 
     comms, source, order = fork_bus
     store = comms.goals.todos
     retained = store.get('P40')
     with store.writing() as db:
-        db.execute(f'DROP TABLE "{ProblemNumber.declared_name}"')
+        db.execute(f'DROP TABLE "{ProblemAllocation.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
-    assert ProblemNumbers.carry(comms.root, apply=False).changed == 2
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 2
+        db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    assert ProblemNumbers.carry(comms.root, apply=False).changed == 3
+    assert ProblemNumbers.carry(comms.root, apply=True).changed == 3
     assert store.get('P40') == retained
+    with store.snapshot() as db:
+        assert ProblemAllocation.select(db) == []
     assert store.allocate_problem() == 'P41'
     assert ProblemNumbers.carry(comms.root, apply=True).changed == 0
+    # Upgrade the installed old schema: keep unsent P41, delete only the P40 copy.
+    with store.writing() as db:
+        db.execute(f'ALTER TABLE "{ProblemAllocation.declared_name}" RENAME TO problem_number')
+        db.execute('INSERT INTO problem_number(number) VALUES (40)')
+        db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    assert ProblemNumbers.carry(comms.root, apply=False).changed == 2
+    assert ProblemNumbers.carry(comms.root, apply=True).changed == 2
+    with store.snapshot() as db:
+        assert [row.number for row in ProblemAllocation.select(db)] == [41]
+    assert store.get('P40') == retained
+    assert store.allocate_problem() == 'P42'
+    assert ProblemNumbers.carry(comms.root, apply=True).changed == 0
+
+
+def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_bus):
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    lead = comms.registry.require('lead')
+    retained = store.get('P40')
+    issued = store.allocate_problem()
+    assert issued == 'P41'
+    created = store.create(issued, source.github, 'Create a real problem', creator=lead,
+        owner=comms.registry.require('other'), generation='created', goal=retained.goal,
+        review_at=retained.review_at, order=order)
+    with store.snapshot() as db:
+        assert ProblemAllocation.select(db) == []
+    # Direct creation must affect allocation without copying its key into the allocator.
+    store.create('P120', source.github, 'Exercise numeric ordering', creator=lead,
+        owner=comms.registry.require('worker'), generation='direct', goal=retained.goal,
+        review_at=retained.review_at, order=replace(order, id='direct-order'))
+    assert store.allocate_problem() == 'P121'
+    with store.snapshot() as db:
+        assert [row.number for row in ProblemAllocation.select(db)] == [121]
+        plan = db.execute(f'EXPLAIN QUERY PLAN SELECT max({Todo.problem_index.term_sql(Todo)}) '
+                          f'FROM "{Todo.declared_name}"').fetchall()
+    print('Numeric identity query plan:', [tuple(row) for row in plan])
+    assert store.get(issued) == created
+
+
+def test_malformed_problem_ids_are_refused_without_writes(fork_bus):
+    comms, source, order = fork_bus
+    store = comms.goals.todos
+    retained = store.get('P40')
+    for text in ('broken', '1', 'P0', 'P01', 'P-1', 'P+1', 'P١', 'P1.0'):
+        assert not ProblemNumber.accepts(text)
+        with pytest.raises(ValueError):
+            store.create(text, source.github, 'Refuse a malformed identity',
+                creator=comms.registry.require('lead'), owner=comms.registry.require('worker'),
+                generation='malformed', goal=retained.goal,
+                review_at=retained.review_at, order=order)
+    with store.snapshot() as db:
+        assert ProblemAllocation.select(db) == []
+    assert store.list(source.github) == (retained,)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .errors import RelationViolationError
+from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
@@ -56,6 +56,9 @@ class ToolCaller(ABC):
 
     def commanding(self, comms: Comms, commander: str) -> ThreadCaller:
         return ThreadCaller(self.acting_name(commander))
+
+    def retire(self, comms: Comms) -> None:
+        raise ToolRefusedError('Only a commander fork can retire through this verb.')
 
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
@@ -138,9 +141,6 @@ class ThreadCaller(ToolCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         """An agent's message is only the bus record."""
-
-    def retire(self, comms: Comms) -> None:
-        raise RelationViolationError('Only a commander fork can retire through this verb.')
 
 
 @dataclass(frozen=True)

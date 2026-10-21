@@ -56,6 +56,7 @@ from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import HuntDue
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -235,11 +236,9 @@ class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
     _comms: Comms = PrivateAttr()
-    _caller: ThreadCaller = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
-        self._caller = ThreadCaller(self.commander)
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -269,15 +268,7 @@ class CommanderContext(CommanderConfig):
         return published.message.message_id
 
     def call(self, tool):
-        return self._caller.invoke(tool, self.comms)
-
-    def commanding(self, caller: ThreadCaller) -> Self:
-        bound = self.model_copy(update={'commander': caller.name})
-        bound._caller = caller
-        return bound
-
-    def retire(self) -> None:
-        self._caller.retire(self.comms)
+        return ThreadCaller(self.commander).invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -433,7 +424,7 @@ class Commander(CommanderContext):
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
-        if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
+        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         if new and document.problems:
             problems.append('problems: fix: omit IDs when creating a new problem')
@@ -583,7 +574,7 @@ class Commander(CommanderContext):
                  '|---|---|---|---|---|---|---|---|---|---|']
         listed, read = self.todos(), self.progress()
         activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
-        for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
+        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
             lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
                          f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
                          f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
@@ -755,7 +746,8 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
 
     def apply(self, ctx: Commander) -> None:
         self.require_commander(ctx.comms.registry.require(ctx.commander))
-        ctx = ctx.commanding(self.fork.commanding(ctx.comms, ctx.commander))
+        ctx = ctx.model_copy(update={
+            'commander': self.fork.commanding(ctx.comms, ctx.commander).name})
         self.gate(ctx)
         self.run(ctx)
 
@@ -1107,7 +1099,7 @@ class RetireVerb(OrderVerb):
     help = "stop a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
-        ctx.retire()
+        self.fork.retire(ctx.comms)
         print(f'{ctx.commander} retired')
 
 

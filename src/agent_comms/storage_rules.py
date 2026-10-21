@@ -18,6 +18,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.repo import Repo
@@ -145,7 +146,7 @@ class StorageRule(RoomAllocation):
         if path == owner.project_path:
             return True
         problem, _, repository = path.name.removeprefix(f'{owner.name}--').partition('--')
-        if not re.fullmatch(r'P[1-9][0-9]*', problem):
+        if not ProblemNumber.accepts(problem):
             return False
         if not repository:
             return path == self.order_checkout(owner.name, problem)

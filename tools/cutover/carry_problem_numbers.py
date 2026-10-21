@@ -1,4 +1,4 @@
-"""Seed global problem allocation and index the original Todo assignment.
+"""Index original Todo identities and install allocation for unsent numbers.
 
 Delete this step once every retained bus has been carried.
 """
@@ -9,7 +9,8 @@ from pathlib import Path
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.todos import ProblemNumber, Todo, TodoStore
+from agent_comms.problem_number import ProblemNumber
+from agent_comms.todos import ProblemAllocation, Todo, TodoStore
 
 
 class ProblemNumbers(Carry):
@@ -28,18 +29,26 @@ class ProblemNumbers(Carry):
             return Carried(0)
         with closing(CoordinationStore.read_snapshot(path)) as db:
             stored = {row.name for row in TodoStore.stored_schema(db)}
-            numbers_missing = ProblemNumber.declared_name not in stored
-            index_missing = Todo.unit_index.name(Todo) not in stored
-        changed = int(numbers_missing) + int(index_missing)
-        if not changed or not apply:
+            numbers_missing = ProblemAllocation.declared_name not in stored
+            migrate_numbers = numbers_missing and 'problem_number' in stored
+            missing_indexes = tuple(index for index in (Todo.unit_index, Todo.problem_index)
+                                    if index.name(Todo) not in stored)
+            changed = int(numbers_missing) + len(missing_indexes)
+            if not changed:
+                return Carried(0)
+            created = tuple(ProblemNumber.parse(todo.id) for todo in Todo.stream(db))
+        if not apply:
             return Carried(changed)
         with closing(CoordinationStore.writer(path)) as db, SQLiteFile.write_transaction(db):
-            if numbers_missing:
-                ProblemNumber.create(db)
-                for todo in Todo.stream(db):
-                    ProblemNumber.reserve(db, todo.id)
-            if index_missing:
-                db.execute(Todo.unit_index.sql(Todo))
+            if migrate_numbers:
+                # SQLite renames its sequence too; even unsent issued IDs stay reserved.
+                db.execute(f'ALTER TABLE problem_number RENAME TO "{ProblemAllocation.declared_name}"')
+                for number in created:
+                    ProblemAllocation.delete(db, number=number.number)
+            elif numbers_missing:
+                ProblemAllocation.create(db)
+            for index in missing_indexes:
+                db.execute(index.sql(Todo))
             TodoStore.require_schema(db)
         return Carried(
             changed, rewritten=tuple(str(file.relative_to(root)) for file in SQLiteFile.files(path))
