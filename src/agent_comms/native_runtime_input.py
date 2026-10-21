@@ -377,4 +377,3 @@ class CurrentNativeCursor(MonotoneColumns, StableReferenceColumns, FrozenColumns
         "AND stage IS NOT NULL "
         "AND session_id IS NOT NULL AND request_generation>0)",
     )
-

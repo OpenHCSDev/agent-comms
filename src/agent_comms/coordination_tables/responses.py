@@ -171,4 +171,3 @@ class ResponseObligation(LifecycleTransitions, LifecycleChanges, IncrementingCol
         ("execution_id", "exact_target", "intent_settled"),
         ("execution_id", "exact_target", "publication_settled"),
     )
-

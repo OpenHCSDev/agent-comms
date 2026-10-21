@@ -409,4 +409,3 @@ class ReplayAssessments(IncrementingColumn, MonotoneColumns, AccumulatingBits, E
     checks = ("facts = 0 OR replay_safe = 0",)
 
     unique = (("execution_id", "retry_authorized"),)
-

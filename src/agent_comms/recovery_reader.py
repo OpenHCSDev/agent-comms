@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -25,16 +27,11 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.participant_store import ParticipantStore
 
 
+@dataclass(eq=False, repr=False)
 class RecoveryReader:
-    def __init__(
-        self,
-        session: CoordinationSession,
-        participants: ParticipantStore,
-        assignments: AssignmentStore,
-    ) -> None:
-        self.session = session
-        self.participants = participants
-        self.assignments = assignments
+    session: CoordinationSession
+    participants: ParticipantStore
+    assignments: AssignmentStore
 
     def get(self, execution_id: str) -> RecoverySnapshot:
         with self.session.read():

@@ -208,4 +208,3 @@ class PublicationEvidence(GuardedInserts, ImmutableRows, CoordinatorTable, Typed
                 deferred=True,
             ),
         )
-

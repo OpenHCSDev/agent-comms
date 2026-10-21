@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
@@ -36,18 +37,12 @@ if TYPE_CHECKING:
     from agent_comms.selected_source_batch import SelectedSource
 
 
+@dataclass(eq=False, repr=False)
 class ExecutionStore:
-    def __init__(
-        self,
-        session: CoordinationSession,
-        participants: ParticipantStore,
-        assignments: AssignmentStore,
-        snapshots: RecoveryReader,
-    ) -> None:
-        self.session = session
-        self.participants = participants
-        self.assignments = assignments
-        self.snapshots = snapshots
+    session: CoordinationSession
+    participants: ParticipantStore
+    assignments: AssignmentStore
+    snapshots: RecoveryReader
 
     def create(
         self,

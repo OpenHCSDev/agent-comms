@@ -218,25 +218,19 @@ class ProjectChangeResult:
     changed: bool
 
 
+@dataclass(eq=False, repr=False)
 class ThreadManagement:
-    def __init__(
-        self,
-        root: Path,
-        registry: Registration,
-        bus: MessageBus,
-        catalog: ChannelCatalog,
-        agents: AgentActivity,
-        owners: OwnerLifecycle,
-        ledger: CollaborationLedger,
-    ):
-        self.root = root
-        self.registry = registry
-        self.bus = bus
-        self.catalog = catalog
-        self.agents = agents
-        self.owners = owners
-        self.ledger = ledger
-        self._wire_lock_path = root / "wire"
+    root: Path
+    registry: Registration
+    bus: MessageBus
+    catalog: ChannelCatalog
+    agents: AgentActivity
+    owners: OwnerLifecycle
+    ledger: CollaborationLedger
+
+    @property
+    def _wire_lock_path(self) -> Path:
+        return self.root / "wire"
 
     def import_thread(
         self,

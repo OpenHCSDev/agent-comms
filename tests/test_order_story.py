@@ -12,17 +12,19 @@ from agent_comms.goals import RequestGoalOrder
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    AcceptedVerdict, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
+    AcceptedVerdict, OrderMessage, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
-    CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
+    CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
 )
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
+from source_revision_fixture import SourceRepository
 
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
+    source = SourceRepository.create(tmp_path / 'source')
     comms.messaging.initialize_private_initial_protocol()
     for name in ("lead", "worker"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
@@ -30,7 +32,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         text="Repair the worker", goal_id="request", order=RequestGoalOrder()))
     caller = ThreadCaller("lead")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
-        problem="P1", order=replace(order(tmp_path), edits=("Repair the existing record owner",)),
+        problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request="request", review_at=RecordedEventTime(1000),
         commander="lead", repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
@@ -50,7 +52,15 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
         request="request", review_at=RecordedEventTime(2000),
-        order=replace(order(tmp_path), id="resent-order"))), comms)
+        order=replace(order(source), id="resent-order"))), comms)
+    current = comms.goals.todos.get("P1")
+    with pytest.raises(ValueError):
+        current.latest_message
+    for message_id in ("initial-order-message", "current-order-message"):
+        caller.invoke(CommsChangeProblemTool(problem=current.id, operation=OrderMessage(
+            current.revision, actor, message_id)), comms)
+        current = comms.goals.todos.get(current.id)
+        assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = Comms(copied_root)
@@ -73,7 +83,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         for problem in ("P2", "P3"):
             replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder(),
                     strikes=(), verdicts=(), messages=()).insert(db)
-    copied.goals.todos.link(actor, "P2", "worker", saved.order.checked().id)
+    copied.goals.todos.link(actor, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
         copied, {"order_id": "resent-order"}, caller=caller))
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")

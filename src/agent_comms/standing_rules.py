@@ -17,14 +17,15 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goals import GoalChangedError
-from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
     from agent_comms.storage_rules import MemoryUse, StorageRule
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
 
 
@@ -93,6 +94,14 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @staticmethod
     def pending_todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
         return tuple(todo for todo in StandingRule.todos(comms, commander) if todo.pending)
+
+    @staticmethod
+    def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
+        """Every unit holding a pending order, with its orders."""
+        held: dict[ThreadIncarnation, list[Todo]] = {}
+        for todo in StandingRule.pending_todos(comms, commander):
+            held.setdefault(todo.held().owner_identity, []).append(todo)
+        return held
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
@@ -343,6 +352,28 @@ class BridgeDown(ReasonedStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
+class ServicePassFailing(DatedStandingRule):
+    """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
+
+    watch: str
+    since: float
+    error: str = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        failing = ServicePassStore.at(comms.root).read().failing
+        return tuple(cls(watch, failed.since, failed.error)
+                     for watch, failed in sorted(failing.items()))
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"SERVICE PASS FAILING: {self.watch} since "
+                f"{RecordedEventTime(self.since).clock()}: {self.error}"
+                " -> fix the owner of the failing read this wake")
+
+@dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):
     """An open order reads as no commit despite its linked pull request having merged."""
 
@@ -363,33 +394,6 @@ class BoardDisagrees(UndatedStandingRule):
         return (
             f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
             f"but its linked PR merged as {self.merge[:9]} -> repair the progress read this wake"
-        )
-
-
-@dataclass(frozen=True)
-class PlanIdle(UndatedStandingRule):
-    """A phase whose dependencies are done stalls unnoticed unless some order serves it."""
-
-    phase: type[PlanPhase]
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        todos = comms.goals.todos.history_for_commander(
-            comms.registry.require(commander).incarnation
-        )
-        return tuple(
-            cls(phase)
-            for phase in PlanPhase.members_with(PlanPhase)
-            if phase.ready(todos) and not phase.ordered(todos)
-        )
-
-    def enforce(self, comms: Comms, commander: str) -> None:
-        self.phase.task.start(comms, comms.registry.require(commander), self.phase)
-
-    def line(self) -> str:
-        return (
-            f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
-            f" -> {self.phase.task.instruction}"
         )
 
 

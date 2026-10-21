@@ -294,4 +294,3 @@ class ExecutionAssignmentLink(GuardedInserts, ImmutableRows, CoordinatorTable, T
                 ("assignment_id", "execution_id"), WakeAssignment, ("assignment_id", "execution_id")
             ),
         )
-

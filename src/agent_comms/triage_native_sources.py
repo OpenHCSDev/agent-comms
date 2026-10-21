@@ -18,7 +18,7 @@ from .typed_table import (
 
 
 @dataclass(frozen=True)
-class TriageNativeSources(GuardedInserts, ImmutableRows, 
+class TriageNativeSources(GuardedInserts, ImmutableRows,
     NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"
 ):
 
@@ -40,4 +40,3 @@ class TriageNativeSources(GuardedInserts, ImmutableRows,
     def __post_init__(self):
         if not self.assignment_ids or len(set(self.assignment_ids)) != len(self.assignment_ids):
             raise IdentityConflict("Native input membership must name distinct original sources")
-

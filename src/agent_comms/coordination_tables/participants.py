@@ -92,4 +92,3 @@ class OwnerGenerations(CounterAdvance, NoDelete, FrozenColumns, ParticipantIdent
     @property
     def lookup(self) -> str:
         return self.owner_lookup
-

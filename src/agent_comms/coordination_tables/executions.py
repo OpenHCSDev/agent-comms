@@ -404,4 +404,3 @@ class ExecutionRecord(LifecycleTransitions, OrdinalTransitions, IncrementingColu
                 deferred=True,
             ),
         )
-
