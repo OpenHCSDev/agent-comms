@@ -54,8 +54,8 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ForeignKey,
+    SharedFileTables,
     SQLiteForeignKeys,
-    SQLiteSchemaObject,
     SqlValue,
     TypedRow,
     TypedTable,
@@ -65,7 +65,7 @@ from .field_codec import MalformedRecord
 from .locked_store import RegistryFile
 
 
-class ResponseTable(DurableTables):
+class ResponseTable(SharedFileTables, DurableTables):
     """An immutable response definition with its write checks and append evidence."""
 
     @classmethod
@@ -253,12 +253,12 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
     schema = ResponseTable.declared_schema()
     try:
         meta = ResponseSchemaMeta.one(db, singleton=1)
-        actual = ResponseTable.stored_member_schema(db)
+        drifted = ResponseTable.schema_differs(db)
     except (sqlite3.Error, MalformedRecord) as error:
         raise PublicationActivationBlocked("private response schema is not installed") from error
     if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
         raise PublicationActivationBlocked("private response schema version is unsupported")
-    if SQLiteSchemaObject.differences(actual, schema) or SQLiteForeignKeys.read(
+    if drifted or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("private response schema has drifted")

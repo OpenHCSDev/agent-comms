@@ -11,17 +11,7 @@ from agent_comms.coordinator import Coordination
 
 from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeSchemaMeta, NativeRuntimeTable
-from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable
-
-
-def _schema() -> dict[str, str]:
-    from . import triage_native_sources  # noqa: F401; canonical native table family
-
-    return {
-        name: sql
-        for table in TypedTable.members_with(NativeRuntimeTable)
-        for name, sql in table.schema_objects().items()
-    }
+from .typed_table import SQLiteForeignKeys
 
 
 def _digest(schema: dict[str, str]) -> str:
@@ -29,20 +19,15 @@ def _digest(schema: dict[str, str]) -> str:
 
 
 def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
-    schema = _schema()
+    schema = NativeRuntimeTable.declared_schema()
     try:
         meta = NativeRuntimeSchemaMeta.one(db, singleton=1)
-        actual = SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                "AND (name LIKE 'native_runtime_%' OR name LIKE 'current_native_cursor%')"
-            )
-        )
+        drifted = NativeRuntimeTable.schema_differs(db)
     except (sqlite3.Error, MalformedRecord) as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
     if meta != NativeRuntimeSchemaMeta(singleton=1, ddl_digest=_digest(schema)):
         raise PublicationActivationBlocked("native runtime schema version differs")
-    if SQLiteSchemaObject.differences(actual, schema) or SQLiteForeignKeys.read(
+    if drifted or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("native runtime schema has drifted")
@@ -51,12 +36,9 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
 def install_native_runtime_schema(store: Coordination) -> None:
     """Explicit fresh schema install. Existing state must match the declared schema."""
     with store.session.writing() as db:
-        present = SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE name=?",
-                (NativeRuntimeSchemaMeta.declared_name,),
-            )
-        )
-        if not present:
-            NativeRuntimeSchemaMeta.create_schema(db)
+        if not NativeRuntimeSchemaMeta.present(db):
+            NativeRuntimeTable.create_schema(db)
+            NativeRuntimeSchemaMeta(
+                singleton=1, ddl_digest=_digest(NativeRuntimeTable.declared_schema())
+            ).insert(db)
         assert_native_runtime_schema(db)

@@ -24,7 +24,7 @@ from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
+from .typed_table import Column, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
 from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
@@ -138,11 +138,6 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
 class _ReplyCount(TypedRow):
     source: str
     total: int
-
-
-@dataclass(frozen=True)
-class _IndexTable(TypedRow):
-    name: str
 
 
 class FileReplyCount(ABC):
@@ -476,9 +471,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
                     connection.execute("BEGIN IMMEDIATE")
                     (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
                     if version.user_version == 0:
-                        if _IndexTable.read(
-                            connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                        ):
+                        if SQLiteTableName.stored(connection):
                             raise ValueError("Reply index requires the quiet runtime reset")
                         for table in TypedTable.members_with(ReplyIndexTable):
                             table.create(connection)

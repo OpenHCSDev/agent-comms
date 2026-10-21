@@ -49,10 +49,11 @@ from .store_files import ExclusiveLock, LockMode
 from .thread_identity import ThreadIncarnation
 from .typed_table import (
     Column,
+    DerivedTables,
     ForeignKey,
     Generated,
     Index,
-    DerivedTables,
+    SharedFileTables,
     SqlValue,
     TypedTable,
 )
@@ -897,7 +898,7 @@ class Replies(CheckpointTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certificate"):
+class CheckedPrefix(CheckpointTable, TypedTable, SharedFileTables, declared_name="prefix_certificate"):
     """The existing SQLite row, decoded once at its persistence boundary."""
 
     singleton: Annotated[Literal[1], Column(primary_key=True)]
@@ -971,7 +972,7 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         Only the writer changes which rows are indexed. A read-only archive
         keeps the same saved check and the index file it names.
         """
-        if cls.member_schema_differs(db):
+        if cls.schema_differs(db):
             raise RelationViolationError("Private bus checked prefix record schema is unavailable.")
         try:
             row = cls.one(db, singleton=1)

@@ -1613,10 +1613,9 @@ class InstallCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> CliResult:
         """The install child's last step, on the bus it carried or created."""
         home = Path.home()
-        project = self.project.resolve()
         record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)
         return InstallResult(record.write(home), {
-            type(harness).declared_name: harness.register(ctx, project)
+            type(harness).declared_name: harness.register(ctx, self.project)
             for harness in Harness.present(home)})
 
 
