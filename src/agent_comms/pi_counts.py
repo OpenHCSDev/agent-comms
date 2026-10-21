@@ -11,7 +11,6 @@ from .field_codec import (
     AcceptsNull,
     ExternalJsonShape,
     FieldCodec,
-    FieldRepresentation,
     NullMember,
     WireValue,
     boundary_decoder,
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
     from .turn_usage import UsageAccount
 
 
-class PiCountWire(AcceptsNull, FieldRepresentation):
+class PiCountWire(AcceptsNull):
     """Positive native counts: zero and omission mean not reported."""
 
     minimum: ClassVar[int] = 1

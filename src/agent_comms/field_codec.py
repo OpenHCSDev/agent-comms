@@ -764,19 +764,6 @@ class AcceptsNull(FieldRepresentation):
         return cls.decode_value(data, structural)
 
 
-class ExternalJsonShape(FieldRepresentation):
-    """Decode the external shape directly, without revalidating each subtree."""
-
-    @handles(object)
-    @classmethod
-    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
-        return cls.from_wire(data)
-
-    @classmethod
-    @abstractmethod
-    def from_wire(cls, data: object) -> Self: ...
-
-
 class WiredValue(Protocol):
     def to_wire(self) -> object: ...
 
@@ -809,6 +796,19 @@ class WireValue(WireForm):
     def decode(cls, value: object) -> Self:
         FieldCodec.encode(value)  # Custom forms still cross the JSON boundary.
         return cls.from_wire(value)
+
+
+class ExternalJsonShape(FieldRepresentation):
+    """Decode the external shape directly, without revalidating each subtree."""
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.from_wire(data)
+
+    @classmethod
+    @abstractmethod
+    def from_wire(cls, data: object) -> object: ...
 
 
 class SingleFieldValue(ExternalJsonShape, WireValue):
@@ -1004,19 +1004,15 @@ class TextRepresentation[V](FieldRepresentation):
         return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class ValidatedScalar[V](FieldRepresentation):
+class ValidatedScalar(FieldRepresentation):
     """The wire scalar is the decoded value, validated identically in both directions."""
 
     @classmethod
-    @abstractmethod
-    def decode(cls, value: object) -> V: ...
-
-    @classmethod
-    def encode(cls, value: object) -> V:
+    def encode(cls, value: object) -> object:
         return cls.decode(value)
 
 
-class SpelledText(TextRepresentation[str], ValidatedScalar[str]):
+class SpelledText(TextRepresentation[str], ValidatedScalar):
     """Text with one declared spelling: what decoding accepts and what its schema reports."""
 
     spelling: ClassVar[re.Pattern[str]]
@@ -1044,7 +1040,7 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
-class BoundedText(TextRepresentation[str], ValidatedScalar[str]):
+class BoundedText(TextRepresentation[str], ValidatedScalar):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
     max_length: ClassVar[int] = 4096
@@ -1067,7 +1063,7 @@ class ResourcePathText(BoundedText):
         return path
 
 
-class SequenceNumber(ValidatedScalar[int]):
+class SequenceNumber(ValidatedScalar):
     """An exact integer bus position; its minimum is the kind's one rule."""
 
     minimum: ClassVar[int]
