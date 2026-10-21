@@ -28,6 +28,7 @@ from agent_comms.attempt_recovery import (
     MonitorEvidence,
     RecoveryMonitorCapability,
     VerifiedOwnerLoss,
+    DispatchedOwnerLoss,
 )
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import (
@@ -1052,13 +1053,13 @@ def test_monitor_requires_owner_loss_separate_from_child_exit(
         _, fence = started(db)
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
         for evidence, owner_loss, error in (
-            (monitor_evidence(True), None, RecoveryBlocked),
+            (monitor_evidence(True), None, AttributeError),
             (
                 monitor_evidence(True, subprocess_dead=False),
-                object.__new__(VerifiedOwnerLoss),
+                object.__new__(DispatchedOwnerLoss),
                 RecoveryBlocked,
             ),
-            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss), AttributeError),
+            (monitor_evidence(True), object.__new__(DispatchedOwnerLoss), AttributeError),
         ):
             with pytest.raises(error):
                 monitor.terminalize_dead_attempt(
@@ -1083,7 +1084,7 @@ def test_monitor_requires_owner_loss_separate_from_child_exit(
 def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
-        with pytest.raises(RecoveryBlocked):
+        with pytest.raises(TypeError):
             VerifiedOwnerLoss(execution_id="exec")
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
         with pytest.raises(AttributeError):
@@ -1095,7 +1096,7 @@ def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
                 expected_execution_revision=3,
                 expected_pointer_revision=1,
                 evidence=monitor_evidence(True),
-                owner_loss=object.__new__(VerifiedOwnerLoss),
+                owner_loss=object.__new__(DispatchedOwnerLoss),
             )
         snapshot = db.snapshots.get("exec")
         assert snapshot.is_current

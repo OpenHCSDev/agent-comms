@@ -16,6 +16,7 @@ from uuid import uuid4
 from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
+from .attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
     Platform,
@@ -464,8 +465,6 @@ class OwnerLifecycle:
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
-        from .attempt_recovery import RecoveryMonitorCapability
-
         for thread, generation in owners:
             self._finish_stopped_owner(thread, generation)
             RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
@@ -495,8 +494,6 @@ class OwnerLifecycle:
     ) -> Thread:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
-        from .attempt_recovery import RecoveryMonitorCapability
-
         RecoveryMonitorCapability.recover_owner(self.root, thread)
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()

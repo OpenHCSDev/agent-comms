@@ -16,12 +16,115 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
+from agent_comms.selected_participant import SelectedParticipant
+from agent_comms.selected_turn import SelectedAttempt
+from agent_comms.launch_runtime import ThreadLaunch
+from contextlib import closing
+from test_coordinated_runtime import _root
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
 from test_coordinated_runtime import tmp_path  # noqa: F401
+
+
+async def release_starting_attempt(directory):
+    root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
+    with closing(CursorDelivery()) as delivery, Coordination(root / "coordination.sqlite3") as store:
+        async with SelectedParticipant.select(
+            comms, store, root_id, "beta", 0, cursor_delivery=delivery,
+        ) as participant:
+            assert participant is not None
+            created = store.executions.create(
+                participant.batch.execution_id, ExecutionOrigin.WIRE,
+                participant.lookup, participant.owner.thread.name, 1,
+                sources=participant.batch.sources,
+            ).value
+            await SelectedAttempt.engage(participant, created)
+            environment = ThreadLaunch.from_thread(participant.owner.thread).apply(dict(os.environ))
+            os.environ.clear()
+            os.environ.update(environment)
+            comms.owners.release("beta")
+    return root
+
+
+def starting_owner(directory, output, exit_allowed):
+    output.put(str(asyncio.run(release_starting_attempt(directory))))
+    if not exit_allowed.wait(15):
+        raise TimeoutError("test must release starting owner")
+
+
+@pytest.fixture
+def released_starting(tmp_path):  # noqa: F811
+    context = multiprocessing.get_context("spawn")
+    output, exit_allowed = context.Queue(), context.Event()
+    process = context.Process(target=starting_owner, args=(str(tmp_path), output, exit_allowed))
+    process.start()
+    try:
+        root = Path(output.get(timeout=10))
+        leave(process, exit_allowed)
+        yield root
+    finally:
+        exit_allowed.set()
+        process.join(10)
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+        output.close()
+        assert process.exitcode == 0
+
+
+def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(released_starting):
+    comms = Comms(released_starting)
+    owner = comms.registry.require("beta")
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        before = store.snapshots.get(execution_id)
+        assert before.attempt.lifecycle.starting
+        assert NativeRuntimeInput.count(store.session._connection) == 0
+        inputs = input_evidence(store)
+    bus = (released_starting / "bus.jsonl").read_bytes()
+    RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        after = store.snapshots.get(execution_id)
+        assert not after.is_current and after.attempt.lifecycle.failed
+        assert after.attempt.reason_code.value == "released_native_unknown"
+        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not after.replay.replay_safe
+        assert not CurrentExecutions.require(store.session._connection,
+            owner_lookup=owner.incarnation.lookup).unresolved
+        assert input_evidence(store) == inputs
+        assert NativeRuntimeInput.count(store.session._connection) == 0
+    assert (released_starting / "bus.jsonl").read_bytes() == bus
+
+
+def test_recover_owner_refuses_a_conflicting_input_identity(released_starting):
+    comms = Comms(released_starting)
+    owner = comms.registry.require("beta")
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+        before = store.snapshots.get(execution_id)
+        with store.session.writing() as db:
+            NativeRuntimeInput(
+                input_id="c" * 32, stage=FullNativeExecution,
+                execution_id=TextNativeColumn(execution_id),
+                attempt_ordinal=NumberNativeColumn(before.attempt.attempt_ordinal),
+                owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+                owner_generation=before.attempt.owner_generation + 1,
+                owner_token_digest="e" * 64,
+            ).insert(db)
+        inputs = input_evidence(store)
+    with pytest.raises(RecoveryBlocked):
+        RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        assert store.snapshots.get(execution_id) == before
+        assert input_evidence(store) == inputs
 
 
 def unknown_owner(directory, history, output, exit_allowed):
