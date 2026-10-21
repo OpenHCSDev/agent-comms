@@ -57,6 +57,7 @@ from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import InfoKind, Message
+from agent_comms.order_runs import OrderRun
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -1285,62 +1286,6 @@ class DirectiveText:
             raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
 
 
-class OrderRun(DeclaredFamily, affix="OrderRun"):
-    label: ClassVar[str] = "Works when:"
-    mechanical: ClassVar[bool] = False
-
-    def require_artifact(self, path: str) -> None:
-        pass
-
-    @abstractmethod
-    def instructions(self) -> tuple[str, ...]: ...
-
-    @abstractmethod
-    def require_closing(self, works: str) -> None:
-        """Refuse closing evidence that does not show this run happened."""
-
-
-@dataclass(frozen=True)
-class MechanicalOrderRun(OrderRun):
-    mechanical: ClassVar[bool] = True
-
-    def instructions(self) -> tuple[str, ...]:
-        return ()
-
-    def require_closing(self, works: str) -> None:
-        """The order's check alone closes it."""
-
-
-@dataclass(frozen=True)
-class ApplicationOrderRun(OrderRun):
-    def require_artifact(self, path: str) -> None:
-        if not Path(path).is_file():
-            raise ToolRefusedError('This order needs --seen FILE showing its requested run.')
-
-    text: str
-    least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
-    quoted_words: ClassVar[int] = 4
-
-    def __post_init__(self) -> None:
-        if len(self.text.split()) < self.least_words:
-            raise ToolRefusedError(f'Add "{self.label} <the user-visible closing run, '
-                                   f'{self.least_words}+ words>"; a grep never closes a problem.')
-
-    def instructions(self) -> tuple[str, ...]:
-        return (f"{self.label} {self.text}",)
-
-    def require_closing(self, works: str) -> None:
-        quoted = self.phrases(self.text) & self.phrases(works)
-        if len(works.split()) < self.least_words or not quoted:
-            raise ToolRefusedError(
-                f"Describe what worked in {self.least_words}+ words, quoting "
-                f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
-
-    @classmethod
-    def phrases(cls, text: str) -> set[tuple[str, ...]]:
-        words = [word.strip(".,;:!?\"'`()").lower() for word in text.split()]
-        return {tuple(words[at:at + cls.quoted_words])
-                for at in range(len(words) - cls.quoted_words + 1)}
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):

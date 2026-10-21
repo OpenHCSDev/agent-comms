@@ -8,7 +8,8 @@ from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import ApplicationOrderRun, GoalRef, Todo, TodoStore
+from agent_comms.todos import GoalRef, Todo, TodoStore
+from agent_comms.order_runs import ApplicationOrderRun
 from test_todos import order, thread
 
 

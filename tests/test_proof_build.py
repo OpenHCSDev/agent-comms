@@ -23,13 +23,13 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from agent_comms.todos import (
-    ApplicationOrderRun,
     CommitDelivery,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
 )
+from agent_comms.order_runs import ApplicationOrderRun
 
 
 def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_path):
