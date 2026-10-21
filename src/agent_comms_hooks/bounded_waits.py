@@ -24,9 +24,33 @@ class Bash(ToolInput):
     command: str
 
     loop: ClassVar[re.Pattern[str]] = re.compile(r"(?:^|[\s;&|('\"`])(?:until|while)\s")
-    bounded: ClassVar[re.Pattern[str]] = re.compile(r"\A\s*(?::\s+fg\s*;\s*)?timeout\s+(\d+)s?\s")
+    bounded: ClassVar[re.Pattern[str]] = re.compile(r"\A\s*timeout\s+(\d+)s?\s")
     pgrep_f: ClassVar[re.Pattern[str]] = re.compile(r"\bpgrep\s+(?:-\w*\s+)*-\w*f")
+    separators: ClassVar[str] = ";&|\n"
     max_seconds: ClassVar[int] = 3600
+
+    def segments(self) -> tuple[str, ...]:
+        """The command split at its top-level separators; a quoted separator stays inside."""
+        segments, current, quote, escaped = [], [], "", False
+        for char in self.command:
+            if escaped:
+                escaped = False
+            elif char == "\\" and quote != "'":
+                escaped = True
+            elif quote:
+                quote = "" if char == quote else quote
+            elif char in "'\"":
+                quote = char
+            elif char in self.separators:
+                segments.append("".join(current))
+                current = []
+                continue
+            current.append(char)
+        return (*segments, "".join(current))
+
+    def bounded_segment(self, segment: str) -> bool:
+        bound = self.bounded.match(segment)
+        return bool(bound) and int(bound.group(1)) <= self.max_seconds
 
     def unbounded_wait(self) -> tuple[str, ...]:
         """Why this command's wait loop could run forever; empty when it holds no loop."""
@@ -39,8 +63,11 @@ class Bash(ToolInput):
                 "other waiters; wait on a PID (`while kill -0 PID`), a file, or use "
                 "run_in_background, which notifies when the command exits"
             )
-        bound = self.bounded.match(self.command)
-        if not bound or int(bound.group(1)) > self.max_seconds:
+        if not all(
+            self.bounded_segment(segment)
+            for segment in self.segments()
+            if self.loop.search(segment)
+        ):
             reasons.append(
                 f"a wait loop must start with `timeout N` (N <= {self.max_seconds}) so it dies "
                 "on its own; for a long watch use the Monitor tool, which is capped"
