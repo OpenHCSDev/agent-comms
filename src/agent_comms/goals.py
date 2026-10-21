@@ -753,7 +753,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     def require_active(self) -> Goal:
         goal = self.require()
-        goal.state.require_active()
+        goal.state.require(Active, RelationViolationError(goal.state.activity_refusal()))
         return goal
 
     def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:

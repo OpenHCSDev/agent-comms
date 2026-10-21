@@ -81,8 +81,9 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
-        with pytest.raises(ValueError):
-            refused.value.queue_state().require_no_pending(ValueError("open work"))  # Idle reload remains queued, not UNKNOWN.
+        from agent_comms.lifecycle_capability import Pending
+
+        assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
     with _store_lock(comms.root / 'wire'):
         with pytest.raises(RelationViolationError):

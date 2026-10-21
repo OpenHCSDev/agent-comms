@@ -16,7 +16,7 @@ from .assignment_states import (
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .lifecycle_capability import Active, Complete, Failed, Terminal
+from .lifecycle_capability import Active, Complete, Failed, Successful, Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 
@@ -172,7 +172,7 @@ class CompletedExecution(Complete, Terminal, AttemptExecution):
 
     def validate_snapshot(self, snapshot, authorized):
         for row in snapshot.obligations:
-            row.lifecycle.require_successful_completion(
+            row.lifecycle.require(Successful,
                 IntegrityViolationError("completed wire execution requires terminal obligation")
             )
 
@@ -182,7 +182,7 @@ class InterruptedExecution(AttemptReference, ExecutionState):
     ordinal: int | None = None
 
     def accepts_attempt(self, phase):
-        return phase.accepts_interrupted_execution()
+        return bool(phase.items_with(Failed, phase))
 
 
 class DeferredExecution(StartsAttempt, InterruptedExecution):

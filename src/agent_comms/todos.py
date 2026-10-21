@@ -1469,9 +1469,8 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         raise ValueError("This problem already has an order; drop it before linking another.")
 
     def folded(self, into: str, why: str) -> ProblemOrder:
-        self.require_no_pending(
-            ValueError("The problem has open orders; link or drop them first.")
-        )
+        if self.items_with(Pending, self):
+            raise ValueError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
     @staticmethod

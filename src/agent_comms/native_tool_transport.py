@@ -23,7 +23,9 @@ from .native_tool_call import (
     NativeToolCall,
     OwnerToolConnection,
     SelectedToolDenied,
+    ToolOutcomeUnknown,
 )
+from .lifecycle_capability import Complete
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
@@ -128,7 +130,7 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
         round = NativeToolRound.decode(len(self.rounds), content, decode_call)
         if self.rounds:
             for call in self.rounds[-1].declared:
-                call.assert_complete()
+                call.progress.observation.require(Complete, ToolOutcomeUnknown())
         return round
 
     def announce(self, round: NativeToolRound[Call]) -> None:
@@ -325,7 +327,7 @@ class ToolTransport(Generic[Call]):
 
     def assert_complete(self) -> None:
         for call in self.calls.values():
-            call.assert_complete()
+            call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))

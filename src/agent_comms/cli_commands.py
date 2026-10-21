@@ -275,7 +275,7 @@ class TargetBatchResult(CliResult):
 
     @property
     def completed_count(self) -> int:
-        return sum(outcome.success_count() for outcome in self.outcomes)
+        return sum(len(outcome.items_with(Successful, outcome)) for outcome in self.outcomes)
 
     @property
     def successful(self) -> bool:

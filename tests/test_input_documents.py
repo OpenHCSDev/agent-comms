@@ -1,5 +1,6 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
+from agent_comms.lifecycle_capability import Unresolved
 import json
 import sqlite3
 from contextlib import ExitStack, closing
@@ -104,7 +105,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
     assert isinstance(stored_inputs(store.root).rows[row.key], StartedInput)
     assert not store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
-    row.require_review()  # prior snapshot is immutable and unchanged
+    row.require(Unresolved, ValueError("review required"))  # prior snapshot is immutable and unchanged
 
 
 def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
@@ -203,7 +204,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         assert name not in {item.name for item in fields(reserved)}
         assert not hasattr(reserved, name)
     unsent = store.settle_unbound(("acp:input",)).lookup("acp:input")
-    unsent.require_review()
+    unsent.require(Unresolved, ValueError("review required"))
     assert isinstance(unsent, NotSentInput)
     assert not unsent.accepts_reservation
     assert not store.bind("acp:input", claim_scope=4, turn_id="new", native_id="b" * 32, text="keep")

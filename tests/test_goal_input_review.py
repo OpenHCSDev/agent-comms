@@ -1,5 +1,6 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
 
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
 import os
 
@@ -100,7 +101,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert [row.input_id for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[key]
-        row.require_review()
+        row.require(Unresolved, ValueError("review required"))
         assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")

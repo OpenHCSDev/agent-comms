@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Executing
+
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import os
@@ -88,7 +90,7 @@ def _projection(
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
     active = owner.turn_record.read().require_active()
-    active.require_executing()
+    active.require(Executing, ValueError("turn must execute"))
     claimed_generation = active.claimed_generation.value
     return OptionalAwarenessProjection(
         index,

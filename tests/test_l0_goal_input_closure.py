@@ -89,7 +89,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     reservation.fail(store, "Observed failure")
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
     changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
-    changed.state.require_active()
+    changed.require_active()
     assert changed.id == goal.id
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2

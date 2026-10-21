@@ -33,6 +33,16 @@ class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcom
     """A rejected request, including duplicate or uncertain prior consumption."""
 
 
+class ToolNotExecuting(SelectedToolDenied):
+    def __init__(self) -> None:
+        super().__init__("Native tool is not executing; outcome may be UNKNOWN")
+
+
+class ToolOutcomeUnknown(SelectedToolDenied):
+    def __init__(self) -> None:
+        super().__init__("Native tool outcome remains UNKNOWN")
+
+
 class DuplicateToolCallIdentity(SelectedToolDenied):
     """One assistant tool round declared the same provider call identity twice."""
 
@@ -66,17 +76,11 @@ class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejectio
     def start(self, call: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool start is missing an announcement or was repeated")
 
-    def require_executing(self) -> None:
-        raise SelectedToolDenied("Native tool is not executing; outcome may be UNKNOWN")
-
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,
     ) -> None:
         raise SelectedToolDenied("Native tool terminal is missing or repeated")
-
-    def assert_complete(self) -> None:
-        raise SelectedToolDenied("Native tool outcome remains UNKNOWN")
 
 
 class AwaitingAnnouncement(CallObservation):
@@ -136,7 +140,7 @@ class AwaitingClaim(CallClaim):
         # No retry even when the callback is cancelled or its durable fsync fails.
         call.progress.claim_scope = UncertainClaim()
         await action()
-        call.progress.observation.require_executing()
+        call.progress.observation.require(Executing, ToolNotExecuting())
         call.progress.claim_scope = AuthorizedCall()
 
 
@@ -211,7 +215,7 @@ class NativeToolCall(ABC):
             # start opens this gate; elapsed time cannot settle event order.
             # Transport retirement cancels its handlers if the stream ends.
             await self.progress.started.wait()
-            self.progress.observation.require_executing()
+            self.progress.observation.require(Executing, ToolNotExecuting())
             await self.progress.claim_scope.consume(self, action)
         except (asyncio.CancelledError, TimeoutError):
             self.progress.observation = UncertainCall()
@@ -229,9 +233,6 @@ class NativeToolCall(ABC):
 
     def accepts_current_request(self, candidate: NativeToolCall) -> bool:
         return self.progress.observation.accepts_current_request(self, candidate)
-
-    def assert_complete(self) -> None:
-        self.progress.observation.assert_complete()
 
     @abstractmethod
     def commit_terminal(

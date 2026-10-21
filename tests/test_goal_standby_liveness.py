@@ -99,7 +99,7 @@ def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_p
     assert [target.incarnation.name for target in execution.inactive_wait_for] == ["other"]
     assert "no active turn: @other" in execution.presentation("owner").summary
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
-    comms.registry.require('owner').goal.state.require_active()
+    comms.registry.require('owner').goal.require_active()
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     assert goal.id == comms.registry.require("owner").goal.id
 
@@ -180,7 +180,7 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
     assert [target.incarnation.name for target in execution.inactive_wait_for] == ["child"]
     assert comms.registry.require("owner").goal.id == goal.id
     # Removal/replacement has no subscribed terminal hook in this prototype.
-    comms.registry.require('owner').goal.state.require_active()
+    comms.registry.require('owner').goal.require_active()
 
 
 def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
@@ -237,7 +237,7 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     assert comms.agents.finish_turn(old_claim) == NoFinishedTurn()
     assert comms.registry.require("child").turn_record.read() == active
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
-    comms.registry.require('owner').goal.state.require_active()
+    comms.registry.require('owner').goal.require_active()
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     new_fence = comms.agents.finish_turn(new_claim)
     assert new_fence is not None and new_fence.identity.generation == new_claim.identity.generation
@@ -255,12 +255,12 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
     assert new_fence is not None
     assert new_fence.identity.generation == old_fence.identity.generation + 1
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
-    comms.registry.require('owner').goal.state.require_active()
+    comms.registry.require('owner').goal.require_active()
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     # The newer turn publishes after the OLD callback, before its own callback.
     comms.messaging.send("child", "owner", "New turn's substantive answer").message
     assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
-    comms.registry.require('owner').goal.state.require_active()
+    comms.registry.require('owner').goal.require_active()
     assert comms.registry.require("owner").goal.id == goal.id
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
 
@@ -296,7 +296,7 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     another.registry.unregister("child")
     another.registry.register(child.without_turn(), RunningThreadStatus())
     assert another.goals.release_waits_after_terminal_turn(stale) == ()
-    another.registry.require('owner').goal.state.require_active()
+    another.registry.require('owner').goal.require_active()
 
 
 def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):

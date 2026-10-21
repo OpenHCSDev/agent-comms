@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Complete
+
 from conftest import publish_initial, responder
 import os
 from dataclasses import dataclass, replace
@@ -185,7 +187,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             case.store, case.bus, case.fence,
             exact_target=routes[1], owner_witness=case.witness,
         ).value
-        settled.execution.lifecycle.assert_complete()
+        settled.execution.lifecycle.require(Complete, ValueError("execution must complete"))
         assert not settled.is_current
         assert len(settled.publication_evidence) == 2
         assert all(row.lifecycle.require_completion() for row in settled.assignments)

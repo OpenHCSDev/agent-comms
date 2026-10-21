@@ -6,6 +6,8 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+from .lifecycle_capability import Successful
+
 import math
 import re
 import types
@@ -899,7 +901,7 @@ class AssistantMessage(PiMessage):
 
     @property
     def final_reply(self):
-        return self.stop_reason.success_count() > 0
+        return bool(self.stop_reason.items_with(Successful, self))
 
     async def apply_start(self, session, event):
         await session.assistant_started()
@@ -922,7 +924,7 @@ class AssistantMessage(PiMessage):
         session.output.start_message()
         if session.accepts_output:
             updates.extend(self.usage.charges(session.usage))
-        session.output.final_assistant_stop = reason.success_count() > 0 and session.started_input
+        session.output.final_assistant_stop = bool(reason.items_with(Successful, reason)) and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
         await session.assistant_ended()
         return tuple(updates)

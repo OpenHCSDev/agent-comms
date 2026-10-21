@@ -306,7 +306,7 @@ class StoredInput(InputAttempt):
         return goal_id in self.goal_reviews
 
     def review(self, goal_id: str, decision: GoalInputDecision) -> StoredInput:
-        self.require_review()
+        self.require(Unresolved, ValueError("Reviewed inputs changed; inspect them again."))
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
     @property

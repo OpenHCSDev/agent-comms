@@ -23,7 +23,8 @@ from .envelope_claim_transitions import (
 )
 from .field_codec import FieldCodec, MalformedRecord
 from .native_arguments import NativeArguments
-from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
+from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied, ToolNotExecuting
+from .lifecycle_capability import Executing
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
@@ -191,7 +192,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         # transport holds the returned reservation for this exact tool call.
         reservation = await self.owner.allow(self.turn, round_number, call)
         async with reservation.checking():
-            call.progress.observation.require_executing()
+            call.progress.observation.require(Executing, ToolNotExecuting())
             call.progress.room = reservation
 
     def tool_finished(self, event, input_id):

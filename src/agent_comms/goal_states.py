@@ -59,11 +59,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
 
-    def require_active(self) -> None:
-        from .errors import RelationViolationError
-
-        raise RelationViolationError(self.activity_refusal())
-
     def activity_refusal(self) -> str:
         pause = self.pause_source
         return (

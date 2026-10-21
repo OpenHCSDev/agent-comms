@@ -1,6 +1,8 @@
 """Explicit abandonment releases a dead slot without replaying an UNKNOWN input."""
 
 from __future__ import annotations
+
+from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing
 import os
@@ -104,7 +106,7 @@ def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(relea
     RecoveryMonitorCapability.recover_owner(released_starting, owner)
     with Coordination(released_starting / "coordination.sqlite3") as store:
         after = store.snapshots.get(execution_id)
-        after.attempt.lifecycle.require_failure(ValueError("failure required"))
+        after.attempt.lifecycle.require(Failed, ValueError("failure required"))
         assert not after.is_current
         assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
         assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS

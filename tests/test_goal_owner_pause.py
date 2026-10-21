@@ -46,7 +46,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     active = reopened.goals.update_goal(
         "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
-    active.state.require_active()
+    active.require_active()
     assert reopened.registry.require('worker').goal.state.pause_source is None
 
 

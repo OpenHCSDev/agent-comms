@@ -73,9 +73,8 @@ class PiStopReason(LifecycleCapability, DeclaredFamily, affix="StopReason"):
     @classmethod
     def require_failed_terminal(cls):
         # A saved tool round cannot establish whether the live owner accepted it.
-        cls.reject_success_as_failure(
-            ValueError("Saved assistant message did not end its turn as a failure")
-        )
+        if cls.items_with(Successful, cls):
+            raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
 class UnfinishedPiStop:

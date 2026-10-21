@@ -11,6 +11,8 @@ response and registry outcomes before recording success.
 
 from __future__ import annotations
 
+from .lifecycle_capability import Failed
+
 import hashlib
 import hmac
 import json
@@ -127,7 +129,7 @@ class Generation(GoalLedgerTable, TypedTable):
         return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
 
     def failure_identity(self) -> GoalAttemptIdentity:
-        self.lifecycle.require_failure(FailureNotObserved())
+        self.lifecycle.require(Failed, FailureNotObserved())
         return self.attempt_identity
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
