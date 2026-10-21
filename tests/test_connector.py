@@ -8,9 +8,11 @@ import os
 import secrets
 import json
 import logging
+import re
+import threading
 import time
-from contextlib import ExitStack
-from dataclasses import dataclass, replace
+from contextlib import ExitStack, contextmanager, suppress
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -33,10 +35,12 @@ from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, digest,
 )
+from agent_comms.coordinator import Coordination
+from agent_comms.message_bus import WatchPass
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
-    InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
+    InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
@@ -54,16 +58,18 @@ def test_serve_requires_explicit_root(tmp_path, capsys):
     assert command.root == tmp_path
 
 
-def test_real_connector_refusals_and_replaced_source():
+def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
     """The actual serve entrypoint, curl transport and production maintenance thread."""
     import os
     import subprocess
     import sys
 
     project = Path(__file__).resolve().parents[1]
-    environment = {**os.environ, "PYTHONPATH": str(project / "src")}
+    environment = {**os.environ, "PYTHONPATH": str(project / "src"),
+                   "PATH": os.pathsep.join((str(source_programs.prefix / "bin"), os.environ["PATH"]))}
     proof = subprocess.run(
-        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py")],
+        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py"),
+         str(tmp_path / "live-connector")],
         env=environment, capture_output=True, text=True, timeout=60,
     )
     assert proof.returncode == 0, proof.stdout + proof.stderr
@@ -125,10 +131,23 @@ def store(tmp_path: Path) -> ConnectorStore:
 
 
 @pytest.fixture
-async def client(store: ConnectorStore, root: Path, comms: Comms):
+def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
-    connector = Connector(store, "http://127.0.0.1:18766", root)
+    return Connector(store, "http://127.0.0.1:18766", root)
+
+
+@pytest.fixture
+def copied_connector(connector, tmp_path):
+    async def copy():
+        copied_root = tmp_path / ".agent-comms"
+        await asyncio.to_thread(StoreBackup.copy_tree, connector.root, copied_root)
+        return Connector(ConnectorStore.at(tmp_path / "copied-auth"), connector.issuer, copied_root)
+    return copy
+
+
+@pytest.fixture
+async def client(connector):
     async with TestServer(connector.application()) as server:
         cookies = CookieJar(unsafe=True, treat_as_secure_origin=server.make_url("/"))
         async with TestClient(server, cookie_jar=cookies) as client:
@@ -255,14 +274,69 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
                 assert confirmed.status == 302
                 code = parse_qs(urlsplit(confirmed.headers["Location"]).query)["code"][0]
                 cookie = confirmed.cookies[TrustedBrowser.cookie_name].value
+                unmatched = await session.get(
+                    f"{origin}/missing/{secret}", params={"code": "one-use-value"}
+                )
+                assert unmatched.status == 404
     finally:
         await runner.cleanup()
     lines = [record.getMessage() for record in caplog.records]
-    assert any("/authorize" in line and " 400 " in line for line in lines), lines
-    assert any(ApprovalLink.route in line and " 200 " in line for line in lines), lines
-    assert any(ApprovalLink.route in line and " 302 " in line for line in lines), lines
+    assert [line.rsplit(" ", 1)[0] for line in lines] == [
+        "GET /authorize 400", f"GET {ApprovalLink.route} 200",
+        f"POST {ApprovalLink.route} 302", "GET unmatched 404",
+    ], lines
+    assert all(re.fullmatch(r"\d+\.\d{3}s", line.rsplit(" ", 1)[1]) for line in lines)
     for value in (secret, code, cookie, "one-use-value", "private-token", "private-cookie"):
         assert all(value not in line for line in lines), lines
+
+
+@dataclass
+class PublishingWatch(WatchPass):
+    calls: int = 0
+    completed: threading.Event = field(default_factory=threading.Event)
+
+    def pass_body(self, comms: Comms) -> None:
+        self.calls += 1
+        comms.messaging.send("claude-ai", "worker", "One watch pass")
+        self.completed.set()
+
+
+async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connector, caplog):
+    original = comms.messaging.send("worker", "claude-ai", "Original stays unchanged").message
+    connector = await copied_connector()
+    copied = Comms(connector.root)
+    barrier = MaintenanceBarrier(copied.registry.store.path)
+    held = barrier.begin(MaintenanceOperator.current())
+    held = barrier.advance(held, PausedPhase)
+    held = barrier.advance(held, InstallingPhase)
+    opened = threading.Event()
+
+    @contextmanager
+    def opened_wire():
+        with connector.opened_wire() as wire:
+            opened.set()
+            yield wire
+
+    watch = PublishingWatch()
+    pending = asyncio.create_task(Coordination.watch_worker(watch, opened_wire))
+    try:
+        try:
+            assert await asyncio.to_thread(opened.wait, 3)
+            assert not await asyncio.to_thread(watch.completed.wait, .05)
+            assert watch.calls == 0
+            assert copied.bus.log.latest_sequence() == original.seq
+            assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+        finally:
+            barrier.advance(held, ReadyPhase)
+        assert await asyncio.to_thread(watch.completed.wait, 3)
+    finally:
+        pending.cancel()
+        with suppress(asyncio.CancelledError):
+            await pending
+    assert watch.calls == 1
+    assert [message.body for message in copied.bus.inbox("worker")] == ["One watch pass"]
+    assert comms.bus.log.latest_sequence() == original.seq
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
@@ -310,7 +384,9 @@ async def test_connector_reads_two_newest_first_conversation_pages(client, store
     assert first["has_older"] and second["has_older"]
 
 
-async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(client, comms, tmp_path):
+async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(
+    client, comms, tmp_path, copied_connector,
+):
     from agent_comms.channel_targets import CommandTarget
 
     comms.channels.create_tag("comms")
@@ -319,11 +395,8 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(clien
     originals = [comms.messaging.send(
         "worker", "#comms", f"@claude-ai channel post {number}").message
         for number in range(55)]
-    copied_root = tmp_path / "copied-wire"
-    await asyncio.to_thread(StoreBackup.copy_tree, comms.root, copied_root)
-    copied = Comms(copied_root)
-    copied_store = ConnectorStore.at(tmp_path / "copied-auth")
-    connector = Connector(copied_store, "http://127.0.0.1:18766", copied_root)
+    connector = await copied_connector()
+    copied = Comms(connector.root)
     target = CommandTarget.named("#comms")
     before = copied.bus.pending_count("claude-ai", target)
     ledger = copied.bus.reads.read()
@@ -384,16 +457,12 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
 
 @pytest.mark.parametrize("phases", [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
 async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
-    comms, tmp_path, phases, monkeypatch,
+    comms, tmp_path, phases, monkeypatch, copied_connector,
 ):
-    for name in ("worker", "claude-ai"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
     original = comms.messaging.send("worker", "claude-ai", "Ready for your message").message
-    copied_root = tmp_path / ".agent-comms"
-    await asyncio.to_thread(StoreBackup.copy_tree, comms.root, copied_root)
+    connector = await copied_connector()
+    copied_root = connector.root
     monkeypatch.setenv("HOME", str(tmp_path))
-    store = ConnectorStore.at(tmp_path / "copy-auth")
-    connector = Connector(store, "http://127.0.0.1:18766", copied_root)
     async with TestClient(TestServer(connector.application())) as reader:
         headers = {"Authorization": f"Bearer {await approved_token(reader, Comms(copied_root))}"}
         before = (copied_root / "bus.jsonl").read_bytes()

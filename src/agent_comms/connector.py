@@ -35,6 +35,7 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
+from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions
@@ -51,7 +52,7 @@ from .connector_store import (
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
 from .messages import Message, QuestionKind
-from .commander.standing import UnownedWheelSpin
+from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .todos import DirectiveText, ReviewedHeadVerdict
@@ -558,18 +559,23 @@ class Connector:
             status = refusal.status
             raise
         finally:
-            # A route renders as its method and path template, never the matched values.
+            match request.match_info.route:
+                case ResourceRoute(resource=AbstractResource(canonical=template)):
+                    pass
+                case SystemRoute():
+                    template = "unmatched"
+                case _:
+                    raise TypeError("Unsupported aiohttp route")
             elapsed = time.monotonic() - started
-            logging.info("%s %s %.3fs", request.match_info.route, status, elapsed)
+            logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
-        heartbeat = CommanderHeartbeat()
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
-                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+                UnownedOrderWatch(), self.opened_wire)),
             asyncio.create_task(Coordination.watch_worker(
-                lambda: heartbeat.watch_pass(self.opened_wire))),
+                CommanderHeartbeat(), self.opened_wire)),
         )
         try:
             yield

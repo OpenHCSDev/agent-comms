@@ -7,11 +7,11 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, asynccontextmanager
+from contextlib import AbstractContextManager, ExitStack, asynccontextmanager
 from contextvars import ContextVar
 from functools import partial
 from pathlib import Path
-from typing import Final, Self, TypeVar
+from typing import TYPE_CHECKING, Final, Self, TypeVar
 
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
@@ -29,6 +29,10 @@ from .private_runtime_schema import PrivateRuntimeSchema
 from .recovery_reader import RecoveryReader
 from .store_files import StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
+
+if TYPE_CHECKING:
+    from .comms import Comms
+    from .message_bus import WatchPass
 
 Result = TypeVar("Result")
 
@@ -124,12 +128,15 @@ class Coordination:
         return await join_retirement(pending)
 
     @classmethod
-    async def watch_worker(cls, operation: Callable[[], None]) -> None:
-        """Join each service pass before idling; cancellation also joins borrowed work."""
+    async def watch_worker(
+        cls, watch: WatchPass, opened_wire: Callable[[], AbstractContextManager[Comms]],
+    ) -> None:
+        """Join each entered pass before idling; cancellation also joins borrowed work."""
         while True:
-            (outcome,) = await asyncio.gather(cls.run_worker(operation), return_exceptions=True)
-            if isinstance(outcome, Exception):
-                logging.error("Service worker pass failed: %r", operation, exc_info=outcome)
+            try:
+                await cls.run_worker(partial(watch.watch_pass, opened_wire))
+            except Exception:
+                logging.exception("Service worker pass failed: %s", type(watch).__name__)
             await asyncio.sleep(60)
 
     @classmethod

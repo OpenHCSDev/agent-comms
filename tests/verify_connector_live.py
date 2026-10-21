@@ -1,7 +1,7 @@
 """Real scratch-bus connector/curl and maintenance proof; no test doubles.
 
-PYTHONPATH=src python -X faulthandler tests/verify_connector_live.py
-All scratch is owned by pi-connector and removed after the subprocess exits.
+PYTHONPATH=src python -X faulthandler tests/verify_connector_live.py <owned-scratch>
+The caller selects scratch; each subprocess run retires its temporary directory.
 """
 from __future__ import annotations
 
@@ -100,8 +100,7 @@ def maintenance_proof(comms):
     print(f"same maintenance thread completed normally: last_seq={after.last_seq}, caught_up=True, no restart")
 
 
-def main():
-    scratch = Path.home() / ".cache/agent-scratch/pi-connector"
+def main(scratch: Path):
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="live-", dir=scratch) as directory:
         base = Path(directory)
@@ -191,4 +190,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(Path(sys.argv[1]))
