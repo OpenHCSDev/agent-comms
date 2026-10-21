@@ -416,24 +416,17 @@ class _ArtifactWriter:
         self.size += len(data)
 
 
+@dataclass(eq=False, repr=False, kw_only=True)
 class WireTranscriptExporter:
     """Stream a fixed wire boundary into one private atomic artifact."""
 
     SCHEMA: ClassVar[str] = "agent-comms/wire-export"
     VERSION: ClassVar[int] = 1
 
-    def __init__(
-        self,
-        *,
-        format: WireExportFormat,
-        scope: WireExportScope,
-        limit: WireExportLimit,
-        boundary: WireExportBoundary,
-    ) -> None:
-        self.format = format
-        self.scope = scope
-        self.limit = limit
-        self.boundary = boundary
+    format: WireExportFormat
+    scope: WireExportScope
+    limit: WireExportLimit
+    boundary: WireExportBoundary
 
     def export(
         self,
