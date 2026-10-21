@@ -53,9 +53,6 @@ class GoalTurnPermit(ABC):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
 
     @abstractmethod
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
-
-    @abstractmethod
     def charge_for(self, goal_id: str, goals: Goals, response: str,
                    usage: PiUsage) -> bool: ...
 
@@ -75,9 +72,3 @@ class NoLaunchPermit(GoalTurnPermit):
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context
-
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
-        generation = store.snapshot(goal_id)
-        if generation and generation.lifecycle.allows_resume(True):
-            store.retire_goal(goal_id, expected_generation=generation.number,
-                              attempt_id=generation.attempt_id)

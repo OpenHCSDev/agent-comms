@@ -66,11 +66,11 @@ def goal_turn(comms, original_goal):
         yield account
 
 
-def test_failed_goal_turn_writes_one_block_naming_turn(copied_goal_bus):
+@pytest.mark.parametrize("original_goal", [False, True])
+@pytest.mark.parametrize("terminal", [events.Done("backend failed", False), EndedWithoutResult()])
+def test_failed_goal_turn_writes_one_block_naming_turn(copied_goal_bus, original_goal, terminal):
     comms = copied_goal_bus
-    with goal_turn(comms, True) as account:
-        terminal = events.Done("backend failed", False)
-        terminal.observe_goal(account)
+    with goal_turn(comms, original_goal) as account:
         account.finish(terminal)
         blocks = [row.after.require().state for row in comms.goals.goal_history("worker")
                   if isinstance(row.after.require().state, BlockedGoal)]
@@ -117,7 +117,6 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
     with goal_turn(comms, original_goal) as account:
         goal = comms.registry.require("worker").goal.require()
         comms.goals.update_goal("worker", ClearGoalAction())
-        terminal.observe_goal(account)
         account.finish(terminal)
         assert comms.registry.require("worker").goal == NoGoal()
         assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle.terminal
@@ -130,7 +129,6 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
 def test_unsuccessful_terminal_still_blocks_goal_on_copied_bus(copied_goal_bus, terminal):
     comms = copied_goal_bus
     with goal_turn(comms, True) as account:
-        terminal.observe_goal(account)
         account.finish(terminal)
         state = comms.registry.require("worker").goal.require().state
         assert isinstance(state, BlockedGoal)

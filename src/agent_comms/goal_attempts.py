@@ -482,10 +482,6 @@ class LaunchPermit(GoalTurnPermit):
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.with_goal(owner, goals)
 
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
-        with suppress(StaleAttemptError):
-            self.reservation.fail(store, "Goal origin turn did not finish successfully.")
-
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""
         with suppress(StaleAttemptError):

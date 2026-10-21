@@ -15,7 +15,6 @@ from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .goal_actions import (
-    BlockedGoalAction,
     GoalAction,
     GoalActionContext,
     GoalPrecondition,
@@ -433,12 +432,6 @@ class Goals:
         action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
-
-    def block_failed_origin(self, name: str, goal: Goal) -> GoalDeclaration:
-        return self.update_goal(name, BlockedGoalAction(
-            expect=GoalPrecondition(goal_id=goal.id, expected_goal=goal),
-            progress="Goal origin turn did not finish successfully.",
-        ))
 
     def block_goal_after_failed_turn(
         self,

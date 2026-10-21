@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from .diagnostics import FailureReason, terminal_failure_reason
 from .goal_failure_observation import FailedTurnObservation
 from .goal_attempts import StaleAttemptError
-from .turn_goal_account import FailedGoalOrigin
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -34,9 +33,6 @@ class TurnTerminal(ABC):
     def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
         return self
 
-    def observe_goal(self, account: TurnGoalAccount) -> None:
-        pass
-
     def reported(self, event: Done) -> Done:
         return event
 
@@ -58,14 +54,18 @@ class TurnTerminal(ABC):
     def settle_launched(self, account, permit, store, captured, current) -> None: ...
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
-        if not permit.has_verified_progress(store):
-            permit.fail_origin(store, goal_id)
-            for goal in current:
-                FailedGoalOrigin(account.comms, account.thread_name, goal).dispatch_sync(goal.state)
+        pass
 
 
 class FailedGoalTurn(TurnTerminal):
     """Reported failures and missing results share the original failed ledger path."""
+
+    def settle_origin(self, account, permit, store, goal_id, current) -> None:
+        if permit.has_verified_progress(store):
+            return
+        for launch in permit.claims:
+            for goal in current.matching(goal_id):
+                self.settle_launched(account, launch, store, goal, current)
 
     def failure_observation(self, account, permit, captured):
         snapshot = account.comms.registry.snapshot()

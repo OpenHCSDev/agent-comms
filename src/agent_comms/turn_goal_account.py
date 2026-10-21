@@ -79,17 +79,6 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
         return f"origin-completed:{self.goal.revision}"
 
 
-@dataclass(frozen=True)
-class FailedGoalOrigin(MroDispatch):
-    comms: Comms
-    thread_name: str
-    goal: Goal
-
-    @handles(ActiveGoal, CompletedGoal)
-    def block(self, state) -> None:
-        self.comms.goals.block_failed_origin(self.thread_name, self.goal)
-
-
 @dataclass(kw_only=True)
 class TurnGoalAccount:
     comms: Comms

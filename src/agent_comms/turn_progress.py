@@ -198,7 +198,6 @@ class TurnProgress(events.AgentEventConsumer):
         # Retain the resolved outcome before transport publication. If delivery
         # throws, failure handling must not classify or resolve it a second time.
         self.turn.terminal = event
-        await Coordination.run_worker(partial(event.observe_goal, self.goals))
         return event
 
     @handles(events.InputStarted)
