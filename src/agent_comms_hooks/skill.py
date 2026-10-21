@@ -10,6 +10,7 @@ each part. The reread hook repeats that order as context grows.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from pydantic import ValidationError
@@ -19,7 +20,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import ContextCadence, SourcesOrder
+from agent_comms_hooks.reread import ContextCadence, SourcesOrder, ToolUseReminder
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,9 @@ class CommanderStart(SourcesOrder):
         return True
 
     def prepare(self) -> None:
+        """A start or compaction drops what was read, so every reminder is due again."""
+        for member in ToolUseReminder.__subclasses__():
+            Path(self.transcript_path).with_suffix(member.mark_suffix).unlink(missing_ok=True)
         self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
         self.drift.write_text("\n".join(RuleFile.drift_tells()), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
