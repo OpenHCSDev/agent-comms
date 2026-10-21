@@ -32,7 +32,7 @@ from agent_comms.typed_table import (
     TextStorage,
     TypedTable,
 )
-from agent_comms.coordination_tables import ExecutionReference, RetryPartition
+from agent_comms.coordination_tables.executions import ExecutionReference, RetryPartition
 
 
 @dataclass(frozen=True, slots=True)

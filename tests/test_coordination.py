@@ -35,7 +35,8 @@ from agent_comms.coordination_tables.assignments import (
     MessageAudience,
     WakeAssignment,
 )
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
     ExecutionOrigin,

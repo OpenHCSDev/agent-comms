@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import IntFlag
 from typing import TYPE_CHECKING, Final, Annotated, ClassVar
 
@@ -14,19 +14,13 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import (
-    IdentityConflict,
-    IntegrityViolationError,
-    RecoveryBlocked,
-    StaleFence,
-)
+from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
-    AccumulatingBits,
     Column,
     CounterDependent,
     FinalizedLifecycle,
@@ -40,11 +34,9 @@ from agent_comms.typed_table import (
     NoDelete,
     NonDecreasing,
     NonDecreasingWhenPresent,
-    NonIncreasing,
     TextStorage,
     TypedTable,
 )
-from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 if TYPE_CHECKING:
     from agent_comms.coordination_snapshot import RecoverySnapshot
@@ -288,124 +280,3 @@ class AttemptRecord(LifecycleTransitions, FinalizedLifecycle, CounterDependent, 
                 deferred=True,
             ),
         )
-
-@dataclass(frozen=True, slots=True)
-class ReplayAssessments(IncrementingColumn, MonotoneColumns, AccumulatingBits, ExecutionReference, RetryPartition, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
-    column_orders = (NonDecreasing(('side_effects_possible',)), NonIncreasing(('replay_safe',)),)
-    accumulating_columns = ('facts',)
-
-    immutable_columns = ('execution_id',)
-
-    @property
-    def allows_retry(self) -> bool:
-        return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
-
-    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
-    facts: Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
-    replay_safe: Annotated[bool, Column()]
-    side_effects_possible: Annotated[bool, Column()]
-    revision: Annotated[int, Column(check="revision > 0")]
-
-    @classmethod
-    def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
-        """Join original observations under the caller's existing attempt fence.
-
-        Missing replay evidence cannot establish safety. Only an existing
-        assessment may retain that fact, and every incoming observation can
-        revoke it. Output facts remain monotonic across all attempts.
-        """
-        if not observed or cls.exists(
-            db,
-            where=(
-                "execution_id=? AND (facts & ?) = ? AND replay_safe=0 AND side_effects_possible=1"
-            ),
-            parameters=(execution_id, int(observed), int(observed)),
-        ):
-            return
-        # Most streamed deltas repeat a fact already durably joined. Read only
-        # that answer, not a decoded row or another write-lock acquisition.
-        # A new fact joins atomically: another connection may have accumulated
-        # different evidence since the existence check, even in autocommit use.
-        statement, values = cls(execution_id, observed, False, True, 1)._insertion()
-        db.execute(
-            statement + """
-            ON CONFLICT (execution_id) DO UPDATE SET
-                facts = facts | excluded.facts,
-                replay_safe = 0,
-                side_effects_possible = 1,
-                revision = revision + 1
-            WHERE (facts | excluded.facts) != facts
-               OR replay_safe != 0 OR side_effects_possible != 1
-            """,
-            values,
-        )
-
-    @classmethod
-    def authorize_if_unobserved(cls, db, execution_id: str) -> None:
-        """Record provider-failure proof only while no output fact exists."""
-        before = cls.one(db, execution_id=execution_id)
-        if before is None:
-            cls(execution_id, ReplayFact.NONE, True, False, 1).record(db, None)
-
-    @classmethod
-    def revoke(cls, db, execution_id: str) -> None:
-        """A nonretryable failure consumes any earlier provider-failure proof."""
-        before = cls.one(db, execution_id=execution_id)
-        if before is not None and before.replay_safe:
-            replace(before, replay_safe=False, revision=before.revision + 1).record(db, before)
-
-    def require_successor(self, after: ReplayAssessments) -> None:
-        accumulated = replace(
-            after,
-            facts=self.facts | after.facts,
-            replay_safe=self.replay_safe and after.replay_safe,
-            side_effects_possible=self.side_effects_possible or after.side_effects_possible,
-        )
-        if accumulated != after:
-            raise IdentityConflict("replay facts cannot be erased")
-
-    def record(self, db, before: ReplayAssessments | None) -> bool:
-        """Persist monotonic replay evidence inside the checked transaction."""
-
-        if before is not None:
-            if replace(before, revision=self.revision) == self:
-                return False
-            before.require_successor(self)
-            ReplayAssessments.update(
-                db,
-                where="execution_id=?",
-                parameters=(self.execution_id,),
-                facts=self.facts,
-                replay_safe=self.replay_safe,
-                side_effects_possible=self.side_effects_possible,
-                revision=before.revision + 1,
-            )
-        else:
-            self.insert(db)
-        return True
-
-    def __post_init__(self) -> None:
-        validate_execution_id(self.execution_id)
-        if self.revision <= 0:
-            raise ValueError("replay revision must be positive")
-        object.__setattr__(self, "facts", ReplayFact(self.facts))
-        if int(self.facts) < 0 or int(self.facts) & ~APPROVED_REPLAY_FACT_MASK:
-            raise ValueError("unrecognized replay fact bits")
-        if self.facts != ReplayFact.NONE and self.replay_safe:
-            raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
-
-    retry_authorized: ClassVar[Generated] = Generated(
-        int,
-        Column(
-            generated=(
-                "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
-                "e = 0\n"
-                "              THEN 1 ELSE 0 END"
-            ),
-            nullable=True,
-        ),
-    )
-
-    checks = ("facts = 0 OR replay_safe = 0",)
-
-    unique = (("execution_id", "retry_authorized"),)

@@ -43,7 +43,8 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,

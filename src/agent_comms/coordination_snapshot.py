@@ -18,10 +18,16 @@ from agent_comms.coordination_tables.attempts import (
     AttemptRecord,
     NoPreviousAttempt,
     PreviousAttempt,
-    ReplayAssessments,
 )
 from agent_comms.coordination_tables.executions import (
-    ExecutionOrigin, ExecutionRecord, NoPointedAttempt, NoPointedExecution, PointerAttempt, PointerExecution,
+    CurrentExecutions,
+    ExecutionOrigin,
+    ExecutionRecord,
+    NoPointedAttempt,
+    NoPointedExecution,
+    PointerAttempt,
+    PointerExecution,
+    ReplayAssessments,
 )
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
@@ -232,11 +238,6 @@ class RecoverySnapshot:
         self, session, outcome, reason_code: ReasonCode,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.assignments import WakeAssignment
-        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
-        from .coordination_tables.executions import CurrentExecutions, ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
-
         db = session._connection
         execution, attempt = self.execution, self.attempt
         if self.publication_intents:

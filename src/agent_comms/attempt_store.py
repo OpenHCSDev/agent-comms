@@ -18,7 +18,8 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession, NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.recovery import (
     ACPClientConnectivity,
     ConnectivityFacet,

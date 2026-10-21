@@ -11,7 +11,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     ExecutionRecord,
 )
