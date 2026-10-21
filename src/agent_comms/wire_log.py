@@ -52,7 +52,7 @@ from .field_codec import FieldCodec, MalformedRecord
 from .locked_store import DurableFile, RegistryFile, WireWakeFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
-from .private_bus_checkpoint import CheckedRead
+from .private_bus_checkpoint import CheckedRead, WritableCheckpoint
 from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .store_files import (
@@ -932,6 +932,12 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
     @property
     def metadata_path(self) -> Path:
         return WireMetadata.path_in(self.path.parent)
+
+    @property
+    def cut_paths(self) -> tuple[Path, ...]:
+        """The files one hold of the bus lock keeps consistent: only the private writer
+        advances the log, its marker and its checkpoint, and only under that lock."""
+        return (self.path, self.metadata_path, WritableCheckpoint.path_in(self.path.parent))
 
     def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
         """Read one marker inode under its leaf lock, independently of registry reads.
