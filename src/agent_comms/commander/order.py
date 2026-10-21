@@ -16,6 +16,7 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import dataclasses
 import re
@@ -132,34 +133,73 @@ FORWARD_BODY = re.compile(
 )  # def x(self): / return self._a.x(...)
 
 
+@dataclass(frozen=True)
+class ClassNames:
+    """A class's direct declarations and simple same-module parent names."""
+
+    own: frozenset[str]
+    bases: frozenset[str]
+
+    def inherited(self, classes: Mapping[str, ClassNames], seen: frozenset[str] = frozenset()) -> frozenset[str]:
+        return frozenset(name for base in self.bases if base in classes and base not in seen
+                         for name in classes[base].own | classes[base].inherited(classes, seen | {base}))
+
+
+class OverrideNames(ast.NodeVisitor):
+    """The AST dispatches declarations; bodies and qualified bases are not direct names."""
+
+    def __init__(self) -> None:
+        self.classes: dict[str, ClassNames] = {}
+        self.names: set[str] = set()
+
+    def generic_visit(self, node: ast.AST) -> None:
+        """Do not turn names nested inside an expression or body into declarations."""
+
+    def visit_Module(self, node: ast.Module) -> None:
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        body, bases = type(self)(), type(self)()
+        for statement in node.body:
+            body.visit(statement)
+        for base in node.bases:
+            bases.visit(base)
+        self.classes[node.name] = ClassNames(frozenset(body.names), frozenset(bases.names))
+
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.visit_FunctionDef(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        for target in node.targets:
+            self.visit(target)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.visit(node.target)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.names.add(node.id)
+
+    @property
+    def overrides(self) -> frozenset[str]:
+        return frozenset(name for declaration in self.classes.values()
+                         for name in declaration.own & declaration.inherited(self.classes))
+
+
 def overrides(sources):
-    """Names a class answers again for a question a base in the same module declares: a per-state answer, not forwarding."""
-    import ast
+    """Names answered again for a question a same-module base declares."""
     found = set()
     for text in sources:
         try:
             tree = ast.parse(text)
         except SyntaxError:
             continue
-        classes = {c.name: c for c in tree.body if isinstance(c, ast.ClassDef)}
-        def own(c):
-            names = set()
-            for node in c.body:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    names.add(node.name)
-                elif isinstance(node, ast.Assign):
-                    names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
-                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                    names.add(node.target.id)
-            return names
-        def inherited(c, seen=()):
-            names = set()
-            for b in c.bases:
-                if isinstance(b, ast.Name) and b.id in classes and b.id not in seen:
-                    names |= own(classes[b.id]) | inherited(classes[b.id], seen + (b.id,))
-            return names
-        for c in classes.values():
-            found |= own(c) & inherited(c)
+        declarations = OverrideNames()
+        declarations.visit(tree)
+        found.update(declarations.overrides)
     return found
 
 
