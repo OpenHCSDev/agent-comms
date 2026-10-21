@@ -17,7 +17,7 @@ from pydantic import (
     ValidateAs,
 )
 
-from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, TextWire, WireModel
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
@@ -61,8 +61,7 @@ class UserInput(TaggedWire, ABC):
     def display(self) -> str: ...
 
 
-class TextInput(UserInput):
-    wire_tag = 'text'
+class TextInput(TextWire, UserInput):
     text: str
 
     @property

@@ -14,6 +14,7 @@ from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
 from .native_startup import SessionLoad
+from .mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -179,7 +180,7 @@ class UnboundedWait(UnchargedWait, TurnWait):
         return None
 
 
-class ProgressWatchdog:
+class ProgressWatchdog(MroDispatch):
     """Select a declared wait once; never grant input or replay authority."""
 
     def __init__(
@@ -238,12 +239,15 @@ class ProgressWatchdog:
             yield self.state(
                 "recovered", self.retry_recovery_reason, 0, phase=phases.ModelWaitPhase()
             )
-        if event.accepts_prompt:
-            self.prompt_accepted = True
-            if event.invalidates_stop:
-                session.output.final_assistant_stop = False
-            self.progress()
-            self.phase = self.phase.model_progress()
+        self.dispatch_sync(event, session)
+
+    @handles(phases.AcceptsPrompt)
+    def accept_prompt(self, event: PiEvent, session: TurnSession) -> None:
+        self.prompt_accepted = True
+        if event.invalidates_stop:
+            session.output.final_assistant_stop = False
+        self.progress()
+        self.phase = self.phase.model_progress()
 
     def transition(self, event: PiEvent) -> None:
         self.phase = event.on(self.phase)

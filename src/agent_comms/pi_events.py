@@ -24,6 +24,7 @@ from .pi_payloads import (
     MissingData,
     MissingToolResult,
     NoDelta,
+    Opaque,
     PiDelta,
     PiMessage,
     PiOmitted,
@@ -140,8 +141,6 @@ class PiEvent(PiTurnPhase, PiPayload, DeclaredFamily):
     async def act(self, session: TurnSession) -> None:
         pass
 
-    accepts_prompt = False
-
     @property
     def invalidates_stop(self) -> bool:
         return False
@@ -180,11 +179,10 @@ class DurablePiEvent(PiEvent, declared_name=None):
 
 
 @dataclass(frozen=True)
-class UnreadPayload:
+class UnreadPayload(Opaque):
     """A Pi event whose fields Core does not read; the record is kept as received."""
 
     payload: dict[str, Any]
-    opaque: ClassVar[bool] = True
 
 
 class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
@@ -245,9 +243,8 @@ class ExtensionError(UnreadPayload, NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentEnd(NativePiEvent):
+class AgentEnd(phases.AcceptsPrompt, NativePiEvent):
     will_retry: Annotated[ReportedFlag | PiOmitted, WireName("willRetry")] = PiOmitted()
-    accepts_prompt = True
 
     @property
     def invalidates_stop(self) -> bool:
@@ -282,8 +279,7 @@ class AgentSettled(NativePiEvent):
         return True
 
 
-class AgentStart(NativePiEvent):
-    accepts_prompt = True
+class AgentStart(phases.AcceptsPrompt, NativePiEvent):
 
     @property
     def invalidates_stop(self) -> bool:
@@ -693,7 +689,7 @@ class InputCommitted(NativePiEvent, NativeInputLocation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEnd(NativePiEvent, DurablePiEvent):
+class MessageEnd(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
@@ -702,15 +698,13 @@ class MessageEnd(NativePiEvent, DurablePiEvent):
         for event in await self.message.apply_end(session):
             yield event
 
-    accepts_prompt = True
-
     @property
     def retry_progress(self) -> bool:
         return self.message.retry_progress
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageStart(NativePiEvent, DurablePiEvent):
+class MessageStart(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
@@ -718,8 +712,6 @@ class MessageStart(NativePiEvent, DurablePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for update in await self.message.apply_start(session, self):
             yield update
-
-    accepts_prompt = True
 
     @property
     def invalidates_stop(self) -> bool:
@@ -734,7 +726,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageUpdate(NativePiEvent, DurablePiEvent):
+class MessageUpdate(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
     assistant_message_event: Annotated[
         NoDelta | PiDelta, WireName("assistantMessageEvent")
     ] = NoDelta()
@@ -754,8 +746,6 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 
     def convert(self):
         return self.assistant_message_event.events()
-
-    accepts_prompt = True
 
     @property
     def retry_progress(self) -> bool:
@@ -879,12 +869,10 @@ class PiToolCallEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(
-    PiToolCallEvent, NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase
+    phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase
 ):
     def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_ended(self.tool_id)
-
-    accepts_prompt = True
 
     is_error: Annotated[ReportedFlag | PiOmitted, WireName("isError")] = PiOmitted()
     result: PiToolResult = field(default_factory=MissingToolResult)
@@ -909,12 +897,10 @@ class ToolExecutionEnd(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(
-    PiToolCallEvent, NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase
+    phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase
 ):
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return current.tool_started(self.tool_id, self.tool_label)
-
-    accepts_prompt = True
 
     args: object = field(default_factory=dict)
     tool_call_id: Annotated[ReportedText | PiOmitted, WireName("toolCallId")] = PiOmitted()
@@ -932,8 +918,7 @@ class ToolExecutionStart(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionUpdate(PiToolCallEvent, NativePiEvent, DurablePiEvent):
-    accepts_prompt = True
+class ToolExecutionUpdate(phases.AcceptsPrompt, PiToolCallEvent, NativePiEvent, DurablePiEvent):
 
     partial_result: Annotated[PiToolResult, WireName("partialResult")] = field(
         default_factory=MissingToolResult

@@ -37,6 +37,10 @@ class NoModelWait:
         return unbounded
 
 
+class AcceptsPrompt:
+    """A native observation proves that Pi accepted the current prompt."""
+
+
 class ClosingTurn:
     """Native tail observations cannot reopen a closing turn."""
 
@@ -70,7 +74,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     # excursion's own backstop bounds the stall instead.
     pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
-    accepts_prompt: ClassVar[bool] = False
     accepts_followup: ClassVar[bool] = True
     can_compact: ClassVar[bool] = False
     can_cancel: ClassVar[bool] = True
@@ -144,9 +147,8 @@ class PreparingPhase(TurnPhase):
     label = "Preparing input"
 
 
-class IdlePhase(ActivityWord, TurnPhase):
+class IdlePhase(AcceptsPrompt, ActivityWord, TurnPhase):
     busy = False
-    accepts_prompt = True
     accepts_followup = False
     can_compact = True
     can_cancel = False

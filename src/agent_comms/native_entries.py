@@ -32,7 +32,7 @@ from .field_codec import (
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import PiMessage, PiOmitted, PiPayload
+from .pi_payloads import Opaque, PiMessage, PiOmitted, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
@@ -626,9 +626,8 @@ class ImportedMetadataEntry(CustomEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownEntry(NativeEntry):
+class UnknownEntry(Opaque, NativeEntry):
     payload: dict[str, Any]
-    opaque = True
 
 
 @dataclass(frozen=True, kw_only=True)

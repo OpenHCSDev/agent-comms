@@ -7,7 +7,7 @@ from functools import partial
 from agent_comms import field_codec
 
 from .native_session_reopen import NativeSessionIdentity
-from .pi_payloads import PiResponseData
+from .pi_payloads import PiResponseData, StrictFields
 from .tool_result import DeclaredReply
 from .turn_context import (
     ContextManifest,
@@ -23,8 +23,7 @@ from .turn_context import (
 
 
 @dataclass(frozen=True)
-class NativeContextManifestData(PiResponseData):
-    strict_fields = True
+class NativeContextManifestData(StrictFields, PiResponseData):
     counter: str
     segments: tuple[SegmentManifest, ...]
     request_id: Annotated[
@@ -54,8 +53,7 @@ class NativeContextManifestData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class NativeContextData(PiResponseData, DeclaredReply):
-    strict_fields = True
+class NativeContextData(StrictFields, PiResponseData, DeclaredReply):
     counter: str
     identity: NativeSessionIdentity
     segments: tuple[MeasuredNativeSegment, ...]

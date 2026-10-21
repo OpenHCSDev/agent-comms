@@ -215,10 +215,27 @@ def project_array(value, target):
     return value if member is None else [project_wire(item, get_args(member)[0]) for item in value]
 
 
+class Opaque:
+    """Retain the complete extension record alongside its declared fields."""
+
+    @classmethod
+    def normalize_record(cls, value, data):
+        return dict(super().normalize_record(value, data), payload=value)
+
+
+class StrictFields:
+    """A closed native record rejects every undeclared external field."""
+
+    @classmethod
+    def normalize_record(cls, value, data):
+        names = {key for _, key in FieldCodec.record_fields(cls)}
+        if set(value) - names - {cls.wire_tag}:
+            raise MalformedRecord(f"Unexpected {cls.__name__} fields")
+        return super().normalize_record(value, data)
+
+
 class PiPayload:
     wire_tag: ClassVar[str | None] = None
-    opaque: ClassVar[bool] = False
-    strict_fields: ClassVar[bool] = False
 
     @classmethod
     def normalize_wire(cls, value):
@@ -229,18 +246,15 @@ class PiPayload:
         if issubclass(cls, DeclaredFamily):
             member = cls.wire_member(value)
             data["kind"] = member.declared_name
-        declared = FieldCodec.record_fields(member)
-        names = {key for _, key in declared}
-        if member.strict_fields and set(value) - names - {member.wire_tag}:
-            raise MalformedRecord(f"Unexpected {member.__name__} fields")
-        hints = FieldCodec._types(member)
-        for f, key in declared:
+        return member.normalize_record(value, data)
+
+    @classmethod
+    def normalize_record(cls, value, data):
+        hints = FieldCodec._types(cls)
+        for f, key in FieldCodec.record_fields(cls):
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                data[key] = member.normalize_field(hints[f.name], key, value[key], value)
-        if member.opaque:
-            # An opaque member keeps the whole record beside the fields it declares.
-            data.update(payload=value)
+                data[key] = cls.normalize_field(hints[f.name], key, value[key], value)
         return data
 
     @classmethod
@@ -526,9 +540,8 @@ class ImageContent(PiContent):
 
 
 @dataclass(frozen=True)
-class UnknownContent(PiContent):
+class UnknownContent(Opaque, PiContent):
     payload: dict[str, Any]
-    opaque = True
 
     def to_wire(self):
         return self.payload
@@ -744,9 +757,8 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class UnknownDiagnostic(PiDiagnostic):
+class UnknownDiagnostic(Opaque, PiDiagnostic):
     payload: dict[str, Any]
-    opaque = True
 
 
 @dataclass(frozen=True)
@@ -1026,9 +1038,8 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownMessage(PiMessage):
+class UnknownMessage(Opaque, PiMessage):
     payload: dict[str, Any]
-    opaque = True
 
 
 @dataclass(frozen=True)
@@ -1106,9 +1117,8 @@ class ToolcallEndDelta(ToolDelta, PiDelta, declared_name="toolcall_end"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownDelta(PiDelta):
+class UnknownDelta(Opaque, PiDelta):
     payload: dict[str, Any]
-    opaque = True
 
     async def emit(self, session):
         return ()
@@ -1219,10 +1229,8 @@ class MissingData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class SessionSwitchData(PiResponseData):
+class SessionSwitchData(StrictFields, PiResponseData):
     """The SDK's actual session-replacement outcome, not a local readiness flag."""
-
-    strict_fields = True
     cancelled: bool
 
     def require_switched(self) -> None:
@@ -1361,9 +1369,8 @@ class ReportedCompaction(PiReported[CompactionData]):
 
 
 @dataclass(frozen=True)
-class UnknownData(PiResponseData):
+class UnknownData(Opaque, PiResponseData):
     payload: Any
-    opaque = True
 
     @classmethod
     def normalize_wire(cls, value):
@@ -1493,10 +1500,8 @@ class StorageDenialToolDetails(NativeToolDetails):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublishedMessageToolDetails(NativeToolDetails):
+class PublishedMessageToolDetails(StrictFields, NativeToolDetails):
     """The send owner supplies its original committed message, not a guessed acknowledgement."""
-
-    strict_fields = True
     id: str
     message: SentTranscript
     correction: CorrectionResult = field(default_factory=CorrectionUnreported)
@@ -1524,19 +1529,16 @@ class NoToolDetails(NativeToolDetails):
 
 
 @dataclass(frozen=True)
-class OpaqueToolDetails(NativeToolDetails):
+class OpaqueToolDetails(Opaque, NativeToolDetails):
     payload: Any
-    opaque = True
 
     def edit_diff(self):
         return NativeEditDetails.capture_diff(self.payload)
 
 
 @dataclass(frozen=True, kw_only=True)
-class FileMutationToolDetails(NativeToolDetails, NativeEditDetails):
+class FileMutationToolDetails(StrictFields, NativeToolDetails, NativeEditDetails):
     """Known native publisher metadata, retaining the existing edit evidence."""
-
-    strict_fields = True
     artifact: Annotated[NativeFileArtifact, WireName("agentCommsArtifact")]
 
     def edit_diff(self):

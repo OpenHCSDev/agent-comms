@@ -38,6 +38,7 @@ from uuid import uuid4
 from typing_extensions import TypeAliasType
 
 from .declared_family import DeclaredFamily
+from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -711,7 +712,25 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
-class FieldRepresentation(ABC):
+class AcceptsNull:
+    """Null is this representation's input, not the structural target's."""
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data, structural):
+        return cls.decode_value(data, structural)
+
+
+class ExternalJsonShape:
+    """Decode the external shape directly, without revalidating each subtree."""
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data, structural):
+        return cls.from_wire(data)
+
+
+class FieldRepresentation(MroDispatch, ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -719,10 +738,22 @@ class FieldRepresentation(ABC):
     """
 
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
-    accepts_null = False
-    # True when the wire value is one external JSON shape decoded by from_wire
-    # rather than the representation's own validated decode.
-    external_json_shape = False
+
+    @classmethod
+    def decode_field(cls, data, structural):
+        handler = getattr(cls, next(cls.handler_names_for(type(data))))
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return handler(data, structural)
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data, structural):
+        return structural.decode(data)
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data, structural):
+        return cls.decode(data)
 
     @classmethod
     @abstractmethod
@@ -776,10 +807,8 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
-class SingleFieldValue(WireValue):
+class SingleFieldValue(ExternalJsonShape, WireValue):
     """One declared field is the whole wire value, not an object envelope."""
-
-    external_json_shape = True
 
     @classmethod
     def wire_field(cls):
@@ -804,11 +833,8 @@ class SingleFieldValue(WireValue):
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
 
 
-class SubclassUnion(DeclaredFamily, WireValue):
+class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
-
-    accepts_null = True
-    external_json_shape = True
 
     @classmethod
     def decodes_tagged_records(cls) -> bool:
@@ -830,10 +856,8 @@ class SubclassUnion(DeclaredFamily, WireValue):
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options()
 
 
-class NullMember(WireValue):
+class NullMember(AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
-
-    accepts_null = True
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -851,8 +875,6 @@ class NullMember(WireValue):
 class RecordMember(WireValue):
     """A wire union's record case uses the declared record codec."""
 
-    accepts_null = False
-
     @classmethod
     def from_wire(cls, data: object) -> Self:
         return FieldCodec.decode_record(cls, data)
@@ -865,11 +887,10 @@ class RecordMember(WireValue):
         return FieldCodec.encode_record(self)
 
 
-class InlineRecord(WireValue):
+class InlineRecord(ExternalJsonShape, WireValue):
     """A typed field represented by its declared object's sibling wire fields."""
 
     field_plan = InlineFieldPlan
-    external_json_shape = True
 
     @classmethod
     def wire_record(cls):
@@ -892,22 +913,18 @@ class JsonShapeMember:
         return cls(value=value)
 
 
-class JsonShapeFamily(WireValue):
+class JsonShapeFamily(AcceptsNull, ExternalJsonShape, WireValue):
     """Untagged external JSON enters one declaration-owned value family.
 
     Put DeclaredFamily before this capability in the root's bases, preserving
     its name-decoding contract. Each JsonShapeMember declares
     its external shape through its value annotation; this codec owns primitive
     selection and recursive conversion. Rendering stays with the value owners.
-    Its wire value is the declared shape itself, so it answers
-    ``external_json_shape`` True and decodes through ``from_wire``.
+    Its wire value is the declared shape itself; ExternalJsonShape decodes it
+    through ``from_wire``.
     Each family class owns the map from JSON type to the member beneath it that
     owns that type, filled as members are defined; a bad declaration fails then.
     """
-
-    external_json_shape = True
-
-    accepts_null = True
 
     _json_owners: ClassVar[dict[type, tuple[type, object]]]
 
@@ -1770,16 +1787,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     @boundary_decoder
     def decode(self, data):
-        representation = self.representation
-        if data is None and not representation.accepts_null:
-            return self.structural.decode(data)
-        with MalformedRecord.refusing(f"Invalid {representation.__name__}"):
-            if representation.external_json_shape:
-                # Decode through the representation capability, independently
-                # of the family's public name decoder. Children validate once;
-                # WireValue's pre-validation would traverse each subtree again.
-                return representation.from_wire(data)
-            return representation.decode(data)
+        return self.representation.decode_field(data, self.structural)
 
 
 class _JsonValueRepresentation(FieldRepresentation):
