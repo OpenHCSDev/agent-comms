@@ -1,9 +1,9 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
-from functools import cache
 from pathlib import Path
 import subprocess
 from typing import ClassVar
+from tempfile import mkdtemp
 
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -35,12 +35,20 @@ class SourceRepository(Repo):
         ).stdout.strip()
 
     @classmethod
-    @cache
+    def remote_for(cls, root: Path, repository: RepositoryName) -> Path:
+        remote = root / f'{repository.to_wire()}.git'
+        remote.parent.mkdir(parents=True, exist_ok=True)
+        cls.git(root, 'init', '--bare', '--initial-branch=main', str(remote))
+        return remote
+
+    @classmethod
     def create(cls, root: Path):
-        repository, remote = root / 'repository', root / 'remote'
+        root.mkdir(parents=True, exist_ok=True)
+        root = Path(mkdtemp(prefix='source-', dir=root))
+        repository = root / 'repository'
         repository.mkdir(parents=True)
-        remote.mkdir()
-        cls.git(remote, 'init', '--bare', '--initial-branch=main')
+        name = RepositoryName.from_wire('example/source')
+        remote = cls.remote_for(root, name)
         cls.git(repository, 'init', '--initial-branch=main')
         cls.git(repository, 'config', 'user.name', 'Citation fixture')
         cls.git(repository, 'config', 'user.email', 'citation@example.invalid')
@@ -52,7 +60,7 @@ class SourceRepository(Repo):
         main = cls.git(repository, 'commit-tree', main_tree, '-m', 'Main declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/main', main)
         branch_blob = cls.git_input(repository,
-            'value = 1\nclass Parent:\n    pass\nclass Member(Parent):\n    pass\n',
+            cls.main_source + 'class Member(Parent):\n    pass\n',
             'hash-object', '-w', '--stdin')
         new_blob = cls.git_input(repository, '@decorated\nclass BranchOnly:\n    pass\n',
                                 'hash-object', '-w', '--stdin')
@@ -61,5 +69,5 @@ class SourceRepository(Repo):
         branch = cls.git(repository, 'commit-tree', tree, '-p', main, '-m', 'PR declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
         cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
-        return cls(checkout=repository, github=RepositoryName.from_wire('example/source'),
+        return cls(checkout=repository, github=name,
                    remote=remote, main_commit=main, branch_commit=branch)

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from test_todos import order as checked_order
+from source_revision_fixture import SourceRepository
 
 
 from agent_comms.change_report import FileLine
@@ -27,7 +28,8 @@ from agent_comms.todos import (
 
 
 def order(root, identity, command='printf 1', expected=1):
-    declaration = checked_order(root)
+    source = SourceRepository.create(root / 'cited-source')
+    declaration = checked_order(source.checkout)
     return replace(declaration, id=identity,
         check=replace(declaration.check, command=command, result=CountCheckResult(expected)))
 

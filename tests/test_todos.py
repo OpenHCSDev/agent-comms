@@ -76,11 +76,17 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 
 def order(root: Path):
-    source = SourceRepository.create(root / 'cited-source')
     return PendingProblemOrder(id="checked-order", owner=FIX_SCOPE.shape.parents[0], scope=FIX_SCOPE, run=MechanicalOrderRun(),
-        check=OrderCheck(str(source.checkout), "true"), edits=("Fix the problem",),
+        check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
+
+
+def test_order_factory_preserves_the_callers_directory_without_creating_source(tmp_path):
+    before = tuple(tmp_path.iterdir())
+    planned = order(tmp_path)
+    assert planned.check.directory == str(tmp_path)
+    assert tuple(tmp_path.iterdir()) == before
 
 
 def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, str]:
@@ -222,7 +228,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
         owner=lead, generation="initial", review_at=RecordedEventTime(1000.0), order=order(tmp_path))
     merged = replace(todo, order=todo.order.checked().merged("2b9c1f1ab"))
     cells = merged.order.board_cells(merged)
-    assert cells.startswith(f"{__file__}:1 | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
+    assert cells.startswith(f"{todo.order.checked().owner.to_wire()} | lead | checked-order | {RecordedEventTime(1000.0).clock()} | ")
     assert json.loads(cells.split(" | ", 4)[-1]) == FieldCodec.encode(merged.order.checked().check)
     assert merged.order.checked().copy_as(PendingProblemOrder) == todo.order
     assert merged.order.line == "Merged, waiting on install"
@@ -239,9 +245,13 @@ def pr_commander(tmp_path, monkeypatch):
     checkout.mkdir()
     source = Repo(checkout=checkout, github=RepositoryName.from_wire("fixture/orders"))
     source.git(checkout, "init", "-q", "-b", WorkBranches.main)
+    (checkout / 'owner.py').write_text(SourceRepository.main_source)
+    source.git(checkout, 'add', 'owner.py')
     source.git(checkout, "-c", "user.name=Order fixture", "-c", "user.email=orders@example.invalid",
-               "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Local merge")
-    source.git(checkout, "remote", "add", "origin", f"https://github.com/{source.github.to_wire()}.git")
+               "-c", "commit.gpgsign=false", "commit", "-qm", "Local merge")
+    remote = SourceRepository.remote_for(tmp_path / 'forge', source.github)
+    source.git(checkout, "remote", "add", "origin", str(remote))
+    source.git(checkout, 'push', '-q', 'origin', WorkBranches.main)
     merged = source.git(checkout, "rev-parse", "HEAD").strip()
     source.git(checkout, "update-ref", f"refs/remotes/origin/{WorkBranches.main}", merged)
     common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",

@@ -68,12 +68,13 @@ def assigned(comms, scope, problem='P1'):
 
 
 def requested(comms, scope, problem='P1'):
+    source = SourceRepository.create(comms.root.parent / 'cited-source')
     comms.goals.update_goal('lead', SetGoalAction(
         text='Classify the failing source or fix its declared parent', goal_id='request',
         order=RequestGoalOrder()))
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(comms.root), scope=scope), request='request',
+        problem=problem, order=replace(order(source.checkout), scope=scope), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         text='Classify the source without changing it',

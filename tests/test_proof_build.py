@@ -53,6 +53,7 @@ from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTo
 from agent_comms.work_branches import WorkBranches
 from order_scope_fixture import FIX_SCOPE
 from cutover.carry_install_schedule import InstallSchedule
+from source_revision_fixture import SourceRepository
 
 
 @dataclass(frozen=True)
@@ -75,14 +76,17 @@ def proof_build_checkouts(
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):
         checkout = tmp_path / package.declared_name
-        subprocess.run(("git", "init", str(checkout)), check=True, capture_output=True)
+        subprocess.run(("git", "init", "--initial-branch=main", str(checkout)), check=True, capture_output=True)
+        (checkout / 'owner.py').write_text(SourceRepository.main_source)
+        subprocess.run(('git', 'add', 'owner.py'), cwd=checkout, check=True, capture_output=True)
+        remote = SourceRepository.remote_for(tmp_path / 'forge', package.repository)
         subprocess.run(
             (
                 "git",
                 "remote",
                 "add",
                 "origin",
-                f"https://github.com/{package.repository.to_wire()}.git",
+                str(remote),
             ),
             cwd=checkout,
             check=True,
@@ -114,6 +118,7 @@ def proof_build_checkouts(
                 ).strip()
             )
         graph = ProofBuildCheckout(Repo.of(checkout), *commits)
+        subprocess.run(('git', 'push', 'origin', 'main'), cwd=checkout, check=True, capture_output=True)
         checkouts.append(graph)
         subprocess.run(
             ("git", "update-ref", f"refs/remotes/origin/{WorkBranches.main}", graph.newer),
@@ -300,7 +305,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
             build = delivery.proof_build
             order = PendingProblemOrder(
                 scope=FIX_SCOPE,
-                owner=FileLine(__file__, 1),
+                owner=FIX_SCOPE.shape.parents[0],
                 check=OrderCheck(str(checkout), "printf 0", CountCheckResult(0)),
                 edits=("Record the copied application proof on its installed build.",),
                 banned=("Do not change the source bus.",),
