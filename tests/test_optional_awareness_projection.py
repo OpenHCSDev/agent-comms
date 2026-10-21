@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bus_record_fixture import prepare_native_comms
+
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import os
@@ -39,8 +41,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    Bus.install(Bus.path_in(root))
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
@@ -48,7 +49,7 @@ def _root(
         comms.registry.declare(
             comms.registry.new_thread(f'member{number:03}', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol'))
         )
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
     return comms, store, WakeCandidateIndex(comms.bus.bus), root_id

@@ -393,12 +393,9 @@ class Goals:
         wait = self.waits.for_goal(goal, self.waits.read())
         if not wait.owner_matches(current.incarnation.require_recorded()):
             return False
-        with self.bus.log.checked_read() as source:
-            original = source.delivery(reference.seq)
-            if original.message.reference != reference:
-                raise ValueError("Dependency reply source reference changed.")
-            if not wait.matches(original, current.incarnation.require_recorded()):
-                return False
+        original, = self.bus.bus.deliveries_for_references((reference,))
+        if not wait.matches(original, current.incarnation.require_recorded()):
+            return False
         return wait.consume_reply(self.waits, goal.id)
 
     def update_goal[Result: GoalDeclaration](

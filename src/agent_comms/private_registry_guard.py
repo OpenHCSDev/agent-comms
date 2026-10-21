@@ -113,6 +113,11 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
+    @property
+    @abstractmethod
+    def namespace(self) -> str:
+        """Require the original native namespace; a public registry has none."""
+
     @abstractmethod
     def write(self, registry_path: Path, text: str) -> None: ...
 
@@ -130,6 +135,10 @@ class RegistryPrivacy(ABC):
 
 
 class PublicRegistry(RegistryPrivacy):
+    @property
+    def namespace(self) -> str:
+        _reject("native namespace requires the original registry guard")
+
     def write(self, registry_path: Path, text: str) -> None:
         store_files._atomic_write_text(registry_path, text, fsync_parent=True)
 
@@ -179,10 +188,15 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         guard.verify()
         return guard
 
+    @property
+    def namespace(self) -> str:
+        """The existing native protocol namespace, never the SQLite bus identity."""
+        return self.root_id.hex()
+
     def launch(self, root: Path) -> RootLaunch:
         from .private_nk_entrypoint import PrivateNkLaunch
 
-        return PrivateNkLaunch.installed(root, self.root_id.hex())
+        return PrivateNkLaunch.installed(root, self.namespace)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
         if registry_path != self.registry_path:
@@ -191,7 +205,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return self
 
     def require_root(self, root_id: str, error: Exception) -> None:
-        if root_id != self.root_id.hex():
+        if root_id != self.namespace:
             raise error
 
     def _trusted_root(self) -> None:

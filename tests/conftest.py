@@ -236,9 +236,10 @@ def private_directory():
 @pytest.fixture
 def private_comms(private_directory):
     """Install one isolated SQLite bus and select it for this check's lifetime."""
+    from bus_record_fixture import prepare_native_comms
+
     root = private_directory / "wire"
-    Bus.install(Bus.path_in(root))
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     from agent_comms.launch_root import LaunchRoot
 
     with LaunchRoot.from_path(root).selected():
