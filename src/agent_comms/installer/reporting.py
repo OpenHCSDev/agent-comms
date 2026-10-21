@@ -1,4 +1,5 @@
 """An install's root-writing permission and terminal outcome."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -36,9 +37,15 @@ class RootWriter(DeclaredFamily, ABC, affix="Writer"):
     def publish(comms: Comms, report: InstallReport, body: str) -> None:
         report.register(comms.registry)
         publisher = cast(InitialWrites, comms.bus.publisher)
-        publisher.publish_ordinary(Message(
-            sender=report.sender, target=report.target, body=body, type=InfoKind,
-        ), origin=AgentOrigin())
+        publisher.publish_ordinary(
+            Message(
+                sender=report.sender,
+                target=report.target,
+                body=body,
+                type=InfoKind,
+            ),
+            origin=AgentOrigin(),
+        )
 
 
 @dataclass(frozen=True)
@@ -47,8 +54,7 @@ class InstalledWriter(RootWriter):
 
     def write(self, root: Path, report: InstallReport, body: str) -> None:
         self.stack.cli(root, "register", "--name", report.sender, "--worktree", str(root))
-        self.stack.cli(root, "send", "--from", report.sender, "--to", report.target,
-                       "--body", body)
+        self.stack.cli(root, "send", "--from", report.sender, "--to", report.target, "--body", body)
 
 
 @dataclass(frozen=True)
@@ -119,8 +125,9 @@ class FinishedInstall(InstallOutcome):
 
 
 @dataclass(frozen=True)
-class InstallFailure[Error: BaseException](InstallOutcome, DeclaredFamily, MroDispatch,
-                                          affix="Install"):
+class InstallFailure[Error: BaseException](
+    InstallOutcome, DeclaredFamily, MroDispatch, affix="Install"
+):
     error: Error
 
     @classmethod
@@ -135,7 +142,11 @@ class InstallFailure[Error: BaseException](InstallOutcome, DeclaredFamily, MroDi
 
     @handles(CarriedInstallError)
     @classmethod
-    def carried(cls, error: CarriedInstallError, writer: RootWriter) -> InstallFailure[BaseException]:
+    def carried(
+        cls,
+        error: CarriedInstallError,
+        writer: RootWriter,
+    ) -> InstallFailure[BaseException]:
         return cls.of(error.error, error.passed.writer())
 
     @handles(BaseException)
@@ -144,12 +155,12 @@ class InstallFailure[Error: BaseException](InstallOutcome, DeclaredFamily, MroDi
         # This factory consumes a caught exception from the source-side run context;
         # that context (or CarriedPass.finishing) supplies a src frame even when the
         # innermost failing library is external.
-        frame = next(frame for frame in reversed(extract_tb(error.__traceback__))
-                     if "src" in Path(frame.filename).parts)
+        frame = next(
+            frame
+            for frame in reversed(extract_tb(error.__traceback__))
+            if "src" in Path(frame.filename).parts
+        )
         return CrashedInstall(writer, error, frame)
-
-    def reraise(self) -> None:
-        raise self.error
 
 
 class RefusedInstall(InstallFailure[UpgradeRefused]):
@@ -163,6 +174,8 @@ class CrashedInstall(InstallFailure[BaseException]):
 
     def lines(self) -> tuple[str, ...]:
         path = Path(self.frame.filename)
-        source = Path(*path.parts[path.parts.index("src"):])
-        return (f"Install failed: {type(self.error).__name__}: {self.error}",
-                f"{source}:{self.frame.lineno}")
+        source = Path(*path.parts[path.parts.index("src") :])
+        return (
+            f"Install failed: {type(self.error).__name__}: {self.error}",
+            f"{source}:{self.frame.lineno}",
+        )

@@ -15,7 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorProbe, ResumedBridge, Serve,
+    MONITOR_FRAME, Binding, BridgeResume, MonitorProbe, ResumedBridge, Serve, UnobservedBridge,
 )
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -145,6 +145,11 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         # Losing the installer connection grants no fallback runtime or retry.
         assert child.wait(timeout=15) == 0, log.read_text()
         assert isinstance(claim.state(), LapsedWatch)
+        outcome = paused.resume()
+        assert isinstance(outcome, UnobservedBridge)
+        assert outcome.name == claim.thread
+        assert outcome.reason != UnobservedBridge(claim.thread).reason
+        assert FieldCodec.decode(BridgeResume, FieldCodec.encode(outcome)) == outcome
         with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy') as db:
             assert Binding.select(db)[0].thread == claim.thread
 

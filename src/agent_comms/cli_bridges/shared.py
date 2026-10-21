@@ -681,8 +681,10 @@ class ReplacedBridge(BridgeResume):
 
 @dataclass(frozen=True)
 class UnobservedBridge(BridgeResume):
+    reason: str = "successor runtime was not observed"
+
     def description(self) -> str:
-        return "successor runtime was not observed; re-arm the session bridge"
+        return f"{self.reason}; re-arm the session bridge"
 
 
 @dataclass(frozen=True)
@@ -698,8 +700,8 @@ class PausedSessionBridge(BridgePause):
             return OwnerExitedBridge(name)
         try:
             self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
-        except OSError:
-            return UnobservedBridge(name)
+        except OSError as error:
+            return UnobservedBridge(name, f"{type(error).__name__}: {error}")
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
@@ -707,10 +709,8 @@ class PausedSessionBridge(BridgePause):
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
-            except OSError:
-                return UnobservedBridge(name)
-            except ValueError:
-                return UnobservedBridge(name)
+            except (OSError, ValueError) as error:
+                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
             if current.process != observed.process or current.owner != observed.owner:
                 return ReplacedBridge(name, observed.process, current.process)
             if current.runtime.prefix != runtime.prefix:

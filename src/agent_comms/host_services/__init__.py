@@ -21,6 +21,7 @@ from typing import ClassVar, Self, cast
 from aiohttp.web import TCPSite
 
 from ..declared_family import DeclaredFamily
+from ..field_codec import boundary_decoder
 from ..launch_runtime import LaunchRuntime
 
 
@@ -35,6 +36,7 @@ class BoundListener:
     site: TCPSite
 
     @classmethod
+    @boundary_decoder
     def of(cls, site: TCPSite) -> Self:
         server = site._server
         if server is None:

@@ -37,20 +37,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
 from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
-from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -63,11 +57,22 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
-from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer.reporting import (
-    CarriedInstallError, CarriedWriter, FreshWriter, InstalledWriter, PreparedFreshWriter, RootWriter,
+    CarriedInstallError,
+    CarriedWriter,
+    FreshWriter,
+    InstalledWriter,
+    PreparedFreshWriter,
+    RootWriter,
 )
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport, InstallRun
@@ -179,7 +184,7 @@ class InstallRolledBack(UpgradeRefused):
 
     def lines(self) -> tuple[str, ...]:
         return (
-            f"Install rolled back: {type(self.error).__name__}: {self.error}",
+            f"Install failed: rolled back after {type(self.error).__name__}: {self.error}",
             f"Original runtime selected again: {self.runtime.prefix}",
             *(line for owner in self.started for line in owner.lines()),
             f"Backup: {self.backup}",
@@ -866,6 +871,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     with passed.finishing():
         started = staged.start(root, running)
         retired_backups = backup.retain(spill_dir)
-        return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
-                               restore_space=restore, backup=backup.report(),
-                               retired_backups=retired_backups)
+        return passed.extended(
+            CarriedRun, stopped=tuple(running), services=services, started=started,
+            restore_space=restore, backup=backup.report(), retired_backups=retired_backups,
+        )

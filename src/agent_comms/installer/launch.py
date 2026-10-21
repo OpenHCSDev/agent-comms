@@ -21,9 +21,22 @@ import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.upgrade import CarriedPass, Install, Stack, TargetTree, Upgrade, run, upgrade
 from agent_comms.installer.reporting import (
-    FinishedInstall, InstallFailure, InstallOutcome, InstalledWriter, RootWriter, UnfinishedInstall,
+    FinishedInstall,
+    InstalledWriter,
+    InstallFailure,
+    InstallOutcome,
+    RootWriter,
+    UnfinishedInstall,
+)
+from agent_comms.installer.upgrade import (
+    CarriedPass,
+    Install,
+    Stack,
+    TargetTree,
+    Upgrade,
+    run,
+    upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.mro_dispatch import MroDispatch, handles
@@ -81,7 +94,7 @@ class InstallReport(ServiceSender, MroDispatch):
         except BaseException as error:
             failure = InstallFailure.of(error, self.outcome.writer)
             self.outcome = failure
-            failure.reraise()
+            raise failure.error from failure.error.__cause__
         finally:
             self.outcome.writer.post(self.root, self, self.outcome.lines())
 
