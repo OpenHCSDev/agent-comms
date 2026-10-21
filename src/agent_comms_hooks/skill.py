@@ -79,13 +79,15 @@ class CommanderStart(CommanderDeck):
 
     @classmethod
     def slices(cls) -> list[str]:
-        """The voice, the indictment and the drift tells, one slice of each per round, so the
-        voice comes back every third slice and the longest source runs through once."""
+        """The voice, the indictment, the drift tells and the recorded failures, one slice of each
+        per round, so each comes back every fourth slice and the longest source runs through once.
+        The failures are the habits caught so far; they are called out by name, repeatedly."""
         voice = cls.paragraphs(CommanderConfig.packaged_voice().read_text(encoding="utf-8"))
         indictment = cls.paragraphs(
             CommanderConfig.packaged_indictment().read_text(encoding="utf-8"))
         tells = RuleFile.drift_tells()
-        streams = (voice, indictment, tells)
+        failures = tuple(f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines())
+        streams = (voice, indictment, tells, failures)
         rounds = max(len(stream) for stream in streams)
         return [stream[number % len(stream)] for number in range(rounds) for stream in streams]
 
