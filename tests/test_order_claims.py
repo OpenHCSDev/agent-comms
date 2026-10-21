@@ -153,15 +153,12 @@ def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_comma
     ctx = held_commander
     claimed = claimed_by_worker(ctx)
     repo = ctx.repos[0]
-    sha = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
-    repo.git(repo.checkout, "push", "--force", "origin", f"{sha}:refs/heads/main")
-    repo.git(repo.checkout, "fetch", "origin")
 
-    main(["check", "P1", "--check", f"{repo.checkout} :: printf 0 -> 0",
+    main(["check", "P1", "--check", f"{repo.checkout} :: printf 1 -> 0",
           "--why", "the recorded check also counted lines the order never asked to remove"], ctx)
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, ClaimedProblemOrder)
-    assert corrected.order.check.command == "printf 0"
+    assert corrected.order.check.command == "printf 1"
     assert corrected.order.check_corrections[-1].previous == claimed.order.check
     assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
