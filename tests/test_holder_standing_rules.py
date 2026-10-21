@@ -9,11 +9,9 @@ from uuid import uuid4
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
@@ -38,13 +36,12 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Repo
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.todos import (
-    DeliverTodo, FixScope, FixShape, OperationDelivery, OrderMessage,
+    DeliverTodo, OperationDelivery, OrderMessage,
     PendingProblemOrder, TodoConflict,
 )
 from agent_comms.tool_caller import ThreadCaller
@@ -54,11 +51,12 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path):
+def held_bus(comms, tmp_path, source_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
-    source = SourceRepository.create(tmp_path / 'cited-source')
+    source = source_repository
+    scope = source.scope()
     for name in ("lead", "worker", "outsider"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(tmp_path)))
+        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout)))
     comms.goals.update_goal("lead", SetGoalAction(
         text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
     ))
@@ -69,7 +67,7 @@ def held_bus(comms, tmp_path):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=FIX_SCOPE.shape.parents[0], scope=FIX_SCOPE, run=MechanicalOrderRun(),
+                id=f"order-{problem}", owner=scope.shape.parents[0], scope=scope, run=MechanicalOrderRun(),
                 check=OrderCheck(str(source.checkout), "printf 1", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),

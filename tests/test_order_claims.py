@@ -22,7 +22,6 @@ from agent_comms.tools import (
     CommsHistoryTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
 )
 from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture family
-    existing_runtime,
     held_commander,
     pr_commander,
 )

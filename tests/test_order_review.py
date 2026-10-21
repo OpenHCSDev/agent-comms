@@ -7,9 +7,9 @@ from test_commander_problem_orders import order
 
 
 @pytest.mark.parametrize('rates', ((), (15.0,)))
-def test_measured_review_rounds_up_and_keeps_two_minute_floor(tmp_path, rates):
+def test_measured_review_rounds_up_and_keeps_two_minute_floor(tmp_path, rates, source_repository):
     measured = MeasuredReview(rates)
-    assert measured.review_at(order(tmp_path, 'new-order')).at == 240
+    assert measured.review_at(order(source_repository, 'new-order')).at == 240
 
 
 def test_empty_measurement_does_not_create_a_store(tmp_path):

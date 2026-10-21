@@ -19,7 +19,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
-from agent_comms.todos import DistanceReadings, EditingProgress, OrderProgress, PresentCheckout
+from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
 
 
 
@@ -109,7 +109,7 @@ def held(tmp_path):
     """P1 ordered long ago and held by a running worker whose own checkout has no commit for it."""
     root = tmp_path / 'comms'
     root.mkdir(mode=0o700)
-    source = SourceRepository.create(tmp_path / 'cited-source')
+    source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
     comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
@@ -118,7 +118,7 @@ def held(tmp_path):
     comms.goals.update_goal('lead', SetGoalAction(
         text='Repair the worker', goal_id='request', order=RequestGoalOrder()))
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(source.checkout), request='request', review_at=RecordedEventTime(1000),
+        problem='P1', order=order(source), request='request', review_at=RecordedEventTime(1000),
         commander='lead', repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
 

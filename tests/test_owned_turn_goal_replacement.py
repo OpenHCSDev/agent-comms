@@ -43,7 +43,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         tmp_path, package=native_runtime_package, provider_type=FollowingReadProvider,
     ) as saved:
         await saved.author_history()
-        source = SourceRepository.create(saved.project / 'cited-source')
+        source = SourceRepository.create(tmp_path / 'source')
         (saved.project / 'probe.txt').write_text('following input reached the new turn\n')
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
@@ -56,7 +56,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 text='Repair following input', goal_id='request', order=RequestGoalOrder(),
             ))
             comms.goals.update_goal(worker, CreateProblemGoalAction(
-                problem='P1', order=order(source.checkout), request='request',
+                problem='P1', order=order(source), request='request',
                 review_at=RecordedEventTime(1000), commander='lead',
                 repo=RepositoryName.from_wire('org/repo'), text='Repair following input',
             ))
@@ -76,7 +76,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                     problem='P1', expected_revision=todo.revision,
                     assigner=comms.registry.require('lead').incarnation,
                     commander='lead', request='request', review_at=RecordedEventTime(2000),
-                    order=replace(order(source.checkout), id='replacement'),
+                    order=replace(order(source), id='replacement'),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
                 sender.goal_permission.require_current(replaced)
@@ -111,7 +111,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
 
 @pytest.mark.asyncio
 async def test_goal_published_during_preparation_is_current_at_reservation(tmp_path):
-    source = SourceRepository.create(tmp_path / 'cited-source')
+    source = SourceRepository.create(tmp_path / 'source')
     comms = Comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(
@@ -122,7 +122,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         text='Repair the turn owner', goal_id='request', order=RequestGoalOrder(),
     ))
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
-        problem='P1', order=order(source.checkout), request='request',
+        problem='P1', order=order(source), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
@@ -137,7 +137,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request='request', review_at=RecordedEventTime(2000),
-            order=replace(order(source.checkout), id='replacement'),
+            order=replace(order(source), id='replacement'),
         ))
         old.original.goal_permission.require_current(replaced)
 
@@ -158,7 +158,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request='request', review_at=RecordedEventTime(3000),
-            order=replace(order(source.checkout), id='replacement-during-preparation'),
+            order=replace(order(source), id='replacement-during-preparation'),
         ))
         assert current.thread.goal == replaced != latest
         current.reserve_input(batch)

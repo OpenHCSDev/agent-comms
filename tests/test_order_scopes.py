@@ -34,16 +34,16 @@ from cutover.carry_order_scopes import TRIAGE_PROBLEMS, OrderScopes
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
-def test_scope_round_trips_through_the_actual_order_file(tmp_path, scope):
-    document = OrderFile(order=replace(order(tmp_path), scope=scope),
+def test_scope_round_trips_through_the_actual_order_file(tmp_path, scope, source_repository):
+    document = OrderFile(order=replace(order(source_repository), scope=scope),
                          defect='The unit was given a fix without a declared parent',
                          why_stupid='The report and implementation require different delivery facts')
     assert OrderFile.read(json.dumps(FieldCodec.encode(document))) == document
     assert FieldCodec.decode(OrderScope, FieldCodec.encode(scope)) == scope
 
 
-def test_an_order_without_scope_and_a_fix_without_parents_name_the_missing_field(tmp_path):
-    wire = FieldCodec.encode(order(tmp_path))
+def test_an_order_without_scope_and_a_fix_without_parents_name_the_missing_field(tmp_path, source_repository):
+    wire = FieldCodec.encode(order(source_repository))
     del wire['scope']
     with pytest.raises(MalformedRecord, match='scope'):
         FieldCodec.decode(PendingProblemOrder, wire)
@@ -61,20 +61,19 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
             replace(shape, parents=(location,)).require_references(source.checkout, revision)
 
 
-def assigned(comms, scope, problem='P1'):
+def assigned(comms, scope, source, problem='P1'):
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
-    return requested(comms, scope, problem)
+    return requested(comms, scope, source, problem)
 
 
-def requested(comms, scope, problem='P1'):
-    source = SourceRepository.create(comms.root.parent / 'cited-source')
+def requested(comms, scope, source, problem='P1'):
     comms.goals.update_goal('lead', SetGoalAction(
         text='Classify the failing source or fix its declared parent', goal_id='request',
         order=RequestGoalOrder()))
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(source.checkout), scope=scope), request='request',
+        problem=problem, order=replace(order(source), scope=scope), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         text='Classify the source without changing it',
@@ -82,8 +81,8 @@ def requested(comms, scope, problem='P1'):
     return caller, comms.goals.todos.get(problem)
 
 
-def test_triage_returns_its_report_without_fictitious_installation(comms):
-    caller, current = assigned(comms, TriageScope())
+def test_triage_returns_its_report_without_fictitious_installation(comms, source_repository):
+    caller, current = assigned(comms, TriageScope(), source_repository)
     report = ReportDelivery(report='The command dispatch belongs on its declared parent; no source changed.')
     result = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                delivery=report, claims=()).apply(comms, caller)
@@ -100,8 +99,8 @@ def test_triage_returns_its_report_without_fictitious_installation(comms):
     (TriageScope(), CommitDelivery(commit='a' * 40, delivered_commit='a' * 40)),
     (FIX_SCOPE, ReportDelivery(report='Classification is not an implementation')),
 ))
-def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope, wrong_delivery):
-    caller, current = assigned(comms, scope)
+def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope, wrong_delivery, source_repository):
+    caller, current = assigned(comms, scope, source_repository)
     request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                  delivery=wrong_delivery, claims=())
     with pytest.raises(ValueError, match='delivery'):
@@ -109,11 +108,11 @@ def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope,
     assert comms.goals.todos.get(current.id) == current
 
 
-def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, tmp_path):
-    assigned(comms, TriageScope())
+def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, tmp_path, source_repository):
+    assigned(comms, TriageScope(), source_repository)
     comms.registry.storage_rule = replace(comms.registry.storage_rule, scratch_base=tmp_path)
     with CheckRoot(comms, ('lead', 'worker'), tmp_path / 'journey' / 'copied').open() as copied:
-        _, current = requested(copied, TriageScope())
+        _, current = requested(copied, TriageScope(), source_repository)
         report = 'The copied native order needs classification only; no source was changed.'
         request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                      delivery=ReportDelivery(report=report), claims=())
@@ -129,16 +128,16 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
     assert comms.goals.todos.get('P1').order.pending
 
 
-def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path):
+def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path, source_repository):
     assert OrderScopes in CarryChain.at(Path(__file__).resolve().parents[1]).pending(())
-    _, original = assigned(comms, FIX_SCOPE)
+    _, original = assigned(comms, FIX_SCOPE, source_repository)
     store = comms.goals.todos
     lead = comms.registry.require('lead')
     worker = comms.registry.require('worker')
     for problem in TRIAGE_PROBLEMS:
         store.create(problem, original.repo, 'Classify the source', creator=lead, owner=worker,
                      generation=original.held().generation, review_at=original.review_at,
-                     goal=original.goal, order=replace(order(comms.root), scope=TriageScope()))
+                     goal=original.goal, order=replace(order(source_repository), scope=TriageScope()))
     copied = tmp_path / 'copy'
     StoreBackup.copy_tree(comms.root, copied)
     path = TodoStore.path_in(copied)

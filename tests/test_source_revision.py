@@ -56,7 +56,7 @@ def test_pull_request_revision_accepts_branch_only_source_without_checkout(tmp_p
 
 def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
     source = SourceRepository.create(tmp_path / 'cited-source')
-    declaration = order(source.checkout)
+    declaration = order(source)
     location = FileLine('branch.py', 2)
     declaration = replace(declaration, owner=location, finding=LocatedProblemFinding(location),
         scope=FixScope(FixShape(parents=(location,), members=())), pull_requests=(source.link,))

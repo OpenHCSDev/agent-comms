@@ -13,7 +13,6 @@ from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
@@ -21,13 +20,8 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
 
 
-@pytest.fixture(scope="session")
-def existing_runtime():
-    return LaunchRuntime.installed()
-
-
 @pytest.fixture
-def held_commander(existing_runtime, pr_commander):
+def held_commander(pr_commander):
     source = pr_commander
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
@@ -36,16 +30,13 @@ def held_commander(existing_runtime, pr_commander):
     todo = source.comms.goals.todos.create(
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead,
         owner=worker, generation="initial-order", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
-        review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0].checkout),
+        review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0]),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
     with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
         ctx = source.model_copy(update={"root": root, "state": root / "state"})
-        current = LaunchRuntime.current_pointer()
-        current.parent.mkdir(parents=True)
-        current.symlink_to(existing_runtime.prefix, target_is_directory=True)
         yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
@@ -57,7 +48,7 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     marker.touch()
     now = time.time()
     replacement = replace(
-        order(ctx.repos[0].checkout), id="replacement-order",
+        order(ctx.repos[0]), id="replacement-order",
         check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )

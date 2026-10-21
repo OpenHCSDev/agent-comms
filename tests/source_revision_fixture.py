@@ -13,10 +13,19 @@ from agent_comms.todos import FixScope, FixShape, PullRequestLink
 
 class SourceRepository(Repo):
     main_source: ClassVar[str] = 'value = 1\nclass Parent:\n    pass\n'
-    remote: Path
-    main_commit: str
-    branch_commit: str
     number: int = 7
+
+    @property
+    def remote(self) -> Path:
+        return Path(self.git(self.checkout, 'remote', 'get-url', 'origin').strip())
+
+    @property
+    def main_commit(self) -> str:
+        return self.git(self.checkout, 'rev-parse', 'refs/heads/main').strip()
+
+    @property
+    def branch_commit(self) -> str:
+        return self.git(self.checkout, 'rev-parse', 'refs/heads/feature').strip()
 
     @property
     def link(self) -> PullRequestLink:
@@ -42,12 +51,11 @@ class SourceRepository(Repo):
         return remote
 
     @classmethod
-    def create(cls, root: Path):
+    def create(cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source')):
         root.mkdir(parents=True, exist_ok=True)
         root = Path(mkdtemp(prefix='source-', dir=root))
         repository = root / 'repository'
         repository.mkdir(parents=True)
-        name = RepositoryName.from_wire('example/source')
         remote = cls.remote_for(root, name)
         cls.git(repository, 'init', '--initial-branch=main')
         cls.git(repository, 'config', 'user.name', 'Citation fixture')
@@ -69,5 +77,5 @@ class SourceRepository(Repo):
         branch = cls.git(repository, 'commit-tree', tree, '-p', main, '-m', 'PR declaration').strip()
         cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
         cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
-        return cls(checkout=repository, github=name,
-                   remote=remote, main_commit=main, branch_commit=branch)
+        cls.git(repository, 'reset', '--hard', 'main')
+        return cls.of(repository)

@@ -13,7 +13,6 @@ from agent_comms.build_identity import (
     RecordedBuildIdentity,
     UninstalledRepositoryError,
 )
-from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import InstallDue
@@ -35,7 +34,6 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.standing_rules import StandingRule
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
@@ -50,7 +48,6 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
-from agent_comms.work_branches import WorkBranches
 from order_scope_fixture import FIX_SCOPE
 from cutover.carry_install_schedule import InstallSchedule
 from source_revision_fixture import SourceRepository
@@ -58,7 +55,7 @@ from source_revision_fixture import SourceRepository
 
 @dataclass(frozen=True)
 class ProofBuildCheckout:
-    repository: Repo
+    repository: SourceRepository
     oldest: str
     installed: str
     newer: str
@@ -75,23 +72,8 @@ def proof_build_checkouts(
     checkouts = []
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):
-        checkout = tmp_path / package.declared_name
-        subprocess.run(("git", "init", "--initial-branch=main", str(checkout)), check=True, capture_output=True)
-        (checkout / 'owner.py').write_text(SourceRepository.main_source)
-        subprocess.run(('git', 'add', 'owner.py'), cwd=checkout, check=True, capture_output=True)
-        remote = SourceRepository.remote_for(tmp_path / 'forge', package.repository)
-        subprocess.run(
-            (
-                "git",
-                "remote",
-                "add",
-                "origin",
-                str(remote),
-            ),
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-        )
+        source = SourceRepository.create(tmp_path / 'source' / package.declared_name, package.repository)
+        checkout = source.checkout
         commits = []
         for number in range(3):
             subprocess.run(
@@ -117,15 +99,9 @@ def proof_build_checkouts(
                     ("git", "rev-parse", "HEAD"), cwd=checkout, text=True
                 ).strip()
             )
-        graph = ProofBuildCheckout(Repo.of(checkout), *commits)
+        graph = ProofBuildCheckout(source, *commits)
         subprocess.run(('git', 'push', 'origin', 'main'), cwd=checkout, check=True, capture_output=True)
         checkouts.append(graph)
-        subprocess.run(
-            ("git", "update-ref", f"refs/remotes/origin/{WorkBranches.main}", graph.newer),
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-        )
         packages[package.distribution] = PackageRecord(
             version="1",
             source=GitRecord(
@@ -167,7 +143,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
                    cwd=checkout, check=True)
     lead = thread("lead", comms.root, 1.0)
     comms.registry.register(lead)
-    merged = replace(order(checkout), run=run).merged(graph.newer)
+    merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
         creator=lead, owner=lead, generation="fixture-goal",
