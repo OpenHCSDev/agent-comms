@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import cached_property, partial
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
@@ -17,9 +17,11 @@ from .acp_extension import (
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .runtime import RuntimeServer, SocketClient
 from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
+
+if TYPE_CHECKING:
+    from .runtime import RuntimeServer, SocketClient
 
 
 @dataclass(frozen=True, kw_only=True)

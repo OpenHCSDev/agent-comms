@@ -3,24 +3,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from . import agent_events as events
-from .routing import MessageRoute
-from .transcript_updates import TranscriptUpdate
+if TYPE_CHECKING:
+    from .runtime import RuntimeServer
+    from .session_lifecycle import SessionLifecycle
+    from .turn_runner import TurnRunner
 
 
 class TurnEffects(ABC):
-    @abstractmethod
-    async def _emit_event(
-        self,
-        session_id: str,
-        event: events.AgentEvent | TranscriptUpdate,
-        client: Any = None,
-        *,
-        turn_id: str | None = None,
-        route: MessageRoute | None = None,
-    ) -> events.AgentEvent | TranscriptUpdate: ...
+    _runtime: RuntimeServer
+    sessions: SessionLifecycle
+    turns: TurnRunner
 
     @abstractmethod
     def _debug_log(self, message: str) -> None: ...
