@@ -14,12 +14,13 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, Watch
 from agent_comms.comms import wire
+from agent_comms.errors import ToolRefusedError
 from agent_comms.external_transcript import NoEarlierPage
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
-from agent_comms.turn_digests import LastTurns, TurnBound, TurnsBefore, TurnsSince
+from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.wire_watch import WatchSource, WireWatch
 
 
@@ -37,6 +38,25 @@ def endpoint(comms, name, window):
     result = subprocess.run(command, env=environment, text=True, capture_output=True,
                             timeout=15, check=True)
     return json.loads(result.stdout)
+
+
+def paged_answers(comms, name):
+    window = LastTurns(100)
+    seen = set()
+    while True:
+        answer = endpoint(comms, name, window)
+        older = FieldCodec.decode(TurnBound, answer['older'])
+        if not answer['turns']:
+            assert older == window
+            return
+        assert older != window
+        assert older.count == 100
+        identities = [turn['turn_id'] for turn in answer['turns']]
+        assert not seen.intersection(identities)
+        assert len(identities) == len(set(identities))
+        seen.update(identities)
+        yield answer
+        window = older
 
 
 def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_path):
@@ -116,7 +136,8 @@ def recorded_claude_transcript(tmp_path):
     return path, rows[-1]
 
 
-def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, monkeypatch, recorded_claude_transcript):
+@pytest.mark.parametrize('empty_index', (152, 52))
+def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, monkeypatch, recorded_claude_transcript, empty_index):
     path, final = recorded_claude_transcript
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     comms = prepared(tmp_path / 'wire')
@@ -155,31 +176,20 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     recorded = comms.transcripts.external('claude').turns(LastTurns(300))
     comms.registry.declare(comms.registry.new_thread('paged', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     items = [FinishedItem(turn.turn_id, turn.turn_id, turn.events) for turn in reversed(recorded)]
-    items.insert(152, FinishedItem('undated-edge', 'undated-edge', ()))
+    items.insert(empty_index, FinishedItem('undated-edge', 'undated-edge', ()))
     comms.transcripts.external('paged').publish_page(items, NoEarlierPage())
-    window = LastTurns(100)
-    seen = []
-    pages = []
-    while True:
-        answer = endpoint(comms, 'paged', window)
-        older = FieldCodec.decode(TurnBound, answer['older'])
-        if not answer['turns']:
-            assert older == window
-            break
-        assert older != window
-        assert older.count == 100
-        pages.append(answer)
-        seen.extend(turn['turn_id'] for turn in answer['turns'])
-        assert len(seen) == len(set(seen))
-        window = older
+    pages = list(paged_answers(comms, 'paged'))
+    seen = [turn['turn_id'] for page in pages for turn in page['turns']]
     expected = [item.turn_id for item in reversed(items)]
     assert seen == expected
     assert len(seen) == 252
-    assert pages[0]['turns'][-1]['turn_id'] == 'undated-edge'
-    assert pages[0]['turns'][-1]['events'] == []
+    edge = seen.index('undated-edge')
+    assert edge in (99, 199)
+    assert pages[edge // 100]['turns'][-1]['turn_id'] == 'undated-edge'
+    assert pages[edge // 100]['turns'][-1]['events'] == []
     sizes = [len(page['turns']) for page in pages]
     assert sizes == [100, 100, 52]
-    print(f'Claude transcript via bridge and CommsTurnsTool: pages={sizes}, unique={len(set(seen))}, empty-edge=100')
+    print(f'Claude transcript via bridge and CommsTurnsTool: pages={sizes}, unique={len(set(seen))}, empty-edge={edge + 1}')
     turn = pages[-1]['turns'][0]
     assert turn['turn_id'] == 'prompt-51'
     assert [event['kind'] for event in turn['events']] == ['user', 'tool_start', 'tool_end', 'assistant']
@@ -195,9 +205,23 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
         answer = comms.transcripts.turns('new', window)
         assert not answer.turns
         assert answer.older is window
-    for window in (LastTurns(), TurnsBefore(at=1.0)):
+    for window in (LastTurns(), TurnsBefore(at=1.0), TurnsOlderThan(turn_id='missing')):
         with pytest.raises(ValueError):
             FieldCodec.decode(TurnBound, {**FieldCodec.encode(window), 'count': 0})
+    with pytest.raises(ToolRefusedError):
+        comms.transcripts.turns('new', TurnsOlderThan(turn_id='missing'))
+
+
+@pytest.mark.parametrize('events', ((), (AssistantTranscript('same time', position=1, timestamp=1.0),)))
+def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
+    comms = prepared(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('undated', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    items = tuple(FinishedItem(f'undated-{index}', f'item-{index}', events) for index in range(251))
+    comms.transcripts.external('undated').publish_page(items, NoEarlierPage())
+    pages = list(paged_answers(comms, 'undated'))
+    seen = [turn['turn_id'] for page in pages for turn in page['turns']]
+    assert seen == [item.turn_id for item in reversed(items)]
+    assert [len(page['turns']) for page in pages] == [100, 100, 51]
 
 
 def test_turn_windows_distinguish_first_and_last_event_time():
