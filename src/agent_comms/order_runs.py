@@ -64,7 +64,7 @@ class ApplicationOrderRun(OrderRun):
                            strike_limit: int) -> None:
         if fired:
             raise ToolRefusedError(
-                f"Refused: {unit.name} has {strike_limit} strikes on "
+                f"{unit.name} has {strike_limit} strikes on "
                 f"{[todo.id for todo in fired]}. "
                 f"Reassign them; only a mechanical run reaches {unit.name}.")
 

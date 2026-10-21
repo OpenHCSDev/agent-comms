@@ -983,7 +983,7 @@ class OpenPrProgress(GitProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """A linked merge closes its order once the installed checkout contains it."""
+    """The forge proves a linked merge; the order's run owns what still needs doing."""
     precedence: ClassVar[int] = 1
     sha: str
 
@@ -994,7 +994,7 @@ class MergedProgress(FoundProgress):
 
     @property
     def state(self) -> str:
-        return f"merged as {self.sha[:9]}, waiting on install"
+        return f"merged as {self.sha[:9]}"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -1368,7 +1368,11 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
-    line: ClassVar[str] = "No order"
+
+    @property
+    def line(self) -> str:
+        return "No order"
+
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
@@ -1545,7 +1549,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         if problems:
             raise ValueError("\n".join(problems))
 
-    line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1757,7 +1760,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             self.delivery.installation_commits, Path(self.check.directory)
         )
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> InstalledProblemOrder:
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
@@ -1779,12 +1782,12 @@ class InstalledEvidence(CheckedProblemOrder, declared_name=None):
     def accepted(self) -> bool:
         return True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         if not self.works.strip() or not self.artifact.strip():
             raise ValueError("Describe what worked and name its artifact file.")
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> Self:
         if (works, artifact) != (self.works, self.artifact):
             raise ValueError("The order already records different installed evidence.")
         return self
