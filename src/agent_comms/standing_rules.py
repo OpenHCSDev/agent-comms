@@ -148,16 +148,19 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
         return self.since.recorded_at("An order alarm")
 
 
-class OrderOverdue(HeldOrderDue):
+class ReviewTimerUp(HeldOrderDue):
+    """Each round of a held order's review timer is its own condition, so the heartbeat wakes
+    the commander once per round; the unit sees no timer and nothing is struck."""
+
     @classmethod
     def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
         actor = comms.registry.require(commander).incarnation
-        return ((todo, todo.deadline) for todo in comms.goals.todos.overdue_for_commander(
-            actor, comms.registry.storage_rule, time.time()))
+        return comms.goals.todos.timers_up_for_commander(
+            actor, comms.registry.storage_rule, time.time())
 
     def line(self) -> str:
-        return (f"ORDER OVERDUE {self.problem} {self.holder}, due {self.since.clock()}, "
-                f"order {self.order} -> push or merge the unfinished work")
+        return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
+                f"order {self.order} -> read its diff and judge it")
 
 
 class FirstCallMissing(HeldOrderDue):

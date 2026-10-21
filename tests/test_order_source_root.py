@@ -41,7 +41,7 @@ order = PendingProblemOrder(
     first_call_deadline=RecordedEventTime(now + 120))
 CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
     problem='P1', order=order, request='request',
-    deadline=RecordedEventTime(now + 3600), commander='lead',
+    review_at=RecordedEventTime(now + 3600), commander='lead',
     repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Repair the source owner',
 )).apply(comms, ThreadCaller('lead'))
 assert comms.goals.todos.get('P1').order.owner == FileLine('src/owner.py', 1)

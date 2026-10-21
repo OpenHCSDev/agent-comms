@@ -96,7 +96,7 @@ Checked by:
 
 - check in `agent_comms.todos.TodoStore.apply`
 
-Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Strikes, then fire."
+Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Two strikes on one task take it away."
 
 ## report_instead_of_state
 

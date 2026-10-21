@@ -13,4 +13,4 @@ type: reference
 - Passing test runs cannot reveal facts supplied outside their declaration; only reading the derivation, and the running program, shows it.
 - Removing a redundant authority is hard to prove safe from code alone, while keeping it is free, so deletion needs the traced context of every consumer.
 
-**Why:** Two independently writable copies of one state add exactly the reachable states where the copies disagree; deleting the copy deletes those states.
+**Why:** these are paper 1's proved results; a slop verdict stands on them, never on taste.

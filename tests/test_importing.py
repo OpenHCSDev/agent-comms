@@ -22,7 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
-from agent_comms.thread_identity import ThreadProvenance
+from agent_comms.thread_identity import NoThreadText, ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.runtime_updates import FinishedItem
 from agent_comms.transcript_events import ImportedReply, ImportedRequest, TextTranscript
@@ -54,7 +54,7 @@ def bodies(snapshot):
 
 
 @pytest.mark.parametrize("title,display,renamed_display", [
-    (None, "original", "renamed"),
+    (NoThreadText(), "original", "renamed"),
     ("Authored title", "Authored title", "Authored title"),
 ])
 def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, title, display, renamed_display, *, thread_registration):
@@ -65,7 +65,11 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, ti
     renamed = replace(thread, name="renamed")
     assert renamed.title == title
     assert renamed.display_title == renamed_display
-    assert "display_title" not in thread.to_wire()
+    encoded = thread.to_wire()
+    assert "display_title" not in encoded
+    assert encoded["title"] == FieldCodec.encode(title)
+    assert FieldCodec.decode(type(thread), encoded).title == title
+    assert FieldCodec.encode(NoThreadText()) is None
 
 
 def test_every_harness_has_one_offline_family_and_one_online_reader():

@@ -22,12 +22,19 @@ from .lifecycle import (
 from .load import LoadComparison
 from .measurements import StorageComparison, measured_load
 from .story import StoryCase
+from .wording import (
+    ApplicationRunComparison,
+    DecisionAlertsComparison,
+    OrderWordingComparison,
+    PlainWordsComparison,
+    UnitWordingComparison,
+)
 from agent_comms.commander_parity.verdicts import VerdictComparison
 
 
 class CreateProblemParityRow(ParityRow):
     number = 1
-    capability = "Create a problem with owner, order and deadline"
+    capability = "Create a problem with owner, order and review timer"
     current = "`order.py problem`; `problems.json`"
     native = "`CommsTodoCreateTool`"
     phases = (OneOrderOwnerPhase,)
@@ -66,7 +73,7 @@ class InstalledEvidenceParityRow(ParityRow):
 
 class BoardParityRow(ParityRow):
     number = 5
-    capability = "Board, overdue, silent, spinning"
+    capability = "Board, review timers up, silent, spinning"
     current = "`order.py board`, `overdue`; `fleet-board.md`"
     native = "`CommsTodoListTool` and the fleet tool, derived"
     phases = (OneOrderOwnerPhase,)
@@ -106,6 +113,10 @@ class PlainWordsParityRow(ParityRow):
     native = "`PlainText`, `StrikeReason`"
     phases = ()
 
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return PlainWordsComparison.read()
+
 
 class OrderWordingParityRow(ParityRow):
     number = 10
@@ -113,6 +124,10 @@ class OrderWordingParityRow(ParityRow):
     current = "`order.py`"
     native = "`OrderText`, `CheckedProblemOrder.require_wording`"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return OrderWordingComparison.read()
 
 
 class OrderWorkParityRow(ParityRow):
@@ -217,9 +232,13 @@ class CommanderPageParityRow(ParityRow):
 class ApplicationRunParityRow(ParityRow):
     number = 23
     capability = "An order states the user-visible run that closes it"
-    current = "scratch `rts/order.py send` (`Works when:`)"
-    native = "`ApplicationOrderRun`, `InstallTodo`, `CommsProblemCloseTool`"
+    current = "`Commander.close` through the copied-bus command runner"
+    native = "`ApplicationOrderRun.require_closing`; `CommsProblemCloseTool.operation_for`"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return ApplicationRunComparison.read()
 
 
 class TracedTransferParityRow(ParityRow):
@@ -233,17 +252,28 @@ class TracedTransferParityRow(ParityRow):
 class UnitWordingParityRow(ParityRow):
     number = 25
     capability = "Unit wording gets a correction, not a strike"
-    current = "scratch `vibe_watch.py`"
-    native = "`PlainText`, `CommsCorrectWordingTool`: correction leaves strikes unchanged"
+    current = "`Commander.call(CommsCorrectWordingTool)`"
+    native = "`CommsCorrectWordingTool.apply`: correction message, unchanged strikes"
     phases = ()
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return UnitWordingComparison.read()
 
 
 class DecisionAlertsParityRow(ParityRow):
     number = 26
-    capability = "Alerts carry only decisions"
-    current = "none; every line interrupts"
-    native = "`messages.AlertKind.require_publishable`, `tools.CommsDecisionTool`"
+    capability = "Authored decisions are validated; alerts stay open"
+    current = "`CommsAuthoredTaskTool.apply` publishes authored decisions as info notices"
+    native = (
+        "`Message.require_decision`; publisher validates author, turn and scope; "
+        "bare `AlertKind` publication remains allowed"
+    )
     phases = (ControlPlanePhase,)
+
+    @classmethod
+    def verify(cls) -> ParityComparison:
+        return DecisionAlertsComparison.read()
 
 
 class MomentumParityRow(ParityRow):
@@ -262,7 +292,7 @@ class MeasuredLoadParityRow(ParityRow):
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
     native = (
-        "`commander.capacity.Load.of` reports orders, overdue, edits and forks; "
+        "`commander.capacity.Load.of` reports orders, review timers up, edits and forks; "
         "self-report comparison unverified"
     )
     phases = (ControlPlanePhase,)
@@ -309,11 +339,11 @@ class UnitTimeParityRow(ParityRow):
 
 class OrderProgressParityRow(ParityRow):
     number = 33
-    capability = "Order progress beside its deadline; the unit never sees a due time"
+    capability = "Order progress beside its review timer; the unit never sees it"
     current = "`order.py board`, `overdue`, `due`, `send`; `rotate.py`"
     native = (
-        "Derived `OrderProgress`; merged work draws no strike; first commit 10 min, "
-        "later progress 15 min STALL; units see no due time"
+        "Derived `OrderProgress`; uncommitted edits count as work; no clock strikes or "
+        "releases; the commander's review timer is hidden from units"
     )
     phases = (OneOrderOwnerPhase, ControlPlanePhase)
 

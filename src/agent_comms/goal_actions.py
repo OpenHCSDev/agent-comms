@@ -507,7 +507,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     problem: str
     order: PendingProblemOrder
     request: str
-    deadline: EventTime
+    review_at: EventTime
     commander: str
 
     @abstractmethod
@@ -534,7 +534,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.order.require_wording()
         commander = ctx.goals.registry.require(self.commander)
         commander.goal.require().require_id(self.request).require_active().order.require_request()
-        self.deadline.require_deadline()
+        self.review_at.require_recorded("A review time")
         self.order.owner.require_exists(Path(self.order.check.directory))
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)
@@ -560,7 +560,7 @@ class OrderGoalAction(ProblemOrderGoalAction):
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
-            generation=generation, goal=goal, deadline=self.deadline, order=self.order,
+            generation=generation, goal=goal, review_at=self.review_at, order=self.order,
             traced=self.traced)
 
 
@@ -575,7 +575,7 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=generation, goal=goal, deadline=self.deadline, order=self.order)
+            generation=generation, goal=goal, review_at=self.review_at, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)

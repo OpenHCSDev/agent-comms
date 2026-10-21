@@ -237,10 +237,11 @@ class OwnedTurn:
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
+        goal = self.runner.comms.registry.require(self.thread_name).goal
         if self.original_owner_input:
-            permission = OwnerGoalPermission(self.thread.goal)
+            permission = OwnerGoalPermission(goal)
         else:
-            permission = self.thread.goal.active().following_permission()
+            permission = goal.active().following_permission()
         if self.original_owner_input:
             source_type = OwnerOriginalInput
         elif not self.origins:
