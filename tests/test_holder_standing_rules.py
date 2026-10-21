@@ -292,7 +292,6 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
 @pytest.mark.parametrize('target,body', [
     ('lead', 'The worker needs an answer'),
     ('#comms', '@lead The worker needs an answer'),
-    ('#comms', 'The worker posts its result to the commanders'),
 ])
 def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
@@ -309,8 +308,9 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
         SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
 
 
-def test_channel_messages_to_other_units_are_not_a_commander_question(held_bus):
-    held_bus.messaging.send('worker', '#comms', '@outsider This question is yours')
+@pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
+def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
+    held_bus.messaging.send('worker', '#comms', body)
     assert UnitAskUnanswered.asks(held_bus, 'lead', time.time()) == ()
 
 
