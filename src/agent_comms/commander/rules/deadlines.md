@@ -1,15 +1,13 @@
 ---
 name: deadlines
-description: "15 minutes is the ceiling; count the work and never pad deadlines or reschedule stalling; deadlines prevent stalling, never punish initiative deleting real slop"
+description: "no deadlines on orders; the commander keeps a review timer per held order, like item timers in a CPMA match, and a timer up means read the unit's state, never an automatic strike"
 type: feedback
 ---
 
-**Why:** the owner reads a due time as an ETA; a padded one says the commander does not know what the work is, and a default deadline lets units spend slack the work does not need.
+**Why:** a due time is a target the unit hits by the cheapest route, so it ships half-finished work early, and a clock that strikes on its own strikes working units. On 2026-10-20 the deadline watcher struck P331 at 20:36:55 although PR 2351 was pushed at 20:31:45, and the stall watcher struck P358 at 20:38:20 while its unit ran the ordered tests; both took the task from the only unit holding the work. Tristan, 2026-10-20: "it promotes stalling we should give no deadline to the unit and the commander should keep track regularly like timers for items in a q3 cpma match".
 
-Deadlines are for bus-unit orders; a fork gets a task list and no time (rules/fork-orders.md). Count the steps, then set `date -d '+N min'`: about 2 minutes for a few shell commands (removing checkouts, closing PRs, pushing a branch), 5 for a merge or publish, about 8 for a qualified build plus one store step plus a DM. Never type a round clock time. No investigation runs longer than 5 minutes. Pull a deadline in when the commit lands early.
-
-Tristan, 2026-10-20: "less than an hour, 15 minutes"; 00:42 "whys it due in 15 minutes? why 15 minutes does it need 15 minutes?"; 04:24 "deleting 2 checkouts doesn't take 15 minutes".
-
-**Deadlines stop stalling; they never punish slop deletion.** A unit late because it folded in deleting real slop on its surface is credited for the initiative, not struck. Lateness from stalling, ceremony or wrong work is still a strike, never hidden by rescheduling.
-
-Tristan, 2026-10-20 11:53: "the deadlines are mostly to prevent stalling and put pressure on agents to be competent ... we allow it and reward the unit for taking that initiative".
+- An order carries no due time for the unit. It names the event that starts the work ("the moment the turns are idle") and the done list.
+- The commander owns one review timer per held order, set from the measured median per edit. A timer up means the commander reads the unit's worktree, commits, PR and newest turn the same tick, the way a CPMA player is at the armour spawn when it comes up, not after.
+- Strikes come only from a commander verdict on evidence: a send-back, a false claim, an off-order edit, or a turn ended stalled on nothing (SKILL.md "Stalled on nothing"). A clock alone never strikes and never reassigns.
+- Stalling is still struck: no tool call while holding an order, a question it could answer itself, ceremony instead of the next step. The timer is when the commander looks; the evidence is what it judges.
+- A unit that folds in deleting real slop on its surface is credited for the initiative. Tristan, 2026-10-20 11:53: "we allow it and reward the unit for taking that initiative".
