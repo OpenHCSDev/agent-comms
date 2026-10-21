@@ -767,7 +767,8 @@ class PresentCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = {f"refs/heads/{branch}"
                  for branch, paths in WorkBranches(self.path).worktrees().items()
-                 if any(storage.owns_checkout(owner, Path(path).resolve()) for path in paths)}
+                 if any(storage.owns_checkout(owner, checkout, checkout)
+                        for checkout in (Path(path).resolve() for path in paths))}
         return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
 
     def commits(self, pattern: str, refs: tuple[str, ...],
