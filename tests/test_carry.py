@@ -66,7 +66,7 @@ def test_the_chain_is_every_declared_step_the_ledger_lacks():
     """Each carry module's one step is in the chain; a recorded name with no step is a
     finished step whose file was deleted, so it is ignored."""
     chain = CarryChain.at(REPO)
-    assert [step.name() for step in chain.steps] == sorted(
+    assert sorted(step.name() for step in chain.steps) == sorted(
         path.stem for path in (REPO / STEPS).glob("carry_*.py"))
     assert chain.pending(("carry_long_deleted",)) == chain.steps
     assert chain.pending(tuple(step.name() for step in chain.steps)) == ()

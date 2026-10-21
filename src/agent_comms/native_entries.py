@@ -10,7 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
 
-from .locked_store import DurableFile, PatternFile
+from .locked_store import DurableFile
+from .native_session_files import SavedSessionFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -173,7 +174,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
 
 @dataclass
-class ImportedSessionWriter(DurableFile, PatternFile):
+class ImportedSessionWriter(DurableFile, SavedSessionFile):
     filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry

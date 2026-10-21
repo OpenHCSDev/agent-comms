@@ -4,12 +4,24 @@ from contextlib import closing
 import json
 import re
 import sqlite3
+from pathlib import Path
 
 import pytest
 
+from agent_comms.change_report import FileLine
 from agent_comms.errors import RelationViolationError
+from agent_comms.goals import OrderCheck
+from agent_comms.installer.carry import CarryChain
+from agent_comms.native_pi import NativeContextJournal
+from agent_comms.native_session_files import NativeSessionFiles, PrivateSession
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registration import Registration
+from agent_comms.repository_name import RepositoryName
+from agent_comms.todos import GoalRef, MechanicalOrderRun, PendingProblemOrder, Todo, TodoStore
 from agent_comms.typed_table import DurableTables, SharedFileTables
-from tools.cutover.declared_schema import _subclasses, carry
+from tools.cutover.carry_declared_schema import _subclasses, carry
+
+REPO = Path(__file__).resolve().parents[1]
 
 
 def _file_rows():
@@ -129,3 +141,51 @@ def test_carry_refuses_a_derived_file(tmp_path):
 
     row = BusPageIndex.rows[0]
     _refused(tmp_path / "f.sqlite3", row.schema_objects()[row.declared_name], "derived")
+
+
+def _positional_indexes(db, row):
+    """Rename a row's declared indexes to the positional names older files hold."""
+    indexes = [(name, sql) for name, sql in row.schema_objects().items() if _INDEX.match(sql)]
+    for ordinal, (name, sql) in enumerate(indexes):
+        db.execute(f'DROP INDEX "{name}"')
+        db.execute(_INDEX.sub(rf'\1"{row.declared_name}_{ordinal}_idx"\2', sql))
+
+
+def test_the_schema_carry_runs_after_the_review_timer_carry():
+    """The todo file's deadline column is renamed before its schema is compared."""
+    names = [step.name() for step in CarryChain.at(REPO).steps]
+    assert names.index("carry_review_timers") < names.index("carry_declared_schema")
+
+
+def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_chain(tmp_path):
+    lead = Registration(tmp_path / "registry.json").new_thread(
+        "lead", frozenset(), str(tmp_path), created_at=1.0)
+    order = PendingProblemOrder(
+        id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
+        check=OrderCheck(str(tmp_path), "true"), edits=("Fix the problem",),
+        banned=("No extra store",), report="Report the delivered commit",
+        at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
+    created = TodoStore(tmp_path).create(
+        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar",
+        creator=lead, goal=GoalRef("lead", 1.0, "goal-1"), owner=lead, generation="initial",
+        review_at=RecordedEventTime(1000.0), order=order)
+    with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
+        db.execute('ALTER TABLE "todo" RENAME COLUMN "review_at" TO "deadline"')
+        db.commit()
+    proof = NativeSessionFiles(PrivateSession.path_in(tmp_path, session_id="s")).input_proof
+    proof.parent.mkdir()
+    proof.with_suffix("").write_text("")
+    with closing(sqlite3.connect(proof)) as db:
+        NativeContextJournal.create(db)
+        _positional_indexes(db, NativeContextJournal)
+        db.commit()
+        assert NativeContextJournal.schema_differs(db)
+
+    for step in CarryChain.at(REPO).steps:
+        step.carry(tmp_path, apply=True)
+
+    assert TodoStore(tmp_path).get("todo-1").review_at == created.review_at
+    with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
+        assert "deadline" not in Todo.stored_columns(db)
+    with closing(sqlite3.connect(proof)) as db:
+        assert not NativeContextJournal.schema_differs(db)

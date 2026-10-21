@@ -269,6 +269,3 @@ class ContextManifests(Carry):
                     *(path.name for path in derived),
                 ),
             )
-
-if __name__ == "__main__":
-    ContextManifests.main()
