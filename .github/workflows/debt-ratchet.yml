@@ -84,10 +84,17 @@ jobs:
           python-version-file: pyproject.toml
       - name: Install uv
         run: python -m pip install uv==0.12.0
-      - name: Install agent-comms and test dependencies
-        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e '.[dev]'
-      - name: Prepare pinned native Pi
-        uses: ./.github/actions/prepare-native
+      - name: Install non-editable Core and test dependencies
+        run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
+      - name: Install and qualify the running interpreter's native artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from agent_comms.installer.upgrade import Stack
+          from agent_comms.launch_runtime import LaunchRuntime
+
+          Stack(Path.cwd(), runtime=LaunchRuntime.running()).install_native()
+          PY
       - name: Rehearse an install through the installed CLI
         run: timeout 300 pytest -n 0 -q -o faulthandler_timeout=60 -p no:cacheprovider tests/test_install_rehearsal.py
 

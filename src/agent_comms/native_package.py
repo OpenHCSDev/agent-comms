@@ -238,7 +238,6 @@ def write_native_manifest(root: Path) -> None:
             os.replace(replacement, MANIFEST)
         finally:
             replacement.unlink(missing_ok=True)
-    VerifiedNativePackage.qualify(root)
 
 
 @dataclass(frozen=True)

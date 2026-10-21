@@ -376,21 +376,9 @@ class Stack:
             run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
                 "--no-editable", cwd=checkout,
                 env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
-            run(checkout / "stack/bin/prepare-pi-native", "--python", built.python,
-                cwd=checkout, env=built.environment(checkout / "src"))
-            native = Path(run(built.python, "-c",
-                "from agent_comms.native_package import pinned_location; print(pinned_location())",
-                cwd=checkout, env=built.environment(checkout / "src")).strip())
-            package = Path(run(built.python, "-c",
-                "import agent_comms; from pathlib import Path; "
-                "print(Path(agent_comms.__file__).parent)",
-                cwd=checkout, env=built.environment()).strip())
-            destination = package / "_native" / native.relative_to(checkout / "stack")
-            destination.parents[2].mkdir(mode=0o700, parents=True)
-            shutil.copytree(native, destination)
+            built.install_native()
             RuntimeResolution.capture(built.python, core).save(prefix)
             built.imports()
-            built.prepare_native()
         except BaseException:
             shutil.rmtree(prefix)
             raise
@@ -398,6 +386,22 @@ class Stack:
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
+
+    def install_native(self) -> None:
+        """Build, copy and qualify this interpreter's native artifact before publication."""
+        run(self.checkout / "stack/bin/prepare-pi-native", "--python", self.python,
+            cwd=self.checkout, env=self.environment(self.checkout / "src"))
+        native = Path(run(self.python, "-c",
+            "from agent_comms.native_package import pinned_location; print(pinned_location())",
+            cwd=self.checkout, env=self.environment(self.checkout / "src")).strip())
+        package = Path(run(self.python, "-c",
+            "import agent_comms; from pathlib import Path; "
+            "print(Path(agent_comms.__file__).parent)",
+            cwd=self.checkout, env=self.environment()).strip())
+        destination = package / "_native" / native.relative_to(self.checkout / "stack")
+        destination.parents[2].mkdir(mode=0o700, parents=True)
+        shutil.copytree(native, destination)
+        self.prepare_native()
 
     def prepare_native(self) -> None:
         run(self.python, "-c", "from agent_comms.native_package import "
