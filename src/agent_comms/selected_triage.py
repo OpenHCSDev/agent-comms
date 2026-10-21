@@ -44,6 +44,15 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
             raise InvalidTriageDecision("triage response is not an unambiguous decision") from error
 
     @classmethod
+    def recognizes(cls, text: str) -> bool:
+        """Whether this text decodes as a bounded verdict from this family."""
+        try:
+            cls.parse(text)
+        except InvalidTriageDecision:
+            return False
+        return True
+
+    @classmethod
     @abstractmethod
     def proves_source(cls, evidence) -> bool: ...
 
