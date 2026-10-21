@@ -7,7 +7,8 @@ import pytest
 
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
 from agent_comms.assignment_states import AssignmentState, BoundAssignment
-from agent_comms.attempt_states import AttemptState
+from agent_comms.attempt_states import AttemptState, LiveAttempt
+from agent_comms.lifecycle_capability import Complete, Failed, Successful, Terminal, Active
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import ReplayFact
@@ -27,13 +28,13 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import PublishedResponse, ResponseState
-from agent_comms.wake_policy import WakePolicy
+from agent_comms.wake_policy import MessageAudience, RecipientDecision, WakePolicy
 from test_coordination_store import ready, started
 
 
-def members(family):
+def members(family, capability=object):
     """Only maintained production declarations; no parallel case inventory."""
-    return tuple(c for c in family.members_with(family) if c.__module__.startswith("agent_comms."))
+    return tuple(c for c in family.members_with(capability) if c.__module__.startswith("agent_comms."))
 
 
 @pytest.fixture
@@ -69,22 +70,24 @@ def test_assignment_positive_numbers_and_timestamps(pending, field):
 
 @pytest.mark.parametrize("policy", members(WakePolicy), ids=lambda c: c.declared_name)
 def test_assignment_decision_and_binding_owned_by_policy(policy):
-    mode = policy()
-    initial = policy.initial_state()
-    state = initial.load(mode, None, None, None)
-    assert state.mode == mode and state.exact_target is None
-    with pytest.raises(IntegrityViolationError):
-        initial.load(mode, "invalid-verdict", None, None)
-    with pytest.raises(IntegrityViolationError):
-        initial.load(mode, None, None, "unowned")
-    if mode.active:
-        for owner in members(AssignmentState):
-            if issubclass(owner, BoundAssignment):
-                bound = owner.build(mode, "exec", "owner")
+    decision = policy().recipient_decision("owner", MessageAudience.DIRECT)
+    assert RecipientDecision.from_wire(decision.to_wire()) == decision
+    for claim in decision.claim_decisions():
+        mode = claim.wake_policy()
+        initial = type(mode).initial_state()
+        state = initial.load(mode, None, None, None)
+        assert state.mode == mode and state.exact_target is None
+        with pytest.raises(IntegrityViolationError):
+            initial.load(mode, "invalid-verdict", None, None)
+        with pytest.raises(IntegrityViolationError):
+            initial.load(mode, None, None, "unowned")
+        for active in mode.items_with(Active, mode):
+            for owner in AssignmentState.members_with(BoundAssignment):
+                bound = owner.build(active, "exec", "owner")
                 assert bound.execution_id == "exec" and bound.exact_target == "owner"
                 for execution_id, target in ((None, "owner"), ("exec", None)):
                     with pytest.raises(IntegrityViolationError):
-                        owner.build(mode, execution_id, target)
+                        owner.build(active, execution_id, target)
 
 
 @pytest.mark.parametrize("owner", members(ExecutionState), ids=lambda c: c.declared_name)
@@ -212,13 +215,12 @@ def test_snapshot_attempt_identity_pointer_and_version(active, pending):
     rejected(pending, "attempt does not match", attempt=active.attempt)
     for changes in ({"execution_id": "other"}, {"attempt_ordinal": 2}, {"owner_lookup": "other"}):
         rejected(active, "identity/owner mismatch", attempt=replace(active.attempt, **changes))
-    for owner in members(AttemptState):
-        phase = owner.load(None if owner.terminal else 1000, owner.terminal, owner.terminal)
-        altered = replace(active.attempt, lifecycle=phase)
-        if owner.terminal:
-            rejected(active, "status/attempt phase mismatch", attempt=altered)
-        else:
-            assert replace(active, attempt=altered).is_current
+    for owner in AttemptState.members_with(LiveAttempt):
+        altered = replace(active.attempt, lifecycle=owner.load(1000, False, False))
+        assert replace(active, attempt=altered).is_current
+    for owner in AttemptState.members_with(Terminal):
+        altered = replace(active.attempt, lifecycle=owner.load(None, True, True))
+        rejected(active, "status/attempt phase mismatch", attempt=altered)
     for changes in ({"current_execution_id": NoPointedExecution()}, {"current_attempt_ordinal": NoPointedAttempt()}):
         rejected(active, "pointer tuple is incomplete", **changes)
     rejected(active, "pointer is inconsistent", is_current=False)
@@ -281,7 +283,7 @@ def terminal_snapshot(active, execution_owner, attempt_owner, response_owner, *,
 
 
 def test_snapshot_retry_terminal_coupling(active):
-    failures = tuple(c for c in members(AttemptState) if c.failed)
+    failures = members(AttemptState, Failed)
     responses = tuple(
         c for c in members(ResponseState) if not c.published and not c.requires_intent
     )
@@ -301,19 +303,16 @@ def test_snapshot_retry_terminal_coupling(active):
                 terminal_snapshot(active, DeferredExecution, phase, response, replay_safe=True)
         failed = terminal_snapshot(active, FailedExecution, phase, response, replay_safe=False)
         assert not failed.can_retry
-    for owner in members(ExecutionState):
-        if owner.completed:
-            for phase in (c for c in members(AttemptState) if c.succeeded):
-                for response in responses:
-                    if response.successful:
-                        assert not terminal_snapshot(
-                            active, owner, phase, response, replay_safe=True
-                        ).can_retry
-                    else:
-                        with pytest.raises(
-                            IntegrityViolationError
-                        ):
-                            terminal_snapshot(active, owner, phase, response, replay_safe=True)
+    for owner in members(ExecutionState, Complete):
+        for phase in (c for c in members(AttemptState) if c.succeeded):
+            for response in responses:
+                if response in ResponseState.members_with(Successful):
+                    assert not terminal_snapshot(
+                        active, owner, phase, response, replay_safe=True
+                    ).can_retry
+                else:
+                    with pytest.raises(IntegrityViolationError):
+                        terminal_snapshot(active, owner, phase, response, replay_safe=True)
 
 
 def published_snapshot(pending):

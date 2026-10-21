@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
@@ -281,7 +283,7 @@ class TriageNativeSend(NativeSendStage):
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
-            if current != captured or not current.lifecycle.triage_pending:
+            if current != captured or not current.lifecycle.requires_selected_triage():
                 raise IdentityConflict("triage claim changed before native batch reservation")
             if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
@@ -400,9 +402,9 @@ class FullNativeSend(NativeSendStage):
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
+        current.lifecycle.require_engagement()
         if (
-            not current.lifecycle.engaged
-            or not snapshot.execution.lifecycle.active
+            not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead

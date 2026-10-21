@@ -134,10 +134,10 @@ class ExecutionStore:
             assignment_id = source.assignment_id
             exact_target = source.delivery.message.exact_reply_target
             routes.setdefault(exact_target, None)
+            assignment.lifecycle.require_engageable()
             if (
                 assignment.recipient_lookup != owner_lookup
                 or assignment.lifecycle.execution_id is not None
-                or not assignment.lifecycle.engageable
             ):
                 raise IdentityConflict("claim cannot engage this execution")
             decision = EngagedAssignment.build(

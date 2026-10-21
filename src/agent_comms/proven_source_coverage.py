@@ -8,6 +8,8 @@ historical watermark grants no current-owner, provider, write or reply permit.
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -311,7 +313,7 @@ class SourceCoverage:
         policy = decision.wake_policy()
         if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not policy.active:
+        if not policy.items_with(Active, policy):
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
         if policy.proves_source(evidence) and all(

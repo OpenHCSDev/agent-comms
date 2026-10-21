@@ -13,6 +13,8 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from agent_comms.lifecycle_capability import Complete
+
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -115,8 +117,6 @@ class _OpenObligation:
 class OptionalAwarenessResult(ABC):
     """Read-only context owns presentation; it never grants an action."""
 
-    complete = False
-
     def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
         self.render(max_text_bytes)
         return ()
@@ -154,7 +154,7 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
 
 
 @dataclass(frozen=True)
-class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
+class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
     recipient_lookup: str
     through_seq: int
     selected: tuple[_SelectedDecision, ...]
@@ -162,7 +162,6 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
     omitted_count: int
     instruction: InstructionFile
     content_instruction: InstructionFile
-    complete = True
 
     def segments(self, max_text_bytes):
         if len(self.text().encode("utf-8")) > max_text_bytes:
