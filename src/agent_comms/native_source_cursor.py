@@ -76,8 +76,7 @@ class NativeSourceCursor:
         identity = CursorOwner(wire_root_id=self.wire_root_id, thread=owner,
                                generation=owner_generation, claimed_generation=owner_claimed_generation)
         with source_reads.borrow():
-            return self._advance_proven(identity, committed_input_id, source_reads,
-                                       StoreLockContention(2.0) if committed_input_id is not None else None)
+            return self._advance_proven(identity, committed_input_id, source_reads, StoreLockContention(2.0))
 
     def _advance_proven(self, identity, committed_input_id, source_reads, contention):
         sources = self._coverage(identity.lookup, contention)

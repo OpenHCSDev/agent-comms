@@ -7,6 +7,7 @@ the owner's event loop with the wire, bus and registry locks held.
 """
 
 from __future__ import annotations
+from agent_comms.context_store import UNREAD_CONTEXT
 
 from conftest import publish_initial
 import hashlib
@@ -64,7 +65,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
         7,
         2,
     )
-    comms.contexts.record(ContextManifest(
+    comms.contexts.record_after(UNREAD_CONTEXT, ContextManifest(
         owner.incarnation,
         RecordedContextTurn(TurnId(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
         (segment,),
