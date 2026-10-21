@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -183,7 +184,7 @@ class ClaimWrites(PrivateWrites):
             raise RelationViolationError("Claim read barrier is unavailable.")
         sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
-            def build(seq: int) -> ClaimRecord:
+            def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
                 )
@@ -239,8 +240,12 @@ class InitialWrites(PrivateWrites):
             if message.seq <= previous:
                 raise ValueError("Initial history must have ascending unique sequences")
             previous = message.seq
-            self.bus.append(lambda seq, original=message.history_snapshot:
-                            PublicRecord.from_message(replace(original, seq=seq)))
+            def build_history(
+                seq: int, db: sqlite3.Connection, original: Message = message.history_snapshot,
+            ) -> PublicRecord:
+                return PublicRecord.from_message(replace(original, seq=seq))
+
+            self.bus.append(build_history)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
@@ -301,7 +306,7 @@ class InitialWrites(PrivateWrites):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
-            def build(seq: int) -> PrivateRecord:
+            def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
                     snapshot=snapshot, original_source=source,
@@ -367,7 +372,7 @@ class ResponseWrites(PrivateWrites):
         role.require_executable(RelationViolationError("Keyed response sender must be executable."))
         if intent.publication_key != canonical_publication_key(intent.execution_id, target.name):
             raise RelationViolationError("Response publication key does not match its route.")
-        def build(seq: int):
+        def build(seq: int, db: sqlite3.Connection):
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
             )

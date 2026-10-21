@@ -49,7 +49,7 @@ async def test_bus_append_wakes_after_each_committed_message(watched_bus):
         for body in ("first", "second"):
             stored = await asyncio.to_thread(
                 bus.append,
-                lambda seq: PublicRecord.from_message(Message("peer", "owner", body, InfoKind, seq=seq)),
+                lambda seq, db: PublicRecord.from_message(Message("peer", "owner", body, InfoKind, seq=seq)),
             )
             await asyncio.wait_for(anext(observations), 1)
             assert bus.lookup(stored.seq).body == body
@@ -70,7 +70,7 @@ async def test_goal_wait_read_and_bus_database_alone_do_not_wake(watched_bus, re
     bus, comms = watched_bus
     waits = GoalWaits(GoalWaits.path_in(comms.root))
     waits.record(recorded_wait)
-    bus.append(lambda seq: PublicRecord.from_message(Message("peer", "owner", "seed", InfoKind, seq=seq)))
+    bus.append(lambda seq, db: PublicRecord.from_message(Message("peer", "owner", "seed", InfoKind, seq=seq)))
     async with aclosing(bus.watch()) as observations:
         await anext(observations)
         waiting = asyncio.create_task(anext(observations))

@@ -32,7 +32,7 @@ from .working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .message_bus import WatchPass
+    from agent_comms.message_bus import WatchPass
 
 Result = TypeVar("Result")
 
@@ -128,8 +128,8 @@ class Coordination:
         return await join_retirement(pending)
 
     @classmethod
-    async def watch_worker(
-        cls, watch: WatchPass, opened_wire: Callable[[], AbstractContextManager[Comms]],
+    async def watch_worker[Observed](
+        cls, watch: WatchPass[Observed], opened_wire: Callable[[], AbstractContextManager[Comms]],
     ) -> None:
         """Join each entered pass before idling; cancellation also joins borrowed work."""
         while True:
@@ -205,8 +205,12 @@ class Coordination:
     def install_private_runtime(self) -> None:
         """Explicit protocol/owner bootstrap, never invoked by a reader."""
         # Load the canonical declarations before querying their existing family.
-        from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401
-        from . import native_runtime_input  # noqa: F401
+        from agent_comms import (  # noqa: F401
+            cohort_schema,
+            coordination_response,
+            native_prompt_binding,
+            native_runtime_input,
+        )
 
         for schema in PrivateRuntimeSchema.__subclasses__():
             schema.install(self)

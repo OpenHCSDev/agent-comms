@@ -22,12 +22,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-
-if TYPE_CHECKING:
-    from .wire_log import WireLog
+from .private_path import ObservedPath
+from .recorded_bus import RecordedBusIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,9 +98,9 @@ class AbsoluteRoutePathText(PathText):
 class ActiveRoute(CommsRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
-    wire_root_id: Annotated[str, Id128Text]
+    bus_identity: RecordedBusIdentity
     # The file format: the writer stamps it and the reader refuses any other before decoding.
-    version: ClassVar[int] = 2
+    version: ClassVar[int] = 3
     # The CLI command that replaces a file this reader refuses; it registers under this name.
     repair_command: ClassVar[str] = "replace-route"
 
@@ -139,27 +138,20 @@ class ActiveRoute(CommsRoute):
             raise MalformedRecord(f"active comms route {path} is invalid: {error}") from error
         return route
 
-    def wire_log(self) -> WireLog:
-        from .wire_log import WireLog  # the wire log's module imports this one
-
-        return WireLog(WireLog.path_in(self.root))
-
     def selects_its_root(self) -> bool:
-        """Whether the root still exists and carries the marker this route was published for."""
-        return self.root.is_dir() and (
-            self.wire_log().read_metadata_unlocked().wire_root_id == self.wire_root_id)
+        """A route selects the database observed when it was published."""
+        from .bus import Bus
+
+        return self.root.is_dir() and self.bus_identity.matches(
+            ObservedPath.at(Bus.path_in(self.root)))
 
     def observe_root(self) -> Path:
-        # The writer atomically replaces this marker. Reuse its owner/mode,
-        # ancestry and protocol decoder, without taking the mutation/durability
-        # barrier or interpreting registry/history merely to observe identity.
-        marker = self.wire_log().private_marker_unlocked()
-        if marker.root_id != self.wire_root_id:
-            raise RelationViolationError("private route root ID changed")
+        if not self.selects_its_root():
+            raise RelationViolationError("route bus was replaced")
         return super(ActiveRoute, self).observe_root()
 
     def launch(self) -> PrivateNkLaunch:
-        return PrivateNkLaunch.installed(self.root, self.wire_root_id)
+        return PrivateNkLaunch.installed(self.root)
 
 
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:

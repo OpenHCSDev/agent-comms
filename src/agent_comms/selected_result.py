@@ -42,8 +42,8 @@ class CoordinatedTurn:
     async def cursor_status_for(participant, input_id) -> str:
         # A failed projection does not undo a committed response or authorize replay.
         # Report the original error rather than pretending it is a cursor observation.
-        cursor = await participant.cursor_delivery.advance(participant, input_id)
-        return "proven" if cursor is not None and cursor.input_id == input_id else "blocked_gap"
+        state = await participant.cursor_delivery.advance(participant, input_id)
+        return "proven" if state.proves_input(input_id) else "blocked_gap"
 
 
 def publish_native_failure(

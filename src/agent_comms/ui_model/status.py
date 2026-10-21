@@ -51,10 +51,9 @@ class ThreadStatusModel:
             self, lambda: ThreadStatusModel.known(self.name, status.over(self.presentation)))
 
     @classmethod
-    def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
-        """Decode the observation's nullable presentation once, for local and foreign views."""
-        if presentation is None:
-            return cls.retired(name)
+    def known(cls, name: str, presentation: ThreadPresentation) -> ThreadStatusModel:
+        """Let the presentation member own its status-row projection."""
+        presentation = presentation.for_status(name)
         lines = [presentation.summary, *(detail for detail in presentation.status.details
                                          if detail != presentation.summary)]
         excerpts = []

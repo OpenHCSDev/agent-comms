@@ -1001,9 +1001,12 @@ class CommsStandingRulesTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
         broken = StandingRule.broken(comms, caller.name)
-        StandingRule.enforce_all(comms, caller.name, broken)
+        rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
-            tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
+            tuple(rule.line() for rule in broken
+                  if rule.broke_after(self.after) and rule not in rejected)
+            + tuple(rule.rejected_line() for rule in broken
+                    if rule.broke_after(self.after) and rule in rejected))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1485,7 +1488,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
+            bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))

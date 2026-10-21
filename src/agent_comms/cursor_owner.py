@@ -19,6 +19,7 @@ from .registry_document import RegistrySnapshot
 from .private_send_rules import RunningTurnRegistryCheck
 
 if TYPE_CHECKING:
+    from .acp_extension import CursorObservation
     from .proven_source_coverage import ProvenSourceCoverage
 
 
@@ -59,11 +60,11 @@ class CursorOwner(RegistryOwner):
             owner_generation=self.generation, owner_claimed_generation=self.claimed_generation,
         )
 
-    def state(self, db: sqlite3.Connection, activation_floor: int) -> CursorState:
-        """Classify SQL absence once, at its storage boundary."""
+    def state(self, db: sqlite3.Connection) -> CursorState:
+        """Classify recipient progress once, at its storage boundary."""
         row = self.cursor(db)
         if row is None:
-            return ActivationFloorCursor(activation_floor)
+            return UnstartedCursor()
         self.require_recorded_input(db, row)
         return RecordedCursor(row)
 
@@ -114,8 +115,15 @@ class CursorState(ABC):
     @abstractmethod
     def without_input(self, proof, owner, coverage): ...
 
+    def require_progress(self, owner, coverage, injected) -> None:
+        if coverage.covered_seq < self.covered_seq:
+            raise IdentityConflict("current cursor would regress")
+
     @abstractmethod
-    def require_progress(self, owner, coverage, injected) -> None: ...
+    def observation(self) -> CursorObservation: ...
+
+    def proves_input(self, input_id: str) -> bool:
+        return False
 
     def require_input_progress(self, proof) -> None:
         pass
@@ -134,11 +142,10 @@ class CursorState(ABC):
 
 
 @dataclass(frozen=True)
-class ActivationFloorCursor(CursorState):
-    floor: int
+class UnstartedCursor(CursorState):
     @property
     def covered_seq(self):
-        return self.floor
+        return 0
 
     @property
     def cursor(self):
@@ -151,12 +158,13 @@ class ActivationFloorCursor(CursorState):
     def without_input(self, proof, owner, coverage):
         return proof.build(owner, coverage.covered_seq)
 
-    def require_progress(self, owner, coverage, injected):
-        if coverage.covered_seq < self.floor:
-            raise IdentityConflict("current cursor would precede activation")
+    def observation(self):
+        from .acp_extension import EmptyCursorObservation
+
+        return EmptyCursorObservation()
 
     def publish(self, db, owner, coverage, proof):
-        if coverage.covered_seq <= self.floor:
+        if coverage.covered_seq <= self.covered_seq:
             return self  # A blocked first source has not established a cursor.
         cursor = proof.candidate(self, owner, coverage)
         cursor.insert(db)
@@ -188,13 +196,22 @@ class RecordedCursor(CursorState):
     def without_input(self, proof, owner, coverage):
         return replace(self.row, covered_seq=coverage.covered_seq)
 
+    def observation(self):
+        from .acp_extension import VerifiedCursorObservation
+
+        return VerifiedCursorObservation(self.row)
+
+    def proves_input(self, input_id: str) -> bool:
+        return self.row.input_id.holds(input_id)
+
     def require_progress(self, owner, coverage, injected):
+        super().require_progress(owner, coverage, injected)
         if (self.row.owner_identity != owner.participant_identity
-                or coverage.covered_seq < self.row.covered_seq or injected < self.row.injected_seq):
+                or injected < self.row.injected_seq):
             raise IdentityConflict("current cursor would change owner or regress")
 
     def require_input_progress(self, proof):
-        if proof.source_seq <= self.row.injected_seq and self.row.input_id != proof.input_id:
+        if proof.source_seq <= self.row.injected_seq and not self.proves_input(proof.input_id):
             raise IdentityConflict("current cursor native input changed")
 
     def claim_mismatch(self, injected_seq):

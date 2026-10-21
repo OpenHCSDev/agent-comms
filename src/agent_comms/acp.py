@@ -39,10 +39,7 @@ from acp.schema import (
     TextContentBlock,
 )
 
-from agent_comms.coordination_errors import (
-    IdentityConflict,
-    PublicationActivationBlocked,
-)
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
@@ -65,6 +62,7 @@ from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
+from .native_source_cursor import NativeSourceCursor
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .routing import MessageRoute
@@ -81,7 +79,6 @@ from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
@@ -218,7 +215,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         from .selected_write_plan import SelectedWritePlans
 
         owner = self.sessions.require(session_id)
-        root_id = self._private_nk_marker()
         controller = self._runtime.controller.get()
         if controller is None or (
             controller is UNBOUND_CONTROLLER and self.sessions.client is None
@@ -226,7 +222,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        acknowledgement = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
+        acknowledgement = await Coordination.run_worker(partial(SelectedWritePlans(self._comms).submit,
             owner_name=owner,
             source_seq=request.source_seq,
             source_message_id=request.source_message_id,
@@ -323,22 +319,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    @property
-    def configured_root_id(self) -> str:
-        """The bus root ID the launch pinned; the bus reader checks it against the marker."""
-        return self._comms.owners.require_private_launch().wire_root_id
-
-    def _private_nk_marker(self) -> str:
-        """Check that the bus belongs to the configured root before a request runs."""
-        configured_root_id = self.configured_root_id
-        with self._comms.bus.log.checked_read() as source:
-            if source.marker.root_id != configured_root_id:
-                raise PublicationActivationBlocked(
-                    "private N/K ACP root does not match configuration"
-                )
-            return source.marker.root_id
-
-    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
+    async def _drain_private_nk(self, session_id: str) -> int:
         """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
@@ -352,8 +333,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         launch = self._comms.owners.require_private_launch()
         package = launch.native_package
-        if launch.wire_root_id != wire_root_id:
-            raise PublicationActivationBlocked("private N/K ACP root does not match its launch")
         thread_name = await self.sessions.sync_identity(session_id)
         snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
         owner = snapshot.require(thread_name)
@@ -365,22 +344,23 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(WireLog.path_in(self._comms.root), self._comms.registry, ResponseWrites)
-        def read_claim():
-            with bus.log.checked_read() as source:
-                return source.marker.claimed_after_seq
-        claimed_after_seq = await Coordination.run_worker(read_claim)
+        bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
+        delivery = self.cursors.delivery(session_id)
+        async with delivery.reading() as source_reads:
+            state = await NativeSourceCursor.read_async(
+                bus, owner_name=thread_name, source_reads=source_reads,
+            )
+        after_seq = state.covered_seq
         store_path = CoordinationStore.path_in(self._comms.root)
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
             root=self._comms.root,
-            wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
-            cursor_delivery=self.cursors.delivery(session_id),
+            cursor_delivery=delivery,
             write_authority=AcpSelectedWriteAuthority(
-                self, session_id, SelectedWritePlans(self._comms, wire_root_id)
+                self, session_id, SelectedWritePlans(self._comms)
             ),
             **(
                 {"selected_tool_intent": self._private_selected_tool_intent}
@@ -390,14 +370,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         with execution.cursor_delivery.measurements.operation("accept_deliveries"):
             await _accept_visible_deliveries(
-                bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
+                bus, store_path, owner.incarnation.lookup, after_seq,
                 owner_name=owner.name, acquire_package=execution.validate,
             )
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(
-                self.inputs, session_id, owner, bus, wire_root_id, claimed_after_seq
+                self.inputs, session_id, owner, bus, after_seq
             )
             await self.cursors.publish(session_id, thread_name)
             return 0
@@ -405,7 +385,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with store.session.read():
                 participant = store.participants.get(owner.incarnation.lookup)
                 candidate = next_sealed_assignment(
-                    store, participant.lookup, owner.name, after_seq=claimed_after_seq,
+                    store, participant.lookup, owner.name, after_seq=after_seq,
                 )
                 if candidate is None:
                     return False

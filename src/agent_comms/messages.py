@@ -375,6 +375,14 @@ class Message(Addressed, BusCapability):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
+    def projections(self):
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
+        for original in self.answers:
+            yield AnsweredSource(original, self.seq)
+
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
         return FieldCodec.construct(cls, {

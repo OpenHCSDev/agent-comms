@@ -90,8 +90,8 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
             wait, targets=(GoalWaitTarget(replacement.incarnation.require_recorded()),)
         )
         assert not replacement_wait.matches(original, owner.incarnation.require_recorded())
-    assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
-    assert not replacement_wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
+    assert wait.has_reply(comms.bus.bus, owner.incarnation.require_recorded())
+    assert not replacement_wait.has_reply(comms.bus.bus, owner.incarnation.require_recorded())
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
     assert list(review.reviewed_inputs) == []
 
@@ -119,7 +119,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
 
     comms.registry.rename("owner", "renamed-owner")
     comms.registry.rename("peer", "renamed-peer")
-    assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
+    assert wait.has_reply(comms.bus.bus, owner.incarnation.require_recorded())
     assert comms.goals.goal_input_review("renamed-owner", goal.id, ["renamed-peer"]).reviewed_inputs == (
         f"bus:{reply.seq}",)
     comms.registry.unregister("renamed-owner")
@@ -131,7 +131,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
             source.delivery(reply.seq), replacement.incarnation.require_recorded()
         )
     assert not replace(wait, owner=replacement.incarnation.require_recorded()).has_reply(
-        comms.bus.log, replacement.incarnation.require_recorded()
+        comms.bus.bus, replacement.incarnation.require_recorded()
     )
 
 
