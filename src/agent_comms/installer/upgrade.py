@@ -262,7 +262,7 @@ class LiveRun(DeclaredFamily, affix="Run"):
 
     @property
     def successful(self) -> bool:
-        return all(outcome.successful for outcome in (*self.processes, *self.bridges))
+        return all(process.successful for process in self.processes)
 
     def lines(self) -> tuple[str, ...]:
         return (

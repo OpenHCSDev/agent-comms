@@ -131,7 +131,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         (bridge,) = Serve.running(home)
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:
-            (paused,) = bridge.pause(resources)
+            paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert child.poll() is None
             assert isinstance(claim.state(), LapsedWatch)

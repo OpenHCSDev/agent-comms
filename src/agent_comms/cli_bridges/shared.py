@@ -565,7 +565,6 @@ class ResumableBridge(ABC):
 @dataclass(frozen=True)
 class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
     name: str
-    successful: ClassVar[bool] = False
 
     def resume(self) -> Self:
         return self
@@ -576,7 +575,6 @@ class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
 
 @dataclass(frozen=True)
 class ResumedBridge(BridgeResume):
-    successful = True
     from_runtime: LaunchRuntime
     to_runtime: LaunchRuntime
 
@@ -587,8 +585,6 @@ class ResumedBridge(BridgeResume):
 
 @dataclass(frozen=True)
 class OwnerExitedBridge(BridgeResume):
-    successful = True
-
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: owner exited; left stopped",)
 
