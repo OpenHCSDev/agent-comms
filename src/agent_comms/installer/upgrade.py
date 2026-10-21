@@ -3,8 +3,8 @@
 ``agent-comms install`` checks out the target revision and runs this package from that
 revision's ``src`` (``python -m agent_comms.installer``), so its steps are the
 target's. The target's stack is built into its own runtime, relocked to the latest
-OpenHCSDev mains, and must import Toad and the ACP client. The bus ledger
-(``CarryLedger``) names the carry steps still pending; each runs with the target's
+OpenHCSDev mains, and must import Toad and the ACP client. Each carry step's dry run
+on the bus says whether it is pending; each runs with the target's
 ``src`` and ``tools`` (``agent_comms.installer.carry``). Every run first rehearses on a
 copy of the bus: the steps, then ``who``, ``threads`` and ``history`` reads, and
 every file no step names as rewritten must be unchanged by saved-file size,
@@ -62,7 +62,7 @@ from agent_comms.installer.backup import (
     bus_files,
     transcripts_held,
 )
-from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryLedger
+from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
@@ -93,11 +93,10 @@ class RehearsalFiles:
 
     @staticmethod
     def declared(steps: tuple[StepRun, ...]) -> frozenset[str]:
-        return frozenset({CarryLedger.filename, *(name for step in steps
-                                                  for name in step.carried.rewritten)})
+        return frozenset(name for step in steps for name in step.carried.rewritten)
 
     def require_rehearsal(self, rehearsal: RehearsalFiles) -> None:
-        outside = sorted(set(self.names) - set(rehearsal.names) - {CarryLedger.filename})
+        outside = sorted(set(self.names) - set(rehearsal.names))
         if outside:
             raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
 
@@ -520,9 +519,9 @@ class TargetTree:
 
 def carry(step: type[Carry], root: Path, stack: Stack, tree: TargetTree, *flags: str) -> Carried:
     """Run one step with the target's src and ``stack``'s Python: the target's staged
-    stack, never the installed one."""
+    stack, never the installed one. Without ``--apply`` it is the step's dry run."""
     operation = Carry.before_stop.__name__ if "--before-stop" in flags else Carry.carry.__name__
-    output = stack.call_step(step, root, tree, operation, apply=True)
+    output = stack.call_step(step, root, tree, operation, apply="--apply" in flags)
     return FieldCodec.decode(Carried, FieldCodec.parse(output))
 
 
@@ -541,13 +540,12 @@ def carry_all(
     results = []
     for step in pending:
         with _store_lock(root / "wire"):
-            results.append(StepRun(step.name(), CarryLedger(root).apply(
-                step.name(), lambda: carry(step, root, stack, tree, "--apply"))))
+            results.append(StepRun(step.name(), carry(step, root, stack, tree, "--apply")))
     return tuple(results)
 
 
-def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain: CarryChain,
-             installer: InstallerChoice) -> CarriedRehearsal:
+def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree,
+             pending: tuple[type[Carry], ...], installer: InstallerChoice) -> CarriedRehearsal:
     """The live run on a practice copy, up to stopping owners: the outgoing runtime answers
     the same owner probe the live run asks it before the stop."""
     parent = installer.scratch(StorageRule.load(root))
@@ -561,7 +559,6 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
-        pending = chain.pending(CarryLedger(copied).applied())
         for path in stack.backup_files(root, pending, tree):
             destination = copied / path.relative_to(root)
             if path.exists() and not destination.exists():
@@ -601,18 +598,18 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
         if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
-        chain = CarryChain.at(tree.path)
-        member = Install.member(root, retire)
         try:
-            pending = member.pending_steps(root, chain)
+            chain = CarryChain.at(tree.path)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
+        member = Install.member(root, retire)
         installed = Stack(checkout)
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path)
-        install = member.of(checkout, root, current, target, chain, pending, installed, staged,
+        pending = member.pending_steps(root, chain, staged, tree)
+        install = member.of(checkout, root, current, target, pending, installed, staged,
                             tree, installer, spill_dir)
         rehearsal = install.rehearsal()
         names = tuple(step.name() for step in pending)
@@ -643,7 +640,6 @@ class Install[Rehearsed: Rehearsal](ABC):
     root: Path
     current: str
     target: str
-    chain: CarryChain
     pending: tuple[type[Carry], ...]
     installed: Stack
     staged: Stack
@@ -665,18 +661,20 @@ class Install[Rehearsed: Rehearsal](ABC):
         return Install
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
-        return chain.pending(CarryLedger(root).applied())
+    def pending_steps(cls, root: Path, chain: CarryChain, staged: Stack,
+                      tree: TargetTree) -> tuple[type[Carry], ...]:
+        """Each step's dry run on the bus, with the target's staged stack, says what is left."""
+        return chain.pending(lambda step: carry(step, root, staged, tree))
 
     @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
+    def of(cls, checkout: Path, root: Path, current: str, target: str,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> Install:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        return member(checkout, root, current, target, chain, pending, installed, staged,
+        return member(checkout, root, current, target, pending, installed, staged,
                       tree, installer, spill_dir)
 
     @abstractmethod
@@ -701,7 +699,7 @@ class Install[Rehearsed: Rehearsal](ABC):
 
 class ChangedInstall(Install[CarriedRehearsal]):
     def rehearsal(self) -> CarriedRehearsal:
-        return rehearse(self.root, self.staged, self.installed, self.tree, self.chain,
+        return rehearse(self.root, self.staged, self.installed, self.tree, self.pending,
                         self.installer)
 
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
@@ -727,14 +725,15 @@ class FreshInstall(Install[FreshRehearsal]):
     The target's source creates the bus already in its format and routes to it."""
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
+    def pending_steps(cls, root: Path, chain: CarryChain, staged: Stack,
+                      tree: TargetTree) -> tuple[type[Carry], ...]:
         return ()
 
     @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
+    def of(cls, checkout: Path, root: Path, current: str, target: str,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
            installer: InstallerChoice, spill_dir: Path) -> Install:
-        return cls(checkout, root, current, target, chain, pending, installed, staged,
+        return cls(checkout, root, current, target, pending, installed, staged,
                    tree, installer, spill_dir)
 
     def announce(self, report: InstallReport) -> None:
@@ -749,7 +748,6 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
-        CarryLedger(self.root).start(self.chain)
         self.staged.publish()
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
@@ -776,7 +774,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
          spill_dir: Path, rehearsal_files: RehearsalFiles) -> CarriedRun:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    expected = frozenset((*rehearsal_files.names, CarryLedger.filename)) | frozenset(
+    expected = frozenset(rehearsal_files.names) | frozenset(
         str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
     selected = tuple(root / name for name in sorted(expected)) if pending else ()
     restore = RestoreSpace.measure(max(

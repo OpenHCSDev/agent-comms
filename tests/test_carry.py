@@ -1,4 +1,4 @@
-"""The carry family: one chain of idempotent steps, a per-bus ledger, and steps that never change."""
+"""The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
 import os
 import sqlite3
@@ -15,7 +15,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.installer.carry import (
-    STEPS, Carried, CarryChain, CarryLedger,
+    STEPS, Carried, CarryChain,
 )
 from agent_comms.installer.backup import (
     StoreBackup, UpgradeRefused, bus_files, transcripts_held,
@@ -64,23 +64,23 @@ class Repository:
         return self.git("rev-parse", "HEAD")
 
 
-def test_the_chain_is_every_declared_step_the_ledger_lacks():
-    """Each carry module's one step is in the chain; a recorded name with no step is a
-    finished step whose file was deleted, so it is ignored."""
+def test_pending_is_every_step_from_the_first_whose_dry_run_reports_a_change():
+    """A step's dry run, not a record of its name, says whether the bus needs it, so a step
+    edited after a bus ran it is judged by what it does now. A later step's dry run is
+    not asked before the earlier pending ones have run."""
     chain = CarryChain.at(REPO)
     assert sorted(step.name() for step in chain.steps) == sorted(
         path.stem for path in (REPO / STEPS).glob("carry_*.py"))
-    assert chain.pending(("carry_long_deleted",)) == chain.steps
-    assert chain.pending(tuple(step.name() for step in chain.steps)) == ()
+    assert chain.pending(lambda step: Carried(0)) == ()
+    edited = chain.steps[len(chain.steps) // 2]
+    asked = []
 
+    def dry_run(step):
+        asked.append(step)
+        return Carried(int(step is edited))
 
-def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
-    ledger = CarryLedger(tmp_path)
-    assert ledger.applied() == ()
-    for name in ("carry_a", "carry_b", "carry_a"):
-        ledger.record(name)
-    assert ledger.applied() == ("carry_a", "carry_b")
-    assert ledger.path.stat().st_mode & 0o777 == 0o600
+    assert chain.pending(dry_run) == chain.steps[chain.steps.index(edited):]
+    assert asked == list(chain.steps[:chain.steps.index(edited) + 1])
 
 
 def record_source(version: int, fields: str) -> str:
