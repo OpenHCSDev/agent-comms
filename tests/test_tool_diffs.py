@@ -79,4 +79,4 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     with pytest.raises(ValueError):
         PublishedMessageToolDetails.from_wire(invalid)
     # Older and unrelated untagged output has no original publication witness.
-    assert PiToolResult.from_wire({**raw, "details": {"id": published["id"]}}).sent_message(True) is None
+    assert PiToolResult.from_wire({**raw, "details": {"id": published["id"]}}).sent_message(True) == NoSentMessage()
