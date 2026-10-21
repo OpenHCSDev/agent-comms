@@ -13,7 +13,6 @@ import asyncio
 import hashlib
 import json
 import os
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -51,22 +50,9 @@ from native_proof_cases import (
 
 
 @pytest.fixture
-def tmp_path():
-    """The sealed runtime permits only owner-only disposable /var/tmp roots.
-
-    CI's standard pytest temp root is /tmp; on hosts without a safe /var/tmp
-    (including Windows and macOS with a symlinked /var), these Linux-only
-    private-root process tests are inapplicable rather than weakening the runtime guard.
-    """
-    if (
-        os.name != "posix"
-        or not Path("/var/tmp").is_dir()
-        or Path("/var").is_symlink()
-        or Path("/var/tmp").is_symlink()
-    ):
-        pytest.skip("sealed runtime requires a real, disposable /var/tmp root")
-    with tempfile.TemporaryDirectory(prefix="ac-sealed-test-", dir="/var/tmp") as root:
-        yield Path(root)
+def tmp_path(private_directory):
+    """Use the shared private directory, including its joined bus retirement."""
+    return private_directory
 
 
 def _root(
