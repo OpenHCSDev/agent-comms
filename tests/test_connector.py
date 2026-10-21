@@ -22,6 +22,7 @@ from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
+    ApprovalLink,
     AuthorizationCodeGrant,
     Connector,
     ConnectorVerb,
@@ -199,9 +200,9 @@ async def test_a_request_without_an_approved_token_is_refused(client, store):
     assert (await client.get("/.well-known/oauth-authorization-server")).status == 200
 
 
-async def test_a_refused_call_answers_its_own_request_id(client, store):
+async def test_a_refused_call_answers_its_own_request_id(client, comms):
     """A client waits forever on a call whose refusal carries a null id."""
-    token = await approved_token(client, store)
+    token = await approved_token(client, comms)
     call = {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
             "params": {"name": "comms_channels", "arguments": {}, "undeclared": {}}}
     refused = await (await client.post(
@@ -210,23 +211,43 @@ async def test_a_refused_call_answers_its_own_request_id(client, store):
     assert "undeclared" in refused["error"]["message"]
 
 
-async def test_request_log_names_the_route_and_never_its_values(client, store, root, caplog):
-    """Served as run_app serves it, with aiohttp's raw access log off."""
+async def test_request_log_names_the_route_and_never_its_values(client, store, root, comms, caplog):
+    """Serve actual GET/POST approval secrets, with aiohttp's raw access log off."""
+    login = await ClientLogin.register(client)
+    assert (await client.get(
+        "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
+    )).status == 200
+    owner = comms.messaging.user_identity(str(comms.root))
+    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    secret = link.path.rsplit("/", 1)[-1]
     runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
                            access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
+    origin = f"http://127.0.0.1:{runner.addresses[0][1]}"
     try:
         with caplog.at_level(logging.INFO):
             async with ClientSession() as session:
-                await session.get(f"http://127.0.0.1:{runner.addresses[0][1]}/authorize",
-                                  params={"state": "one-use-value"})
+                await session.get(f"{origin}/authorize", params={"state": "one-use-value"})
+                preview = await session.get(
+                    f"{origin}{link.path}", params={"code": "one-use-value"},
+                    headers={"Authorization": "Bearer private-token",
+                             "Cookie": f"{TrustedBrowser.cookie_name}=private-cookie"},
+                )
+                assert preview.status == 200
+                confirmed = await session.post(f"{origin}{link.path}", allow_redirects=False)
+                assert confirmed.status == 302
+                code = parse_qs(urlsplit(confirmed.headers["Location"]).query)["code"][0]
+                cookie = confirmed.cookies[TrustedBrowser.cookie_name].value
     finally:
         await runner.cleanup()
     lines = [record.getMessage() for record in caplog.records]
     assert any("/authorize" in line and " 400 " in line for line in lines), lines
-    assert all("one-use-value" not in line for line in lines), lines
+    assert any(ApprovalLink.route in line and " 200 " in line for line in lines), lines
+    assert any(ApprovalLink.route in line and " 302 " in line for line in lines), lines
+    for value in (secret, code, cookie, "one-use-value", "private-token", "private-cookie"):
+        assert all(value not in line for line in lines), lines
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
