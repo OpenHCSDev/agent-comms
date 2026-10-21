@@ -33,7 +33,7 @@ from pydantic import PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -55,7 +55,7 @@ from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HuntDue
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -787,27 +787,22 @@ class DirectiveVerb(CommanderVerb):
     ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        thread = ctx.comms.registry.require(self.who(ctx))
-        answerable = (*(message for goal in thread.goal.active()
-                        for message in goal.order.directive_messages(ctx.comms.goals)),
-                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
-        originals = tuple(message for message in answerable if message.message_id in self.answers)
+        originals = tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                          if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
             sys.exit('REFUSED: --answers must name original directives on this request '
                      'or unanswered unit messages to this commander.')
         return tuple(message.reference for message in originals)
 
     def gate(self, ctx: Commander) -> None:
-        answers = self.answer_references(ctx)
-        thread = ctx.comms.registry.require(self.who(ctx))
-        overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
-        if overdue and not answers:
-            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
-            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        self.answer_references(ctx)
+        owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
+                     if rule.message.message_id not in self.answers)
+        if owed:
+            lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
+                     'that must wait is sent now: "waiting on X, owner Y".')
         super().gate(ctx)
 
 
