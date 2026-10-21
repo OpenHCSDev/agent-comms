@@ -24,7 +24,8 @@ from importlib.resources import files
 from math import ceil
 from pathlib import Path
 from statistics import median
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
+from types import get_original_bases
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
 
@@ -1607,11 +1608,14 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
 
     delivery_class: ClassVar[type[OrderDelivery]]
 
-    def decode_delivery(self, value: object) -> Delivery:
-        try:
-            return FieldCodec.decode(cast(type[Delivery], self.delivery_class), value)
-        except MalformedRecord as error:
-            raise MalformedRecord(f"delivery: {error}") from error
+    def __init_subclass__(cls, **options):
+        super().__init_subclass__(**options)
+        cls.delivery_class = next(
+            get_args(base)[0]
+            for owner in cls.__mro__
+            for base in get_original_bases(owner)
+            if get_origin(base) is OrderScope
+        )
 
     def require_references(self, root: Path) -> None:
         """Triage has no implementation declarations to validate."""
@@ -1630,8 +1634,6 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
 
 
 class TriageScope(OrderScope[ReportDelivery]):
-    delivery_class = ReportDelivery
-
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
@@ -1651,7 +1653,6 @@ class TriageScope(OrderScope[ReportDelivery]):
 
 @dataclass(frozen=True)
 class FixScope(OrderScope[CheckedDelivery]):
-    delivery_class = CheckedDelivery
     shape: FixShape
 
     def require_references(self, root: Path) -> None:
@@ -1819,8 +1820,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             f"Order: {self.id}", *self.scope.instructions(todo.id),
             *self.work_instructions()))
 
-    def delivered(self, delivery):
-        delivery = self.scope.decode_delivery(delivery)
+    def delivered(self, delivery: CheckedDelivery):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
@@ -2804,7 +2804,9 @@ class ServeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class DeliverTodo(TodoOperation):
+class DeliverTodo(TodoOperation, declared_name=None):
+    """Internal delivery command; the order-done tool owns its wire boundary and claims."""
+
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
@@ -2817,8 +2819,7 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        delivery = current.order.checked().scope.decode_delivery(self.delivery)
-        verified = delivery.verified(current, goals.registry, self.verified_claims)
+        verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)
         except OrderCheckFailedError as error:
@@ -2831,10 +2832,8 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        scope = current.order.checked().scope
-        delivery = scope.decode_delivery(self.delivery)
-        delivery.at.require_delivery()
-        return scope.completed(current, delivery)
+        self.delivery.at.require_delivery()
+        return current.order.checked().scope.completed(current, self.delivery)
 
 
 @dataclass(frozen=True)

@@ -2141,10 +2141,6 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
-        if isinstance(data, DeclaredFamily):
-            if not isinstance(data, self.target):
-                raise MalformedRecord(f"Expected {self.target.__name__}, received {type(data).__name__}")
-            return data
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
 

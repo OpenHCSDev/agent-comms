@@ -11,8 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 from agent_comms.change_report import FileLine
 from agent_comms.coordination_database import CoordinationStore
@@ -30,7 +31,7 @@ class StoredOrder(TypedRow):
 
     problem: str
     path: str
-    owner: FileLine = field(metadata={"sql": Column(storage=TextStorage)})
+    owner: Annotated[FileLine, Column(storage=TextStorage)]
 
     def scope_json(self) -> str:
         scope = (TriageScope() if self.problem in TRIAGE_PROBLEMS

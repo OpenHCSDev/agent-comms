@@ -23,7 +23,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from agent_comms.todos import (
-    CommitDelivery, DeliverTodo, DoneTodoState, FixScope, FixShape, FoldedProblemOrder, OrderScope,
+    CommitDelivery, DoneTodoState, FixScope, FixShape, FoldedProblemOrder, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
 from cutover.order_scope import TRIAGE_PROBLEMS, convert
@@ -78,17 +78,8 @@ def requested(comms, scope, problem='P1'):
     return caller, comms.goals.todos.get(problem)
 
 
-def test_triage_refuses_commit_before_git_or_storage_and_returns_its_report(comms):
+def test_triage_returns_its_report_without_fictitious_installation(comms):
     caller, current = assigned(comms, TriageScope())
-    commit = CommitDelivery(commit='a' * 40, delivered_commit='a' * 40,
-                            at=RecordedEventTime(1000))
-    with pytest.raises(ValueError, match='delivery'):
-        CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
-                           delivery=commit, claims=()).apply(comms, caller)
-    with pytest.raises(ValueError, match='delivery'):
-        DeliverTodo(current.revision, comms.registry.require(caller.name).incarnation, commit,
-                    current.order.id).apply(current)
-    assert comms.goals.todos.get(current.id) == current
     report = ReportDelivery(report='The command dispatch belongs on its declared parent; no source changed.')
     result = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                delivery=report, claims=()).apply(comms, caller)
@@ -111,15 +102,6 @@ def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope,
                                  delivery=wrong_delivery, claims=())
     with pytest.raises(ValueError, match='delivery'):
         CommsOrderDoneTool.invoke(comms, request.arguments, caller=caller)
-    assert comms.goals.todos.get(current.id) == current
-
-
-def test_a_fix_does_not_accept_a_report_instead_of_implementation(comms):
-    caller, current = assigned(comms, FIX_SCOPE)
-    with pytest.raises(ValueError, match='delivery'):
-        CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
-                           delivery=ReportDelivery(report='No implementation delivered'),
-                           claims=()).apply(comms, caller)
     assert comms.goals.todos.get(current.id) == current
 
 

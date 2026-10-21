@@ -1061,10 +1061,9 @@ class CommsOrderDoneTool(CommsTodoTool):
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         order = todo.order.checked()
         order.require_delivery(self.order_id)
-        delivery = order.scope.decode_delivery(self.delivery)
         verified = order.scope.verified_claims(
-            delivery, self.claims, comms, Path(order.check.directory))
-        return DeliverTodo(todo.revision, actor, delivery, self.order_id,
+            self.delivery, self.claims, comms, Path(order.check.directory))
+        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
                            verified_claims=verified)
 
 
