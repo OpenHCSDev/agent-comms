@@ -1049,13 +1049,34 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
                 return any(cls.broad(argument, names=cls.suppressed_names) for argument in arguments)
         return False
 
+    @staticmethod
+    def carries(handler: ast.ExceptHandler) -> bool:
+        """The bound error is passed into a class constructor: a typed outcome, not a swallow."""
+        match handler:
+            case ast.ExceptHandler(name=str(bound)):
+                return any(
+                    isinstance(name, ast.Name) and name.id == bound
+                    for child in ast.walk(handler)
+                    for argument in BroadSwallow.constructor_arguments(child)
+                    for name in ast.walk(argument))
+        return False
+
+    @staticmethod
+    def constructor_arguments(node: ast.AST) -> list[ast.expr]:
+        """The arguments of a call to a capitalized name: a class constructor."""
+        match node:
+            case ast.Call(func=ast.Name(id=callee) | ast.Attribute(attr=callee),
+                          args=args, keywords=keywords) if callee[:1].isupper():
+                return [*args, *(keyword.value for keyword in keywords)]
+        return []
+
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
         match node:
             case ast.With(items=items) | ast.AsyncWith(items=items):
                 return sum(cls.suppresses(item.context_expr) for item in items)
             case ast.ExceptHandler(type=error):
-                return int(cls.broad(error) and not any(
+                return int(cls.broad(error) and not cls.carries(node) and not any(
                     isinstance(child, ast.Raise) for child in ast.walk(node)))
         return 0
 
