@@ -57,7 +57,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                             'text': 'Prove an explicit Retry starts the next generation',
                         })
                     elif number in (2, 4):
-                        goal = comms.registry.require(session).require_goal()
+                        goal = comms.registry.require(session).goal.require()
                         claims: tuple[WorkingClaim, ...] = ()
                         if number == 4:
                             resumed = store.require_generation(goal.id)
@@ -111,7 +111,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 await until(lambda: any(isinstance(goal.state, BlockedGoal)
                                         for goal in comms.registry.require(session).goal)
                             and not comms.registry.require(session).executing)
-                blocked = comms.registry.require(session).require_goal()
+                blocked = comms.registry.require(session).goal.require()
                 store = comms.goals.open_goal_store()
                 before = store.require_generation(blocked.id)
                 assert before.lifecycle == BlockedGeneration(), before
@@ -123,7 +123,7 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 await until(lambda: any(isinstance(goal.state, CompletedGoal)
                                         for goal in comms.registry.require(session).goal)
                             and not comms.registry.require(session).executing)
-                completed = comms.registry.require(session).require_goal()
+                completed = comms.registry.require(session).goal.require()
                 generation = store.require_generation(completed.id)
                 assert completed.id == blocked.id
                 assert generation.number == before.number + 1
