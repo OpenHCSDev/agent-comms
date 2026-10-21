@@ -24,12 +24,20 @@ from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.wire_log import WireSnapshot
 from agent_comms.message_bus import WatchPass
-from agent_comms.standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.message_page import PageBounds
+from agent_comms.read_basis import NamedViewer
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import (
+    DatedStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+)
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.work_branches import WorkBranches
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.phase_evidence import PlanReading
@@ -415,6 +423,62 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
         rows = ", ".join(sorted(rule.todo.id for rule in current))
         return f"{len(current)} unowned rows wait for a new unit: {rows}"
 
+
+@dataclass(frozen=True)
+class CheckoutUnreadable(UndatedStandingRule):
+    """A holder's checkout git cannot open: that unit's state, while every other unit reads on."""
+
+    unit: str
+    checkout: Path
+    error: str = field(compare=False)
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        storage = comms.registry.storage_rule
+        holders = sorted({todo.held().owner for todo in cls.pending_todos(comms, commander)})
+        return tuple(
+            cls(holder, path, error)
+            for holder in holders
+            for path in storage.checkout_paths(comms.registry.require(holder))
+            for error in WorkBranches(path).read_checkout().errors()
+        )
+
+    def line(self) -> str:
+        return (f"CHECKOUT UNREADABLE: {self.unit} {self.checkout}: {self.error}"
+                " -> order the unit to repair its checkout; its work stays retained")
+
+@dataclass(frozen=True)
+class HeartbeatSilent(DatedStandingRule):
+    """A commander the heartbeat serves whose newest beat is older than the cadence allows.
+
+    The heartbeat beats on every pass, so its silence is the failure; this rule reads the
+    bus in the commander's own tool process, where a dead heartbeat cannot hide it.
+    """
+
+    seconds: ClassVar[int] = 180
+    beat: int
+    since: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        served = {thread.incarnation
+                  for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+        if CommanderHeartbeat.sender not in comms.registry or (
+                comms.registry.require(commander).incarnation not in served):
+            return ()
+        page = comms.views.history_page(ThreadTarget(CommanderHeartbeat.sender),
+                                        PageBounds(limit=1), viewer=NamedViewer(commander))
+        return tuple(cls(beat.seq, beat.timestamp + cls.seconds) for beat in page.messages[-1:]
+                     if beat.sender == CommanderHeartbeat.sender
+                     and beat.timestamp + cls.seconds < time.time())
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (f"HEARTBEAT SILENT: no beat since seq {self.beat}, silent past "
+                f"{RecordedEventTime(self.since).clock()}"
+                " -> read the connector journal for the failing pass and fix its owner")
 
 @dataclass(frozen=True)
 class Unjudged(ReasonedStandingRule, UndatedStandingRule):
