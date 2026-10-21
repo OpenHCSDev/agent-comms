@@ -699,7 +699,7 @@ class HistoryReadback(ABC):
         for _ in FileRevision.capture(bus.path).revisions():
             with bus.observing() as db:
                 Bus.require_schema(db)
-                yield cast(StoredHistory, StoredHistory.from_connection(db))
+                yield StoredHistory.from_connection(db)
             return
         yield UnstoredHistory()
 
