@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash .github/run-step.sh {0}
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -59,7 +63,6 @@ jobs:
       - name: Prepare pinned native Pi
         uses: ./.github/actions/prepare-native
       - name: Run every native script
-        shell: bash
         run: |
           export PI_NATIVE_PACKAGE_DIR="$(python -c 'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())')"
           for script in stack/test-*; do
