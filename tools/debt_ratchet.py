@@ -513,7 +513,14 @@ class ScopeNames(ast.NodeVisitor):
         super().generic_visit(node)
         self.scope = outer
 
-    visit_FunctionDef = visit_AsyncFunctionDef = visit_ClassDef = visit_named
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.visit_named(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.visit_named(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.visit_named(node)
 
 
 class CleanChangedLines(OccurrenceMeasure):
