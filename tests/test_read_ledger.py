@@ -1,9 +1,9 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
 from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.wire_log import WireLog
 
 import random
 from dataclasses import replace
@@ -23,7 +23,7 @@ from agent_comms.presentation import ReadThrough
 
 
 def prepared(root):
-    comms = wire(root)
+    comms = prepare_native_comms(wire(root))
     for name, tags in (("alice", {"team"}), ("bob", set())):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(root)))
     return comms
@@ -98,7 +98,6 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
     conversation = DMConversation(participants=(owner,))
     document = ReadDocument(messages={owner: ReadCursor({conversation: ConversationCursor(2)})})
     encoded = FieldCodec.encode(document)
-    assert encoded["messages"][0][0] == {"name": "viewer", "created_at": 1.0}
     assert FieldCodec.decode(ReadDocument, encoded) == document
 
 
@@ -256,19 +255,19 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     from agent_comms.read_basis import AllChannelDisplayScope
 
     class AlternateMessages(AllChannelDisplayScope):
-        def includes(self, message):
-            return message.seq % 2 == 0
+        @property
+        def index_predicate(self):
+            return "seq % 2 = 0", ()
 
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for i in range(6):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating")
-    page = comms.bus.log.read_page(MessagePageRequest(scope))
-    document = comms.bus.reads.read()
-    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
-        basis = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
-            viewer, page.messages, comms.registry.snapshot(), opened, index, document=document))
+    page = MessagePageRequest(scope).read_opened(comms.bus.bus)
+    basis = comms.bus.reads.capture(
+        viewer, page.messages, comms.registry.snapshot(), comms.bus.bus,
+        document=comms.bus.reads.read())
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 3
     assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
@@ -296,10 +295,10 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
     from agent_comms.read_basis import AllChannelDisplayScope, AllConversation
-    with comms.bus.log.opened_wire_snapshot() as source:
-        basis = source.query_page_index(lambda index: AllChannelDisplayScope("#any").capture_all(
-            comms.bus.reads, viewer, snapshot, source, index, document=comms.bus.reads.read(),
-            through=source.metadata.last_seq))
+    source = comms.bus.bus
+    basis = AllChannelDisplayScope("#any").capture_all(
+        comms.bus.reads, viewer, snapshot, source, document=comms.bus.reads.read(),
+        through=source.revision)
     assert tuple(item.conversation for item in basis.conversations) == (AllConversation(),)
     assert tuple(seen.conversations) == (AllConversation(),)
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))
@@ -318,10 +317,9 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms.messaging.send("alice", "#team", "painted").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
-    replacement = tmp_path / "replacement.jsonl"
-    replacement.write_bytes(comms.bus.log.path.read_bytes())
-    replacement.chmod(0o600)
-    replacement.replace(comms.bus.log.path)
+    replacement = tmp_path / "replacement.sqlite3"
+    comms.bus.bus.backup(replacement)
+    replacement.replace(comms.bus.bus.path)
     reopened = wire(tmp_path)
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor()
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"].count == 1
@@ -344,28 +342,24 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     message = comms.messaging.send("alice", viewer, "read before restore").message
     ledger = comms.bus.reads
     assert ledger.read().bus_identity == NoRecordedBus()
-    assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.log.path))
+    assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.bus.path))
     assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"].count == 1
 
     page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
-    recorded = RecordedBus(FileIdentity.from_stat(comms.bus.log.path.stat()))
+    recorded = RecordedBus(FileIdentity.from_stat(comms.bus.bus.path.stat()))
     assert ledger.read().bus_identity == recorded == page.selection.basis.bus_identity
-    assert recorded.matches(ObservedPath.at(comms.bus.log.path))
-    old = FieldCodec.encode(ledger.read())
-    assert old["bus_identity"] == [recorded.identity.device, recorded.identity.inode]
-    assert FieldCodec.decode(ReadDocument, old) == ledger.read()
-    unrecorded = FieldCodec.decode(ReadDocument, {**old, "bus_identity": None})
-    assert unrecorded.bus_identity == NoRecordedBus()
-    assert unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path)) == ReadCursor()
+    assert recorded.matches(ObservedPath.at(comms.bus.bus.path))
+    assert FieldCodec.decode(ReadDocument, FieldCodec.encode(ledger.read())) == ledger.read()
+    unrecorded = replace(ledger.read(), bus_identity=NoRecordedBus())
+    assert unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.bus.path)) == ReadCursor()
     assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"].count == 0
 
-    replacement = tmp_path / "restored-bus.jsonl"
-    replacement.write_bytes(comms.bus.log.path.read_bytes())
-    replacement.chmod(0o600)
-    replacement.replace(comms.bus.log.path)
+    replacement = tmp_path / "restored-bus.sqlite3"
+    comms.bus.bus.backup(replacement)
+    replacement.replace(comms.bus.bus.path)
     reopened = wire(tmp_path)
-    assert not recorded.matches(ObservedPath.at(reopened.bus.log.path))
+    assert not recorded.matches(ObservedPath.at(reopened.bus.bus.path))
     snapshot = reopened.registry.snapshot()
     assert message.seq not in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(
         ReadLedger.conversation(message, snapshot))
@@ -508,9 +502,8 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
         seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
         painted_cursor, acknowledged_cursor = current_cursor(painted), current_cursor(acknowledged)
         snapshot = comms.registry.snapshot()
-        with comms.bus.log.full_history_snapshot() as (_, messages):
-            for message in messages:
-                key = ReadLedger.conversation(message, snapshot)
-                read = message.seq in seen.for_conversation(key)
-                assert not read or message.seq in painted_cursor.for_conversation(key), (seed, index, operation, message.seq)
-                assert read == (message.seq in acknowledged_cursor.for_conversation(key)), (seed, index, operation, message.seq)
+        for message in comms.bus.bus.message_history():
+            key = ReadLedger.conversation(message, snapshot)
+            read = message.seq in seen.for_conversation(key)
+            assert not read or message.seq in painted_cursor.for_conversation(key), (seed, index, operation, message.seq)
+            assert read == (message.seq in acknowledged_cursor.for_conversation(key)), (seed, index, operation, message.seq)

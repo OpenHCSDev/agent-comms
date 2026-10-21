@@ -119,6 +119,12 @@ class BusReader(RouteCounts, ABC):
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
             return headers[0].kind.read_from(db, headers[0].seq)
 
+    def delivery(self, seq: int) -> Delivered:
+        """A public history row cannot stand in for a frozen delivery."""
+        for delivery in self.lookup(seq).deliveries():
+            return delivery
+        raise RelationViolationError("Bus sequence has no frozen delivery")
+
     def lookup_message(self, message_id: str) -> BusRecord:
         """Resolve one content identity; absent or ambiguous identities are refused."""
         with self.observing() as db:
