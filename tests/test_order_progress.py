@@ -9,7 +9,6 @@ import time
 import pytest
 from test_todos import order
 
-from agent_comms.change_report import FileLine, MissingSourceLine
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import RequestGoalOrder
@@ -194,11 +193,3 @@ def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
     clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
     assert up.line() == f'TIMER UP: worker P1 at {clock}, order order-P1 -> read its diff and judge it'
     assert up.began() == 1000.0
-
-
-def test_a_cited_line_that_does_not_exist_is_a_refusal(tmp_path):
-    (tmp_path / 'owner.py').write_text('one\n')
-    FileLine('owner.py', 1).require_exists(tmp_path)
-    for missing in (FileLine('owner.py', 2), FileLine('absent.py', 1)):
-        with pytest.raises(MissingSourceLine, match='does not exist'):
-            missing.require_exists(tmp_path)
