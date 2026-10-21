@@ -474,8 +474,9 @@ class Message(Addressed, BusCapability):
         raise RelationViolationError("Message has no claim transition")
 
     def retained_task_facts(self):
-        yield from self.sender_role.user_task_facts(self)
-        yield from self.task.retained_task_facts(self)
+        source = Message.from_message(self)
+        yield from self.sender_role.user_task_facts(source)
+        yield from self.task.retained_task_facts(source)
 
     def __post_init__(self) -> None:
         if not self.sender:
@@ -640,7 +641,7 @@ class ClaimMessage(Claimed, Message):
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(self)
+        yield ClaimTaskFact(ClaimMessage.from_message(self))
 
     def require_retained_claim(self, claimed_after_seq: int) -> None:
         """The envelope carries its own committed claim facts."""

@@ -11,8 +11,6 @@ from agent_comms.child_process import SpawnedProcess
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
-from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.thread_status import RunningThreadStatus
 
 
 def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path, thread_registration):
@@ -27,15 +25,11 @@ def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path,
             child = SpawnedProcess.launch((str(python), "-c", "import time; time.sleep(60)"),
                                            env=environment)
             children.callback(child.close)
-            threads[name] = thread_registration.new_thread(
-                name, frozenset(), str(tmp_path), process_identity=child.identity, created_at=1.0)
-        snapshot = RegistrySnapshot(
-            threads=threads, statuses={name: RunningThreadStatus() for name in threads},
-            last_seen={name: 1.0 for name in threads}, aliases={},
-            owner_generations={name: 1 for name in threads},
-            _claimed_generations={name: 1 for name in threads},
-            by_lookup={thread.incarnation.lookup: thread for thread in threads.values()},
-        )
+            thread = thread_registration.new_thread(
+                name, frozenset(), str(tmp_path), process_identity=child.identity)
+            thread_registration.declare(thread)
+            threads[name] = thread
+        snapshot = thread_registration.snapshot()
         selections = tuple(OwnerRestartSelection.capture(snapshot, name) for name in threads)
         assert len({selected.interpreter for selected in selections}) == 2
         for selected in selections:

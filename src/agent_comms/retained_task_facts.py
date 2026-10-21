@@ -15,7 +15,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_attempt import StoredInput
-from .messages import Message
+from .messages import ClaimMessage, Message
 from .message_reference import MessageReference
 from .text_digest import TextDigest
 
@@ -172,7 +172,7 @@ class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
 
 @dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
-    source: Message
+    source: ClaimMessage
 
     def __post_init__(self) -> None:
         self.source.require_claim_transition()

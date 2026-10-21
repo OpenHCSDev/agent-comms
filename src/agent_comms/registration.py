@@ -88,6 +88,7 @@ class Registration:
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Explicit owner launch prepares registry authority before any coordinator exists."""
         with self.store.locked():
+            self.store.read_snapshot_unlocked().purpose.require_write()
             return self.store.private_guard_unlocked().prepare_native(self.store.path)
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:

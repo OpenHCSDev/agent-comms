@@ -45,6 +45,7 @@ from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.registry_store import RegistryStore
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.store_files import _atomic_write_text, _store_lock
 from agent_comms.typed_table import Column, DerivedTables, SharedFileTables, TypedTable
@@ -149,6 +150,7 @@ class HistoryCatalogSource:
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
     ) -> HistorySource:
         mapped = self.mapped_root(root, original_root)
+        RegistryStore.at(mapped).mark_historical()
         bus = Bus(Bus.path_in(mapped))
         source = HistorySource(
             str(mapped),
@@ -679,6 +681,7 @@ class BusHistory(Carry, BusFile):
         roots = (root, *(source.mapped_root(root, self.original_root) for source in sources))
         paths = {HistoryArchive.path_in(root)}
         for directory in roots:
+            paths.update(RegistryStore.at(directory).written)
             paths.update(
                 (
                     directory / self.filename,

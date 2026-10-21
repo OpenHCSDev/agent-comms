@@ -72,6 +72,7 @@ class Publisher:
         """Resolve the public route from the caller's acquired declarations."""
 
         snapshot = registry_snapshot
+        snapshot.purpose.require_write()
         sender = snapshot.canonical_name(message.sender)
         if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
