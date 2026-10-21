@@ -292,11 +292,14 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
 
 
 @dataclass
-class PublishingWatch(WatchPass):
+class PublishingWatch(WatchPass[None]):
     calls: int = 0
     completed: threading.Event = field(default_factory=threading.Event)
 
-    def pass_body(self, comms: Comms) -> None:
+    def observe(self, comms: Comms) -> None:
+        pass
+
+    def pass_body(self, comms: Comms, observed: None) -> None:
         self.calls += 1
         comms.messaging.send("claude-ai", "worker", "One watch pass")
         self.completed.set()
@@ -340,8 +343,11 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
-class FailingWatch(WatchPass):
-    def pass_body(self, comms: Comms) -> None:
+class FailingWatch(WatchPass[None]):
+    def observe(self, comms: Comms) -> None:
+        pass
+
+    def pass_body(self, comms: Comms, observed: None) -> None:
         raise RuntimeError("A real watch failure")
 
 
