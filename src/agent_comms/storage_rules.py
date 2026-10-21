@@ -5,7 +5,6 @@ import getopt
 import json
 import math
 import re
-import shlex
 import shutil
 import subprocess
 import time
@@ -14,7 +13,6 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import cached_property
-from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -23,13 +21,14 @@ from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule
-from agent_comms.work_branches import WorkBranches
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
     RoomAllocation,
     TestGateRoomWork,
 )
+from agent_comms.work_branches import WorkBranches
+from agent_comms_hooks.shell import shell_commands
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -525,29 +524,6 @@ class GitInvocation:
     @property
     def writes_source(self) -> bool:
         return bool(self.args) and self.args[0] in GitWriteOperation
-
-
-def shell_commands(command):
-    """Shell words, not matches in quoted code or here-document bodies."""
-    body = []
-    lines = iter(command.splitlines(keepends=True))
-    for line in lines:
-        body.append(line)
-        lex = shlex.shlex(line, posix=False, punctuation_chars='<>')
-        lex.whitespace_split = True
-        words = list(lex)
-        for index, word in enumerate(words[:-1]):
-            if word in ('<<', '<<-'):
-                delimiter = shlex.split(words[index + 1])[0]
-                for line in lines:
-                    if line.rstrip('\r\n').lstrip('\t') == delimiter:
-                        break
-    lex = shlex.shlex(''.join(body), posix=True, punctuation_chars=';&|><()\n')
-    lex.whitespace = ' \t\r'
-    lex.whitespace_split = True
-    for separator, words in groupby(lex, key=lambda word: bool(word) and set(word) <= set(';&|()\n')):
-        if not separator:
-            yield list(words)
 
 
 class ForbidsCommands(ShellProgram):

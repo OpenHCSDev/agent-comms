@@ -54,17 +54,20 @@ class ClaudeHook(HookRecord):
     def read(cls) -> Self:
         return cls.decode(json.load(sys.stdin))
 
+    def respond(self, **fields: str) -> None:
+        """Claude Code's answer to this event: its event name plus the given fields."""
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
+
     def warn(self, reason: str) -> None:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": self.hook_event_name,
-                        "additionalContext": reason,
-                    }
-                }
-            )
-        )
+        self.respond(additionalContext=reason)
+
+
+@dataclass(frozen=True)
+class ClaudeToolHook(ClaudeHook):
+    """What Claude Code adds for a tool-call event: the tool and its input."""
+
+    tool_name: str
+    tool_input: dict
 
 
 @dataclass(frozen=True)

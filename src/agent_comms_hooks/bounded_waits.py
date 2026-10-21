@@ -8,14 +8,73 @@ oldest 2,981 minutes), 378 forks/s and 48% system CPU on a 12-core machine.
 
 from __future__ import annotations
 
-import json
 import re
-from dataclasses import dataclass
-from itertools import dropwhile
+from collections.abc import Iterator
+from dataclasses import dataclass, replace
+from itertools import dropwhile, takewhile
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHook, ClaudeToolHookProgram
+from agent_comms_hooks import ClaudeToolHook, ClaudeToolHookProgram
 from agent_comms_hooks.reread import ToolInput
+from agent_comms_hooks.shell import shell_commands
+
+Words = tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Timeout:
+    """`timeout [OPTION]... DURATION` in front of a command: whether it bounds the command,
+    and the command it runs."""
+
+    word: ClassVar[str] = "timeout"
+    valued: ClassVar[frozenset[str]] = frozenset(("-k", "-s", "--kill-after", "--signal"))
+    """Options whose value is the next word."""
+    duration: ClassVar[re.Pattern[str]] = re.compile(r"(\d+(?:\.\d*)?)([smhd]?)")
+    unit: ClassVar[dict[str, int]] = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+    max_seconds: ClassVar[int] = 3600
+
+    bounded: bool
+    command: Words
+
+    @classmethod
+    def split(cls, words: Words) -> Timeout:
+        if words[:1] != (cls.word,):
+            return cls(False, words)
+        rest = words[1:]
+        while rest[:1] and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in cls.valued else rest[1:]
+        limit = cls.duration.fullmatch(rest[0]) if rest else None
+        seconds = float(limit.group(1)) * cls.unit[limit.group(2)] if limit else 0
+        return cls(0 < seconds <= cls.max_seconds, rest[1:])
+
+
+@dataclass(frozen=True)
+class Wait:
+    """One `until` or `while` loop: whether a timeout bounds it, and the commands of its
+    condition, which run on every pass."""
+
+    bounded: bool
+    condition: tuple[Words, ...]
+
+    def polls_pgrep_f(self) -> bool:
+        return any(map(Pgrep.full_match, self.condition))
+
+
+class Pgrep:
+    """`pgrep -f`: matching the pattern against whole command lines, the waiter's own included."""
+
+    program: ClassVar[str] = "pgrep"
+    full: ClassVar[str] = "--full"
+
+    @classmethod
+    def full_match(cls, segment: Words) -> bool:
+        match Timeout.split(tuple(dropwhile(Bash.openers.__contains__, segment))).command:
+            case (cls.program, *args):
+                return any(
+                    arg == cls.full or (arg[:1] == "-" and arg[1:2] != "-" and "f" in arg[1:])
+                    for arg in takewhile(lambda arg: arg.startswith("-"), args)
+                )
+        return False
 
 
 @dataclass(frozen=True)
@@ -27,89 +86,43 @@ class Bash(ToolInput):
     loops: ClassVar[frozenset[str]] = frozenset(("until", "while"))
     openers: ClassVar[frozenset[str]] = frozenset(("do", "then", "!", "{"))
     """Words after which the next word is again a command."""
+    body: ClassVar[Words] = ("do",)
+    """The word that ends a loop's condition."""
     shell: ClassVar[re.Pattern[str]] = re.compile(r"(?:ba)?sh")
     script_flag: ClassVar[re.Pattern[str]] = re.compile(r"-\w*c")
-    seconds: ClassVar[re.Pattern[str]] = re.compile(r"(\d+)s?")
-    pgrep_f: ClassVar[re.Pattern[str]] = re.compile(r"\bpgrep\s+(?:-\w*\s+)*-\w*f")
-    max_seconds: ClassVar[int] = 3600
 
-    # The shell's quoting, declared once: a single-quoted run, a double-quoted run (where a
-    # backslash escapes), one escaped character, or one plain character. An unclosed quote
-    # runs to the end of the command, as it does while the shell reads on.
-    piece: ClassVar[str] = r"""'(?:[^']*)'?|"(?:\\.|[^"\\])*"?|\\.|[^'"\\{plain}]"""
-    segment: ClassVar[re.Pattern[str]] = re.compile(f"(?:{piece.format(plain=';&|\n()')})+", re.S)
-    """Text between top-level separators; quoted or escaped separators stay inside it."""
-    word: ClassVar[re.Pattern[str]] = re.compile(f"(?:{piece.format(plain=r'\s')})+", re.S)
-    unquote: ClassVar[re.Pattern[str]] = re.compile(r"""'([^']*)'?|"((?:\\.|[^"\\])*)"?|\\(.)""", re.S)
-
-    def segments(self) -> tuple[tuple[str, ...], ...]:
-        """The command's unquoted words, split at its top-level separators."""
-        return tuple(
-            words for text in self.segment.findall(self.command)
-            if (words := tuple(
-                self.unquote.sub(lambda quoted: "".join(filter(None, quoted.groups())), word)
-                for word in self.word.findall(text)
-            ))
-        )
-
-    def holds_loop(self) -> bool:
-        return any(map(self.runs_loop, self.segments()))
-
-    def runs_loop(self, segment: tuple[str, ...]) -> bool:
-        """A loop keyword at command position, or in the script a shell runs with -c."""
-        words = tuple(dropwhile(self.openers.__contains__, segment))
-        if words[:1] == ("timeout",):
-            words = words[2:]
-        match words:
-            case (keyword, *_) if keyword in self.loops:
-                return True
-            case (program, flag, script, *_) if self.shell.fullmatch(program) and self.script_flag.fullmatch(flag):
-                return Bash(script).holds_loop()
-        return False
-
-    def bounded(self, segment: tuple[str, ...]) -> bool:
-        match segment:
-            case ("timeout", limit, *_) if bound := self.seconds.fullmatch(limit):
-                return int(bound.group(1)) <= self.max_seconds
-        return False
+    def waits(self) -> Iterator[Wait]:
+        """Every loop this command runs, at command position or in a script a shell runs with -c."""
+        segments = tuple(map(tuple, shell_commands(self.command)))
+        for index, segment in enumerate(segments):
+            timeout = Timeout.split(tuple(dropwhile(self.openers.__contains__, segment)))
+            match timeout.command:
+                case (keyword, *condition) if keyword in self.loops:
+                    yield Wait(timeout.bounded, (tuple(condition), *takewhile(
+                        lambda later: later[:1] != self.body, segments[index + 1:]
+                    )))
+                case (program, flag, script, *_) if (
+                    self.shell.fullmatch(program) and self.script_flag.fullmatch(flag)
+                ):
+                    for wait in Bash(script).waits():
+                        yield replace(wait, bounded=wait.bounded or timeout.bounded)
 
     def unbounded_wait(self) -> tuple[str, ...]:
         """Why this command's wait loop could run forever; empty when it holds no loop."""
-        waits = tuple(filter(self.runs_loop, self.segments()))
-        if not waits:
-            return ()
+        waits = tuple(self.waits())
         reasons = []
-        if self.pgrep_f.search(self.command):
+        if any(wait.polls_pgrep_f() for wait in waits):
             reasons.append(
                 "a wait loop may not use `pgrep -f`: it matches its own command line and the "
                 "other waiters; wait on a PID (`while kill -0 PID`), a file, or use "
                 "run_in_background, which notifies when the command exits"
             )
-        if not all(map(self.bounded, waits)):
+        if not all(wait.bounded for wait in waits):
             reasons.append(
-                f"a wait loop must start with `timeout N` (N <= {self.max_seconds}) so it dies "
+                f"a wait loop must start with `timeout N` (N <= {Timeout.max_seconds}) so it dies "
                 "on its own; for a long watch use the Monitor tool, which is capped"
             )
         return tuple(reasons)
-
-
-@dataclass(frozen=True)
-class PreToolUseHook(ClaudeHook):
-    tool_name: str
-    tool_input: dict
-
-    def deny(self, reason: str) -> None:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": self.hook_event_name,
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-        )
 
 
 class BoundedWaits(ClaudeToolHookProgram):
@@ -122,10 +135,13 @@ class BoundedWaits(ClaudeToolHookProgram):
 
 
 def main() -> None:
-    hook = PreToolUseHook.read()
+    hook = ClaudeToolHook.read()
     reasons = Bash.decode(hook.tool_input).unbounded_wait()
     if reasons:
-        hook.deny("Unbounded wait refused: " + "; ".join(reasons))
+        hook.respond(
+            permissionDecision="deny",
+            permissionDecisionReason="Unbounded wait refused: " + "; ".join(reasons),
+        )
 
 
 if __name__ == "__main__":
