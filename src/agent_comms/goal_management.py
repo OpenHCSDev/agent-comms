@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
+    from .thread_identity import TurnId
 from .goal_presentation import (
     GoalPublicationSnapshot,
     GoalSnapshot,
@@ -446,6 +447,7 @@ class Goals:
         started_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
+        turn: TurnId | None = None,
     ) -> GoalDeclaration:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
@@ -453,7 +455,7 @@ class Goals:
             current = thread.goal.matching(started_goal.id)
             if thread.worktree != expected_worktree:
                 return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
+            blocked = current.after_failed_turn(diagnostic, turn)
             if blocked is current:
                 return thread.goal
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))

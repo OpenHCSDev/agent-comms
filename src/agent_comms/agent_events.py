@@ -278,19 +278,20 @@ class Done(AgentEvent, FailedGoalTurn):
     def failure_observation(self, account, permit, captured):
         return None if self.ok else super().failure_observation(account, permit, captured)
 
-    def observe_goal(self, account) -> None:
-        if not self.ok:
-            account.permit.block(account, "Backend turn failed; inspect local diagnostics before resuming.")
-        else:
-            account.require_output(self.text)
+    def verified(self, account) -> bool:
+        return self.ok and bool(self.text.strip() or account.has_productive_tool)
+
+    def settle_current(self, account) -> None:
+        if self.verified(account):
+            VerifiedGoalSettlement.settle_current(account)
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
-        if self.ok:
+        if self.verified(account):
             current.settle(VerifiedGoalSettlement, store, permit, account.turn)
         super().settle_launched(account, permit, store, captured, current)
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
-        if self.ok:
+        if self.verified(account):
             permit.settle_goal(OriginGoalSettlement, store, current, account.turn)
         super().settle_origin(account, permit, store, goal_id, current)
 

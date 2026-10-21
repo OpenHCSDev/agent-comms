@@ -698,12 +698,15 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @abstractmethod
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration: ...
+                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration: ...
 
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
-    def after_failed_turn(self, diagnostic: str) -> GoalDeclaration:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
+        return self
+
+    def after_verified_turn(self, captured: GoalDeclaration, turn: TurnId) -> GoalDeclaration:
         return self
 
     def check_expected(self, current: GoalDeclaration) -> None:
@@ -795,7 +798,7 @@ class NoGoal(NullMember, GoalDeclaration):
         pass
 
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
+                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
         return self
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -906,9 +909,9 @@ class Goal(RecordMember, GoalDeclaration):
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
+                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
         return goals.block_goal_after_failed_turn(
-            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic,
+            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic, turn=turn,
         )
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -1018,9 +1021,16 @@ class Goal(RecordMember, GoalDeclaration):
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
 
-    def after_failed_turn(self, diagnostic: str) -> Goal:
+    def after_verified_turn(self, captured: GoalDeclaration, turn: TurnId) -> Goal:
+        for original in captured.matching(self.id):
+            state = self.state.after_verified_turn(original.state, turn)
+            if state is not self.state:
+                return replace(self, state=state, revision=self.revision + 1)
+        return self
+
+    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> Goal:
         progress = self.order.failed_turn_progress(self, diagnostic)
-        state = self.state.after_failed_turn(diagnostic)
+        state = self.state.after_failed_turn(diagnostic, turn)
         if state is self.state:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)

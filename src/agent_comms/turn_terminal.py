@@ -51,6 +51,9 @@ class TurnTerminal(ABC):
         detail = f"Native turn failed: {type(cause).__name__}: {cause}"
         return (await progress.record_failure(detail)).outcome
 
+    def settle_current(self, account: TurnGoalAccount) -> None:
+        pass
+
     @abstractmethod
     def settle_launched(self, account, permit, store, captured, current) -> None: ...
 
@@ -88,12 +91,12 @@ class FailedGoalTurn(TurnTerminal):
         observation = self.failure_observation(account, permit, captured)
         with suppress(StaleAttemptError):
             permit.reservation.fail(
-                store, "Goal turn ended without verified terminal progress.",
+                store, self.failure_reason,
                 observation=observation,
             )
         current.block_after_failed_turn(
             account.comms.goals, account.thread_name, account.owner.worktree,
-            "Goal turn ended without verified terminal progress.",
+            self.failure_reason, turn=account.turn,
         )
 
 
@@ -104,10 +107,6 @@ class EndedWithoutResult(FailedGoalTurn):
 
     def interrupted(self, terminal: TurnTerminal) -> TurnTerminal:
         return terminal
-
-    def settle_launched(self, account, permit, store, captured, current) -> None:
-        account.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
-        super().settle_launched(account, permit, store, captured, current)
 
 
 class OperatorStopped(TurnTerminal):

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from .declared_family import DeclaredFamily
 from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+from .thread_identity import TurnId
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext, ProblemOrderGoalAction
@@ -52,7 +53,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
 
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
+        return self
+
+    def after_verified_turn(self, captured: GoalState, turn: TurnId) -> GoalState:
         return self
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
@@ -125,10 +129,10 @@ class FromOpenGoal:
 class BlockingOnFailure:
     """An eligible state owns the failed-turn transition and reason validation."""
 
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
         from .goal_actions import required_block_reason
 
-        return BlockedGoal(required_block_reason(diagnostic))
+        return BlockedGoal(required_block_reason(diagnostic), turn=turn)
 
 
 class OpenGoal(BlockingOnFailure, GoalState):
@@ -156,10 +160,10 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
         if self.protected:
             return self
-        return super().after_failed_turn(diagnostic)
+        return super().after_failed_turn(diagnostic, turn)
 
     def failure_projection(self, reason: str) -> tuple[str, str]:
         return self.source.failure_projection()
@@ -235,6 +239,25 @@ class BlockedState(GoalState, FromOpenGoal):
 @dataclass(frozen=True)
 class BlockedGoal(BlockedState):
     block_reason: str
+    turn: TurnId | None = None
+
+    @classmethod
+    def successors(cls) -> tuple[type[GoalState], ...]:
+        return (*super().successors(), ActiveGoal)
+
+    def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
+        super().check_transition(nxt, owner=owner)
+        if nxt.active:
+            raise ValueError(self.transition_refusal())
+
+    def after_verified_turn(self, captured: GoalState, turn: TurnId) -> GoalState:
+        # The captured state was read before this turn was allocated. Equality
+        # excludes blocks written during it; UUIDs themselves have no ordering.
+        if self.turn is not None and self == captured and self.turn != turn:
+            active = ActiveGoal()
+            if self.may_become(active):
+                return active
+        return self
 
     def __post_init__(self) -> None:
         reason = self.block_reason
