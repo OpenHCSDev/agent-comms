@@ -11,7 +11,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-SOURCE_SHA = "3a4ee476b0596f346023398f52176381355f98dd621b8161f269c7ef3a57e28f"
+SOURCE_SHA = "0fc81d38f172aa330c2bee1900d6e63fe2bc5ced3e889ca3f7686e8e981a7618"
 
 
 def replace_once(source: str, old: str, new: str) -> str:

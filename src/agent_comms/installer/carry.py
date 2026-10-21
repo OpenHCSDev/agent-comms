@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.errors import RelationViolationError
 from agent_comms.locked_store import DurableFile
 
 STEPS = Path("tools/cutover")
@@ -68,6 +69,12 @@ class Carry(ABC):
     @abstractmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
+
+    @staticmethod
+    def require_confined(root: Path, path: Path) -> None:
+        """A carry must never follow a copied path or alias into the source bus."""
+        if not path.is_relative_to(root) or path.resolve() != path:
+            raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
     @classmethod
     def before_stop(cls, root: Path, *, apply: bool) -> Carried:

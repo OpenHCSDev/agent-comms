@@ -6,6 +6,7 @@ import hashlib
 import os
 from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Self
 
 from .errors import RelationViolationError
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
@@ -138,7 +139,7 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
     @classmethod
     def for_identity(
         cls, identity: NativeSessionIdentity, *, root: Path, owner: ParticipantIdentity,
-    ) -> NativeSessionFiles:
+    ) -> Self:
         return cls(*(getattr(identity, declaration.name)
                      for declaration in fields(NativeSessionIdentity)), root=root, owner=owner)
 
