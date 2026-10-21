@@ -30,32 +30,7 @@ from agent_comms.child_process import (
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 
-# The grandchild ignores TERM, so the owner must force retirement even after
-# the group leader exits. Publishing both identities proves they really ran.
-TREE = """import subprocess,sys,os,time,json
-from pathlib import Path
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
-grandchild = ('import signal,time,sys; '
-              'stop = signal.SIGBREAK if sys.platform=="win32" else signal.SIGTERM; '
-              'signal.signal(stop, signal.SIG_IGN); print("ready",flush=True); time.sleep(60)')
-child=subprocess.Popen([sys.executable,'-c',grandchild],stdout=subprocess.PIPE)
-assert child.stdout.readline()==b'ready\\n'
-identities=[FieldCodec.encode(ProcessIdentity.capture(p)) for p in (os.getpid(),child.pid)]
-Path(sys.argv[1]).write_text(json.dumps(identities))
-print('tree ready',flush=True)
-time.sleep(60)
-"""
-
-
-def identities(path: Path) -> tuple[ProcessIdentity, ...]:
-    return tuple(FieldCodec.decode(ProcessIdentity, row) for row in json.loads(path.read_text()))
-
-
-async def ready(path: Path) -> None:
-    async with asyncio.timeout(5):
-        while not path.exists():
-            await asyncio.sleep(0.01)
+from process_tree_fixture import TREE, identities, ready
 
 
 @pytest.mark.asyncio
@@ -67,6 +42,43 @@ async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: P
         outcome = await child.finish()
         assert isinstance(outcome, TimedOutOutcome)
         assert all(not member.alive() for member in identities(acknowledgement))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="The ratchet uses POSIX fork workers")
+@pytest.mark.asyncio
+async def test_fork_pool_parent_death_retires_workers_and_nested_child_group(tmp_path: Path) -> None:
+    announcement = tmp_path / "pool-tree.json"
+    child = SpawnedProcess.launch(
+        (sys.executable, str(Path(__file__).with_name("process_pool_child.py")), str(announcement)),
+        output=subprocess.PIPE,
+    )
+    observed = ()
+    try:
+        await ready(announcement)
+        observed = identities(announcement)
+        assert all(member.alive() for member in observed)
+        assert len(child.platform.group_members(child.identity)) > 1
+        # Kill only the parent: no context exit and no outer group signal. The
+        # worker's own lifeline and current child owner must do the retirement.
+        child.process.kill()
+        child.process.wait(timeout=5)
+        async with asyncio.timeout(8):
+            while child.platform.group_members(child.identity) or any(p.alive() for p in observed):
+                await asyncio.sleep(.01)
+        assert all(not member.alive() for member in observed)
+    finally:
+        child.close()
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
+
+
+def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) -> None:
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", "import sys; print('out'); print('err', file=sys.stderr); sys.exit(7)"),
+        timeout=5, cwd=tmp_path, env=dict(os.environ),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
 
 
 @pytest.mark.asyncio

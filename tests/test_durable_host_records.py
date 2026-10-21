@@ -27,7 +27,7 @@ from agent_comms.pi_durable_backend import (
     Settle,
 )
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.pi_payloads import PiContextUsage
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
 from agent_comms.pi_rpc import PiRpcChannel
 
 
@@ -133,7 +133,9 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             with pytest.raises(RuntimeError):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(UnreportedCount(), UnreportedCount())
+            assert (await backend.child.request(GetSessionStats())).context_usage == ReportedContextUsage(
+                PiContextUsage(UnreportedCount(), UnreportedCount())
+            )
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:
