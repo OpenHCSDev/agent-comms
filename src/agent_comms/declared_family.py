@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, ABCMeta
+from collections.abc import Mapping
 from typing import Any, ClassVar, Self, cast
 
 from metaclass_registry import (  # type: ignore[import-untyped]
@@ -127,7 +128,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     def member_named(cls, name: object) -> type[Self]:
         cls._member_declarations()
         try:
-            member = cls.__registry__[name]
+            member = cast(Mapping[object, type[DeclaredFamily]], cls.__registry__)[name]
         except (KeyError, TypeError):
             raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):

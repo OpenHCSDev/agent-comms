@@ -280,7 +280,10 @@ def test_external_null_members_and_nullable_names_use_their_declarations():
     assert NullableName.from_wire({"ending": None}).ending is None
     known = PiStopReason.member_named("stop")
     assert NullableName.from_wire({"ending": "stop"}).ending is known
-    assert FieldCodec.decode(type[PiStopReason], known) is known
+    resolved = FieldCodec.normalize_external(type[PiStopReason], "stop", {})
+    assert FieldCodec.decode(type[PiStopReason], resolved) is known
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(type[PiStopReason], known)
 
 
 def test_response_command_owns_data_normalization_without_redecoding_its_identity():
@@ -313,6 +316,16 @@ def test_malformed_response_commands_are_not_unknown_commands(command):
 
     with pytest.raises(MalformedRecord):
         Response.from_wire({"type": "response", "command": command})
+
+
+@pytest.mark.parametrize("wire", [
+    {"type": "text_start", "contentIndex": 0},
+    {"type": "text_delta", "delta": "native text"},
+    {"type": "text_end", "contentIndex": 0},
+])
+def test_native_delta_records_are_not_normalized_as_the_null_union_member(wire):
+    event = PiEvent.from_wire({"type": "message_update", "assistantMessageEvent": wire})
+    assert event.assistant_message_event.to_wire() == wire
 
 
 def test_exact_envelope_derives_additional_response_fields():
