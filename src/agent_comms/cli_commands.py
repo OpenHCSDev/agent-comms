@@ -1769,16 +1769,24 @@ class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
         return (cls.thread_binding(thread),) if cls.available_for_thread(thread, status) else ()
 
     @classmethod
+    @abstractmethod
+    def thread_binding(cls, thread: Thread) -> Self: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamedCliCommand(CliCommand):
+    name: Annotated[str, TargetBound(), Argument(flags=("--name",))]
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamedThreadCliCommand(ThreadBoundCliCommand, NamedCliCommand):
+    @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
         return cls(name=thread.name)
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadLifecycleCliCommand(MultipleTargets, ThreadBoundCliCommand):
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
-
+class ThreadLifecycleCliCommand(MultipleTargets, NamedThreadCliCommand):
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
         return tuple(bound for member in resolved.members
@@ -1837,7 +1845,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        if thread.turn_record.executing:
+        if thread.executing:
             return ()
         return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
 
@@ -1857,11 +1865,8 @@ class ReleaseCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, ThreadBoundCliCommand):
+class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand):
     help = "Archive a stopped thread"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)
@@ -2189,11 +2194,7 @@ class ThreadTagsCliCommand(CliCommand, declared_name="thread-tags"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExactTagCliCommand(CliCommand):
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
-
+class ExactTagCliCommand(NamedCliCommand):
     @classmethod
     def for_tag(cls, name: str) -> Self:
         return cls(name=name)
@@ -2252,11 +2253,8 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="de
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveChannelCliCommand(MultipleTargets, CliCommand, declared_name="archive-channel"):
+class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="archive-channel"):
     help = "Archive channel"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
     archived: Annotated[
         bool, TargetBound(), Argument(flags=("--archived",))
     ] = True
@@ -2290,11 +2288,8 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name="restore-
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteViewCliCommand(CliCommand, declared_name="delete-view"):
+class DeleteViewCliCommand(NamedCliCommand, declared_name="delete-view"):
     help = "Delete saved view"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
@@ -2309,11 +2304,8 @@ class DeleteViewCliCommand(CliCommand, declared_name="delete-view"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinChannelCliCommand(MultipleTargets, CliCommand, declared_name="pin-channel"):
+class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-channel"):
     help = "Set channel pin"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
     pinned: Annotated[
         bool, TargetBound(), Argument(flags=("--pinned",))
     ] = False
@@ -2331,11 +2323,8 @@ class PinChannelCliCommand(MultipleTargets, CliCommand, declared_name="pin-chann
 
 
 @dataclass(frozen=True, kw_only=True)
-class ChannelActivityCliCommand(CliCommand, declared_name="channel-activity"):
+class ChannelActivityCliCommand(NamedCliCommand, declared_name="channel-activity"):
     help = "Toggle member activity"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
     enabled: Annotated[
         bool, TargetBound(), Argument(flags=("--enabled",))
     ] = False
@@ -2386,11 +2375,8 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinThreadCliCommand(MultipleTargets, CliCommand, declared_name="pin-thread"):
+class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-thread"):
     help = "Toggle thread pin in channel"
-    name: Annotated[
-        str, TargetBound(), Argument(flags=("--name",))
-    ]
     channel: Annotated[
         str, TargetBound(), Argument(flags=("--channel",))
     ]
