@@ -28,13 +28,21 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.order_runs import OrderRun
-
 from agent_comms import skills
+from agent_comms.build_identity import (
+    BuildIdentity,
+    CommitInstallation,
+    RecordedBuildIdentity,
+    UnrecordedBuildIdentity,
+)
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
-    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
-    SourceReference, SourceRevision,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    PullRequestHeadRevision,
+    SourceReference,
+    SourceRevision,
 )
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import (
@@ -62,16 +70,11 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.build_identity import (
-    BuildIdentity,
-    CommitInstallation,
-    RecordedBuildIdentity,
-    UnrecordedBuildIdentity,
-)
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import InfoKind, Message
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message
+from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
@@ -93,6 +96,7 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
+    ExpressionIndex,
     Index,
     JsonStorage,
     TextStorage,
@@ -2396,6 +2400,9 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+        """Only assignment operations compete for a unit."""
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -2413,6 +2420,9 @@ class AssignTodo(TodoOperation):
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
+
+    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+        TodoStore.require_unit_in(db, self.proposed.owner_identity, current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2970,7 +2980,11 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
-    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+    unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
+        "json_extract({assignment}, '$.owner')",
+        "json_extract({assignment}, '$.owner_created')", "{state}",
+    ))
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)), unit_index)
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3225,6 +3239,23 @@ def _participant(thread: Thread) -> ThreadIncarnation:
     return thread.incarnation
 
 
+@dataclass(frozen=True)
+class ProblemNumber(TypedTable):
+    """Allocated global problem numbers, including reservations not yet sent."""
+
+    number: Annotated[int, Column(primary_key=True, auto_increment=True)]
+
+    @classmethod
+    def reserve(cls, db: sqlite3.Connection, problem: str) -> None:
+        if re.fullmatch(r'P[1-9]\d*', problem):
+            cls(int(problem[1:])).insert_if_absent(db)
+
+    @classmethod
+    def allocate(cls, db: sqlite3.Connection) -> str:
+        cursor = db.execute(f'INSERT INTO "{cls.declared_name}" DEFAULT VALUES')
+        return f'P{cursor.lastrowid}'
+
+
 @dataclass(frozen=True, slots=True)
 class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -3236,7 +3267,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemNumber)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3257,6 +3288,27 @@ class TodoStore(DurableStore):
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection
+
+    def allocate_problem(self) -> str:
+        with self.writing() as db:
+            return ProblemNumber.allocate(db)
+
+    @staticmethod
+    def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
+                        assigner: ThreadIncarnation) -> None:
+        """The original open Todo owns who assigns its unit, under this transaction."""
+        match = (f"({Todo.unit_index.term_sql(Todo)})="
+                 f"({','.join('?' for _ in Todo.unit_index.terms)})")
+        for state in TodoState.open_names():
+            held = Todo.select(db,
+                where=f"{match} AND NOT (creator=? AND creator_created=?)",
+                parameters=(unit.name, unit.wire_birth, state, assigner.name, assigner.wire_birth),
+                limit=1)
+            for todo in held:
+                raise TodoError(
+                    f"{unit.name} is assigned by {todo.creator} on open order "
+                    f"{todo.order.checked().id} ({todo.id}); "
+                    "finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3505,6 +3557,8 @@ class TodoStore(DurableStore):
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
             review_at, order, goal)
         with self.writing() as db:
+            self.require_unit_in(db, assignee, identity)
+            ProblemNumber.reserve(db, todo_id)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -3514,6 +3568,7 @@ class TodoStore(DurableStore):
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
             current = self._current(db, todo_id)
+            command.require_unit(db, current)
             result = command.apply(current)
             if result == current:
                 return current
