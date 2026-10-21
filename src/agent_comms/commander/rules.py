@@ -54,4 +54,4 @@ class ReviewVerb(RulesVerb):
 
 
 def main(a, ctx):
-    RulesVerb.parse(a, __doc__).apply(ctx)
+    RulesVerb.parse(a).apply(ctx)

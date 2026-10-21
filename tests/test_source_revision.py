@@ -1,5 +1,6 @@
 """Citations use fetched Git objects, not whichever source is on disk."""
 from dataclasses import replace
+import shutil
 
 import pytest
 
@@ -12,6 +13,14 @@ from agent_comms.goals import GitCommandFailed
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import FixScope, FixShape, LocatedProblemFinding
+
+
+def test_source_creation_does_not_reuse_a_retired_directory(tmp_path):
+    first = SourceRepository.create(tmp_path)
+    shutil.rmtree(first.checkout.parent)
+    replacement = SourceRepository.create(tmp_path)
+    replacement.scope().require_references(replacement.checkout, MainRevision())
+    assert replacement.git(replacement.checkout, 'rev-parse', 'HEAD').strip() == replacement.main_commit
 
 
 def test_main_revision_refuses_branch_lines_and_ignores_dirty_disk(tmp_path):
@@ -46,8 +55,8 @@ def test_pull_request_revision_accepts_branch_only_source_without_checkout(tmp_p
 
 
 def test_order_derives_its_only_source_revision_from_its_pull_request(tmp_path):
-    declaration = order(tmp_path)
     source = SourceRepository.create(tmp_path / 'cited-source')
+    declaration = order(source)
     location = FileLine('branch.py', 2)
     declaration = replace(declaration, owner=location, finding=LocatedProblemFinding(location),
         scope=FixScope(FixShape(parents=(location,), members=())), pull_requests=(source.link,))
