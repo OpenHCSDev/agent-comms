@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .lifecycle import LifecycleState
+
 
 class LifecycleCapability:
     @classmethod
@@ -20,7 +25,7 @@ class Settled(LifecycleCapability):
 
 class Terminal(Settled):
     @classmethod
-    def successors(cls) -> tuple[()]:
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
         return ()
 
 

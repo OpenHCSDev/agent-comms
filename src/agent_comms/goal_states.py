@@ -86,6 +86,10 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
+    def continues_turn_from(self, captured: GoalState) -> bool:
+        """A running turn keeps its authority only while the state it was granted stands."""
+        return self == captured
+
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
 
@@ -128,6 +132,10 @@ class OpenGoal(BlockingOnFailure, GoalState):
 
 @dataclass(frozen=True)
 class ActiveGoal(Active, OpenGoal, FromOpenGoal):
+
+    def continues_turn_from(self, captured: GoalState) -> bool:
+        """An order or retry that makes the goal active never ends a running turn."""
+        return True
 
     @property
     def toggle(self) -> type[GoalAction]:

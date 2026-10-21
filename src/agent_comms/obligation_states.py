@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
-from .coordination_errors import IntegrityViolationError, IdentityConflict
+from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
+from .reason_codes import NoReasonCode
 
 if TYPE_CHECKING:
     from .coordination_session import CoordinationSession
@@ -115,10 +116,7 @@ class DeferredResponse(Deferred, ResponseState):
     def resume_response(
         cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
     ) -> None:
-        from .coordination_tables.responses import ResponseObligation
-        from .reason_codes import NoReasonCode
-
-        ResponseObligation.update(
+        obligation.update(
             session._connection,
             where="execution_id=? AND exact_target=?",
             parameters=(execution_id, obligation.exact_target),

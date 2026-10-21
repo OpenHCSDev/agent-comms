@@ -6,23 +6,18 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
-import math
 import re
-import types
 import typing
 from abc import abstractmethod
-from dataclasses import dataclass, field, fields, is_dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
-from functools import singledispatch
 from typing import (
     TYPE_CHECKING,
     Annotated,
     ClassVar,
     Literal,
     Self,
-    Union,
-    get_args,
-    get_origin,
 )
 from uuid import uuid4
 
@@ -30,12 +25,16 @@ from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
+    ExternalField,
+    ExternalNull,
+    ExternalNullMember,
     FieldCodec,
     Id128Text,
     MalformedRecord,
     NullMember,
     SingleFieldValue,
     TextRepresentation,
+    ValidatedScalar,
     WireName,
     WireOmitDefault,
     WireRequired,
@@ -46,7 +45,7 @@ from .goals import GoalDeclaration
 from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
-from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
+from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
     PiStopReason,
@@ -88,7 +87,8 @@ class PiReported[T](SingleFieldValue):
     def from_wire(cls, data: object) -> Self:
         """The value decodes and encodes as the field it fills, family tag included."""
         annotation = cls.wire_field().annotation
-        return cls(FieldCodec.decode(annotation, project_wire(data, annotation)))
+        normalized = FieldCodec.normalize_external(annotation, data, {})
+        return cls(FieldCodec.decode(annotation, normalized))
 
     def to_wire(self) -> object:
         return FieldCodec.encode(self.value, self.wire_field().annotation)
@@ -178,45 +178,7 @@ class AnonymousRequest(PiOmitted):
 PiRequestId = RequestId | AnonymousRequest
 
 
-def wire_options(target):
-    """Python's annotation taxonomy is interpreted only at this ingress boundary."""
-    declared, _ = FieldCodec._representation(target)
-    return get_args(declared) if get_origin(declared) in (Union, types.UnionType) else (declared,)
-
-
-@singledispatch
-def project_wire(value, target):
-    """Project known Pi extension fields; FieldCodec still owns all decoding."""
-    return value
-
-
-@project_wire.register(dict)
-def project_object(value, target):
-    member = next(
-        (
-            option
-            for option in wire_options(target)
-            # A null member is never the record a JSON object normalizes into.
-            if isinstance(option, type) and is_dataclass(option)
-            and not issubclass(option, NullMember)
-        ),
-        None,
-    )
-    if member is not None and issubclass(member, PiPayload):
-        return member.normalize_wire(value)
-    return value
-
-
-@project_wire.register(list)
-def project_array(value, target):
-    member = next(
-        (option for option in wire_options(target) if get_origin(option) in (tuple, list)),
-        None,
-    )
-    return value if member is None else [project_wire(item, get_args(member)[0]) for item in value]
-
-
-class PiPayload:
+class PiPayload(ExternalField):
     wire_tag: ClassVar[str | None] = None
 
     @classmethod
@@ -236,14 +198,16 @@ class PiPayload:
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
         for f, key in FieldCodec.record_fields(cls):
+            if key in data:
+                continue
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                data[key] = cls.normalize_field(hints[f.name], key, value[key], value)
+                data[key] = FieldCodec.normalize_external(hints[f.name], value[key], value)
         return data
 
     @classmethod
-    def normalize_field(cls, target, key, value, record):
-        return project_wire(value, target)
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.normalize_wire(value)
 
     @classmethod
     def from_wire(cls, value):
@@ -303,14 +267,23 @@ class OpenPayload(PiPayload, DeclaredFamily):
     @classmethod
     def wire_member(cls, value: dict[str, JsonValue]) -> type[Self]:
         try:
-            return cls.member_named(FieldCodec.decode(str, value.get(cls.wire_tag)))
+            member = cls.member_named(FieldCodec.decode(str, value.get(cls.wire_tag)))
+            return member.wire_case(value)
         except (UnknownFamilyMember, MalformedRecord):
             member, = cls.members_with(UnknownPayload)
             return member
 
+    @classmethod
+    def wire_case(cls, value: dict[str, JsonValue]) -> type[Self]:
+        return cls
+
 
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
+    @classmethod
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.normalize_wire(record)
+
     @classmethod
     def wire_member(cls, value):
         try:
@@ -404,24 +377,29 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return {"success": False, "finalError": self.final_error}
 
 
-@dataclass(frozen=True)
-class PiCost(PiPayload):
-    input: PiField[float] = (
-        0.0
-    )
-    output: PiField[float] = 0.0
-    cache_read: Annotated[PiField[float], WireName("cacheRead")] = 0.0
-    cache_write: Annotated[PiField[float], WireName("cacheWrite")] = 0.0
-    total: PiField[float] = (
-        0.0
-    )
+class CostAmount(ValidatedScalar):
+    @classmethod
+    def decode(cls, value: object) -> float:
+        amount = FieldCodec.decode(float, value)
+        if amount < 0:
+            raise MalformedRecord("Pi cost must be a finite nonnegative number.")
+        return amount
 
     @classmethod
-    def normalize_field(cls, target: object, key: str, value: object, record: object) -> object:
-        amount = super().normalize_field(target, key, value, record)
-        if type(amount) in (int, float) and not (math.isfinite(amount) and amount >= 0):
-            raise MalformedRecord(f"Pi cost {key} must be a finite nonnegative number.")
-        return amount
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(float)
+
+
+PiCostAmount = Annotated[float, CostAmount]
+
+
+@dataclass(frozen=True)
+class PiCost(PiPayload):
+    input: PiField[PiCostAmount] = 0.0
+    output: PiField[PiCostAmount] = 0.0
+    cache_read: Annotated[PiField[PiCostAmount], WireName("cacheRead")] = 0.0
+    cache_write: Annotated[PiField[PiCostAmount], WireName("cacheWrite")] = 0.0
+    total: PiField[PiCostAmount] = 0.0
 
     def charged(self) -> Decimal:
         return Decimal(str(self.total))
@@ -429,12 +407,6 @@ class PiCost(PiPayload):
 
 @dataclass(frozen=True)
 class PiUsage(PiPayload):
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "totalTokens" and type(value) is not int:
-            return None
-        return super().normalize_field(target, key, value, record)
-
     input: PiField[NonnegativePiCount] = UnreportedCount()
     output: PiField[NonnegativePiCount] = UnreportedCount()
     cache_read: Annotated[
@@ -444,7 +416,7 @@ class PiUsage(PiPayload):
         PiField[NonnegativePiCount], WireName("cacheWrite")
     ] = UnreportedCount()
     total_tokens: Annotated[
-        PiField[PiCount], WireName("totalTokens")
+        PiField[TotalPiCount], WireName("totalTokens")
     ] = UnreportedCount()
     cost: PiField[PiCost] = (
         PiCost()
@@ -774,7 +746,7 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class PiMessage(OpenPayload, affix="Message"):
+class PiMessage(ExternalNull, OpenPayload, affix="Message"):
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
@@ -822,12 +794,6 @@ class PiMessage(OpenPayload, affix="Message"):
         if isinstance(self.stop_reason, str):
             object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
 
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "stopReason":
-            return FieldCodec.encode(PiStopReason.from_external(value))
-        return super().normalize_field(target, key, value, record)
-
     @property
     def measured_tokens(self) -> PiCount:
         return self.stop_reason.measured(self.usage.total_tokens)
@@ -865,7 +831,7 @@ class PiMessage(OpenPayload, affix="Message"):
         return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
 
 
-class AbsentMessage(PiMessage):
+class AbsentMessage(ExternalNullMember, PiMessage):
     """An omitted external message permits neither new input nor output."""
 
     update_context = True
@@ -1000,18 +966,8 @@ class UserMessage(PiMessage):
         return events
 
 
-class ToolDetailsPayload(PiPayload):
-    """The shared SDK details field owns normalization of its external shapes."""
-
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "details":
-            return NativeToolDetails.normalize_wire(value)
-        return super().normalize_field(target, key, value, record)
-
-
 @dataclass(frozen=True)
-class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult"):
+class ToolResultMessage(PiMessage, declared_name="toolResult"):
     tool_call_id: Annotated[PiField[str], WireName("toolCallId")] = ""
     tool_name: Annotated[PiField[str], WireName("toolName")] = "tool"
     is_error: Annotated[PiField[bool], WireName("isError")] = False
@@ -1116,8 +1072,7 @@ class UnknownDelta(UnknownPayload, PiDelta):
 
 
 @dataclass(frozen=True)
-class PiModel(PiPayload, DeclaredFamily, affix="Model"):
-    wire_tag = None
+class PiModel(ExternalNull, PiPayload, DeclaredFamily, affix="Model"):
     context_window: ClassVar[PiCount] = UnreportedCount()
 
     @classmethod
@@ -1131,7 +1086,7 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
         raise ValueError("Prepared native model does not match the owner selection")
 
 
-class UnreportedModel(PiModel):
+class UnreportedModel(ExternalNullMember, PiModel):
     """The external state has not reported a model; no identity is implied."""
 
 
@@ -1161,13 +1116,7 @@ class ReportedModel(PiModel):
 
 @dataclass(frozen=True)
 class PiContextUsage(PiPayload):
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "tokens" and type(value) is not int:
-            return None
-        return super().normalize_field(target, key, value, record)
-
-    tokens: PiField[PiCount] = UnreportedCount()
+    tokens: PiField[TotalPiCount] = UnreportedCount()
     context_window: Annotated[
         PiField[PiCount], WireName("contextWindow")
     ] = UnreportedCount()
@@ -1178,8 +1127,7 @@ class PiContextUsage(PiPayload):
 
 
 @dataclass(frozen=True)
-class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
-    wire_tag = None
+class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 
     @property
     def session_busy(self) -> bool:
@@ -1212,7 +1160,7 @@ class EmptyData(PiResponseData):
     pass
 
 
-class MissingData(PiResponseData):
+class MissingData(ExternalNullMember, PiResponseData):
     """An omitted/null native payload is not a successful data observation."""
 
     def require_payload(self):
@@ -1285,12 +1233,6 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     is_compacting: Annotated[
         PiField[ReportedFlag | PiOmitted], WireName("isCompacting")
     ] = PiOmitted()
-
-    @classmethod
-    def normalize_field(cls, target, key, value, record):
-        if key == "model" and value is None:
-            return {"kind": UnreportedModel.declared_name}
-        return super().normalize_field(target, key, value, record)
 
     def agent_info(self, session):
         """Project this actual native state, not a later usage-only observation."""
@@ -1368,8 +1310,6 @@ class UnknownData(Opaque, PiResponseData):
 
 @dataclass(frozen=True)
 class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
-    wire_tag = None
-
     @classmethod
     def normalize_wire(cls, value):
         if value is None:
@@ -1401,7 +1341,7 @@ class MissingToolResult(PiToolResult):
 
 
 @dataclass(frozen=True)
-class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
+class ProvidedToolResult(PiToolResult):
     content: tuple[PiContent, ...] = ()
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 

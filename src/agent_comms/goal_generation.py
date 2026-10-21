@@ -12,6 +12,7 @@ from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
 )
+from .goal_states import BlockedGoal
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
 
@@ -106,19 +107,16 @@ class ReservedGeneration(GenerationState):
 @dataclass(frozen=True)
 class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
-        from .goal_actions import required_block_reason
-        from .goal_states import BlockedGoal
-
         if generation.attempt_id:
-            refusal = required_block_reason(
+            state = BlockedGoal(
                 "The interrupted goal attempt is unresolved. Inspect it, then use "
                 "Retry to authorize a new attempt. Your messages can still be sent."
             )
-            blocked = replace(goal, state=BlockedGoal(refusal), revision=goal.revision + 1)
+            blocked = replace(goal, state=state, revision=goal.revision + 1)
             ctx.goals.registry.register(
                 replace(ctx.thread, goal=blocked), ctx.goals.registry.status(ctx.thread.name)
             )
-            raise ValueError(refusal)
+            raise ValueError(state.reason)
         super().resume_status(generation, goal, ctx)
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:

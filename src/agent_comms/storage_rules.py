@@ -140,8 +140,10 @@ class StorageRule(RoomAllocation):
                     found.append(work)
         return tuple(found)
 
-    def owns_checkout(self, owner: Thread, path: Path) -> bool:
-        """A checkout of another repository is named for the repository its origin declares."""
+    def owns_checkout(self, owner: Thread, path: Path, source: Path) -> bool:
+        """A checkout of another repository is named for the repository its origin declares.
+        `source` is a checkout of the repository `path` holds: `path` itself once it exists, or
+        the checkout a new worktree is added from, so a destination is judged before it exists."""
         if path == owner.project_path:
             return True
         problem, _, repository = path.name.removeprefix(f'{owner.name}--').partition('--')
@@ -149,15 +151,15 @@ class StorageRule(RoomAllocation):
             return False
         if not repository:
             return path == self.order_checkout(owner.name, problem)
-        return ((path / '.git').exists()
-                and path == self.repository_checkout(owner.name, problem, Repo.of(path).github))
+        return ((source / '.git').exists()
+                and path == self.repository_checkout(owner.name, problem, Repo.of(source).github))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
         ordered = self.order_checkout(owner.name, 'P*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_checkout(owner, path))
+                     if path.is_dir() and self.owns_checkout(owner, path, path))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
@@ -176,7 +178,7 @@ class StorageRule(RoomAllocation):
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_checkout(thread, path))
+                             if path.is_dir() and self.owns_checkout(thread, path, path))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -246,7 +248,9 @@ class StorageRule(RoomAllocation):
         self.require_floor()
         self.require_quota(thread, *proposed)
 
-    def require_path(self, thread: Thread, path):
+    def require_path(self, thread: Thread, path: Path, source: Path):
+        """`source` is a checkout of the repository `path` holds when `path` is a checkout itself
+        (see owns_checkout); a path inside a checkout is judged by that checkout."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
@@ -254,7 +258,8 @@ class StorageRule(RoomAllocation):
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if not self.owns_checkout(thread, checkout):
+            judged_by = source if checkout == path else checkout
+            if not self.owns_checkout(thread, checkout, judged_by):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
@@ -423,7 +428,7 @@ class WriteStorageEffect(StorageEffect):
     path: Path
 
     def check(self, projection: StorageProjection):
-        projection.rule.require_path(projection.thread, self.path)
+        projection.rule.require_path(projection.thread, self.path, self.path)
 
 
 @dataclass(frozen=True)
@@ -453,12 +458,15 @@ class TestGateStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
+    """A new worktree at `path`, added from the repository checked out at `source`."""
+
     path: Path
+    source: Path
 
     def check(self, projection: StorageProjection):
         rule, thread = projection.rule, projection.thread
-        rule.require_path(thread, self.path)
-        if not rule.owns_checkout(thread, self.path):
+        rule.require_path(thread, self.path, self.source)
+        if not rule.owns_checkout(thread, self.path, self.source):
             destination = rule.order_checkout(thread.name, "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         super().check(projection)
@@ -608,7 +616,7 @@ class AddsCheckout(ShellProgram):
             tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
         if not tail:
             raise StorageDenied('StorageRule: worktree destination is missing')
-        return (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
+        return (CheckoutStorageEffect(physical_path(tail[0], cwd), cwd),)
 
 
 class RemovesCheckout(ShellProgram):

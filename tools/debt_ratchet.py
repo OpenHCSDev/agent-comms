@@ -459,15 +459,21 @@ class TypeErrors(CheckedRevision):
 
 @dataclass(frozen=True)
 class ChangedSource:
-    """One head module and the new-side lines changed by its Git patch."""
+    """One head module, its base revision, and the new-side lines changed by its Git patch.
+    A path missing at the base is empty there, as in every per-file measure."""
 
     path: str
     source: bytes
     lines: frozenset[int]
+    base_source: bytes
 
     @cached_property
     def tree(self) -> ast.Module:
         return ast.parse(self.source, self.path)
+
+    @cached_property
+    def base_tree(self) -> ast.Module:
+        return ast.parse(self.base_source, self.path)
 
     @cached_property
     def tokens(self) -> tuple[tokenize.TokenInfo, ...]:
@@ -485,11 +491,45 @@ class ChangedSource:
                 start = int(span[0])
                 count = int(span[1]) if len(span) == 2 else 1
                 lines.update(range(start, start + count))
-        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
+        listed = git(repo, "ls-tree", "--name-only", base, "--", path).strip()
+        base_source = git(repo, "show", f"{base}:{path}") if listed else b""
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines), base_source)
+
+
+class ScopeNames(ast.NodeVisitor):
+    """Each node's enclosing class and function names, dotted, through the AST's own dispatch."""
+
+    def __init__(self) -> None:
+        self.found: dict[ast.AST, str] = {}
+        self.scope = ""
+
+    def generic_visit(self, node: ast.AST) -> None:
+        self.found[node] = self.scope
+        super().generic_visit(node)
+
+    def visit_named(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
+        self.found[node] = outer = self.scope
+        self.scope = f"{outer}.{node.name}"
+        super().generic_visit(node)
+        self.scope = outer
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.visit_named(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.visit_named(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.visit_named(node)
 
 
 class CleanChangedLines(OccurrenceMeasure):
-    """No occurrence may be written, even when another occurrence is deleted."""
+    """No occurrence may be written, even when another occurrence is deleted.
+
+    An occurrence is identified by its enclosing scope and its source text, so rewriting
+    the rest of a line around an unchanged occurrence writes nothing new, while a different
+    occurrence elsewhere never pays for a new one.
+    """
 
     @staticmethod
     def site_lines(node: ast.AST) -> range:
@@ -502,14 +542,37 @@ class CleanChangedLines(OccurrenceMeasure):
         return {f"{measure.__name__}:{path}": measure.changed_sites(source)
                 for measure in Measure.members_with(CleanChangedLines)}
 
+    @staticmethod
+    def scopes(tree: ast.AST) -> dict[ast.AST, str]:
+        """Each node's enclosing class and function names, dotted; the module is empty."""
+        names = ScopeNames()
+        names.visit(tree)
+        return names.found
+
+    @classmethod
+    def identities(cls, tree: ast.AST, filename: str) -> Counter[tuple[str, str]]:
+        """Every occurrence in the module, keyed by its scope and source text."""
+        scopes = cls.scopes(tree)
+        found: Counter[tuple[str, str]] = Counter()
+        for node in cls.sites(tree, filename):
+            if count := cls.occurrences(node):
+                found[scopes[node], ast.unparse(node)] += count
+        return found
+
     @classmethod
     def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The first changed line of each occurrence written on a changed line."""
+        """The first changed line of each occurrence written there that the base lacks."""
+        scopes = cls.scopes(source.tree)
+        unwritten = cls.identities(source.tree, source.path)
+        unwritten.subtract(cls.identities(source.base_tree, source.path))
         sites = []
         for node in cls.sites(source.tree, source.path):
             if ((count := cls.occurrences(node))
                     and (touched := source.lines.intersection(cls.site_lines(node)))):
-                sites.extend([min(touched)] * count)
+                identity = scopes[node], ast.unparse(node)
+                written = max(0, min(count, unwritten[identity]))
+                unwritten[identity] -= written
+                sites.extend([min(touched)] * written)
         return sites
 
 
@@ -560,7 +623,7 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        module = ChangedSource(filename, source, frozenset())
+        module = ChangedSource(filename, source, frozenset(), b"")
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
@@ -740,19 +803,74 @@ class ModuleDeclarations:
     classes: tuple[tuple[str, tuple[str, ...]], ...]
 
 
+class TypePositions(MroDispatch):
+    """The expressions where a type is expected, each position declared by the node owning it."""
+
+    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
+    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
+
+    def __init__(self) -> None:
+        self.types: list[ast.expr] = []
+        self.metadata: list[ast.expr] = []
+
+    @staticmethod
+    def called(node: ast.expr) -> str:
+        return ast.unparse(node).rpartition(".")[2]
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def signature(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        arguments = node.args
+        self.types.extend(filter(None, (node.returns, *(argument.annotation for argument in (
+            *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+            *filter(None, (arguments.vararg, arguments.kwarg)))))))
+
+    @handles(ast.AnnAssign)
+    def annotation(self, node: ast.AnnAssign) -> None:
+        self.types.append(node.annotation)
+
+    @handles(ast.ClassDef)
+    def bases(self, node: ast.ClassDef) -> None:
+        self.types.extend(node.bases)
+
+    @handles(ast.Call)
+    def type_variable_bound(self, node: ast.Call) -> None:
+        if self.called(node.func) == self.type_variable:
+            self.types.extend((*node.args[1:], *(keyword.value for keyword in node.keywords)))
+
+    @handles(ast.Subscript)
+    def annotated_metadata(self, node: ast.Subscript) -> None:
+        """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
+        if self.called(node.value) == self.annotated:
+            self.metadata.extend(typing.cast(ast.Tuple, node.slice).elts[1:])
+
+    @classmethod
+    def literals(cls, tree: ast.AST) -> Iterator[ast.AST]:
+        """The nodes inside a type position, so a one-word class name there names its class."""
+        positions = cls()
+        for node in ast.walk(tree):
+            positions.dispatch_sync(node)
+        metadata = {id(part) for expression in positions.metadata for part in ast.walk(expression)}
+        return (part for expression in positions.types for part in ast.walk(expression)
+                if id(part) not in metadata)
+
+
 @dataclass(frozen=True)
 class DeclaredSpellings:
     """Every spelling a revision's production Python declares as a name.
 
     Classes count under their own name, src modules under their dotted path, and modules and
     top-level functions under a multi-word name; a one-word module or function name is also an
-    ordinary word, so a literal equal to it is not taken as naming it. Enum members are the
-    declared boundary spellings of another program's contract, so literals in an enum's body
-    are the one place such a spelling may appear.
+    ordinary word, so a literal equal to it is not taken as naming it. A one-word class name
+    (Read, Open, Claimed) is an ordinary word too, so a literal equal to it names the class
+    only where a type is expected: an annotation, a return, a class base or a type variable's
+    bound. Enum members are the declared boundary spellings of another program's contract, so
+    literals in an enum's body are the one place such a spelling may appear.
     """
 
     names: dict[str, str]
     enums: frozenset[str]
+    unmistakable: dict[str, str]
+    """The names a literal names wherever it appears: all but the one-word class names."""
 
     boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
         kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
@@ -762,12 +880,17 @@ class DeclaredSpellings:
     selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
         call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
+    class_word: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+")
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
     entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
     @staticmethod
     def multiword(name: str) -> bool:
         return name.strip("_").count("_") > 0
+
+    @classmethod
+    def one_word_class(cls, name: str) -> bool:
+        return len(cls.class_word.findall(name)) == 1
 
     @staticmethod
     def dotted_name(module: Path, packages: set[Path]) -> str:
@@ -813,7 +936,10 @@ class DeclaredSpellings:
         enums = set(cls.boundary_enums)
         while grown := {name for name, parents in bases.items() if parents & enums} - enums:
             enums |= grown
-        return cls(names, frozenset(enums))
+        ordinary = set(filter(cls.one_word_class, (
+            name for name, target in names.items() if target.startswith("class "))))
+        return cls(names, frozenset(enums),
+                   {name: target for name, target in names.items() if name not in ordinary})
 
     def exempt(self, tree: ast.AST) -> set[int]:
         """Literals no reader takes as identity: prose, interpolation pieces, class-header
@@ -871,9 +997,12 @@ class DeclaredSpellings:
                         left = right
                 case ast.MatchValue(value=value) if self.kind(value):
                     record(value, ComparedKind, "kind matched by spelling")
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in self.names:
-                record(node, NamedDeclaration, self.names[node.value])
+        for spellings, nodes in ((self.unmistakable, ast.walk(tree)),
+                                 (self.names, TypePositions.literals(tree))):
+            for node in nodes:
+                if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and node.value in spellings):
+                    record(node, NamedDeclaration, spellings[node.value])
         return sorted(found.values(), key=lambda site: site.line)
 
     def kind(self, node: ast.AST) -> bool:
@@ -1006,13 +1135,34 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
                 return any(cls.broad(argument, names=cls.suppressed_names) for argument in arguments)
         return False
 
+    @staticmethod
+    def carries(handler: ast.ExceptHandler) -> bool:
+        """The bound error is passed into a class constructor: a typed outcome, not a swallow."""
+        match handler:
+            case ast.ExceptHandler(name=str(bound)):
+                return any(
+                    isinstance(name, ast.Name) and name.id == bound
+                    for child in ast.walk(handler)
+                    for argument in BroadSwallow.constructor_arguments(child)
+                    for name in ast.walk(argument))
+        return False
+
+    @staticmethod
+    def constructor_arguments(node: ast.AST) -> list[ast.expr]:
+        """The arguments of a call to a capitalized name: a class constructor."""
+        match node:
+            case ast.Call(func=ast.Name(id=callee) | ast.Attribute(attr=callee),
+                          args=args, keywords=keywords) if callee[:1].isupper():
+                return [*args, *(keyword.value for keyword in keywords)]
+        return []
+
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
         match node:
             case ast.With(items=items) | ast.AsyncWith(items=items):
                 return sum(cls.suppresses(item.context_expr) for item in items)
             case ast.ExceptHandler(type=error):
-                return int(cls.broad(error) and not any(
+                return int(cls.broad(error) and not cls.carries(node) and not any(
                     isinstance(child, ast.Raise) for child in ast.walk(node)))
         return 0
 
@@ -1763,7 +1913,7 @@ class Comparison:
                 or any(self.introduced.values()))
 
 
-def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
+def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Comparison:
     source_root = Path(root)
     if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
         raise ValueError("--root must be a repository-relative source directory")
@@ -1782,7 +1932,7 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
 
     measures = Measure.members_with(Measure)
     # Forked workers start from this already-imported module instead of importing it again.
-    with ForkedProcessPool() as pool:
+    with ForkedProcessPool(workers) as pool:
         parts = {measure: [pool.submit(part)
                            for part in measure.parts(repo, base, head, paths, root)]
                  for measure in measures}
@@ -1817,9 +1967,19 @@ def main() -> int:
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
+    parser.add_argument("--workers", type=int, default=os.process_cpu_count() or 1,
+                        help="Pool width; a caller running ratchets in parallel narrows it")
     args = parser.parse_args()
-    result = compare(Path.cwd(), args.base, args.head, args.root)
-    print(json.dumps(FieldCodec.project(result, "report"), indent=2))
+    result = compare(Path.cwd(), args.base, args.head, args.root, args.workers)
+    # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
+    print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
+    # The failing step's last lines become check annotations (.github/run-step.sh merges
+    # stderr), so what grew goes to stderr last; stdout stays the one JSON report.
+    for name, grown in sorted(result.delta.items()):
+        if grown > 0:
+            print(f"grew {name} +{grown}", file=sys.stderr)
+    for identity, lines in sorted(result.introduced_lines.items()):
+        print(f"introduced {identity} at lines {lines}", file=sys.stderr)
     return int(result.failed)
 
 

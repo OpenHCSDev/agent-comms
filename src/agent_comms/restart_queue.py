@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 
-from .child_process import ProcessIdentity, SpawnedProcess
+from .child_process import OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationError
@@ -289,6 +289,7 @@ def _start_watcher(root: Path, target: RestartTarget) -> SpawnedProcess:
         (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
         env=target.runtime.encode(),
         runtime=target.launch_runtime,
+        lifetime=OutlivesLauncherLifetime,
     )
 
 
