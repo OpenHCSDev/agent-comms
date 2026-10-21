@@ -30,6 +30,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
+from .repo import Checkout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
@@ -380,7 +381,7 @@ class OrderCheck:
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
-            CheckedCommit.git(repository, "worktree", "add", "--detach", tree, sha)
+            Checkout.add(repository, tree, sha, "--detach")
             try:
                 run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
                                      timeout=self.timeout)
