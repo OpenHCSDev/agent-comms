@@ -29,7 +29,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .child_process import ProcessIdentity
 from .cohort_schema import (
     AwarenessClaimGenerations,
@@ -103,13 +103,14 @@ class OptionalAwarenessProjection:
         generation: int,
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
-        after_seq = index.bus.activation.claimed_after_seq
-        return cls(index, after_seq, through_seq, generation, claimed_generation,
+        # No native cursor is supplied here: include the unstarted prefix,
+        # never infer recipient progress from a sender's resource claim.
+        return cls(index, 0, through_seq, generation, claimed_generation,
                    registry=registry)
 
     async def segments(
         self,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> tuple[ContextSegment, ...]:
@@ -147,7 +148,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness text budget is outside the bounded read")
 
     def __call__(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -168,7 +169,7 @@ class OptionalAwarenessProjection:
             return OmittedAwareness.capture(reason=type(error).__name__)
 
     def _build(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         if owner.process_identity != ProcessIdentity.capture(os.getpid()):
             raise ProjectionUnavailableError("selected owner is not this process")
@@ -295,7 +296,7 @@ class OptionalAwarenessProjection:
     def _verify_schema_and_owner(
         self,
         db: sqlite3.Connection,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> None:

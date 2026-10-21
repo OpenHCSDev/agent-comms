@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -57,7 +57,7 @@ class GoalWait(ABC):
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return False
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     def review_after_seq(
@@ -180,7 +180,7 @@ class RecordedGoalWait(GoalWait):
             self.goal_id, self.revision
         )
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
         if not self.owner_matches(owner):
             return False

@@ -5,16 +5,23 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
 from agent_comms.bus import Bus, PrivateRecord, PublicRecord
 from agent_comms.candidate_maintenance import drain_candidate_catchup, schedule_candidate_catchup
+from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole
+from agent_comms.notification_assignment import (
+    AnsweredResponse, AssignmentActivity, NotificationAssignment, UnansweredResponse,
+)
+from agent_comms.notification_progress import ShownToModelProgress
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_candidate_index import CommittedAppendHint, WakeCandidateIndex
+from agent_comms.wake_policy import FullWake, MessageAudience
 
 
 @pytest.fixture
@@ -32,9 +39,10 @@ def peer():
     return RecordedThreadIncarnation("peer", 1001.0)
 
 
-def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole()):
+def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole(), answers=()):
     def build(seq, db):
-        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq, role=role)
+        message = Message(sender.name, recipient.name, body, InfoKind, seq=seq, role=role,
+                          answers=answers)
         audience = freeze_audience(
             message, (FrozenRecipient(recipient.lookup, recipient.name),), "c" * 64,
             sender_lookup=sender.lookup, sender_name=sender.name)
@@ -107,6 +115,28 @@ def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
         bus, scope, ConversationCursor(), (first.seq, last.seq)) == middle.seq - 1
     assert ReadLedger._proved_read_prefix(
         bus, scope, ConversationCursor(middle.seq - 1, (last.seq,)), (middle.seq,)) == last.seq
+
+
+def test_notification_answers_require_frozen_delivery_not_a_public_answer_reference(bus, owner, peer):
+    original = append_reply(bus, peer, owner)
+    assignment = WakeAssignment(
+        assignment_id="shown", recipient=owner.name, recipient_lookup=owner.lookup,
+        wire_seq=original.seq, message_id=original.message_id, audience=MessageAudience.DIRECT,
+        lifecycle=DeliveredAssignment(PendingDecision(FullWake())),
+        accepted_at_ms=1, updated_at_ms=1)
+    row = NotificationAssignment(assignment, AssignmentActivity(
+        False, ShownToModelProgress(1), UnansweredResponse()))
+    bus.append(lambda seq, db: PublicRecord.from_message(Message(
+        owner.name, peer.name, "public answer is not frozen delivery evidence", InfoKind,
+        seq=seq, answers=(original.reference,))))
+    unanswered, = NotificationAssignment._recorded_conversation_responses(
+        bus.path.parent, (original,), (row,))
+    assert isinstance(unanswered.activity.response, UnansweredResponse)
+    reply = append_reply(bus, owner, peer, answers=(original.reference,))
+    answered, = NotificationAssignment._recorded_conversation_responses(
+        bus.path.parent, (original,), (row,))
+    assert answered.activity.response == AnsweredResponse(
+        reply.reference, int(reply.timestamp * 1000))
 
 
 def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, peer):

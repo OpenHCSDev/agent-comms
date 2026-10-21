@@ -36,7 +36,7 @@ from .thread_owned_state import ThreadOwnedState
 from .bus import Bus
 
 if TYPE_CHECKING:
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .messages import Message
     from .read_basis import MessageDisplayScope
     from .registry_document import RegistrySnapshot
@@ -212,7 +212,7 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
         return document.cursor(viewer, snapshot, ObservedPath.at(Bus.path_in(self.path.parent)))
 
     def displayed_recipient(
-        self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
+        self, original: Delivered, recipient, snapshot: RegistrySnapshot, *, document=None
     ):
         """Return recorded human display evidence for this exact frozen recipient.
 
