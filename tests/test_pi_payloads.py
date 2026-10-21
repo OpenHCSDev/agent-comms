@@ -290,3 +290,25 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
     assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
         call.allowed_claim()
+
+
+@pytest.mark.parametrize(
+    ("line", "member"),
+    [
+        (b'{"type":"auto_retry_end","success":true,"attempt":1}\n', "succeeded"),
+        (
+            b'{"type":"auto_retry_end","success":false,"attempt":3,'
+            b'"finalError":"overloaded_error"}\n',
+            "failed",
+        ),
+    ],
+)
+def test_auto_retry_end_decodes_pi_boolean_success_into_its_outcome(line, member):
+    """Pi's own auto_retry_end record (agent-session.js) selects the outcome by its boolean."""
+    from agent_comms.pi_events import AutoRetryEnd
+    from agent_comms.pi_rpc import PiRpcChannel
+
+    event = PiRpcChannel.decode_record(line, strict=True)
+
+    assert isinstance(event, AutoRetryEnd)
+    assert event.outcome.declared_name == member
