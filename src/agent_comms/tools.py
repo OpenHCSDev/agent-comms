@@ -20,7 +20,7 @@ from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
 from .channel_targets import ChannelTarget, CommandTarget
-from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
     CliCommand,
@@ -1459,7 +1459,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
-    target: Annotated[str, *tool_field("Channel or peer conversation")] = ANY_CHANNEL.name
+    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.declared_name
     ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
         True
     )

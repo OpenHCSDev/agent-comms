@@ -28,7 +28,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.channels import ANY_CHANNEL
+from agent_comms.channels import AnyChannel
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
@@ -416,7 +416,7 @@ class TestFullHistory:
         comms.messaging.send("a", "#all", "one").message.message_id
         comms.messaging.send("a", "b", "dm").message.message_id
         comms.messaging.send("b", "#x", "tagged").message.message_id
-        bodies = [(m.sender, m.target, m.body) for m in list(comms.views.history_page(ANY_CHANNEL).messages)]
+        bodies = [(m.sender, m.target, m.body) for m in list(comms.views.history_page(AnyChannel.target()).messages)]
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
 

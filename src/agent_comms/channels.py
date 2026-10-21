@@ -198,6 +198,10 @@ class MembershipChannel:
 
 
 class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
+    @classmethod
+    def target(cls) -> ChannelTarget:
+        return ChannelTarget(cls.declared_name)
+
     def validate_declaration(self) -> None:
         if self.name != self.declared_name:
             raise ValueError("Built-in channel must retain its declaration identity.")
@@ -260,10 +264,6 @@ class NoneChannel(BuiltinChannelView, declared_name="#none"):
 
 class AllChannel(BuiltinChannelView, declared_name="#all"):
     pass
-
-
-ANY_CHANNEL = ChannelTarget(AnyChannel.declared_name)
-"""Every channel a reader receives: the target of an unscoped inbox or count."""
 
 
 class ReadOnlyChannel(NonRoutableChannel):
