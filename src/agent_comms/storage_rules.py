@@ -267,8 +267,8 @@ class StorageRule(RoomAllocation):
         return (
             f'Storage (refused without a strike): your checkouts are '
             f'{self.order_checkout(thread.name, "P<n>")} (another repository changed in the '
-            f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), at most '
-            f'{self.max_checkouts} besides your home checkout {thread.project_path}, '
+            f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
+            f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.scratch}/, capped at {self.scratch_cap_gib:g} GB together with '

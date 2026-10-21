@@ -35,6 +35,7 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import WorkBranchError
+from order_scope_fixture import FIX_SCOPE
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -63,7 +64,7 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
     assert lockstep.name == 'worker--P1--toad'
     assert rule.owns_checkout(worker, checkout) and rule.owns_checkout(worker, lockstep)
     assert not rule.owns_checkout(worker, misnamed)
-    assert rule.problem_checkouts('worker', 'P1') == (checkout, lockstep, misnamed)
+    assert rule.problem_checkouts('worker', 'P1') == (checkout, misnamed, lockstep)
     assert lockstep in rule.checkouts_of(worker)
     assert misnamed not in rule.checkouts_of(worker)
 
@@ -99,7 +100,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), run=MechanicalOrderRun(),
+        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(home), 'true'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',
