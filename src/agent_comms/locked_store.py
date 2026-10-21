@@ -223,14 +223,20 @@ class DurableFile(RootFile):
 
 
 class WireWakeFile(RootFile):
-    """Commits to this primary file wake idle wire readers, unlike lock-file churn."""
+    """Declared commit signals wake idle readers, unlike lock-file churn."""
 
     __slots__ = ()
 
     @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return (cls.path_in(root),)
+
+    @classmethod
     def watched_paths_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(
-            owner.path_in(directory) for owner, directory in cls.declarations_in(root)
+            path
+            for owner, directory in cls.declarations_in(root)
+            for path in owner.source_paths(directory)
         )
 
 
