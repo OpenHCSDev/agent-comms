@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 
-from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.backup import NoBackup, StoreBackup
 from agent_comms.installer.carry import CarryChain, CarryLedger
 
 
@@ -36,6 +36,7 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
         writer.commit()
         spill_dir = tmp_path / 'spill'
         backup = StoreBackup.take(root, route, (store, ledger), spill_dir)
+        assert isinstance(backup, StoreBackup)
         assert backup.path.parent == spill_dir
         assert backup.original()
         writer.execute("UPDATE events SET body='changed'")
@@ -57,7 +58,6 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
 def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     root = tmp_path / 'ROOT'
     spill_dir = tmp_path / 'spill'
-    assert StoreBackup.retain(spill_dir, root) == ()
     spill_dir.mkdir()
     backups = tuple(spill_dir / f'ROOT.upgrade-20260101T00000{n}' for n in range(4))
     for backup in backups:
@@ -72,13 +72,14 @@ def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     ordinary_file = spill_dir / 'ROOT.upgrade-not-a-directory'
     ordinary_file.write_text('untouched')
 
-    assert StoreBackup.retain(spill_dir, root) == backups[:2]
+    backup = StoreBackup(root, tmp_path / 'route.json', backups[-1])
+    assert backup.retain(spill_dir) == backups[:2]
     assert not any(path.exists() for path in backups[:2])
     assert all((path / 'saved').read_text() == 'retained store' for path in backups[2:])
     assert all((path / 'saved').read_text() == 'untouched'
                for path in (unrelated, other_root, retired_run))
     assert ordinary_file.read_text() == 'untouched'
-    assert StoreBackup.retain(spill_dir, root) == ()
+    assert backup.retain(spill_dir) == ()
 
 
 def test_backup_retention_preserves_restored_archives(tmp_path):
@@ -92,10 +93,26 @@ def test_backup_retention_preserves_restored_archives(tmp_path):
     archive.mkdir()
     (archive / 'saved').write_text('restored evidence')
 
-    assert StoreBackup.retain(spill_dir, root) == backups[:1]
+    backup = StoreBackup(root, tmp_path / 'route.json', backups[-1])
+    assert backup.retain(spill_dir) == backups[:1]
     assert not backups[0].exists()
     assert all(path.is_dir() for path in backups[1:])
     assert (archive / 'saved').read_text() == 'restored evidence'
+
+
+def test_runtime_only_backup_retains_without_a_spill_directory(tmp_path):
+    root = tmp_path / 'wire'
+    spill_dir = tmp_path / 'missing-spill'
+    backup = StoreBackup.take(root, tmp_path / 'no-route.json', (), spill_dir)
+
+    assert isinstance(backup, NoBackup)
+    assert backup.retain(spill_dir) == ()
+    assert backup.original()
+    backup.restore()
+    assert backup.report().backup == 'none'
+    assert backup.report().bytes == 0
+    assert not spill_dir.exists()
+    assert not root.exists()
 
 
 def test_ledger_does_not_repeat_a_recorded_conversion(tmp_path):

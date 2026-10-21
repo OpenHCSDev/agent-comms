@@ -137,19 +137,66 @@ def transcripts_held(root: Path) -> Iterator[None]:
         holder.communicate()
 
 
+class ResourceBackup(ABC):
+    """The installation's rollback and retention behavior, with or without a snapshot."""
+
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
+
+    @abstractmethod
+    def report(self) -> BackupReport: ...
+
+    @abstractmethod
+    def original(self) -> bool: ...
+
+    @abstractmethod
+    def restore(self) -> None: ...
+
+    @abstractmethod
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
+
+
 @dataclass
-class ResourceBackup[Contents](ABC):
+class StoreBackup(ResourceBackup):
+    """Snapshot declared databases through SQLite; restore only the selected files."""
     root: Path
     route: Path
     path: Path
-    contents: ClassVar[type]
+    kept: ClassVar[int] = 2
+
+    def files(self) -> dict[str, str]:
+        return FieldCodec.decode(dict[str, str],
+                                 FieldCodec.parse((self.path / 'files.json').read_text()))
+
+    def retire(self) -> Path:
+        archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
+        self.path.rename(archived)
+        directory = os.open(archived.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        print(f'Restored data backup kept at {archived}', flush=True)
+        return archived
+
+    def restore_route(self) -> None:
+        if (self.path / 'active-route.json').exists():
+            shutil.copy2(self.path / 'active-route.json', self.route)
+
+    @staticmethod
+    def directory_format(root: Path) -> str:
+        """One name declaration for creation and recognition; the root is literal data."""
+        return f'{root.name.replace("%", "%%")}.upgrade-%Y%m%dT%H%M%S'
 
     @classmethod
-    @abstractmethod
-    def directory(cls, spill_dir: Path, root: Path) -> Path: ...
+    def directory(cls, spill_dir: Path, root: Path) -> Path:
+        return spill_dir / time.strftime(cls.directory_format(root))
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> Self:
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> ResourceBackup:
+        if not files:
+            return NoBackup()
         path = cls.directory(spill_dir, root)
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)
@@ -167,71 +214,17 @@ class ResourceBackup[Contents](ABC):
                            fsync_parent=True)
         return backup
 
-    @abstractmethod
-    def capture(self, files: tuple[Path, ...]) -> dict[str, Contents]: ...
-
-    def files(self) -> dict[str, Contents]:
-        return FieldCodec.decode(dict[str, self.contents],
-                                 FieldCodec.parse((self.path / 'files.json').read_text()))
-
-    @abstractmethod
-    def original(self) -> bool: ...
-
-    def retire(self) -> Path:
-        archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
-        self.path.rename(archived)
-        directory = os.open(archived.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-        print(f'Restored data backup kept at {archived}', flush=True)
-        return archived
-
-    def restore_route(self) -> None:
-        if (self.path / 'active-route.json').exists():
-            shutil.copy2(self.path / 'active-route.json', self.route)
-
-    @abstractmethod
-    def restore(self) -> None: ...
-
-
-class StoreBackup(ResourceBackup[str]):
-    """Snapshot declared databases through SQLite; restore only the selected files."""
-    contents: ClassVar[type] = str
-    kept: ClassVar[int] = 2
-
-    @staticmethod
-    def directory_format(root: Path) -> str:
-        """One name declaration for creation and recognition; the root is literal data."""
-        return f'{root.name.replace("%", "%%")}.upgrade-%Y%m%dT%H%M%S'
-
-    @classmethod
-    def directory(cls, spill_dir: Path, root: Path) -> Path:
-        return spill_dir / time.strftime(cls.directory_format(root))
-
-    @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
-        if not files:
-            return NoBackup.take(root, route, files, spill_dir)
-        return super().take(root, route, files, spill_dir)
-
-    @classmethod
-    def retain(cls, spill_dir: Path, root: Path) -> tuple[Path, ...]:
-        name_format = cls.directory_format(root)
-        try:
-            entries = tuple(spill_dir.iterdir())
-        except FileNotFoundError:
-            return ()  # A runtime-only install may never have needed a spill directory.
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]:
+        name_format = self.directory_format(self.root)
         backups = []
-        for path in entries:
+        for path in spill_dir.iterdir():
             try:
                 timestamp = time.strptime(path.name, name_format)
             except ValueError:
                 continue
             if time.strftime(name_format, timestamp) == path.name and path.is_dir():
                 backups.append(path)
-        retired = tuple(sorted(backups)[:-cls.kept])
+        retired = tuple(sorted(backups)[:-self.kept])
         for path in retired:
             shutil.rmtree(path)
         return retired
@@ -356,14 +349,11 @@ class StoreBackup(ResourceBackup[str]):
         self.restore_route()
 
 
-class NoBackup(StoreBackup):
-    """A runtime-only install takes no snapshot and cannot restore files."""
+class NoBackup(ResourceBackup):
+    """A runtime-only install owns no files, paths or snapshot operations."""
 
-    @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> Self:
-        if files:
-            raise UpgradeRefused('NoBackup cannot select files')
-        return cls(root, route, cls.directory(spill_dir, root))
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]:
+        return ()
 
     def original(self) -> bool:
         return True
