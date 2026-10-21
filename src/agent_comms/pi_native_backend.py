@@ -35,7 +35,7 @@ from .agent_backend import (
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
-from .native_session_files import NativeSessionFiles
+from agent_comms.native_session_files import NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
@@ -81,14 +81,15 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    def select_session(self, directory, execution, source_reads):
+    def select_session(self, directory, execution, source_reads, *, root, thread):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
                     NativeSessionIdentity.from_evidence(
                         source_reads.for_source(path)
                     ))
-        return SavedSelectedSession(directory, identity=identity)
+        return SavedSelectedSession(directory, identity=identity,
+                                    owner=thread.incarnation.require_recorded())
 
     def history_source(self, root, incarnation):
         return NativeTranscript(Path(self.path))
@@ -97,7 +98,7 @@ class PiSessionFile(RuntimeLocation):
         return NativeTranscript(Path(self.path)).imported_sources()
 
     def storage_files(self):
-        return (NativeSessionFiles(Path(self.path)),)
+        return (NativeSessionLocks(Path(self.path)),)
 
     @property
     def model_choice(self):
@@ -150,7 +151,8 @@ class PersistentPiSession:
         if not child.proc.alive():
             return False
         try:
-            revision = SessionRevision.observe(identity.session_file).require_available()
+            launch = child.key[0]
+            revision = SessionRevision.observe(launch.session.files(launch.root)).require_available()
         except SessionRevisionUnavailable:
             return False
         self.child_state = RetainedNative(child, identity, revision)
@@ -240,6 +242,7 @@ class PiNativeBackend(
             package=package,
             worktree=thread.worktree,
             root=self.comms.root,
+            owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
             environment=environment,
             session_file=thread.runtime.read_key,
@@ -278,6 +281,7 @@ class PiNativeBackend(
             persistent_session=self,
             package=package,
             root=self.comms.root,
+            owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,

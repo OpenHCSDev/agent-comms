@@ -6,6 +6,8 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
+from agent_comms.participant_identity import ParticipantIdentity
+
 import os
 import re
 import shutil
@@ -278,7 +280,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
 
     @classmethod
     @contextmanager
-    def open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:
+    def open_evidence(cls, files: NativeSessionFiles) -> Iterator[sqlite3.Connection]:
         """Read an indexed snapshot after SQLite's bounded hot-journal recovery.
 
         A read is corroboration, never a fresh acknowledgement. Keep the private inode
@@ -286,7 +288,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
         Open existing storage read/write for SQLite rollback, then forbid SQL
         writes. A cold history view can recover without a model turn or acknowledgement.
         """
-        path = NativeSessionFiles(Path(session_file)).input_proof
+        path = files.input_proof
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
@@ -342,34 +344,34 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Path
 
     def corroborates_input(
-        self, input_id: str, *, evidence: NativeEvidenceRead | None = None
+        self, input_id: str, *, files: NativeSessionFiles,
+        evidence: NativeEvidenceRead | None = None
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
         This grants neither replay nor recovery authority. History IO occurs
         before the coordinator read transaction, as on the native return path.
         """
-        if self.input_id != input_id:
+        if self.input_id != input_id or files.session != self.session_file:
             return False
         return self.read_evidence(
-            self.session_file, input_id,
+            files, input_id,
             request_generation=self.request_generation, evidence=evidence,
             session_entry_start=self.session_entry_start,
         ) == self
 
     @classmethod
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
+        cls, files: NativeSessionFiles, input_id: str, *, request_generation: int | None = None,
         evidence: NativeEvidenceRead | None = None,
         session_entry_start: int,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         Id128Text.decode(input_id)
-        session_file = Path(session_file).absolute()
+        session_file = files.session.absolute()
         from .native_entries import NativeInputEvidenceRead
-
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            with NativeContextJournal.open_evidence(session_file) as db:
+            with NativeContextJournal.open_evidence(files) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
             if row is None:
                 raise NativePiUnavailable("The input has no assembled-context proof")
@@ -526,6 +528,7 @@ class NativePiRpcLaunch:
         package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
+        owner: ParticipantIdentity,
         directory: Path,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
@@ -544,7 +547,7 @@ class NativePiRpcLaunch:
 
         saved = Path(session_file).absolute() if session_file is not None else None
         _durable_private_session_dir(directory)
-        session = SelectedSession.for_launch(directory, saved)
+        session = SelectedSession.for_launch(directory, saved, root=root, worktree=cwd, owner=owner)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
@@ -557,13 +560,14 @@ class NativePiRpcLaunch:
         env.update(environment or {})
         arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
+        arguments += session.proof_arguments(root)
         if session.path is not None:
             arguments += ("--session", str(session.path))
         return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
-        directory: Path,
+        directory: Path, owner: ParticipantIdentity,
         environment: dict[str, str] | None, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
@@ -574,7 +578,8 @@ class NativePiRpcLaunch:
         """
         self._command_selection(command, self.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if (saved, directory) != (self.session.path, self.session.directory):
+        if ((saved, directory) != (self.session.path, self.session.directory)
+                or self.session.files(root).owner.lookup != owner.lookup):
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
@@ -627,6 +632,7 @@ class NativePiRpcLaunch:
             *model.argv,
         ]
         arguments.extend(session.launch_arguments(thinking_level))
+        arguments.extend(session.proof_arguments(root))
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
@@ -968,7 +974,7 @@ def read_tracked_input_commitment(
 
 
 def _verify_context(
-    session_file: Path,
+    files: NativeSessionFiles,
     input_id: str,
     session_id: str,
     input_event: pi.InputCommitted,
@@ -977,12 +983,13 @@ def _verify_context(
 ) -> NativeContextProof:
     from .native_entries import NativeInputEvidenceRead
 
+    session_file = files.session
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(
             session_file, session_entry_start=input_event.session_entry_start)
     except MalformedRecord as error:
         raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        if not emitted.corroborates_input(input_id, evidence=evidence):
+        if not emitted.corroborates_input(input_id, files=files, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
         return emitted

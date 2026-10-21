@@ -15,6 +15,8 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
+from agent_comms.participant_identity import ParticipantIdentity
+
 import asyncio
 import json
 import secrets
@@ -123,6 +125,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession,
     package: VerifiedNativePackage,
     root: Path,
+    owner: ParticipantIdentity,
     session_directory: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
@@ -137,7 +140,7 @@ async def stream_agent_events(
     durable tool-liveness policy. Durable retry decisions belong to the
     coordinator, never this transport adapter.
     """
-    owner = asyncio.current_task()
+    task = asyncio.current_task()
     try:
         async with persistent_session.lock:
             try:
@@ -147,6 +150,7 @@ async def stream_agent_events(
                     tuple(agent_args),
                     package=package,
                     root=root,
+                    owner=owner,
                     directory=session_directory,
                     worktree=Path(cwd),
                     environment=env_extra,
@@ -184,8 +188,8 @@ async def stream_agent_events(
                     async for event in stream:
                         yield event
     finally:
-        if owner is not None:
-            await terminate_task_process(owner)
+        if task is not None:
+            await terminate_task_process(task)
 
 
 class InputStartListener(ABC):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.native_session_files import NativeSessionFiles
+
 import os
 import shutil
 import time
@@ -317,7 +319,9 @@ class RecoveryMonitorCapability:
                     raise RecoveryBlocked("native recovery input does not match its binding")
                 try:
                     proof = NativeContextProof.read_evidence(
-                        session.path, source.input_id, evidence=evidence,
+                        NativeSessionFiles(session.path, root=store.session.path.parent,
+                                           owner=source.owner_identity),
+                        source.input_id, evidence=evidence,
                         session_entry_start=source.require_context_proof().session_entry_start,
                     )
                 except (NativePiUnavailable, UnrecordedNativeContext):
@@ -428,7 +432,9 @@ class RecoveryMonitorCapability:
                 if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")
                 proof = NativeContextProof.read_evidence(
-                    session_file, reserved.input_id, evidence=evidence,
+                    NativeSessionFiles(session_file, root=store.session.path.parent,
+                                       owner=reserved.owner_identity),
+                    reserved.input_id, evidence=evidence,
                     session_entry_start=reserved.require_context_proof().session_entry_start,
                 )
                 original_session.require_context(proof)

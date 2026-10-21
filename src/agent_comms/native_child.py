@@ -218,9 +218,9 @@ class NativeChildState(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, package, root, directory, worktree, environment, session_file):
+    def managed_launch(self, command, arguments, *, package, root, owner, directory, worktree, environment, session_file):
         return NativePiRpcLaunch.managed(
-            command, arguments, package=package, root=root, directory=directory,
+            command, arguments, package=package, root=root, owner=owner, directory=directory,
             worktree=worktree, environment=environment, session_file=session_file,
         )
 
@@ -310,7 +310,8 @@ class RetainedNative(ChildNative):
 
     @property
     def current(self) -> bool:
-        return self.child.proc.alive() and self.revision.current(self.identity.session_file)
+        launch = self.child.key[0]
+        return self.child.proc.alive() and self.revision.current(launch.session.files(launch.root))
 
     def idle(self):
         if not self.current:
@@ -323,8 +324,9 @@ class RetainedNative(ChildNative):
             data = await current.child.request(request)
             if request.writes_session:
                 # This child wrote the file itself; its loaded context is the new revision.
+                launch = current.child.key[0]
                 current.revision = SessionRevision.observe(
-                    current.identity.session_file
+                    launch.session.files(launch.root)
                 ).require_available()
                 current.child.forget_context()
             return data
@@ -335,17 +337,17 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, package, root, directory, worktree, environment, session_file):
+    def managed_launch(self, command, arguments, *, package, root, owner, directory, worktree, environment, session_file):
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                root=root, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
+                root=root, owner=owner, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
         return super().managed_launch(
-            command, arguments, package=package, root=root, directory=directory,
+            command, arguments, package=package, root=root, owner=owner, directory=directory,
             worktree=worktree, environment=environment, session_file=session_file,
         )
 

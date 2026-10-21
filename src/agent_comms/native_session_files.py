@@ -8,6 +8,8 @@ from pathlib import Path
 
 from .errors import RelationViolationError
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
+from agent_comms.field_codec import Id128Text
+from agent_comms.participant_identity import ParticipantIdentity
 
 
 class SessionFiles:
@@ -96,27 +98,18 @@ class SessionFiles:
 
 
 @dataclass(frozen=True, slots=True)
-class NativeSessionFiles(SessionFiles):
-    """One saved session: the transcript, its input-proof journal and writer lock.
-
-    The input proof is a SQLite journal written by the native process; its
-    rollback/WAL companions belong to it. Any other file sharing the session's
-    name is unexpected and refuses deletion.
-    """
+class NativeSessionLocks(SessionFiles):
+    """A native transcript and its writer lock, independent of proof storage."""
 
     session: Path
 
     @classmethod
-    def of(cls, session_file: str) -> NativeSessionFiles:
+    def of(cls, session_file: str) -> NativeSessionLocks:
         return cls(Path(session_file).resolve())
 
     @property
-    def input_proof(self) -> Path:
-        return Path(f"{self.session}.input-proof")
-
-    @property
     def schema_paths(self) -> tuple[Path, ...]:
-        return (self.input_proof,)
+        return ()
 
     @property
     def writer_lock(self) -> Path:
@@ -124,12 +117,24 @@ class NativeSessionFiles(SessionFiles):
 
     @property
     def members(self) -> tuple[Path, ...]:
-        proof = self.input_proof
-        return (
-            self.session,
-            proof,
-            *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
-            self.writer_lock,
+        return self.session, self.writer_lock
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NativeSessionFiles(NativeSessionLocks):
+    """Bind native proof storage to its original bus and participant identity."""
+
+    root: Path
+    owner: ParticipantIdentity
+
+    @classmethod
+    def of(cls, session_file: str, *, root: Path, owner: ParticipantIdentity) -> NativeSessionFiles:
+        return cls(Path(session_file).resolve(), root=root, owner=owner)
+
+    @property
+    def input_proof(self) -> Path:
+        return NativeInputProof.path_in(
+            self.root, lookup=Id128Text.decode(self.owner.lookup), name=self.session.name,
         )
 
 
@@ -141,16 +146,16 @@ class NativeInputProof(DurableFile, SQLiteFile, PatternFile):
 
 
 class SavedSessionFile(PatternFile):
-    """A bus location holding saved native sessions, each with its input proof beside it."""
+    """A bus location holding saved native transcripts and their writer locks."""
 
     __slots__ = ()
 
     @classmethod
-    def sessions_in(cls, root: Path) -> tuple[NativeSessionFiles, ...]:
+    def sessions_in(cls, root: Path) -> tuple[NativeSessionLocks, ...]:
         """Every saved session under ``root``, found relative to it, so a practice copy's
         sessions are its own and never the live bus the copied registry still names."""
         return tuple(
-            NativeSessionFiles(path)
+            NativeSessionLocks(path)
             for owner, directory in cls.declarations_in(root)
             for path in sorted(owner.matching_in(directory))
         )

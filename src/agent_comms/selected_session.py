@@ -9,9 +9,12 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .native_arguments import NativeArguments
+from agent_comms.native_arguments import NativeArguments, NativeInputProofArgument
+from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.participant_identity import ParticipantIdentity
 from .native_session_reopen import NativeSessionIdentity
-from .native_pi import NativePiUnavailable, _session_location
+from agent_comms.native_pi import NativePiUnavailable, _session_location, _durable_private_session_dir
 from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
@@ -67,16 +70,22 @@ class SelectedSession:
         self.attest(NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     def continued(self, context) -> SelectedSession:
-        self.require_context(context)
-        return SavedSelectedSession(self.directory,
-            identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
+        raise NativePiUnavailable("An unselected session cannot own a tracked native continuation")
+
+    def files(self, root: Path) -> NativeSessionFiles:
+        raise NativePiUnavailable("An unselected session has no bus-owned proof")
+
+    def proof_arguments(self, root: Path) -> tuple[str, ...]:
+        return ()
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
-        if path is None:
-            return cls(directory)
-        return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(str(path)))
+    def for_launch(
+        cls, directory: Path, path: Path | None, *, root: Path,
+        worktree: Path, owner: ParticipantIdentity,
+    ) -> SelectedSession:
+        identity = (create_fresh_private_session(root, worktree=worktree) if path is None
+                    else NativeSessionIdentity.locate(str(path)))
+        return SavedSelectedSession(directory, owner=owner, identity=identity)
 
     @classmethod
     async def prepare(
@@ -95,7 +104,8 @@ class SelectedSession:
             directory = execution.session_directory
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
-            return runtime.select_session(directory, execution, source_reads)
+            return runtime.select_session(directory, execution, source_reads,
+                                          root=participant.comms.root, thread=thread)
 
         with participant.cursor_delivery.measurements.operation("session_reopen"):
             async with participant.cursor_delivery.reading() as source_reads:
@@ -106,6 +116,20 @@ class SelectedSession:
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
     identity: NativeSessionIdentity = field(kw_only=True)
+    owner: ParticipantIdentity = field(kw_only=True)
+
+    def files(self, root: Path) -> NativeSessionFiles:
+        return NativeSessionFiles(self.path, root=root, owner=self.owner)
+
+    def proof_arguments(self, root: Path) -> tuple[str, ...]:
+        proof = self.files(root).input_proof
+        _durable_private_session_dir(proof.parent)
+        return NativeInputProofArgument(str(proof)).argv
+
+    def continued(self, context) -> SelectedSession:
+        self.require_context(context)
+        return SavedSelectedSession(self.directory, owner=self.owner,
+            identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @property
     def path(self) -> Path:

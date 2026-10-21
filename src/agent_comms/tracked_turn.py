@@ -536,7 +536,7 @@ class TrackedTurnSession(TurnSession):
         # Cancellation joins the worker before its borrowed scope is released.
         async with self.cursor_delivery.reading() as source_reads:
             return await Coordination.run_worker(lambda: _verify_context(
-                self.active_session_file,
+                self.launch.session.files(self.launch.root),
                 self.command.input_id,
                 self.native.attestation.identity.session_id,
                 self.input_commit.require(),
