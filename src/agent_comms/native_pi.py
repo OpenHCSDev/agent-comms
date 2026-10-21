@@ -266,12 +266,14 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
         return NativeProofDifference(missing, conflicts)
 
     @classmethod
-    def validate_history(cls, db: sqlite3.Connection) -> None:
-        """Replay stored rows only into memory, through the existing schema rules.
+    def validate_history(cls, db: sqlite3.Connection, *, session_id: str) -> None:
+        """Decode and validate the union through its declared row schema in memory.
 
-        This validates the union, not a second implementation of native lineage.
+        Historical generations from separate journal lifetimes can overlap. The
+        live append policy is not a rule for restoring immutable keyed evidence.
         No input is executed and neither durable journal is written.
         """
+        cls.history_difference(db).require_compatible()
         columns = cls._column_list(tuple(cls.column_projection()))
         rows = cls.read(db.execute(
             f"SELECT {columns} FROM {cls.history_schema}.{cls.declared_name} UNION "
@@ -280,21 +282,27 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
         ))
         with closing(sqlite3.connect(":memory:")) as validation:
             cls.create_schema(validation)
+            for name in cls.trigger_bodies():
+                validation.execute(f'DROP TRIGGER "{name}"')
             for row in rows:
+                if row.session_id != session_id:
+                    raise RelationViolationError("Native proof history belongs to another session")
                 row.insert(validation)
 
     @classmethod
-    def merge_history(cls, db: sqlite3.Connection) -> int:
+    def merge_history(cls, db: sqlite3.Connection, *, session_id: str) -> int:
         """Insert historical holes atomically, preserving inode and writer schema."""
+        # Decode outside the reserved writer lock. Native writers can append while
+        # this runs; the transaction below rechecks every key before inserting.
+        cls.validate_history(db, session_id=session_id)
         with db:
             db.execute("BEGIN IMMEDIATE")
             difference = cls.history_difference(db)
             difference.require_compatible()
             if not difference.missing_rows:
                 return 0
-            cls.validate_history(db)
             # The append trigger intentionally rejects older generations. The
-            # declared schema above validated the entire ordered union first;
+            # declared row schema above validated the entire union first;
             # transactional DDL makes every trigger rollback with a failed insert.
             triggers = cls.trigger_bodies()
             for name in triggers:

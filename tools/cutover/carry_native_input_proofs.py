@@ -86,7 +86,7 @@ class ProofRelocation(LegacyNativeProof):
 class ProofHistoryReport:
     source: Annotated[Path, PathText]
     target: Annotated[Path, PathText]
-    owner: str
+    owner: OwnerGenerations
     difference: NativeProofDifference
     inserted_rows: int = 0
     message: str = "existing target"
@@ -95,7 +95,7 @@ class ProofHistoryReport:
 class ProofHistory(LegacyNativeProof):
     def report(self, difference: NativeProofDifference, *, inserted: int = 0,
                message: str = "existing target") -> ProofHistoryReport:
-        return ProofHistoryReport(self.source, self.input_proof, self.owner.owner_thread,
+        return ProofHistoryReport(self.source, self.input_proof, self.owner,
                                   difference, inserted, message)
 
     @abstractmethod
@@ -126,6 +126,7 @@ class ExistingProofTarget(ProofHistory):
         NativeSessionFileRole.require(self.input_proof.lstat())
         with closing(sqlite3.connect(self.input_proof.as_uri() + f"?mode={mode}", uri=True,
                                      timeout=30)) as db:
+            db.execute("PRAGMA synchronous=EXTRA")
             NativeContextJournal.require_schema(db)
             db.execute(f"ATTACH DATABASE ? AS {NativeContextJournal.history_schema}",
                        (self.source.as_uri() + "?mode=ro",))
@@ -139,7 +140,7 @@ class ExistingProofTarget(ProofHistory):
     def apply(self, journal_root: Path) -> ProofHistoryReport:
         with self.connection(journal_root, "rw") as db:
             difference = NativeContextJournal.history_difference(db)
-            inserted = NativeContextJournal.merge_history(db)
+            inserted = NativeContextJournal.merge_history(db, session_id=self.session_id)
         return self.report(difference, inserted=inserted)
 
 
