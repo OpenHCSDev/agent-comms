@@ -122,18 +122,20 @@ class GoalCannotRun(UndatedStandingRule):
 
     unit: str
     orders: tuple[str, ...]
+    goal: Goal
     execution: BlockedExecution
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         return tuple(
-            cls(owner.name, tuple(todo.id for todo in todos), block)
+            cls(owner.name, tuple(todo.id for todo in todos), view.goal.require(), block)
             for owner, todos in cls.holders(comms, commander).items()
-            for block in comms.goals.goal_execution(owner.name).unit_blocks()
+            for view in (comms.goals.goal_snapshot(owner.name),)
+            for block in view.execution.unit_blocks()
         )
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        self.execution.enforce_unit_block(comms, commander, self.unit, self.orders)
+        self.execution.enforce_unit_block(comms, commander, self.unit, self.orders, self.goal)
 
     def line(self) -> str:
         return self.execution.unit_block_line(self.unit, self.orders)

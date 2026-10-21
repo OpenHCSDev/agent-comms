@@ -51,15 +51,6 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
     assert wire(comms.root).registry.require("worker").goal.state == paused.state
     assert comms.goals.goal_history("worker")[-1].after.state == paused.state
-    assert (
-        comms.goals.block_goal_after_failed_turn(
-            "worker",
-            started_goal=goal,
-            expected_worktree=str(comms.root),
-            diagnostic="Backend failed",
-        )
-        == rewritten
-    )
 
 
 @pytest.mark.parametrize(

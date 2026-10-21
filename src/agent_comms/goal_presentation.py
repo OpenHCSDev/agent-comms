@@ -223,14 +223,15 @@ class BlockedExecution(WaitingExecution, declared_name=None):
         return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
                 f"{self.reason} -> Core reissues the orders")
 
-    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...]) -> None:
+    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal) -> None:
         from .commander.standing import UnownedWheelSpin
         from .goal_actions import GoalPrecondition
+        from .goals import GoalChangedError
         from .thread_identity import CoreWatcherIncarnation
 
         if comms.goals.goal_execution(unit) != self:
-            return
-        observed = comms.registry.require(unit).goal.require_id(self.goal_id)
+            raise GoalChangedError(comms.registry.require(unit), goal.captured)
+        observed = goal
         for problem in orders:
             todo = comms.goals.todos.get(problem)
             todo.require_assignee(comms.registry.require(unit).incarnation, observed.id)
@@ -269,7 +270,7 @@ class AttemptUnresolvedExecution(BlockedExecution):
         return (f"UNRESOLVED BLOCK {unit}: orders {', '.join(orders)}; "
                 f"goal {self.goal_id} -> {self.reason}")
 
-    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...]) -> None:
+    def enforce_unit_block(self, comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal) -> None:
         pass
 
 
