@@ -1,6 +1,9 @@
 """Core owns what an order and a strike may say, for every caller."""
 import pytest
+from dataclasses import replace
 
+from test_todos import order as checked_order
+from agent_comms.commander.order import OrderFile
 from agent_comms.todos import BluntText, FairText, HierarchyText, OrderText, PlainText, StrikeReason
 
 TEN = "the unit pushed a commit that deleted the store test file"
@@ -32,3 +35,17 @@ def test_value_types_refuse_their_declared_words(family, text, accepted):
     else:
         with pytest.raises(ValueError):
             family(text)
+
+
+def test_soft_word_rule_reads_only_the_two_explanation_fields(source_repository):
+    order = replace(checked_order(source_repository),
+                    edits=('Delete maybe.py',), banned=('optional guards', 'perhaps'),
+                    report='Report optional examples')
+    document = OrderFile(order,
+        'The command refuses a check that counts deleted source declarations.',
+        'This is stupid because two rules answer the same question differently.')
+    assert document.problems_found(clean=False) == []
+    order.require_wording()
+    for field in ('defect', 'why_stupid'):
+        refused = replace(document, **{field: 'Maybe ' + getattr(document, field)})
+        assert any(problem.startswith(field + ':') for problem in refused.problems_found(clean=False))
