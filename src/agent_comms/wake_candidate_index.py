@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from .delivery_policy import KeyedResponseAcknowledgement
+from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision

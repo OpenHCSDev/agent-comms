@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -12,10 +13,13 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from datetime import datetime
+from functools import cache
 from pathlib import Path
+from string import Formatter
 from typing import ClassVar, Iterator, Self
 
 from agent_comms.coordination_database import CoordinationStore
@@ -137,40 +141,70 @@ def transcripts_held(root: Path) -> Iterator[None]:
         holder.communicate()
 
 
-@dataclass
-class ResourceBackup[Contents](ABC):
-    root: Path
-    route: Path
-    path: Path
-    contents: ClassVar[type]
+@dataclass(frozen=True, order=True)
+class BackupName:
+    """One fixed-width name declaration owns creation, recognition and ordering."""
+
+    value: str
+    format: ClassVar[str] = (
+        "{root}.upgrade-{created.year:04d}{created.month:02d}{created.day:02d}"
+        "T{created.hour:02d}{created.minute:02d}{created.second:02d}"
+    )
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
-        backup = cls(root, route, path)
-        selected = tuple(str(file.relative_to(root)) for file in files)
-        if path.exists():
-            if tuple(json.loads((path / 'selected.json').read_text())) != selected:
-                raise UpgradeRefused('Existing backup belongs to different resources')
-            backup.files()  # An interrupted snapshot is never treated as complete.
-            return backup
-        path.mkdir(mode=0o700, parents=True)
-        _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
-        contents = backup.capture(files)
-        if route.exists():
-            shutil.copy2(route, path / 'active-route.json')
-        _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1),
-                           fsync_parent=True)
-        return backup
+    def now(cls, root: Path) -> Self:
+        return cls(cls.format.format(root=root.name, created=datetime.now()))
+
+    @classmethod
+    @cache
+    def pattern(cls, root: Path) -> re.Pattern[str]:
+        parts = []
+        for literal, name, spec, _ in Formatter().parse(cls.format):
+            parts.append(re.escape(literal))
+            if name:
+                parts.append(rf"[0-9]{{{int(spec.removesuffix('d'))}}}" if spec
+                             else re.escape(root.name))
+        return re.compile("".join(parts))
+
+    @classmethod
+    def matching(cls, root: Path, names: Iterable[str]) -> Iterator[Self]:
+        pattern = cls.pattern(root)
+        for name in names:
+            if pattern.fullmatch(name):
+                yield cls(name)
+
+
+class ResourceBackup(ABC):
+    """The installation's rollback and retention behavior, with or without a snapshot."""
+
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
 
     @abstractmethod
-    def capture(self, files: tuple[Path, ...]) -> dict[str, Contents]: ...
-
-    def files(self) -> dict[str, Contents]:
-        return FieldCodec.decode(dict[str, self.contents],
-                                 FieldCodec.parse((self.path / 'files.json').read_text()))
+    def report(self) -> BackupReport: ...
 
     @abstractmethod
     def original(self) -> bool: ...
+
+    @abstractmethod
+    def restore(self) -> None: ...
+
+    @abstractmethod
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]: ...
+
+
+@dataclass
+class StoreBackup(ResourceBackup):
+    """Snapshot declared databases through SQLite; restore only the selected files."""
+    root: Path
+    route: Path
+    path: Path
+    kept: ClassVar[int] = 2
+
+    def files(self) -> dict[str, str]:
+        return FieldCodec.decode(dict[str, str],
+                                 FieldCodec.parse((self.path / 'files.json').read_text()))
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -187,13 +221,35 @@ class ResourceBackup[Contents](ABC):
         if (self.path / 'active-route.json').exists():
             shutil.copy2(self.path / 'active-route.json', self.route)
 
-    @abstractmethod
-    def restore(self) -> None: ...
+    @classmethod
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> ResourceBackup:
+        if not files:
+            return NoBackup()
+        path = spill_dir / BackupName.now(root).value
+        backup = cls(root, route, path)
+        selected = tuple(str(file.relative_to(root)) for file in files)
+        if path.exists():
+            if tuple(json.loads((path / 'selected.json').read_text())) != selected:
+                raise UpgradeRefused('Existing backup belongs to different resources')
+            backup.files()  # An interrupted snapshot is never treated as complete.
+            return backup
+        path.mkdir(mode=0o700, parents=True)
+        _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
+        contents = backup.capture(files)
+        if route.exists():
+            shutil.copy2(route, path / 'active-route.json')
+        _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1),
+                           fsync_parent=True)
+        return backup
 
-
-class StoreBackup(ResourceBackup[str]):
-    """Snapshot declared databases through SQLite; restore only the selected files."""
-    contents: ClassVar[type] = str
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]:
+        backups = sorted(BackupName.matching(
+            self.root, (path.name for path in spill_dir.iterdir() if path.is_dir()),
+        ))
+        retired = tuple(spill_dir / name.value for name in backups[:-self.kept])
+        for path in retired:
+            shutil.rmtree(path)
+        return retired
 
     def report(self) -> BackupReport:
         return BackupReport(self.description, sum(path.stat().st_size for path in self.path.rglob('*')
@@ -315,14 +371,11 @@ class StoreBackup(ResourceBackup[str]):
         self.restore_route()
 
 
-class NoBackup(StoreBackup):
-    """A runtime-only install takes no snapshot and cannot restore files."""
+class NoBackup(ResourceBackup):
+    """A runtime-only install owns no files, paths or snapshot operations."""
 
-    @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], path: Path) -> Self:
-        if files:
-            raise UpgradeRefused('NoBackup cannot select files')
-        return cls(root, route, path)
+    def retain(self, spill_dir: Path) -> tuple[Path, ...]:
+        return ()
 
     def original(self) -> bool:
         return True

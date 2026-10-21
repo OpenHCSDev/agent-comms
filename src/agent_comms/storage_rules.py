@@ -376,6 +376,8 @@ class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
     def check(self, projection: StorageProjection):
+        if self.path == projection.thread.project_path:
+            projection.rule.deny(f'{self.path} is where {projection.thread.name} runs; move it home first: agent-comms set-project {projection.thread.name} {projection.rule.checkout_base / projection.thread.name}')
         projection.storage = projection.storage.removing(self.path)
 
 

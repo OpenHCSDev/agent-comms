@@ -51,7 +51,6 @@ from agent_comms.wire_log import WireLog
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
-    NoBackup,
     RestoreSpace,
     SavedFile,
     StoreBackup,
@@ -221,6 +220,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     started: tuple[OwnerStart, ...]
     restore_space: RestoreSpace
     backup: BackupReport
+    retired_backups: tuple[Annotated[Path, PathText], ...]
 
 
 @dataclass(frozen=True)
@@ -691,9 +691,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         installed.owners(root, "stop", running)
         with transcripts_held(root):
             before = bus_files(root)
-            backup = (StoreBackup if selected else NoBackup).take(
-                root, active_route_path(), selected,
-                spill_dir / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
+            backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
     except BaseException as error:
         maintenance.clear(held)
         started = installed.start(root, running)
@@ -737,5 +735,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
     started = staged.start(root, running)
+    retired_backups = backup.retain(spill_dir)
     return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
-                           restore_space=restore, backup=backup.report())
+                           restore_space=restore, backup=backup.report(),
+                           retired_backups=retired_backups)

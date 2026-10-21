@@ -24,7 +24,9 @@ from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, 
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.transcript_events import ImportedReply, ImportedRequest
+from agent_comms.runtime_updates import FinishedItem
+from agent_comms.transcript_events import ImportedReply, ImportedRequest, TextTranscript
+from agent_comms.ui_model.message_category import AgentCategory, UserCategory
 from agent_comms.turn_context import CodexRolloutProvenance
 
 
@@ -145,6 +147,35 @@ def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path):
         "An incomplete final source record was omitted.",
     }
     assert ClaudeTranscript.subagents(session) == (subagent,)
+
+
+def claude_narration(uuid, text):
+    """Claude Code saves narration and hidden reasoning under one tag; only narration has text."""
+    return claude("assistant", uuid, message={"content": [
+        {"type": "thinking", "thinking": text, "signature": "opaque"}]})
+
+
+def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path):
+    source = lines(tmp_path / "s.jsonl", [
+        claude_prompt("p", "Fix it", origin={"kind": "human"}),
+        claude_narration("hidden", ""),
+        claude_narration("n", "Reading the decoder first."),
+        claude_tool("c", "b1", "Bash", {"command": "pytest"}),
+        claude_result("o", "b1", "42 passed"),
+        claude_reply("d", "Fixed."),
+    ])
+    events = [event for update in OfflineHistory.of(ClaudeCodeHarness, source, None).read()
+              if isinstance(update, FinishedItem) for event in update.events
+              if isinstance(event, TextTranscript)]
+    assert [(event.text, event.category) for event in events] == [
+        ("Fix it", UserCategory),
+        ("Reading the decoder first.", AgentCategory),
+        ("Fixed.", AgentCategory),
+    ]
+    snapshot = read(ClaudeCodeHarness, source)
+    assert [(type(message), body) for message, body in zip(snapshot.messages, bodies(snapshot))
+            if body in {"Reading the decoder first.", "Fixed."}] == [
+        (ImportedReply, "Reading the decoder first."), (ImportedReply, "Fixed.")]
 
 
 def test_claude_reads_from_its_latest_compaction(tmp_path):
