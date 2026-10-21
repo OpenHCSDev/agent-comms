@@ -112,7 +112,9 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
                 "round_trip": f"comms_channels read alike on port {port}"}
         else:
             assert result.returncode != 0
-            assert "connector round trip failed" in result.stdout + result.stderr
+            assert CALLER.name in result.stderr
+            assert not result.stdout
+            assert service.poll() is None
     finally:
         service.terminate()
         service.wait(timeout=30)
