@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from collections.abc import Callable
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass
@@ -15,6 +16,9 @@ from agent_comms.bus_tables import (
     BusRow,
     BusTables,
     KeyedPublication,
+    SentSource,
+    ReceivedSource,
+    AnsweredSource,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
@@ -22,6 +26,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import ClaimMessage, Message
+from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
 
 
@@ -122,17 +127,21 @@ class Bus(StoreWriter, DurableFile):
 
     def scoped_page(
         self, predicate: str, parameters: tuple, *, lower: int = 0,
-        upper: int | None = None, descending: bool = False, limit: int = 100,
+        upper: int | None = None, descending: bool = False, limit: int = 100, kinds=(),
     ) -> tuple[Message, ...]:
         """A captured display scope narrows the addressed table before decoding."""
         with self.observing() as db:
             upper = self.revision() + 1 if upper is None else upper
             order = "DESC" if descending else "ASC"
+            members = ""
+            if kinds:
+                members = ' AND type IN (' + ','.join('?' for _ in kinds) + ')'
             rows = db.execute(
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 f'JOIN "{Message.table.declared_name}" USING(seq) '
-                f'WHERE ({predicate}) AND seq > ? AND seq < ? '
-                f'ORDER BY seq {order} LIMIT ?', (*parameters, lower, upper, limit),
+                f'WHERE ({predicate}) AND seq > ? AND seq < ?{members} '
+                f'ORDER BY seq {order} LIMIT ?',
+                (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
             return tuple(self._record(db, BusRow.require(
                 db, seq=FieldCodec.decode(int, row[0]))) for row in rows)
@@ -145,5 +154,103 @@ class Bus(StoreWriter, DurableFile):
                            f'"{Addressed.table.declared_name}" '
                            f'JOIN "{Message.table.declared_name}" USING(seq) '
                            f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
+                parameters=(*parameters, through),
+            )
+
+    def messages_for_references(self, references):
+        with self.observing() as db:
+            records = tuple(self._record(db, BusRow.require(db, seq=ref.seq)) for ref in references)
+        for reference, record in zip(references, records, strict=True):
+            if record.reference != reference:
+                raise RelationViolationError("Message reference does not match its bus record")
+        return records
+
+    def deliveries_for_references(self, references):
+        return tuple(delivery for record in self.messages_for_references(references)
+                     for delivery in record.deliveries())
+
+    def _source_page(self, query, parameters, *, after=0, before=None, limit=100,
+                     descending=True, sequences=()):
+        with self.observing() as db:
+            before = self.revision() + 1 if before is None else before
+            selected = ""
+            if sequences:
+                selected = " AND seq IN (" + ",".join("?" for _ in sequences) + ")"
+            order = "DESC" if descending else "ASC"
+            rows = db.execute(
+                f"SELECT seq FROM ({query}) WHERE seq > ? AND seq < ?{selected} "
+                f"ORDER BY seq {order} LIMIT ?",
+                (*parameters, after, before, *sequences, limit),
+            )
+            return tuple(self._record(db, BusRow.require(
+                db, seq=FieldCodec.decode(int, row[0]))) for row in rows)
+
+    def conversation(self, lookup: str, *, after=0, before=None, limit=100,
+                     descending=True, sequences=()):
+        return self._source_page(
+            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=? UNION '
+            f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?',
+            (lookup, lookup), after=after, before=before, limit=limit,
+            descending=descending, sequences=sequences,
+        )
+
+    def sent(self, lookup: str, *, after=0, before=None, limit=100, descending=True):
+        return self._source_page(
+            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=?', (lookup,),
+            after=after, before=before, limit=limit, descending=descending,
+        )
+
+    def received(self, lookup: str, *, after=0, before=None, limit=100,
+                 sender_lookups=(), descending=True, source: type[ReceivedSource] = ReceivedSource):
+        sender = ""
+        if sender_lookups:
+            marks = ",".join("?" for _ in sender_lookups)
+            sender = (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
+                      f'WHERE lookup IN ({marks}))')
+        return self._source_page(
+            f'SELECT seq FROM "{source.declared_name}" WHERE lookup=?{sender}',
+            (lookup, *sender_lookups), after=after, before=before, limit=limit,
+            descending=descending,
+        )
+
+    def replies(self, references: tuple[MessageReference, ...]):
+        with self.observing() as db:
+            sequences = {row.seq for original in references
+                         for row in AnsweredSource.select(db, original=original)}
+            return tuple(self._record(db, BusRow.require(db, seq=seq)) for seq in sorted(sequences))
+
+    def changed_names(self, after: int) -> frozenset[str]:
+        with self.observing() as db:
+            return frozenset(FieldCodec.decode(str, row[0]) for row in db.execute(
+                f'SELECT sender FROM "{Addressed.table.declared_name}" WHERE seq>? UNION '
+                f'SELECT target FROM "{Addressed.table.declared_name}" WHERE seq>?', (after, after),
+            ))
+
+    def display_unread(self, scopes, viewer_names, seen, snapshot):
+        from .read_basis import ReadCursor
+
+        counts = {}
+        with self.observing() as db:
+            for scope in scopes:
+                bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
+                predicate, parameters = scope.index_predicate
+                counts[scope.channel] = FieldCodec.decode(int, db.execute(
+                    f'WITH {ReadCursor.sql("?")}, requests AS ('
+                    f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
+                    f'JOIN "{Message.table.declared_name}" USING(seq) WHERE seq > ? '
+                    f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
+                    f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
+                    (*bindings.values(), seen.lower_bound(scope, snapshot), *parameters,
+                     json.dumps(tuple(viewer_names))),
+                ).fetchone()[0])
+        return counts
+
+    def selected_sequences(self, predicate, parameters, through):
+        """An explicit bulk read mark projects positions, not message bodies."""
+        with self.observing() as db:
+            return Addressed.table.select(
+                db, where=(f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
+                           f'JOIN "{Message.table.declared_name}" USING(seq) '
+                           f'WHERE ({predicate}) AND seq <= ?)'),
                 parameters=(*parameters, through),
             )

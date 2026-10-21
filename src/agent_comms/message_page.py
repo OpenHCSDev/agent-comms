@@ -7,7 +7,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
-from .messages import Message
+from .messages import Message, MessageKind
 from .page_traversal import OlderTraversal, PageCursor, PageTraversal
 from .read_basis import (
     DisplayBasis, SelectedDisplay, NoDisplaySelection, MessageDisplayScope,
@@ -139,12 +139,15 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     bounds: PageBounds = NEWEST_PAGE
     empty: ClassVar[MessagePage] = MessagePage((), False, False, NoDisplaySelection())
 
+    def kinds(self):
+        return MessageKind.members_with(MessageKind)
+
     def read_opened(self, source: Bus) -> MessagePage:
         traversal = self.bounds.traversal
         window = PageWindow(self.bounds)
-        opposite = bool(traversal.opposite(source, self.scope, limit=1))
+        opposite = bool(traversal.opposite(source, self.scope, limit=1, kinds=self.kinds()))
         more = False
-        for row in traversal.records(source, self.scope, limit=self.bounds.limit + 1):
+        for row in traversal.records(source, self.scope, limit=self.bounds.limit + 1, kinds=self.kinds()):
             if self.includes(row) and not window.take(traversal, row):
                 more = True
                 break
@@ -160,8 +163,8 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
 class ConversationMessagePageRequest(MessagePageRequest):
     """A presented conversation excludes declaration-owned state records."""
 
-    def includes(self, message: Message) -> bool:
-        return message.type.conversation_message and super().includes(message)
+    def kinds(self):
+        return tuple(kind for kind in super().kinds() if kind.conversation_message)
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,7 +12,8 @@ from typing import Annotated, get_type_hints
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DurableTables, TypedTable
+from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, TypedTable
+from agent_comms.message_reference import MessageReference
 
 
 class BusRecord(DeclaredFamily, affix="Record"):
@@ -21,6 +22,34 @@ class BusRecord(DeclaredFamily, affix="Record"):
 
 class BusTables(DurableTables, AppendOnlyTables):
     """Bus history cannot be rebuilt from another source."""
+
+
+class BusProjectionTables(DerivedTables):
+    """Reverse lookups are derived from the record, in its append transaction."""
+
+
+@dataclass(frozen=True)
+class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):
+    lookup: Annotated[str, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
+
+
+class SentSource(ParticipantSource):
+    """The participant authored this record."""
+
+
+class ReceivedSource(ParticipantSource):
+    """The participant belongs to the frozen delivery audience."""
+
+
+class DirectReplySource(ReceivedSource):
+    """The record's declared reply policy starts a separate direct turn."""
+
+
+@dataclass(frozen=True)
+class AnsweredSource(TypedTable, BusProjectionTables):
+    original: Annotated[MessageReference, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
 
 
 @dataclass(frozen=True)
@@ -86,11 +115,16 @@ class BusCapability(BusTables):
                 key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
             for table in self.tables())
 
+    def projections(self):
+        return iter(())
+
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""
         BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
         stored = replace(self, seq=seq)
         for row in stored.rows():
+            row.insert(db)
+        for row in stored.projections():
             row.insert(db)
         return stored.seq
 

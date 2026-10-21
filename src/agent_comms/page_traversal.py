@@ -93,12 +93,12 @@ class PageTraversal(ABC):
 
     @abstractmethod
     def records(
-        self, source: Bus, scope: MessageDisplayScope, *, limit: int,
+        self, source: Bus, scope: MessageDisplayScope, *, limit: int, kinds=(),
     ) -> tuple[Message, ...]: ...
 
     @abstractmethod
     def opposite(
-        self, source: Bus, scope: MessageDisplayScope, *, limit: int,
+        self, source: Bus, scope: MessageDisplayScope, *, limit: int, kinds=(),
     ) -> tuple[Message, ...]: ...
 
     @staticmethod
@@ -120,13 +120,13 @@ class OlderTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, -1, -1)
 
-    def records(self, source, scope, *, limit):
-        return scope.records(source, upper=self.cursor, descending=True, limit=limit)
+    def records(self, source, scope, *, limit, kinds=()):
+        return scope.records(source, upper=self.cursor, descending=True, limit=limit, kinds=kinds)
 
-    def opposite(self, source, scope, *, limit):
+    def opposite(self, source, scope, *, limit, kinds=()):
         if self.cursor is None:
             return ()
-        return scope.records(source, lower=self.cursor - 1, limit=limit)
+        return scope.records(source, lower=self.cursor - 1, limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> OlderTraversal | None:
         cursor = page.oldest_cursor
@@ -146,11 +146,11 @@ class NewerTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, count)
 
-    def records(self, source, scope, *, limit):
-        return scope.records(source, lower=self.cursor, limit=limit)
+    def records(self, source, scope, *, limit, kinds=()):
+        return scope.records(source, lower=self.cursor, limit=limit, kinds=kinds)
 
-    def opposite(self, source, scope, *, limit):
-        return OlderTraversal(self.cursor + 1).records(source, scope, limit=limit)
+    def opposite(self, source, scope, *, limit, kinds=()):
+        return OlderTraversal(self.cursor + 1).records(source, scope, limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> NewerTraversal | None:
         cursor = page.newest_cursor

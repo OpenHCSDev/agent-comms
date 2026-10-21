@@ -29,7 +29,7 @@ from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile, ObservedPath
 from .recorded_bus import RecordedBusIdentity
-from .store_files import SharedLock, _store_lock
+from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
@@ -43,7 +43,7 @@ class DisplayViewer(SubclassUnion, affix="Viewer"):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> SelectedDisplay: ...
+    def historical_selection(self, page, presentation, historical, source, document, snapshot) -> SelectedDisplay: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
@@ -66,7 +66,7 @@ class AnonymousViewer(NullMember, DisplayViewer):
     def direct_history(self, direct: type[DMHistory], peer: str) -> DMHistory:
         raise ValueError("DM history requires --as <participant>.")
 
-    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> NoDisplaySelection:
+    def historical_selection(self, page, presentation, historical, source, document, snapshot) -> NoDisplaySelection:
         return NoDisplaySelection()
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
@@ -92,7 +92,7 @@ class NamedViewer(SingleFieldValue, DisplayViewer):
     def direct_history(self, direct: type[DMHistory], peer: str) -> DMHistory:
         return direct(self.name, peer)
 
-    def historical_selection(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalSelection:
+    def historical_selection(self, page, presentation, historical, source, document, snapshot) -> HistoricalSelection:
         historical.validate()
         return HistoricalSelection(HistoricalDisplay(historical, presentation.bus.reads.capture(
             self.resolve(snapshot).name, page.messages, snapshot, source,
@@ -670,7 +670,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading_snapshot() as snapshot:
+        with registry.store.reading_snapshot() as snapshot:
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
@@ -678,31 +678,28 @@ class DMDisplayBasis:
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
-        from .wire_log import CurrentSnapshotOpening
-        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-            result = bounds.conversation(scope).displayed(
-                bus.reads, document, viewer_name, snapshot, snapshot, source,
-            )
+        result = bounds.conversation(scope).displayed(
+            bus.reads, document, viewer_name, snapshot, snapshot, bus.bus,
+        )
         page, displayed = result.page, result.displayed
-        with _store_lock(root / "wire", mode=SharedLock()):
-            root_info = root.stat()
-            basis = cls(
-                root=str(root.resolve()),
-                root_identity=(root_info.st_dev, root_info.st_ino),
-                worktree=str(Path(worktree).resolve()),
-                requested_peer=peer,
-                viewer_identity=viewer_thread.incarnation,
-                viewer_names=viewer_names,
-                peer_identity=peer_thread.incarnation,
-                peer_names=peer_names,
-                bus_identity=displayed.bus_identity,
-                displayed=displayed,
-                fetched_through=page.newest_seq or 0,
-            )
-            with registry.store.locked(mode=SharedLock()):
-                basis.validate_identity(
-                    snapshot, RecordedBusIdentity.capture(bus.log.path), registry.user_thread())
-            return replace(page, selection=DMSelection(basis))
+        root_info = root.stat()
+        basis = cls(
+            root=str(root.resolve()),
+            root_identity=(root_info.st_dev, root_info.st_ino),
+            worktree=str(Path(worktree).resolve()),
+            requested_peer=peer,
+            viewer_identity=viewer_thread.incarnation,
+            viewer_names=viewer_names,
+            peer_identity=peer_thread.incarnation,
+            peer_names=peer_names,
+            bus_identity=displayed.bus_identity,
+            displayed=displayed,
+            fetched_through=page.newest_seq or 0,
+        )
+        with registry.store.locked(mode=SharedLock()):
+            basis.validate_identity(
+                snapshot, RecordedBusIdentity.capture(bus.bus.path), registry.user_thread())
+        return replace(page, selection=DMSelection(basis))
 
     def identity(self, history_revision: FileObservation) -> DMDisplayIdentity:
         return DMDisplayIdentity(
@@ -747,15 +744,14 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire", mode=SharedLock()):
-            user = registry.user_thread()
-            with registry.store.locked():
-                snapshot = registry.store.read_snapshot_unlocked()
-                self.validate_for(
-                    root, worktree, peer, through, snapshot,
-                    RecordedBusIdentity.capture(bus.log.path), user,
-                )
-                self.displayed.tail.mark(bus.reads, self.displayed, through)
+        user = registry.user_thread()
+        with registry.store.locked():
+            snapshot = registry.store.read_snapshot_unlocked()
+            self.validate_for(
+                root, worktree, peer, through, snapshot,
+                RecordedBusIdentity.capture(bus.bus.path), user,
+            )
+            self.displayed.tail.mark(bus.reads, self.displayed, through)
 
     def validate_for(
         self,
@@ -820,10 +816,10 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         conversation = self.read_key(message.sender, message.target, snapshot)
         return message.seq in seen.for_conversation(conversation)
 
-    def records(self, source: Bus, *, lower=0, upper=None, descending=False, limit=100):
+    def records(self, source: Bus, *, lower=0, upper=None, descending=False, limit=100, kinds=()):
         predicate, parameters = self.index_predicate
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
-                                  descending=descending, limit=limit)
+                                  descending=descending, limit=limit, kinds=kinds)
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: Bus, *, document, through: int) -> DisplayBasis:

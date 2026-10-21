@@ -62,6 +62,16 @@ class Delivered(BusCapability):
     decisions: tuple[RecipientDecision, ...]
     control: str
 
+    def projections(self):
+        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
+
+        yield from super().projections()
+        yield SentSource(self.audience.sender_lookup, self.seq)
+        for recipient in self.audience.recipients:
+            yield ReceivedSource(recipient.recipient_lookup, self.seq)
+            if self.direct_for(recipient.recipient_lookup):
+                yield DirectReplySource(recipient.recipient_lookup, self.seq)
+
 
 @dataclass(frozen=True, slots=True)
 class CommittedDelivery(MessageWireRecord):
