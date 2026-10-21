@@ -301,6 +301,9 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     category = OutboundCategory
 
+    def result_parts(self, otherwise: tuple) -> tuple[SentTranscript, ...]:
+        return (self,)
+
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
         return {"type": "content", "content": {

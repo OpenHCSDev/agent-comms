@@ -15,8 +15,9 @@ from native_backend_fixture import native_backend_fixture
 
 
 async def test_real_idle_owner_is_replaced_without_losing_session(
-        tmp_path, monkeypatch, native_runtime_package):
+        tmp_path, monkeypatch, native_runtime_package, source_programs):
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
+        source_programs.bind(native.project)
         monkeypatch.setenv('AGENT_COMMS_AGENT_MODELS', 'response-local/fixture')
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():

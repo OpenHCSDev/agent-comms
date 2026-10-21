@@ -29,7 +29,7 @@ from .commander_heartbeat import CommanderHeartbeat
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
@@ -78,7 +78,7 @@ class TaskLaunchInput(LaunchInput):
         return GivenThreadText(self.text)
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
-        return replace(launch, startup_input=self.input_key)
+        return replace(launch, startup_input=SetVariable(self.input_key))
 
     def record_first_input(self, record) -> None:
         record(self.input_key, seq=None, text=self.text)
