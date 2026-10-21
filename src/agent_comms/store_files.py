@@ -329,7 +329,7 @@ def store_lock_path(store_path: Path) -> Path:
 @contextmanager
 def _store_lock_file(store_path: Path):
     """Open read-only: lock retirement must not generate a close-write watch event."""
-    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = store_lock_path(store_path)
     with StoreLock.releasing(), os.fdopen(
         os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb"

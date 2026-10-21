@@ -6,6 +6,7 @@ Ordinary conversation sends no longer acquire or manually release files.
 from __future__ import annotations
 
 from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 from bus_history import read_history
 import json
@@ -35,14 +36,7 @@ from agent_comms.thread_status import RunningThreadStatus
 
 
 def marked(tmp_path: Path) -> Comms:
-    comms = Comms(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    marker = comms.root / "bus_meta.json"
-    assert json.loads(marker.read_text())["claim_envelopes_version"] == 1
-    assert json.loads(marker.read_text())["wire_root_id"] == root_id
-    assert marker.stat().st_mode & 0o777 == 0o600
-    assert not (comms.root / ".bus.jsonl.claim-gate-v1").exists()
-    return comms
+    return prepare_native_comms(Comms(tmp_path / "wire"))
 
 
 def _sample_line(*, complete: bool = True) -> bytes:

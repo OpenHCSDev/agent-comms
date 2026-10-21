@@ -1,5 +1,6 @@
 
 from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 import json
 import os
@@ -22,8 +23,8 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.messages import HandoffKind, InfoKind, Message
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.pi_counts import PiCount
-from agent_comms.publisher import InitialWrites
 from agent_comms.registration import Registration
+from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
@@ -34,7 +35,7 @@ from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
+def test_native_root_checks_relative_and_absolute_ancestor_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     unsafe = tmp_path / "nonsticky-writable"
@@ -42,21 +43,20 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     unsafe.chmod(0o777)
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
+        candidate = Comms(root)
         with pytest.raises(RelationViolationError):
-            Bus.install(Bus.path_in(Comms(root).root))
-        assert not (root / "bus_meta.json").exists()
-        assert not (root / "bus.jsonl").exists()
+            prepare_native_comms(candidate)
+        assert not Bus.path_in(root).exists()
+        assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
-    safe = Comms(Path("safe-relative"))
-    assert len(safe.messaging.initialize_private_initial_protocol()) == 32
+    safe = prepare_native_comms(Comms(Path("safe-relative")))
+    assert safe.registry.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
-def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
-    registry = Registration(tmp_path / "registry.json")
-    bus = MessageBus(tmp_path / "bus.jsonl", registry, InitialWrites)
+def test_native_root_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
     with pytest.raises(RelationViolationError):
-        bus.publisher.initialize_private_protocol()
+        prepare_native_comms(Comms(tmp_path))
 
 
 class TestAgentRuntimeInfo:

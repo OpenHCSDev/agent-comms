@@ -33,7 +33,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import DurableFile, RegistryFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, RegistryFile, StoreCommittedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
@@ -306,7 +306,7 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class Bus(BusReader, WalStore, DurableFile, Watched):
+class Bus(BusReader, WalStore, BusFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"

@@ -233,6 +233,18 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class BusFile(DurableFile):
+    """Declared data and lifecycle files that rule out a fresh bus installation."""
+
+    @classmethod
+    def fresh(cls, root: Path) -> bool:
+        return not any(
+            path.exists() or path.is_symlink()
+            for owner, directory in cls.declarations_in(root)
+            for path in (owner.path_in(directory),)
+        )
+
+
 class WireWakeFile(RootFile):
     """Declared commit signals wake idle readers, unlike lock-file churn."""
 

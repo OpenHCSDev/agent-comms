@@ -19,8 +19,9 @@ def append(bus, message):
 
 def test_activity_family_tracks_original_roles_targets_and_member_scope(bus):
     append(bus, Message("author", "#team", "newest", InfoKind, timestamp=30.0))
-    append(bus, Message("human", "worker", "direct", InfoKind, timestamp=20.0,
-                        sender_role=UserThreadRole, mentions=(ThreadMention("mentioned", 0, 1),)))
+    direct = "@mentioned direct"
+    append(bus, Message("human", "worker", direct, InfoKind, timestamp=20.0,
+                        sender_role=UserThreadRole, mentions=ThreadMention.find(direct, str)))
     append(bus, Message("author", "#team", "older notice", InfoKind, timestamp=10.0,
                         role=NoticeRole()))
     clocks = bus.activity_clocks()
