@@ -586,10 +586,17 @@ class OwnInstanceWrites(ast.NodeVisitor):
         self.instance = instance
         self.found: list[ast.Call] = []
 
-    def visit_FunctionDef(self, node: ast.AST) -> None:
-        pass
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """A nested scope's writes are its own."""
 
-    visit_AsyncFunctionDef = visit_Lambda = visit_ClassDef = visit_FunctionDef
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """A nested scope's writes are its own."""
 
     def visit_Call(self, node: ast.Call) -> None:
         written = [*map(ast.unparse, node.args[:1])]
