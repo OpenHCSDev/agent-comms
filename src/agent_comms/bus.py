@@ -21,11 +21,12 @@ from agent_comms.bus_tables import (
     AnsweredSource,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import MessageNotificationError, RelationViolationError
+from agent_comms.errors import MessageNotificationError, RelationViolationError, UnclaimedError
+from agent_comms.envelope_claim_transitions import ClaimTransition
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import BusRecord, ClaimMessage, Message
+from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
 from agent_comms.watched import Watched
@@ -120,6 +121,14 @@ class Bus(StoreWriter, DurableFile, Watched):
                     f"Bus row {header.seq} lacks {table.declared_name}")
             values.update(FieldCodec.encode_fields(rows[0]))
         return FieldCodec.decode_record(member, values)
+
+    def claim(self, seq: int) -> ClaimTransition:
+        """Read attestation from the row's capability, never a retained-history floor."""
+        with self.observing() as db:
+            rows = Claimed.table.select(db, seq=seq)
+            if not rows:
+                raise UnclaimedError(seq)
+            return rows[0].claim_transition
 
     def lookup(self, seq: int) -> BusRecord:
         with self.observing() as db:

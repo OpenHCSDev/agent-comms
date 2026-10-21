@@ -51,6 +51,7 @@ class HeldBusWrite:
 class WatchPass[Observed](HeldBusWrite, ABC):
     """Observe before entering maintenance to apply the result."""
 
+
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
             observed = self.observe(comms)
