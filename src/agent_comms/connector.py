@@ -26,6 +26,7 @@ import json
 import logging
 import secrets
 import signal
+import sys
 import time
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
@@ -46,7 +47,9 @@ from .command import Command
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText, Argument, WireName, WireOmitDefault
+from .field_codec import (
+    Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
+)
 from .goal_actions import DirectiveGoalAction
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
@@ -801,7 +804,7 @@ class ConnectorVerb(
     def apply(self, ctx: ConnectorStore) -> int | str: ...
 
     @classmethod
-    def parse(cls, argv: Sequence[str] | None) -> Self:
+    def parse(cls, argv: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(
             prog=cls.program,
             description=__doc__,
@@ -883,5 +886,7 @@ class RevokeVerb(ConnectorVerb):
         return 0
 
 
+@boundary_decoder
 def main(argv: Sequence[str] | None = None) -> int | str:
-    return ConnectorVerb.parse(argv).apply(ConnectorStore.owned())
+    arguments = sys.argv[1:] if argv is None else argv
+    return ConnectorVerb.parse(arguments).apply(ConnectorStore.owned())
