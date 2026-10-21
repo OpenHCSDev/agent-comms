@@ -41,7 +41,7 @@ def recorded_context(session: Path, row: dict[str, object], *, session_entry_sta
 
 def write_proof_rows(files: NativeSessionFiles, rows: Iterable[dict[str, object]]) -> None:
     path = files.input_proof
-    files.input_proof.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    files.prepare_private_directory(path.parent)
     path.unlink(missing_ok=True)
     os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     with closing(sqlite3.connect(path)) as db:

@@ -14,7 +14,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.participant_identity import ParticipantIdentity
 from .native_session_reopen import NativeSessionIdentity
-from agent_comms.native_pi import NativePiUnavailable, _session_location, _durable_private_session_dir
+from agent_comms.native_pi import NativePiUnavailable, _session_location
 from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
@@ -123,7 +123,7 @@ class SavedSelectedSession(SelectedSession):
 
     def proof_arguments(self, root: Path) -> tuple[str, ...]:
         proof = self.files(root).input_proof
-        _durable_private_session_dir(proof.parent)
+        self.files(root).prepare_private_directory(proof.parent)
         return NativeInputProofArgument(str(proof)).argv
 
     def continued(self, context) -> SelectedSession:

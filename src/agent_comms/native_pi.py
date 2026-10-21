@@ -34,9 +34,7 @@ from .private_path import (
     FileIdentity,
     FileRevision,
     NativeSessionFileRole,
-    PrivateDirectoryRole,
     TrustedAncestorRole,
-    fsync_directory,
 )
 from .typed_table import Column, DurableTables, Index, TypedTable
 
@@ -546,7 +544,7 @@ class NativePiRpcLaunch:
         from .selected_session import SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
-        _durable_private_session_dir(directory)
+        NativeSessionFiles.prepare_private_directory(directory)
         session = SelectedSession.for_launch(directory, saved, root=root, worktree=cwd, owner=owner)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
@@ -614,13 +612,13 @@ class NativePiRpcLaunch:
         session_dir, session_file = session.directory, session.path
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
-        _durable_private_session_dir(session_dir)
+        NativeSessionFiles.prepare_private_directory(session_dir)
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
         agent_dir = session_dir / ".native-pi-agent"
-        _durable_private_session_dir(agent_dir)
+        NativeSessionFiles.prepare_private_directory(agent_dir)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
@@ -898,51 +896,6 @@ class PrivateEvidenceRead:
                 )
             revision = observed
         return revision
-
-
-def _private_session_dir(directory: Path) -> None:
-    if ".." in directory.parts:
-        raise NativePiUnavailable("Native Pi session directory is not lexical")
-    try:
-        TrustedAncestorRole.require_path(directory)
-    except ValueError as error:
-        raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
-    if PrivateDirectoryRole.violation(directory.lstat()) is not None:
-        raise NativePiUnavailable("Native Pi session directory must be owner-only")
-
-
-def _durable_private_session_dir(directory: Path) -> None:
-    """Commit each new directory entry before a Pi launch can be returned.
-
-    Re-sync the private ancestor chain even on reuse: a visible directory may
-    have survived a failed parent fsync on the previous preparation. Stop at
-    the parent of the highest owner-only directory, not at the filesystem root.
-    """
-    missing: list[Path] = []
-    current = directory
-    while True:
-        try:
-            current.lstat()
-        except FileNotFoundError:
-            missing.append(current)
-            current = current.parent
-        else:
-            break
-    try:
-        for path in reversed(missing):
-            path.mkdir(mode=0o700, exist_ok=True)
-            _private_session_dir(path)
-            fsync_directory(path.parent)
-        _private_session_dir(directory)
-        parent = directory.parent
-        while True:
-            fsync_directory(parent)
-            info = parent.lstat()
-            if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
-                break
-            parent = parent.parent
-    except OSError as error:
-        raise NativePiUnavailable("Native Pi session directory could not be committed") from error
 
 
 def _session_location(directory: Path, candidate: str) -> Path:

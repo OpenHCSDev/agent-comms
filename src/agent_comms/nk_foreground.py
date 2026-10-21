@@ -32,7 +32,7 @@ from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
-from .native_pi import _private_session_dir
+from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
@@ -94,11 +94,11 @@ def reserve_foreground_owner(
         or not root.is_relative_to("/var/tmp")
     ):
         raise PublicationActivationBlocked("Foreground N/K requires a private /var/tmp root")
-    _private_session_dir(root)
+    NativeSessionFiles.require_private_directory(root)
     if type(wire_root_id) is not str or not wire_root_id:
         raise MalformedRecord("A private wire-root ID is required")
     worktree = root / "work"
-    _private_session_dir(worktree)
+    NativeSessionFiles.require_private_directory(worktree)
     comms = Comms(root)
     with comms.bus.log.checked_read() as source:
         marker = source.marker

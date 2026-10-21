@@ -13,7 +13,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.native_pi import NativeContextJournal, _durable_private_session_dir
+from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_session_files import NativeInputProof, NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -50,7 +50,7 @@ class ProofRelocation(NativeSessionFiles):
         present = self.source_files
         if self.source not in present:
             raise FileNotFoundError(self.source)
-        _durable_private_session_dir(self.input_proof.parent)
+        self.prepare_private_directory(self.input_proof.parent)
         moved: list[Path] = []
         try:
             for source, destination in reversed(tuple(zip(

@@ -13,6 +13,7 @@ from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.field_codec import Id128Text
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 
 
 class SessionFiles:
@@ -142,6 +143,50 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
     ) -> Self:
         return cls(*(getattr(identity, declaration.name)
                      for declaration in fields(NativeSessionIdentity)), root=root, owner=owner)
+
+    @staticmethod
+    def require_private_directory(directory: Path) -> None:
+        from agent_comms.native_pi import NativePiUnavailable
+
+        if ".." in directory.parts:
+            raise NativePiUnavailable("Native Pi session directory is not lexical")
+        try:
+            TrustedAncestorRole.require_path(directory)
+        except ValueError as error:
+            raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
+        if PrivateDirectoryRole.violation(directory.lstat()) is not None:
+            raise NativePiUnavailable("Native Pi session directory must be owner-only")
+
+    @classmethod
+    def prepare_private_directory(cls, directory: Path) -> None:
+        """Commit creation and re-sync the owner-private ancestor chain on reuse."""
+        from agent_comms.native_pi import NativePiUnavailable
+
+        missing: list[Path] = []
+        current = directory
+        while True:
+            try:
+                current.lstat()
+            except FileNotFoundError:
+                missing.append(current)
+                current = current.parent
+            else:
+                break
+        try:
+            for path in reversed(missing):
+                path.mkdir(mode=0o700, exist_ok=True)
+                cls.require_private_directory(path)
+                fsync_directory(path.parent)
+            cls.require_private_directory(directory)
+            parent = directory.parent
+            while True:
+                fsync_directory(parent)
+                info = parent.lstat()
+                if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
+                    break
+                parent = parent.parent
+        except OSError as error:
+            raise NativePiUnavailable("Native Pi session directory could not be committed") from error
 
     @property
     def session(self) -> Path:

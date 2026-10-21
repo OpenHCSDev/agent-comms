@@ -10,7 +10,8 @@ from uuid import uuid4
 
 from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
-from .native_pi import NativePiUnavailable, _durable_private_session_dir
+from .native_pi import NativePiUnavailable
+from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, SavedSessionFile
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import NativeSessionFileRole, fsync_directory
@@ -26,7 +27,7 @@ def create_fresh_private_session(
     session_id = uuid4().hex
     path = location.path_in(Path(root).absolute(), session_id=session_id, **parts)
     session_dir = path.parent
-    _durable_private_session_dir(session_dir)
+    NativeSessionFiles.prepare_private_directory(session_dir)
     header = SessionEntry(
         id=session_id, version=3, cwd=str(worktree),
         timestamp=RecordedTimestamp.written(datetime.now(UTC)),
