@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms import field_codec
 
@@ -29,7 +29,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, DurableTables, Generated, Index, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, DurableStore, Generated, Index, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -212,7 +212,7 @@ def _members(column: str, values) -> tuple[str, tuple]:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions(TypedStore, DurableTables):
+class InputDispositions(DurableStore):
     """Indexed durable input rows; each operation reads only the rows it names."""
 
     root: Path

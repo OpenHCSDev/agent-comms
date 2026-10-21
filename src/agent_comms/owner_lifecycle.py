@@ -10,7 +10,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from uuid import uuid4
 
 from agent_comms import field_codec
@@ -18,10 +18,10 @@ from agent_comms import field_codec
 from .active_route import resolve_comms_route
 from .child_process import (
     ObservedProcess,
-    SpawnedProcess,
     Platform,
     ProcessIdentity,
     ProcessState,
+    SpawnedProcess,
     SynchronousProcess,
 )
 from .cli_result import CliResult
@@ -32,7 +32,13 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
+from .native_arguments import (
+    ConfiguredBinary,
+    InheritedArguments,
+    LaunchArguments,
+    LaunchBinary,
+    NativeArguments,
+)
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -43,12 +49,12 @@ from .restart_refusals import (
 from .restart_scope import AllOwners, RestartScope
 from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
-from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .thread_owned_state import ThreadOwnedState
+from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .threads import Thread
 from .tool_result import ToolResult
 from .turn_lease import NoTurnRecord
-from .typed_table import Column, DurableTables, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, DurableStore, JsonStorage, TypedTable
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -220,7 +226,7 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
 
 
 @dataclass(frozen=True)
-class OwnerReleaseStore(ThreadOwnedState, TypedStore, DurableTables):
+class OwnerReleaseStore(ThreadOwnedState, DurableStore):
     root: Path
     filename = "owner_releases.sqlite3"
     rows = (OwnerReleaseEvidence,)

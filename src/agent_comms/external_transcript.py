@@ -29,14 +29,13 @@ from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
 from .transcript_sources import TranscriptDraft, TranscriptRecord, TranscriptSource
 from .typed_table import (
     Column,
-    DurableTables,
+    DurableStore,
     ForeignKey,
     Generated,
     Index,
     RealStorage,
     StoreWriter,
     TypedRow,
-    TypedStore,
     TypedTable,
 )
 from .wire_watch import WatchSource, WireWatch
@@ -417,7 +416,7 @@ class StoreRead(TranscriptSource):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TranscriptSource, TypedStore, DurableTables):
+class ExternalTranscript(TranscriptSource, DurableStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path

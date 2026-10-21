@@ -37,7 +37,7 @@ from .turn_context import (
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
-from .typed_table import Column, DurableTables, Generated, Index, TypedStore, TypedTable
+from .typed_table import Column, DurableStore, Generated, Index, TypedTable
 
 
 @dataclass(frozen=True)
@@ -404,7 +404,7 @@ class ContextManifestPage:
 
 
 @dataclass(frozen=True)
-class ContextStore(TypedStore, DurableTables):
+class ContextStore(DurableStore):
     root: Path
     filename: ClassVar[str] = "turn_context.sqlite3"
     rows = (ContextStoreInfo, ContextEntry, ContextSegmentVersion, ContextRequest)

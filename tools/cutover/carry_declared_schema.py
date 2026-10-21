@@ -54,10 +54,6 @@ for _module in walk_packages(agent_comms.__path__, "agent_comms."):
     import_module(_module.name)
 
 
-def _subclasses(family: type) -> list[type]:
-    return [kind for child in family.__subclasses__() for kind in (child, *_subclasses(child))]
-
-
 _INDEX_NAME = re.compile(r'^(CREATE (?:UNIQUE )?INDEX )(?:"(?:[^"]|"")+"|\S+)( ON )')
 
 
@@ -131,7 +127,7 @@ class StoredObject(TypedRow):
 
 
 def derived(row: type[TypedTable]) -> bool:
-    return any(row in kind.schema_rows() for kind in _subclasses(DerivedTables))
+    return any(row in kind.schema_rows() for kind in DerivedTables.schema_members())
 
 
 @dataclass(frozen=True)

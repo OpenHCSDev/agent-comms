@@ -22,15 +22,16 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, PendingProblemOrder, Todo, TodoStore
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.typed_table import DurableTables, SharedFileTables
-from cutover.carry_declared_schema import _subclasses, carry
+from cutover.carry_declared_schema import carry
 
 REPO = Path(__file__).resolve().parents[1]
 
 
 def _file_rows():
     """Each durable file's rows: the shared coordinator file is one file of many kinds."""
-    kinds = {kind for kind in _subclasses(DurableTables)
-             if not any(issubclass(base, DurableTables) for base in kind.__bases__ if base is not DurableTables)}
+    kinds = {kind for kind in DurableTables.schema_members()
+             if not any(issubclass(base, DurableTables) and base.declares_schema()
+                        for base in kind.__bases__ if base is not DurableTables)}
     shared = tuple({row for kind in kinds if issubclass(kind, SharedFileTables)
                     for row in kind.schema_rows()})
     files = {kind.__name__: kind.schema_rows() for kind in kinds
