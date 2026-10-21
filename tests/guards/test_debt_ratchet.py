@@ -921,6 +921,21 @@ def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_i
     assert report["introduced_lines"][identity] == [2]
 
 
+def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
+    holder = "class Holder:\n    def check(self, v):\n        return v is None\n"
+    other = "class Other:\n    def check(self, v):\n        return v is None\n"
+    base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
+    moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
+    status, report = repo.compare(base, moved)
+    identity = f"{NoneAbsence.__name__}:{repo.root}"
+    assert report["introduced"][f"{identity}/executions.py"] == 0
+    deleted = repo.commit({"attempts.py": holder, "executions.py": None})
+    moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
+    status, report = repo.compare(deleted, moved_out)
+    assert status == 1
+    assert report["introduced_lines"][f"{identity}/owners.py"] == [8]
+
+
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
