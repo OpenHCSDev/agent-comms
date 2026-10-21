@@ -21,6 +21,8 @@ def pre_tool_use(command: str) -> subprocess.CompletedProcess:
     ("until [ -s out.txt ]; do sleep 5; done", "timeout N"),
     ("timeout 60 bash -c 'until [ -s a ]; do sleep 5; done'; until [ -s b ]; do sleep 5; done",
      "timeout N"),
+    ("ls; while true; do sleep 5; done", "timeout N"),
+    ("bash -c 'until [ -s f ]; do sleep 5; done'", "timeout N"),
 ])
 def test_an_unbounded_wait_is_denied(command, refused):
     result = pre_tool_use(command)
@@ -35,6 +37,8 @@ def test_an_unbounded_wait_is_denied(command, refused):
     "timeout 300 bash -c 'while kill -0 4242; do sleep 5; done'",
     "cat out.txt; timeout 60 bash -c 'until [ -s f ]; do sleep 5; done'",
     "git status",
+    'judge back X --roast "slop because it restates while the owner already answers it"',
+    'echo "until later"',
 ])
 def test_a_bounded_wait_or_plain_command_passes(command):
     result = pre_tool_use(command)
