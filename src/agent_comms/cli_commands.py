@@ -26,6 +26,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
 from agent_comms.errors import ToolRefusedError
+from agent_comms.message_bus import HeldBusWrite
 
 from .active_route import (
     ActiveRoute,
@@ -888,11 +889,11 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))
 
 
-class PublishingCliCommand(CliCommand, declared_name=None):
+class PublishingCliCommand(HeldBusWrite, CliCommand, declared_name=None):
     """Wait for maintenance to clear before running a CLI publication."""
 
     def apply(self, ctx: Comms) -> CliResult:
-        return asyncio.run(ctx.bus.when_open(partial(self.publish, ctx)))
+        return self.write_when_open(ctx, partial(self.publish, ctx))
 
     @abstractmethod
     def publish(self, ctx: Comms) -> CliResult: ...

@@ -246,7 +246,8 @@ def pr_commander(tmp_path, monkeypatch):
                      for row, body in requests},
     }))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
-    lead = thread(source.checkout.name, tmp_path, 1.0)
+    lead = Registration(tmp_path / "registry.json").new_thread(
+        source.checkout.name, frozenset(), str(source.checkout), created_at=1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)

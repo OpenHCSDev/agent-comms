@@ -25,7 +25,6 @@ import json
 import logging
 import secrets
 import time
-import urllib.request
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -35,6 +34,7 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from aiohttp import web
 from aiohttp.typedefs import Handler
+from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions
@@ -45,19 +45,20 @@ from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, option
 from .goal_actions import DirectiveGoalAction
+from .host_services import HostService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
 from .messages import Message, QuestionKind
-from .commander.standing import UnownedWheelSpin
+from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_caller import ThreadCaller
 from .tools import (
-    CommsChannelsTool, CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -335,11 +336,6 @@ class ToolsListResult(McpResult):
 
 
 @dataclass(frozen=True)
-class RoundTripResult:
-    round_trip: str
-
-
-@dataclass(frozen=True)
 class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
@@ -515,6 +511,15 @@ class Connector:
             comms.registry.require(CALLER.name)
             yield comms
 
+    @contextmanager
+    def service_wire(self) -> Iterator[Comms]:
+        """A service pass selects its explicit root without borrowing a request route.
+
+        Waiting with a client route borrowed would hold up its replacement. The
+        pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
+        """
+        yield Comms.blocking_reads(self.root)
+
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
@@ -522,6 +527,7 @@ class Connector:
             return tool.invoke(comms, arguments, caller=CALLER)
 
     def application(self) -> web.Application:
+        self.store.read()  # Refuse an unreadable store before binding any port.
         with self.opened_wire() as comms:
             CommanderHeartbeat.register(comms.registry)
         app = web.Application(middlewares=[self.log_route])
@@ -548,6 +554,13 @@ class Connector:
     async def log_route(self, request: web.Request, handler: Handler) -> web.StreamResponse:
         """One line per request naming its route template: paths and queries carry one-use secrets
         and OAuth values, and headers carry bearer tokens, so none of them is logged."""
+        match request.match_info.route:
+            case ResourceRoute(resource=AbstractResource(canonical=template)):
+                pass
+            case SystemRoute():
+                template = "unmatched"
+            case _:
+                raise TypeError("Unsupported aiohttp route")
         started = time.monotonic()
         status = web.HTTPInternalServerError.status_code
         try:
@@ -558,18 +571,16 @@ class Connector:
             status = refusal.status
             raise
         finally:
-            # A route renders as its method and path template, never the matched values.
             elapsed = time.monotonic() - started
-            logging.info("%s %s %.3fs", request.match_info.route, status, elapsed)
+            logging.info("%s %s %s %.3fs", request.method, template, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
-        heartbeat = CommanderHeartbeat()
         tasks = (
             asyncio.create_task(Coordination.watch_worker(
-                lambda: UnownedWheelSpin.watch_pass(self.opened_wire))),
+                UnownedOrderWatch(), self.service_wire)),
             asyncio.create_task(Coordination.watch_worker(
-                lambda: heartbeat.watch_pass(self.opened_wire))),
+                CommanderHeartbeat(), self.service_wire)),
         )
         try:
             yield
@@ -772,7 +783,10 @@ class Connector:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
+class ConnectorVerb(
+    DeclaredFamily, DeclaredOptions, Command,
+    affix="Verb", discovery_package=HostService.__module__,
+):
     """One connector command: its options are its fields, and its parser comes from them."""
 
     @abstractmethod
@@ -811,37 +825,6 @@ class ServeVerb(ConnectorVerb):
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
         web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
-        return 0
-
-
-@dataclass(frozen=True, kw_only=True)
-class RoundTripVerb(ConnectorVerb):
-    """Explicit qualification for a configured connector: its loopback read agrees with this
-    bus as claude-ai. Which runtime the service runs is HostService.restart_onto's proof."""
-
-    help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
-    port: int = option("--port", default=PORT, help="The service's loopback port")
-
-    def apply(self, ctx: ConnectorStore) -> int | str:
-        read = ToolCall.of(CommsChannelsTool)
-        call = ToolsCallMessage(jsonrpc="2.0", id=0, params=read)
-        with ctx.granted("upgrade round trip") as token:
-            request = urllib.request.Request(
-                f"http://{LOOPBACK}:{self.port}/mcp",
-                data=json.dumps(FieldCodec.encode(call)).encode(),
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with urllib.request.urlopen(request, timeout=60) as response:
-                response = FieldCodec.decode(ToolsCallReply, json.load(response))
-        reply = response.result
-        if reply.is_error:
-            return f"The connector round trip failed: {reply.content[0].text}"
-        with client_wire(self.root) as comms:
-            if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
-                return f"The service on port {self.port} reads another bus than {self.root}"
-        print(json.dumps(FieldCodec.encode(
-            RoundTripResult(f"{call.params.name} read alike on port {self.port}"))))
         return 0
 
 
