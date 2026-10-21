@@ -9,25 +9,29 @@ import shlex
 import shutil
 import subprocess
 import time
+from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import cached_property
 from itertools import groupby
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from .field_codec import FieldCodec, PathText
-from .native_tool_call import SelectedToolDenied
-from .standing_rules import UndatedStandingRule
-from .storage_room import (
-    AllocationRoomWork, BuildRoomWork, RoomAllocation, TestGateRoomWork,
+from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.storage_room import (
+    AllocationRoomWork,
+    BuildRoomWork,
+    RoomAllocation,
+    TestGateRoomWork,
 )
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .thread_identity import ThreadIncarnation
-    from .threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.threads import Thread
 
 StoragePath = Annotated[Path, PathText]
 
@@ -228,7 +232,7 @@ class StorageRule(RoomAllocation):
 
 
 @dataclass(frozen=True)
-class UnitStorage(UndatedStandingRule):
+class UnitStorage:
     """The home storage slot (possibly non-Git) followed by extra Git checkouts."""
 
     rule: StorageRule
@@ -239,13 +243,9 @@ class UnitStorage(UndatedStandingRule):
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
         return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
 
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[UnitStorage, ...]:
-        todos = cls.todos(comms, commander)
-        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
-        registry = comms.registry
-        read = (cls.read(registry.storage_rule, registry.require(unit)) for unit in units)
-        return tuple(storage for storage in read if storage.over_checkouts or storage.missing_home)
+    @property
+    def home(self) -> Path:
+        return self.checkouts[0]
 
     @property
     def extra_checkouts(self) -> tuple[Path, ...]:
@@ -257,7 +257,7 @@ class UnitStorage(UndatedStandingRule):
 
     @property
     def missing_home(self) -> bool:
-        return not self.checkouts[0].is_dir()
+        return not self.home.is_dir()
 
     def adding(self, path: Path) -> UnitStorage:
         proposed = replace(self, checkouts=tuple(dict.fromkeys((*self.checkouts, path))))
@@ -273,10 +273,53 @@ class UnitStorage(UndatedStandingRule):
         if self.over_checkouts:
             self.rule.deny(f'at most {self.rule.max_checkouts} checkouts besides the home checkout')
 
+
+@dataclass(frozen=True)
+class StorageViolation(UndatedStandingRule, declared_name=None):
+    """One family scan shares each held unit's storage snapshot between its violations."""
+
+    storage: UnitStorage
+
+    @classmethod
+    def scan_owner(cls) -> type[StorageViolation]:
+        return __class__
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        todos = cls.todos(comms, commander)
+        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+        registry = comms.registry
+        members = cls.members_with(cls)
+        found = []
+        for unit in units:
+            storage = UnitStorage.read(registry.storage_rule, registry.require(unit))
+            found.extend(member(storage) for member in members if member.violated(storage))
+        return tuple(found)
+
+    @classmethod
+    @abstractmethod
+    def violated(cls, storage: UnitStorage) -> bool: ...
+
+
+class StorageOverQuota(StorageViolation):
+    @classmethod
+    def violated(cls, storage: UnitStorage) -> bool:
+        return storage.over_checkouts
+
     def line(self) -> str:
-        home = f'; declared home {self.checkouts[0]} is missing' if self.missing_home else ''
-        return (f'VIOLATION storage quota: {self.unit} holds {len(self.extra_checkouts)} checkouts besides home, '
-                f'limit {self.rule.max_checkouts}{home} -> order the cleanup')
+        return (f'VIOLATION storage quota: {self.storage.unit} holds '
+                f'{len(self.storage.extra_checkouts)} checkouts besides home, '
+                f'limit {self.storage.rule.max_checkouts} -> order the cleanup')
+
+
+class StorageHomeMissing(StorageViolation):
+    @classmethod
+    def violated(cls, storage: UnitStorage) -> bool:
+        return storage.missing_home
+
+    def line(self) -> str:
+        return (f'VIOLATION storage home: {self.storage.unit} declared home '
+                f'{self.storage.home} is missing -> restore the home checkout')
 
 
 @dataclass

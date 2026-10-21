@@ -15,16 +15,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
-from .plan_phases import PlanPhase
-from .recorded_time import EventTime, RecordedEventTime
-from .repo import Repo
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.plan_phases import PlanPhase
+from agent_comms.recorded_time import EventTime, RecordedEventTime
+from agent_comms.repo import Repo
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .goals import RequestDirective
-    from .storage_rules import MemoryUse, StorageRule
-    from .todos import Todo
+    from agent_comms.comms import Comms
+    from agent_comms.goals import RequestDirective
+    from agent_comms.storage_rules import MemoryUse, StorageRule
+    from agent_comms.todos import Todo
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -79,10 +79,16 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return tuple(todo for todo in StandingRule.todos(comms, commander) if todo.pending)
 
     @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        """Ordinary rules scan independently; a family can own one shared scan."""
+        return cls
+
+    @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
-        """Every member's violations for one commander that began after ``after``."""
-        found = (v for rule in cls.members_with(cls) for v in rule.violations(comms, commander))
-        return tuple(rule for rule in found if rule.broke_after(after))
+        """Read each inherited scan owner once, preserving the requested member scope."""
+        owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
+        found = (v for owner in owners for v in owner.violations(comms, commander))
+        return tuple(rule for rule in found if isinstance(rule, cls) and rule.broke_after(after))
 
 
 class UndatedStandingRule(StandingRule, declared_name=None):
