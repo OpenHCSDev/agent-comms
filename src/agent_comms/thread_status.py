@@ -18,12 +18,18 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class Visible:
+    """A presence that can be addressed, started and pinned in channels."""
+
+    def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
+        pass
+
+
 @dataclass(frozen=True)
 class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     active: ClassVar[bool] = False
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
-    visible: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
     receiving: ClassVar[bool]
 
@@ -37,9 +43,8 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def declaration(self) -> ThreadStatus:
         return self
 
-    def require_visible(self) -> None:
-        if not self.visible:
-            raise RelationViolationError("Initial direct target must be visible.")
+    def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
+        raise RelationViolationError(message)
 
     def require_running(self) -> None:
         raise RelationViolationError("goal owner is not running")
@@ -95,11 +100,10 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence(ThreadStatus, declared_name=None):
+class ActiveThreadPresence(Visible, ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
     active = True
-    visible = True
 
     def require_active(self) -> None:
         pass
@@ -146,13 +150,12 @@ class IdleThreadStatus(ActiveThreadPresence):
     receiving = True
 
 
-class StoppedThreadStatus(ThreadStatus):
+class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
     receiving = False
 
     def require_stopped(self) -> None:
         pass
-    visible = True
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.stopped
