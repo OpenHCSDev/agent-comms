@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 from acp import RequestError
 
+from agent_comms.following_inputs import OwnerFollowingInputs
+
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
@@ -274,7 +276,10 @@ class OwnedTurn:
             reservation.pop_all()
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
-        self.backend_inbox = self.runner.inputs.bind_native_turn(self.session_id, self.thread)
+        self.following = OwnerFollowingInputs(
+            self.runner.inputs, self.session_id, self.thread,
+            self.runner.inputs.bind_native_turn(self.session_id, self.thread),
+        )
         self.finish_event = asyncio.Event()
         self.controller = (
             self.runner.inputs.state(self.session_id).queued[self.accepted_input_id].controller
@@ -286,7 +291,7 @@ class OwnedTurn:
         self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()
         self.input_cleanup.push_async_callback(
-            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
+            self.runner.inputs.finish_turn_inputs, self.following
         )
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)
@@ -362,7 +367,7 @@ class OwnedTurn:
             tool_mode=CodingToolMode(sender),
             worktree=self.worktree,
             environment=self.env_extra,
-            inbox=self.backend_inbox,
+            inbox=self.following.inbox,
             finish_event=self.finish_event,
             send_boundary=sender,
             interrupt_boundary=lambda public_id, native_id, text: sender(

@@ -68,6 +68,8 @@ from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
+    from agent_comms.following_inputs import OwnerFollowingInputs
+
     from .turn_phase import TurnPhase
 
 AGENT_PREFIX = "!agent "
@@ -1049,10 +1051,9 @@ class InputDrain(InputObservation):
         with _store_lock(self.comms._wire_lock_path):
             return self.dispositions.settle_unbound(keys)
 
-    async def finish_turn_inputs(
-        self, session_id: str, inbox: TurnInbox
-    ) -> None:
-        """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
+    async def finish_turn_inputs(self, following: OwnerFollowingInputs) -> None:
+        """Retire the ending turn's existing input owner; retain UNKNOWN only as notices."""
+        session_id, inbox = following.session_id, following.inbox
         state = self.state(session_id)
         turn = state.retire_turn(inbox)
         if not turn.is_open:
@@ -1064,15 +1065,7 @@ class InputDrain(InputObservation):
             await turn.finish_original(self)
         finally:
             try:
-                if state.queued:
-                    from .following_inputs import OwnerFollowingInputs
-
-                    owner = await Coordination.run_worker(partial(
-                        self.comms.registry.require, self.sessions.require(session_id),
-                    ))
-                    await OwnerFollowingInputs(self, session_id, owner, inbox).pass_on_unread(
-                        self.effects.turns,
-                    )
+                await following.pass_on_unread(self.effects.turns)
             finally:
                 # Retire only after the old lease ended and live, unwritten
                 # acceptances had their handoff. UNKNOWN rows never grant it.
