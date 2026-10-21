@@ -27,6 +27,7 @@ from statistics import median
 from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
+from urllib.parse import quote
 
 from agent_comms.order_runs import OrderRun
 
@@ -457,6 +458,17 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
     status: type[ListedPullRequest] = field(kw_only=True)
+    reviewable_at: float = field(kw_only=True)
+
+    def diff(self, repo: RepositoryName) -> str:
+        """The linked request's base versus this immutable head, not a local checkout."""
+        result = subprocess.run(
+            ("gh", "api", f"repos/{repo.to_wire()}/compare/{quote(self.base, safe='')}...{self.head}",
+             "-H", "Accept: application/vnd.github.diff"),
+            capture_output=True, text=True, timeout=60)
+        if result.returncode:
+            raise TodoError(result.stderr.strip() or f"Cannot read PR #{self.number} at {self.head}.")
+        return result.stdout
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -520,6 +532,9 @@ class GithubPullRequest:
     head: str
     updated: str
     base: str
+    created: str
+    head_time: str
+    ready_events: tuple[str, ...]
     closed: bool
     isDraft: bool
     mergeStateStatus: str
@@ -527,6 +542,10 @@ class GithubPullRequest:
     queued: bool
     merge: PullRequestCommit | None
     merged: str | None
+
+    @property
+    def reviewable_at(self) -> float:
+        return max(_github_time(at) for at in (self.created, self.head_time, *self.ready_events))
 
 
 @dataclass(frozen=True)
@@ -538,6 +557,8 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
 
+    reviewable_at: float = field(kw_only=True)
+    reviewable: ClassVar[bool] = False
     action: ClassVar[str] = "read the pull request"
 
     @classmethod
@@ -558,11 +579,13 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   orders, base=self.base, problems=problems, status=type(self))
+                                   orders, base=self.base, problems=problems, status=type(self),
+                                   reviewable_at=self.reviewable_at)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
     """The open-state scan owns precedence through its most specific member's MRO."""
+    reviewable = True
     action = "wait for the checks, then review the head"
 
     @classmethod
@@ -580,7 +603,8 @@ class UnmergedListedPullRequest(ListedPullRequest):
         members = cls.members_with(cls)
         order = max(members, key=lambda member: len(member.__mro__)).__mro__
         member = next(member for member in order if member in members and member.accepts(row))
-        yield member(row.number, row.branch, row.head, row.updated, row.base)
+        yield member(row.number, row.branch, row.head, row.updated, row.base,
+                     reviewable_at=row.reviewable_at)
 
 
 class CleanListedPullRequest(UnmergedListedPullRequest):
@@ -608,6 +632,7 @@ class FailingChecksListedPullRequest(QueuedListedPullRequest):
 
 
 class DraftListedPullRequest(FailingChecksListedPullRequest):
+    reviewable = False
     action = "finish the working change and mark the pull request ready"
 
     @classmethod
@@ -622,7 +647,8 @@ class ClosedListedPullRequest(ListedPullRequest):
     @classmethod
     def from_github(cls, row: GithubPullRequest) -> Iterator[ListedPullRequest]:
         if row.closed and row.merged is None:
-            yield cls(row.number, row.branch, row.head, row.updated, row.base)
+            yield cls(row.number, row.branch, row.head, row.updated, row.base,
+                      reviewable_at=row.reviewable_at)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -637,13 +663,13 @@ class MergedListedPullRequest(ListedPullRequest):
             if row.merge is None:
                 raise WorkBranchError(f"GitHub merged PR #{row.number} without a merge commit")
             yield cls(row.number, row.branch, row.head, row.updated, row.base,
-                      merge=row.merge, merged=row.merged)
+                      merge=row.merge, merged=row.merged, reviewable_at=row.reviewable_at)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> MergedPullRequest:
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems, status=type(self))
+                                 problems=problems, status=type(self), reviewable_at=self.reviewable_at)
 
 
 class PullRequests:
@@ -678,17 +704,21 @@ class PullRequests:
             return ()
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
-            'head: headRefOid base: baseRefName closed isDraft mergeStateStatus '
+            'head: headRefOid base: baseRefName closed isDraft mergeStateStatus created: createdAt '
+            'ready: timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) '
+            '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
             'queue: mergeQueueEntry { position } '
-            'checks: commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } '
+            'checks: commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } } '
             'merge: mergeCommit { oid } merged: mergedAt updated: updatedAt }' for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = subprocess.run(
             ("gh", "api", "graphql", "-f", "query=" + query,
              "--jq", '.data.repository | map_values(. + '
-             '{queued: (.queue != null), checks: .checks.nodes[0].commit.statusCheckRollup.state}'
-             ' | del(.queue))'),
+             '{queued: (.queue != null), head_time: .checks.nodes[0].commit.committedDate, '
+             'ready_events: [.ready.nodes[].createdAt], '
+             'checks: .checks.nodes[0].commit.statusCheckRollup.state}'
+             ' | del(.queue, .ready))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise WorkBranchError(
@@ -2245,7 +2275,7 @@ class CommanderCursor(TypedTable):
 
     def advance(self, store: TodoStore) -> None:
         with store.writing() as db:
-            previous = next(type(self).select(db, commander=self.commander), None)
+            previous = type(self).one(db, commander=self.commander)
             if previous is None or previous.message.seq < self.message.seq:
                 self.upsert(db)
 
@@ -2546,7 +2576,7 @@ class AssignTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class CitedStrike(TodoOperation, declared_name=None):
+class CitedStrike(TodoCommand, declared_name=None):
     evidence: Annotated[tuple[FileLine, ...], WireOmitDefault()] = field(
         default=(), kw_only=True)
 
@@ -2561,7 +2591,7 @@ class CitedStrike(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class StrikeTodo(CitedStrike, StoryEvent):
+class StrikeTodo(CitedStrike, TodoOperation, StoryEvent):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -2658,7 +2688,7 @@ class VerdictAudience:
 
 @dataclass(frozen=True)
 class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
-    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    """A judgment kept on the Todo that owns the reviewed work and its history."""
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
@@ -2672,6 +2702,15 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
 
     def reviewed_heads(self) -> tuple[str, ...]:
         """Only a judgment of a commit clears review of that immutable head."""
+        return ()
+
+    def judged_calls(self) -> tuple[str, ...]:
+        return ()
+
+    def head_review_times(self) -> tuple[float, ...]:
+        return ()
+
+    def send_back_times(self) -> tuple[float, ...]:
         return ()
 
     def judged(self, current: Todo) -> Todo:
@@ -2689,8 +2728,11 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
 
 
 @dataclass(frozen=True)
-class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
+class ToolCallVerdict(OrderVerdict, declared_name=None):
     tool_call_id: str
+
+    def judged_calls(self) -> tuple[str, ...]:
+        return (self.tool_call_id,)
 
     def story_text(self) -> str:
         return f"{super().story_text()}; tool call {self.tool_call_id}"
@@ -2720,20 +2762,12 @@ class QuotedVerdict(OrderVerdict, declared_name=None):
 
 @dataclass(frozen=True)
 class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
-    """The tool call carries out the order clause it quotes."""
+    """A stored edit acceptance; new review commands write immutable head verdicts."""
     line = "Accepted"
-
-    @classmethod
-    def require_branches(cls, added: int, no_owner: str | None) -> None:
-        if added <= 0:
-            return
-        if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
-                and re.search(r'/\S+:\d+', no_owner)):
-            raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
 
 
 @dataclass(frozen=True)
-class HeadVerdict(QuotedVerdict, TodoOperation, declared_name=None):
+class HeadVerdict(QuotedVerdict, declared_name=None):
     """One judgment of immutable code; its members own only their GitHub result."""
     context: ClassVar[str] = "agent-comms/review"
     state: ClassVar[str]
@@ -2745,6 +2779,9 @@ class HeadVerdict(QuotedVerdict, TodoOperation, declared_name=None):
 
     def reviewed_heads(self) -> tuple[str, ...]:
         return (self.head,)
+
+    def head_review_times(self) -> tuple[float, ...]:
+        return (self.at.recorded_at("A head review"),)
 
     @property
     def line(self) -> str:
@@ -2775,7 +2812,7 @@ class HeadVerdict(QuotedVerdict, TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class AcceptedHeadVerdict(HeadVerdict):
-    state = "success"
+    state: ClassVar[str] = "success"
 
 
 @dataclass(frozen=True)
@@ -2828,6 +2865,9 @@ class RejectingVerdict(OrderVerdict, CitedStrike, declared_name=None):
     """Shared strike and goal revision, for current heads and stored tool-call history."""
     reason: StrikeReason
 
+    def send_back_times(self) -> tuple[float, ...]:
+        return (self.at.recorded_at("A send-back"),)
+
     @property
     def line(self) -> str:
         return f"Sent back: {self.reason.text}"
@@ -2851,7 +2891,7 @@ class RejectingVerdict(OrderVerdict, CitedStrike, declared_name=None):
 
 @dataclass(frozen=True)
 class RejectedHeadVerdict(HeadVerdict, RejectingVerdict):
-    state = "failure"
+    state: ClassVar[str] = "failure"
 
 
 @dataclass(frozen=True)
@@ -3132,13 +3172,19 @@ class Todo(TypedTable):
     def held_order_ids(self) -> tuple[str, ...]:
         return tuple(order.id for order in self.order_history)
 
-    def unreviewed_heads(self, registry: Registration, pulls: PullRequests) -> frozenset[str]:
-        """Published code awaiting a commit judgment, not the edits that produced it."""
-        source = ProgressSource.of(self, registry, pulls)
-        published = {request.head for request in source.requests(UnmergedListedPullRequest)}
-        published.update(point.sha for point in source.published())
-        reviewed = {head for verdict in self.verdicts for head in verdict.reviewed_heads()}
-        return frozenset(published - reviewed)
+    def head_verdict(self, head: str) -> OrderVerdict | None:
+        """The last verdict on this problem and immutable head; a new push has none."""
+        return next((verdict for verdict in reversed(self.verdicts)
+                     if head in verdict.reviewed_heads()), None)
+
+    @property
+    def evidence_since(self) -> float:
+        return max((self.order.checked().at.recorded_at("An order"),
+                    *(at for verdict in self.verdicts for at in verdict.head_review_times())))
+
+    @property
+    def judged_call_ids(self) -> tuple[str, ...]:
+        return tuple(call for verdict in self.verdicts for call in verdict.judged_calls())
 
     @property
     def reference_pattern(self) -> str:
@@ -3554,14 +3600,6 @@ class TodoStore(DurableStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth))
-
-    def unreviewed_heads(self, commander: ThreadIncarnation,
-                         registry: Registration) -> frozenset[tuple[RepositoryName, str]]:
-        """One pushed head linked to several open problems is still one review."""
-        held = tuple(todo for todo in self.held_for_commander(commander) if todo.pending)
-        pulls = PullRequests(held)
-        return frozenset((todo.repo, head) for todo in held
-                         for head in todo.unreviewed_heads(registry, pulls))
 
     def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
         return self._open(

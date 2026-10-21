@@ -6,14 +6,12 @@ from agent_comms.commander.capacity import Load
 from agent_comms.field_codec import FieldCodec
 
 
-@pytest.mark.parametrize("unjudged", [0, 1, 395, 1_000_000])
-def test_capacity_reports_load_and_forks(unjudged):
-    load = Load(24, 14, unjudged, ("judge",))
+@pytest.mark.parametrize("heads", [0, 1, 395, 1_000_000])
+def test_capacity_reports_head_work_and_forks(heads):
+    load = Load(24, 14, heads, ("judge",))
     assert FieldCodec.encode(load)["total"] == load.total
-    assert load.total == 24 + 2 * 14 + unjudged / 10
-    assert str(load) == (
-        f"load {load.total:.0f} (24 open orders, 14 review timers up, {unjudged} unjudged edits), "
-        "1 live forks ['judge']"
-    )
+    assert load.heads_waiting == heads
+    assert load.total == 24 + 2 * 14 + heads
+    assert load.forks == ("judge",)
 
 

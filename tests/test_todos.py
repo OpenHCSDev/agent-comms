@@ -247,7 +247,9 @@ def pr_commander(tmp_path, monkeypatch):
     source.git(checkout, "update-ref", f"refs/remotes/origin/{WorkBranches.main}", merged)
     from agent_comms.todos import GithubPullRequest
 
-    common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
+    clock = "2026-10-20T12:00:00Z"
+    common = dict(branch="feature/orders", head=merged, updated=clock,
+                  created=clock, head_time=clock, ready_events=(),
                   base=WorkBranches.main, closed=True, isDraft=False,
                   mergeStateStatus="CLEAN", checks="SUCCESS", queued=False)
     requests = (

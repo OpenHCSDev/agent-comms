@@ -106,11 +106,12 @@ from .todos import (
     InstallTodo,
     OrderDelivery,
     OrderProgress,
-    ToolCallVerdict,
+    HeadVerdict,
     PlainText,
     PullRequests,
     StrikeReason,
     Todo,
+    TodoCommand,
     TodoOperation,
     VerdictAudience,
 )
@@ -884,7 +885,7 @@ class CommsTodoTool(ThreadToolRequest):
             self.problem, self.operation_for(todo, actor, comms), caller.name))
 
     @abstractmethod
-    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoCommand:
         """Build the change, verifying any attached application claims before writing."""
 
     def result(self, changed: Todo) -> TodoChanged | ProblemClosed:
@@ -902,22 +903,27 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsVerdictTool(CommsChangeProblemTool):
-    label = "Judge order tool call"
+class CommsVerdictTool(CommsTodoTool):
+    label = "Review pull request head"
     description = (
-        "Record the commander's verdict on one tool call the holder made for its "
-        "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
-        "the holder and revises its Goal in the same write."
+        "Record an accepted or rejected verdict on a linked pull request's current head "
+        "and post its review status on that commit. A rejection strikes the holder and "
+        "revises its Goal in the same write."
     )
     operation: Annotated[
-        ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
+        HeadVerdict, *tool_field("Accepted or rejected verdict on the linked current head")
     ]
+
+    def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> HeadVerdict:
+        if self.operation.actor != actor:
+            raise ToolRefusedError("The verdict actor must be the commander recording it.")
+        return self.operation
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsUnjudgedTool(ThreadReadTool):
-    label = "Unjudged edits"
-    description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
+    label = "Review evidence"
+    description = "Read original edit calls since each open order's last head verdict."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
         return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
@@ -927,7 +933,7 @@ class CommsUnjudgedTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    description = "Read held work, ready heads awaiting review, timers and receiving child commanders."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> Load:
         return Load.of(comms, caller.subject(self.thread))

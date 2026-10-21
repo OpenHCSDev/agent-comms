@@ -13,12 +13,12 @@ from agent_comms.goals import Goal
 from agent_comms.message_reference import MessageReference
 from agent_comms.message_bus import WatchPass
 from agent_comms.standing_rules import (
-    OrderRefusingStandingRule, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule, OrderRefusingStandingRule, StandingRule, UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import Todo
+from agent_comms.todos import PullRequest, PullRequests, Todo, UnmergedListedPullRequest
 from agent_comms.turn_digests import TurnDigestRead, TurnsSince
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
@@ -178,16 +178,29 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):
 
 
 @dataclass(frozen=True)
-class Unjudged(OrderRefusingStandingRule, ReasonedStandingRule, UndatedStandingRule):
-    limit: ClassVar[int] = 50
-    text = "UNJUDGED {why} pushed heads -> judge the commits before sending more orders"
-
-    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
-        return (f"{self.why} unreviewed pushed heads exceed the {self.limit} head ceiling; "
-                "judge is the way out: review the commits before sending more orders.",)
+class Unjudged(OrderRefusingStandingRule, DatedStandingRule):
+    """One ready current head without a verdict on its held problem."""
+    problem: str
+    holder: str
+    request: PullRequest
+    seconds: ClassVar[int] = 10 * 60
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = len(comms.goals.todos.unreviewed_heads(
-            comms.registry.require(commander).incarnation, comms.registry))
-        return str(total) if total > cls.limit else None
+    def violations(cls, comms: Comms, commander: str) -> tuple[Unjudged, ...]:
+        held = cls.todos(comms, commander)
+        pulls = PullRequests(held)
+        return tuple(cls(todo.id, todo.holder, request) for todo in held
+                     for request in pulls.listed(todo.repo, UnmergedListedPullRequest, todo)
+                     if request.status.reviewable and todo.head_verdict(request.head) is None)
+
+    def began(self) -> float:
+        return self.request.reviewable_at
+
+    def line(self) -> str:
+        age = max(0, int((time.time() - self.began()) / 60))
+        return (f"UNJUDGED {self.problem} {self.holder} PR #{self.request.number} "
+                f"head {self.request.head} ({age} min) "
+                f"-> judge ok {self.problem} or judge back {self.problem}")
+
+    def refusal(self, comms: Comms, answers: Sequence[MessageReference]) -> tuple[str, ...]:
+        return (self.line(),) if time.time() - self.began() >= self.seconds else ()

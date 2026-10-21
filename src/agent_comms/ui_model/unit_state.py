@@ -25,7 +25,7 @@ from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.todos import (
-    OrderProgress, ProgressSource, PullRequests, SendBackVerdict, Todo,
+    OrderProgress, ProgressSource, PullRequests, Todo,
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
 from agent_comms.turn_digests import LastTurns, TurnDigestRead
@@ -258,9 +258,8 @@ class Spinning(StalledOnNothing):
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
         if not source.pending:
             return
-        sends = sorted(verdict.at.recorded_at("A send-back")
-                       for todo in source.pending for verdict in todo.verdicts
-                       if isinstance(verdict, SendBackVerdict))
+        sends = sorted(at for todo in source.pending for verdict in todo.verdicts
+                       for at in verdict.send_back_times())
         commit_at = max((commit.at for origin in source.sources for commit in origin.commits()),
                         default=source.since)
         calls = source.calls

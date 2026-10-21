@@ -47,7 +47,7 @@ from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import GoalRef, PendingProblemOrder, RejectingVerdict, Todo, TodoOperation
+from .todos import GoalRef, PendingProblemOrder, RejectingVerdict, Todo, TodoCommand
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -371,7 +371,7 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
     problem: str
-    operation: TodoOperation
+    operation: TodoCommand
 
     @abstractmethod
     def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal: ...

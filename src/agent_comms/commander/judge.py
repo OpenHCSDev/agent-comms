@@ -1,46 +1,35 @@
-"""The commander's verdict on every unit edit, judged against the order that unit is carrying out.
+"""Review the current commit of a pull request linked to a held problem.
 
-A send-back's --roast is posted to its verdict's audience with the quoted slop line, so the
-unit learns what was stupid and nobody repeats it; a send-back without a roast is refused.
---serves quotes the order Todo, which also owns every verdict.
-
-A verdict is a set of semantic claims the tool can falsify: --serves must be words from
-the unit's current order (which clause this edit carries out), and every edit must contain
-one of the --line quotes (the deleted authority or added owner I judged it by). Without
-reading each edit and deciding what it does, the claims cannot be written.
-
-Each edit's CODE is printed only after its last hunk line, so a verdict needs the
-whole edit on screen: a show piped into head or /dev/null yields no codes.
-
-A verdict without a reason is refused; a send-back must cite a real message from
-the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
+The Todo owns the verdict; HeadVerdict posts its GitHub status on that exact commit.
+A new push has no verdict. Edit IDs and read codes are evidence, not review identities.
+Every --line quote is checked against the linked request's diff at the selected head.
 """
 
 import hashlib
 import json
-import os
 import re
 import sys
 import time
-from typing import Annotated
 from abc import abstractmethod
-from dataclasses import asdict, dataclass, field
-
+from dataclasses import asdict, dataclass
+from typing import Annotated
 
 from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import Argument, FieldCodec
 from agent_comms.todos import (
-    AcceptedVerdict,
+    AcceptedHeadVerdict,
     BluntText,
     Derivation,
-    PeerAcceptedVerdict,
-    SendBackVerdict,
+    HeadVerdict,
+    ListedPullRequest,
+    PullRequest,
+    PullRequests,
+    RejectedHeadVerdict,
     Slop,
     StrikeReason,
-    SupersededVerdict,
     Todo,
-    ToolCallVerdict,
+    UnmergedListedPullRequest,
 )
 from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
@@ -48,23 +37,15 @@ from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 
-BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
-
 
 class Hunk(ReplacementEdit):
-
-    def branches_added(self) -> int:
-        """Branches the new text has beyond the old text (branch-vs-polymorphism: presumed slop)."""
-        return sum(1 for line in self.new_text.splitlines() if BRANCH.search(line)) - sum(
-            1 for line in self.old_text.splitlines() if BRANCH.search(line))
-
     def rendered(self) -> str:
         return (''.join(f'- {line}\n' for line in self.old_text.splitlines())
                 + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
 
 
 class Edit(EditCall):
-    """The Core result row, decoded at the commander's tool boundary."""
+    """Original edit evidence, decoded at the commander's tool boundary."""
     hunks: tuple[Hunk, ...]
 
     @classmethod
@@ -73,17 +54,7 @@ class Edit(EditCall):
         return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
 
     def code(self) -> str:
-        """Four hex digits derived from the edit's own text; shown only after its full hunks."""
         return hashlib.sha256((self.id + json.dumps([asdict(h) for h in self.hunks])).encode()).hexdigest()[:4]
-
-    def branches_added(self) -> int:
-        return sum(hunk.branches_added() for hunk in self.hunks)
-
-    def text(self) -> str:
-        return ''.join(hunk.old_text + hunk.new_text for hunk in self.hunks)
-
-    def added(self) -> str:
-        return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def rendered(self) -> str:
         return (f'--- {self.id} {self.at.clock()} {self.path}\n'
@@ -91,241 +62,121 @@ class Edit(EditCall):
                 + f'\n=== end {self.id} code {self.code()}')
 
 
-def show(ctx, pending: list[Edit]) -> None:
-    by_thread: dict[str, list[Edit]] = {}
-    for edit in pending:
-        by_thread.setdefault(edit.thread, []).append(edit)
-    for name, edits in by_thread.items():
-        orders = ctx.held_by(name)
-        intent = '\n'.join('\n'.join((todo.order.instructions(todo),
-            *(f'Sent: {message.message_id}' for message in todo.messages[-1:])))
-            for todo in orders) or 'NO OPEN ORDER TODO'
-        print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
-        for edit in edits:
+def show(ctx: order.Commander, pending: list[Edit], held: tuple[Todo, ...]) -> None:
+    pulls = PullRequests(held)
+    for todo in held:
+        print(f'===== {todo.id} {todo.holder}\n{todo.order.instructions(todo)}')
+        for message in todo.messages[-1:]:
+            print(f'Sent: {message.message_id}')
+        requests = pulls.listed(todo.repo, ListedPullRequest, todo)
+        if not requests:
+            print('No linked pull request; publish the working branch first.')
+        for request in requests:
+            verdict = todo.head_verdict(request.head)
+            print(f'PR #{request.number} head {request.head}: '
+                  + (verdict.line if verdict is not None else 'unreviewed'))
+        evidence = [edit for edit in pending if edit.problem == todo.id]
+        print(f'{len(evidence)} edits since the last head verdict:')
+        for edit in evidence:
             print(edit.rendered())
-    print(f'{len(pending)} unjudged')
 
 
 def roast(ctx, audience, thread, lines, text, fix, slop):
-    """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
-    the required fact it restates and the declaration that derives it (paper 1's definition), why that is
-    stupid, and what replaces it."""
+    """Keep the rejected code, duplicated fact and replacement visible to its audience."""
     body = (f'{thread}, this is stupid slop and it is going back:\n'
-            + '\n'.join(f'    {l.strip()}' for l in lines)
+            + '\n'.join(f'    {line.strip()}' for line in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
     print(f'roast sent to {", ".join(audience.threads)}: ' + ctx.post(audience, body))
 
 
-def alarm(ctx):
-    while True:
-        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
-                if edit.at.before(time.time() - 300)]
-        if late:
-            counts: dict[str, int] = {}
-            for edit in late:
-                counts[edit.thread] = counts.get(edit.thread, 0) + 1
-            oldest = min(edit.at.recorded_at("An overdue edit") for edit in late)
-            print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
-                  + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge show', flush=True)
-        time.sleep(60)
-
-
 class JudgeVerb(CommanderVerb):
-    """A verb of `judge`."""
+    """A verb of `judge`; judgment is never gated by unrelated order refusals."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
-    help = "every unit's unjudged edits in full, beside its current orders"
-    thread: Annotated[
-        str, Argument(flags=("thread",), options={"nargs": "?"})
-    ] = ""
-
-    def selects(self, edit: Edit) -> bool:
-        return not self.thread or edit.thread == self.thread
+    help = "linked pull request heads, their verdicts, and original edit evidence"
+    thread: Annotated[str, Argument(flags=("thread",), options={"nargs": "?"})] = ""
 
     def run(self, ctx: order.Commander) -> None:
-        show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if self.selects(edit)])
-
-
-class AlarmVerb(JudgeVerb):
-    help = "loop: every minute, name edits unjudged for 5 min"
-
-    def run(self, ctx: order.Commander) -> None:
-        alarm(ctx)
+        held = tuple(todo for todo in ctx.held_orders()
+                     if not self.thread or todo.holder == self.thread)
+        show(ctx, Edit.unjudged(ctx.comms, ctx.commander), held)
 
 
 @dataclass(frozen=True, kw_only=True)
 class VerdictVerb(JudgeVerb):
-    """Every verdict, mine or a fork's, is made after reviewing paper 1's
-    correct-maintenance results. Each member's required options are the facts its verdict carries."""
-
-    ids: Annotated[
-        tuple[str, ...],
-        Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
-    ]
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
     why: str
-    problem: Annotated[
-        str,
-        Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"}),
-    ] = ""
+    serves: Annotated[str, Argument(options={"help": "exact words of the order"})]
     lines: Annotated[
         tuple[str, ...],
-        Argument(
-            flags=("--line",),
-            options={
-                "action": "append",
-                "metavar": "LINE",
-                "help": "an exact diff line; repeat for each",
-            },
-        ),
+        Argument(flags=("--line",), options={"action": "append", "metavar": "LINE",
+                                            "help": "an exact line of the PR diff; repeat"}),
     ]
 
     @abstractmethod
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> ToolCallVerdict: ...
+    def operation(self, ctx: order.Commander, todo: Todo, request: PullRequest) -> HeadVerdict: ...
 
-    @abstractmethod
-    def check_edits(self, edits: list[Edit]) -> None: ...
+    def check_diff(self, diff: str) -> None:
+        if len(self.why.split()) < 6:
+            sys.exit('Refused: say which intent the head serves or violates and why (6+ words).')
+        if not self.lines or any(line not in diff for line in self.lines):
+            sys.exit('Refused: every --line must quote the linked PR diff at its current head.')
 
-    @abstractmethod
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None: ...
+    def report(self, ctx: order.Commander, todo: Todo) -> None:
+        """Acceptance has no additional public effect beyond the recorded review status."""
 
     def run(self, ctx: order.Commander) -> None:
-        if len(self.why.split()) < 6:
-            sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in ctx.held_orders()
-                  if not self.problem or todo.id == self.problem}
-        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
-                 if edit.problem in orders}
-        ids = [token.split(':')[0] for token in self.ids]
-        if missing := [i for i in ids if i not in edits]:
-            sys.exit(f'Refused: unknown edit ids {missing}')
-        if unread := [token for token in self.ids
-                      if token != f'{token.split(":")[0]}:{edits[token.split(":")[0]].code()}']:
-            sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
-        for i in ids:
-            if not any(line in edits[i].text() for line in self.lines):
-                sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
-        selected = {i: orders[edits[i].problem] for i in ids}
-        self.check_edits([edits[i] for i in ids])
-        # Validate the whole batch through the operation owner before its first write.
-        for i, todo in selected.items():
-            self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
-        current = {todo.id: todo for todo in selected.values()}
-        for i, todo in selected.items():
-            result = ctx.call(CommsVerdictTool(problem=todo.id,
-                              operation=self.operation(ctx, current[todo.id], i)))
-            current[todo.id] = result.todo
-        left = len(Edit.unjudged(ctx.comms, ctx.commander))
-        print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
-        self.report(ctx, tuple(current.values()))
+        todo = next((todo for todo in ctx.held_orders() if todo.id == self.problem), None)
+        if todo is None:
+            sys.exit(f'Refused: {self.problem} is not a held order of this commander.')
+        requests = PullRequests((todo,)).listed(todo.repo, UnmergedListedPullRequest, todo)
+        if len(requests) != 1:
+            sys.exit(f'Refused: {todo.id} must link exactly one open pull request; found {len(requests)}.')
+        request, = requests
+        self.check_diff(request.diff(todo.repo))
+        result = ctx.call(CommsVerdictTool(problem=todo.id,
+                          operation=self.operation(ctx, todo, request)))
+        print(f'{self.declared_name}: {todo.id} PR #{request.number} head {request.head}')
+        self.report(ctx, result.todo)
 
 
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(VerdictVerb):
-    help = "the edit serves the order"
-    serves: Annotated[
-        str, Argument(options={"help": "exact words of the order"})
-    ]
-    no_owner: Annotated[
-        str,
-        Argument(
-            flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
-        ),
-    ] = ""
-    peer: Annotated[
-        str,
-        Argument(
-            flags=("--peer",),
-            options={"help": "another sender's retained order message to the unit"},
-        ),
-    ] = ""
+    help = "accept the linked pull request's current head"
 
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        actor = ctx.incarnation
-        if self.peer:
-            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
-                                       quote=self.serves, peer=self.peer)
-        return AcceptedVerdict(todo.revision, actor, todo.held(), edit_id, quote=self.serves)
-
-    def check_edits(self, edits: list[Edit]) -> None:
-        for edit in edits:
-            path = edit.path
-            after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
-            if added := order.forwarders_added(edit.added(), after):
-                sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
-            AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
-
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class SupersededVerb(VerdictVerb):
-    help = "the task moved to another unit; these edits are neither ok nor sent back"
-    by: Annotated[
-        str,
-        Argument(
-            flags=("--by",),
-            options={"metavar": "PROBLEM", "help": "the replacing problem id from order board"},
-        ),
-    ]
-
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
-        return SupersededVerdict(todo.revision,
-                                 ctx.incarnation,
-                                 todo.held(), edit_id, replacement=self.by, reason=self.why)
-
-    def check_edits(self, edits: list[Edit]) -> None:
-        pass
-
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        pass
+    def operation(self, ctx: order.Commander, todo: Todo, request: PullRequest) -> HeadVerdict:
+        return AcceptedHeadVerdict(todo.revision, ctx.incarnation, todo.held(),
+                                   quote=self.serves, head=request.head)
 
 
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
-    help = "send the edit back; the roast is posted to the verdict's audience"
-    # A bare annotation would inherit VerdictVerb's default; field() keeps it required.
-    problem: Annotated[
-        str,
-        Argument(options={"metavar": "PROBLEM", "help": "required problem id from order board"}),
-    ] = field()
-    roast: Annotated[
-        str, Argument(options={"help": "blunt, why it is stupid, with because"})
-    ]
+    help = "reject the linked current head, record its strike and post the roast"
+    roast: Annotated[str, Argument(options={"help": "blunt, why it is stupid, with because"})]
     fix: Annotated[str, Argument(options={"help": "owner and replacing shape"})]
     pattern: Annotated[
-        str,
-        Argument(
-            flags=("--slop",), options={"help": "pattern ID from the pinned refactor-audit catalog"}
-        ),
+        str, Argument(flags=("--slop",), options={"help": "refactor-audit pattern ID"}),
     ]
-    fact: Annotated[
-        str, Argument(options={"help": "the required fact, 4+ words"})
-    ]
-    at: Annotated[
-        str, Argument(options={"help": "PATH:LINE where it is restated"})
-    ]
-    derive: Annotated[
-        str, Argument(options={"help": "|".join(Derivation.names())})
-    ]
-    by: Annotated[
-        str, Argument(options={"help": "PATH:LINE of the declaration that owns it"})
-    ]
+    fact: Annotated[str, Argument(options={"help": "the required fact, 4+ words"})]
+    at: Annotated[str, Argument(options={"help": "PATH:LINE where it is restated"})]
+    derive: Annotated[str, Argument(options={"help": "|".join(Derivation.names())})]
+    by: Annotated[str, Argument(options={"help": "PATH:LINE of its owning declaration"})]
 
     def slop(self) -> Slop:
         return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,
                                            at=self.at, derive=self.derive, by=self.by))
 
-    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, ctx.incarnation,
-                               todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
-                               evidence=(FileLine.from_wire(self.at),))
+    def operation(self, ctx: order.Commander, todo: Todo, request: PullRequest) -> HeadVerdict:
+        return RejectedHeadVerdict(todo.revision, ctx.incarnation, todo.held(),
+            quote=self.serves, head=request.head,
+            reason=StrikeReason(f'{todo.id} head sent back: {self.why}'),
+            evidence=(FileLine.from_wire(self.at),))
 
-    def check_edits(self, edits: list[Edit]) -> None:
+    def check_diff(self, diff: str) -> None:
+        super().check_diff(diff)
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
             sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
         if len(self.fix.split()) < 8:
@@ -334,14 +185,15 @@ class BackVerb(VerdictVerb):
         order.refuse(self.roast, BluntText)
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
 
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        for todo in todos:
-            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
-            roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
-            line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): '
-                    f'{todo.strikes[-1].reason}')
-            ctx.on_record(line, 'Send-back', audience)
+    def report(self, ctx: order.Commander, todo: Todo) -> None:
+        verdict = todo.verdicts[-1]
+        holder = verdict.previous.owner
+        audience = verdict.audience.of(holder, todo.goal)
+        roast(ctx, audience, holder, self.lines, self.roast, self.fix, self.slop())
+        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {holder} '
+                f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): '
+                f'{todo.strikes[-1].reason}')
+        ctx.on_record(line, 'Send-back', audience)
 
 
 def main(args, ctx):

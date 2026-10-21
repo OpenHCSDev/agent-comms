@@ -262,7 +262,7 @@ class LatestCommanderPing(MessageReadRequest[CommanderPingMessage | None]):
     def read(cls, comms: Comms, sender: str,
              commander: ThreadIncarnation) -> CommanderPingMessage | None:
         with comms.goals.todos.snapshot() as db:
-            position = next(CommanderCursor.select(db, commander=commander), None)
+            position = CommanderCursor.one(db, commander=commander)
         after = position.message if position is not None else None
         latest = comms.bus.log.read_page(cls(
             DMDisplayScope.capture(sender, commander.name, comms.registry.snapshot()), commander, after))

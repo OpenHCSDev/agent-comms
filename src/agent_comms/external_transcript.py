@@ -243,9 +243,9 @@ class ExternalEventRow(TypedTable):
         from .transcript_events import ToolStartTranscript
 
         tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
-        judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
+        judged = todo.judged_call_ids
         placeholders = lambda values: ",".join("?" for _ in values)
-        since = todo.order.at.recorded_at("An order")
+        since = todo.evidence_since
         where = (f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
                  'AND (e.timestamp>=? OR e.timestamp IS NULL)')
         parameters = (thread, ToolStartTranscript.declared_name, *tools, since)
@@ -407,12 +407,6 @@ class StoreRead(TranscriptSource):
                                                call_id=identity)
                 yield from tool.edit_calls(identity, GeneratedTimestamp.decode(timestamp),
                                            todo.held().owner, todo.id)
-
-    def unjudged_count(self, todo) -> int:
-        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
-        return self.connection.execute(
-            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
-            parameters).fetchone()[0]
 
 
 @dataclass(frozen=True, slots=True)

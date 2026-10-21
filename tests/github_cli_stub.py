@@ -30,6 +30,17 @@ def main():
         # gh --jq returns the typed projection, not the raw GraphQL envelope.
         print(json.dumps({f"p{number}": data["requests"][number]["listed"]
                           for _, number in selections}))
+    elif arguments[:3] == ["api", "--method", "POST"]:
+        assert arguments[3].startswith(f'repos/{data["repo"]}/statuses/')
+        fields = dict(arguments[index + 1].split("=", 1)
+                      for index, argument in enumerate(arguments) if argument == "-f")
+        assert fields["state"] in ("success", "failure")
+        print(json.dumps(fields))
+    elif arguments[:1] == ["api"] and arguments[1].startswith(f'repos/{data["repo"]}/compare/'):
+        assert arguments[arguments.index("-H") + 1] == "Accept: application/vnd.github.diff"
+        assert any(arguments[1].endswith("..." + request["listed"]["head"])
+                   for request in data["requests"].values())
+        print(data["diff"])
     else:
         raise AssertionError(f"Unexpected gh invocation: {arguments!r}")
 
