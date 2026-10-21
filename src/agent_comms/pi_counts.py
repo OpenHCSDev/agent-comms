@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .field_codec import (
     AcceptsNull,
+    ExternalField,
     ExternalJsonShape,
     FieldCodec,
     NullMember,
@@ -44,13 +45,13 @@ class PiCountWire(AcceptsNull):
         return {"anyOf": [FieldCodec.value_schema(int), UnreportedCount.schema()]}
 
 
-class TotalCountWire(PiCountWire):
-    """A measured total is unreported unless Pi supplied an integer."""
+class TotalCountWire(PiCountWire, ExternalField):
+    """Only external totals treat a non-integer as unreported; retained values stay strict."""
 
     @classmethod
     @boundary_decoder
-    def decode(cls, value: object) -> PiCount:
-        return super().decode(value) if type(value) is int else UnreportedCount()
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return value if type(value) is int else None
 
 
 class NonnegativeCountWire(PiCountWire):

@@ -729,13 +729,13 @@ class DefaultExternalName:
 
 class ExternalName(ExternalField, DeclaredFamily):
     @classmethod
-    def from_external(cls, value: object) -> object:
+    def from_external(cls, value: object) -> type[Self]:
         if value is not None:
             try:
                 return cls.member_named(FieldCodec.decode(str, value))
             except UnknownFamilyMember:
                 pass
-        member, = cast(type[DeclaredFamily], cls._family_root).members_with(DefaultExternalName)
+        member, = cls.members_with(DefaultExternalName)
         return member
 
     @classmethod
@@ -2118,8 +2118,9 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 class _FixedTupleDecoder(_TupleDecoder):
     def normalize_items(self, data: object, record: Mapping[str, object]) -> object:
-        return [plan.normalize_external(value, record)
-                for plan, value in zip(self.items, cast(list[object], data), strict=True)]
+        with MalformedRecord.refusing("Tuple length does not match declaration"):
+            pairs = tuple(zip(self.items, cast(list[object], data), strict=True))
+        return [plan.normalize_external(value, record) for plan, value in pairs]
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]

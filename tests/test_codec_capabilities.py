@@ -204,6 +204,12 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
     assert decoded.optional is None
 
 
+@pytest.mark.parametrize("data", [[{"role": "user"}], [{"role": "user"}, 1, 2]])
+def test_external_fixed_tuples_refuse_wrong_lengths_at_the_codec_boundary(data):
+    with pytest.raises(MalformedRecord):
+        FieldCodec.normalize_external(tuple[PiMessage, int], data, {})
+
+
 @pytest.mark.parametrize("family, spelling", [(PiStopReason, "stop"), (CompactionReason, "overflow")])
 def test_external_name_families_derive_one_default_without_accepting_invalid_values(family, spelling):
     from agent_comms.field_codec import DefaultExternalName
@@ -211,7 +217,9 @@ def test_external_name_families_derive_one_default_without_accepting_invalid_val
     fallback, = family.members_with(DefaultExternalName)
     assert family.from_external(spelling) is known
     for value in (None, "future_value"):
-        assert family.from_external(value) is known.from_external(value) is fallback
+        assert family.from_external(value) is fallback
+    with pytest.raises(ValueError):
+        known.from_external("future_value")
     for value in (True, 5, object()):
         with pytest.raises(MalformedRecord):
             family.from_external(value)
@@ -224,6 +232,15 @@ def test_measured_totals_share_one_declared_integer_policy(value):
     totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
               PiContextUsage.from_wire({"tokens": value}).tokens)
     assert [FieldCodec.encode(total) for total in totals] == ([2, 2] if value == 2 else [None, None])
+
+
+@pytest.mark.parametrize("value", [False, "3", {}, 1.5])
+def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
+    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+
+    for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(family, {key: value})
 
 
 @pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
