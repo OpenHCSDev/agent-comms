@@ -1,6 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
-from agent_comms.wire_log import WireLog
+from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -46,10 +46,9 @@ def archived_notification(tmp_path, *, thread_registration):
 def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     document = live.bus.reads.read()
-    with WireLog(Path(source.root) / 'bus.jsonl').opened_wire_snapshot() as opened:
-        basis = opened.query_page_index(lambda index: live.bus.reads.capture_indexed(
-            'reader', messages[1:], live.registry.snapshot(), opened, index,
-            document=document, conversation_snapshot=source.provenance))
+    basis = live.bus.reads.capture(
+        'reader', messages[1:], live.registry.snapshot(), Bus(Bus.path_in(Path(source.root))),
+        document=document, conversation_snapshot=source.provenance)
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
     with live.bus.history.read_sources() as sources:
         results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
