@@ -128,7 +128,8 @@ class PrivateWrites(Publisher):
 
     @classmethod
     def prepare_root(cls, root: Path) -> None:
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with Bus(Bus.path_in(root)).writing():
+            pass
 
 
 class ClaimWrites(PrivateWrites):
