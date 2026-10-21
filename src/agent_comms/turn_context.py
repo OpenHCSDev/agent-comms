@@ -848,8 +848,17 @@ class MeasuredNativeSegment(ContextSegment):
         return self.contributors
 
 
+class PublicInstructionSegment:
+    """Instruction-bearing context discloses its wording as public instruction."""
+
+    def disclosure_for(self, span: ContextSpan):
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        return PublicInstructionDisclosure()
+
+
 @dataclass(frozen=True, kw_only=True)
-class SystemLayerSegment(MeasuredNativeSegment):
+class SystemLayerSegment(PublicInstructionSegment, MeasuredNativeSegment):
     content: str
     tokens: int
     sha256: str
@@ -878,11 +887,6 @@ class SystemLayerSegment(MeasuredNativeSegment):
             return any(source.contains(coordinates) for source in original.source_spans)
         # Historical captures prove wording with no assembly attribution.
         return coordinates.provenance == (UnattributedProvenance(),)
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
 
     def source_membership(self):
         yield from super().source_membership()
@@ -979,11 +983,8 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(NativeMessages, MeasuredNativeSegment):
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
+class CompactionSummarySegment(PublicInstructionSegment, NativeMessages, MeasuredNativeSegment):
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1016,7 +1017,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstructionSegment(ContextSegment):
+class InstructionSegment(PublicInstructionSegment, ContextSegment):
     instruction: InstructionFile
 
     @classmethod
@@ -1033,11 +1034,6 @@ class InstructionSegment(ContextSegment):
 
     def text(self) -> str:
         return self.instruction.render(self.values())
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
 
 
 @dataclass(frozen=True, kw_only=True)

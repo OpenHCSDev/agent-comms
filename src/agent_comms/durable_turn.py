@@ -7,6 +7,7 @@ recovery events from a successful result.
 """
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import partial
 
 from agent_comms.reason_codes import GivenReasonCode
@@ -26,16 +27,17 @@ from .coordination_tables.attempts import ReplayAssessments, ReplayFact
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
+from .owner_fence import OwnerFence
 from .turn_failure import TurnFailure
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
 
 
+@dataclass(eq=False, repr=False)
 class DurableTurn(MroDispatch):
-    def __init__(self, attempts: AttemptStore, fence, pointer_revision, input_id):
-        self.attempts = attempts
-        self.fence = fence
-        self.pointer_revision = pointer_revision
-        self.input_id = input_id
+    attempts: AttemptStore
+    fence: OwnerFence
+    pointer_revision: int
+    input_id: str
 
     @contextmanager
     def using_attempts(self, attempts):
