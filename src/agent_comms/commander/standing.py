@@ -6,31 +6,31 @@ import time
 from collections.abc import Iterable, Sequence
 from abc import abstractmethod
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Self
 
-from ..comms import Comms
-from ..goal_actions import ReissuedOrderGoalAction
-from ..goals import Goal, GoalRevision
-from ..goal_states import BlockedState
-from ..goal_history import GoalHistoryStore
-from ..goal_generation import GenerationState, RetryableGeneration
-from ..message_page import MessageReadRequest
-from ..message_reference import MessageReference
-from ..messages import Message
-from ..read_basis import RepliesDisplayScope
-from ..bus_page_index import BusPageIndex
-from ..wire_log import WireSnapshot
-from ..message_bus import WatchPass
-from ..standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
+from agent_comms.comms import Comms
+from agent_comms.goal_actions import GoalPrecondition, ReissuedOrderGoalAction
+from agent_comms.goals import Goal
+from agent_comms.goal_states import BlockedState
+from agent_comms.goal_history import GoalHistoryStore
+from agent_comms.goal_generation import GenerationState, RetryableGeneration
+from agent_comms.message_page import MessageReadRequest
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
+from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.wire_log import WireSnapshot
+from agent_comms.message_bus import WatchPass
+from agent_comms.standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
 from agent_comms.storage_rules import OrderCheckoutWork
-from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
-from ..threads import Thread
-from ..todos import Todo
-from ..turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
-from ..work_dispatch import ReusedWorkDispatch, WorkDispatch
-from .config import CommanderConfig
+from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
+from agent_comms.threads import Thread
+from agent_comms.todos import Todo
+from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms.commander.config import CommanderConfig
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 
@@ -89,7 +89,7 @@ class BlockedHolder(HolderCannotRun, declared_name=None):
     """An idle holder classified by its goal and original attempt ledger."""
 
     block_record: Path
-    goal: GoalRevision
+    goal: Goal
 
     @staticmethod
     @abstractmethod
@@ -104,7 +104,9 @@ class BlockedHolder(HolderCannotRun, declared_name=None):
 
     @classmethod
     def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().revision_key)
+        return cls(
+            thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require()
+        )
 
 
 @dataclass(frozen=True)
@@ -128,10 +130,17 @@ class Blocked(BlockedHolder):
         return isinstance(goal.state, BlockedState) and isinstance(generation, RetryableGeneration)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        observed = self.goal
         for problem in self.orders:
             todo = comms.goals.todos.get(problem)
-            comms.goals.update_goal(self.unit, UnownedWheelSpin.order_for(
-                todo, commander, CoreWatcherIncarnation.watcher()))
+            todo.require_assignee(comms.registry.require(self.unit).incarnation, observed.id)
+            action = UnownedWheelSpin.order_for(todo, commander, CoreWatcherIncarnation.watcher())
+            observed = comms.goals.update_goal(self.unit, replace(
+                action, expect=GoalPrecondition(
+                    goal_id=observed.id, expected_state=observed.state,
+                    expected_checkpoint=observed.captured,
+                ),
+            ))
 
     def line(self) -> str:
         return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
@@ -301,8 +310,8 @@ class UnownedWheelSpin(UndatedStandingRule):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
-                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch(
-                        cls.order_for(todo, commander, assigner), todo.revision, unit)))
+                    found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
+                        cls.order_for(todo, commander, assigner), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,
@@ -342,17 +351,32 @@ class CheckoutHeldWheelSpin(UnownedWheelSpin, declared_name=None):
                 f"{self.work.checkout} -> restore its holder; do not hand the row away")
 
 
-class UnownedOrderWatch(WatchPass):
-    """Hand released work to idle units after the scheduled pass enters the bus."""
+@dataclass(frozen=True)
+class UnownedObservation:
+    commander: Thread
+    rule: UnownedWheelSpin
 
-    def pass_body(self, comms: Comms) -> None:
+
+class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
+    """Observe released work and its checkouts before entering the bus to assign it."""
+
+    def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
-        for commander in {todo.creator_identity.name for todo in available}:
-            mine = (todo for todo in available if todo.creator_identity.name == commander)
-            for rule in UnownedWheelSpin.paired(
-                comms, commander, mine, CoreWatcherIncarnation.watcher()
-            ):
-                rule.enforce(comms, commander)
+        observed: list[UnownedObservation] = []
+        for name in {todo.creator_identity.name for todo in available}:
+            commander = comms.registry.require(name)
+            mine = (todo for todo in available if todo.creator_identity.name == name)
+            observed.extend(
+                UnownedObservation(commander, rule)
+                for rule in UnownedWheelSpin.paired(
+                    comms, name, mine, CoreWatcherIncarnation.watcher()
+                )
+            )
+        return tuple(observed)
+
+    def pass_body(self, comms: Comms, observed: tuple[UnownedObservation, ...]) -> None:
+        for item in observed:
+            StandingRule.enforce_all(comms, item.commander.name, (item.rule,))
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

@@ -11,7 +11,8 @@ import pytest
 
 from order_scope_fixture import FIX_SCOPE
 from test_todos import order
-from agent_comms.change_report import FileLine, MissingSourceLine
+from source_revision_fixture import SourceRepository
+from agent_comms.change_report import FileLine, MissingSourceLine, PullRequestHeadRevision
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from agent_comms.coordination_database import CoordinationStore
@@ -51,14 +52,13 @@ def test_an_order_without_scope_and_a_fix_without_parents_name_the_missing_field
 
 
 def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
-    location = FileLine.class_declaration(PendingProblemOrder)
-    location.require_class(tmp_path)
-    source = tmp_path / 'owner.py'
-    source.write_text('value = 1\nclass Parent:\n    pass\nclass Member(Parent):\n    pass\n')
+    source = SourceRepository.create(tmp_path)
+    revision = PullRequestHeadRevision(source.link)
     shape = FixShape(parents=(FileLine('owner.py', 2),), members=(FileLine('owner.py', 4),))
-    shape.require_references(tmp_path)
-    with pytest.raises(MissingSourceLine, match='class declaration'):
-        replace(shape, parents=(FileLine('owner.py', 1),)).require_references(tmp_path)
+    shape.require_references(source.checkout, revision)
+    for location in (FileLine('owner.py', 1), FileLine('branch.py', 1)):
+        with pytest.raises(MissingSourceLine, match='class declaration'):
+            replace(shape, parents=(location,)).require_references(source.checkout, revision)
 
 
 def assigned(comms, scope, problem='P1'):

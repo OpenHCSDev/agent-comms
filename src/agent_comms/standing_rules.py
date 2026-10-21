@@ -6,7 +6,7 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
-import subprocess
+import logging
 import time
 from abc import abstractmethod
 from collections import Counter, defaultdict
@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 
@@ -38,13 +39,23 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
 
+    def rejected_line(self) -> str:
+        return f"Not applied (goal changed): {self.line()}"
+
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
     @staticmethod
-    def enforce_all(comms: Comms, commander: str, rules: Iterable[StandingRule]) -> None:
+    def enforce_all(comms: Comms, commander: str,
+                    rules: Iterable[StandingRule]) -> frozenset[StandingRule]:
+        rejected: set[StandingRule] = set()
         for rule in rules:
-            rule.enforce(comms, commander)
+            try:
+                rule.enforce(comms, commander)
+            except GoalChangedError as changed:
+                logging.info("Skipped stale enforcement: %s", changed)
+                rejected.add(rule)
+        return frozenset(rejected)
 
     def heartbeat_group(self) -> object:
         """Ordinary violations each own one heartbeat line."""
@@ -262,11 +273,10 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
                  for todo in cls.todos(comms, commander)}
         candidates: list[str] = []
         for repo in repos:
-            log = subprocess.run(
-                ['git', '-C', str(repo.checkout), 'log', 'origin/main', '--since=7.days',
-                 '--name-only', '--format=', '--', repo.source], capture_output=True, text=True)
+            log = repo.git(repo.checkout, 'log', 'origin/main', '--since=7.days',
+                           '--name-only', '--format=', '--', repo.source)
             churn = Counter(str((repo.checkout / name).resolve())
-                            for name in log.stdout.splitlines()
+                            for name in log.splitlines()
                             if name.endswith('.py') and (repo.checkout / name).is_file())
             candidates.extend(path for path, _ in churn.most_common(15))
         return tuple(sorted(set(candidates), key=lambda path: (hunted.get(path, 0), path)))[:1]

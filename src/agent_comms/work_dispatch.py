@@ -11,13 +11,15 @@ import math
 import subprocess
 import time
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
-from .goal_actions import (
+from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
+    OrderGoalAction,
     ProblemOrderGoalAction,
 )
+
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
@@ -107,6 +109,14 @@ class ReusedWorkDispatch(WorkDispatch):
     """Publish to an existing unit without allocating or starting another process."""
 
     unit: Thread
+
+    @classmethod
+    def for_unit(cls, action: OrderGoalAction, unit: Thread) -> Self:
+        bound = replace(
+            action,
+            expect=replace(action.expect, expected_checkpoint=unit.goal.captured),
+        )
+        return cls(bound, action.expected_revision, unit)
 
     @property
     def name(self) -> str:

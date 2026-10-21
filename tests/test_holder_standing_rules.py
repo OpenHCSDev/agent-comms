@@ -37,6 +37,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
+from agent_comms.repo import Repo
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
@@ -49,6 +50,10 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 @pytest.fixture
 def held_bus(comms, tmp_path):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
+    Repo.git(tmp_path, "init", "-q", "-b", "main")
+    Repo.git(tmp_path, "-c", "user.name=Held-order fixture", "-c", "user.email=held@example.invalid",
+             "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Held-order source")
+    Repo.git(tmp_path, "update-ref", "refs/remotes/origin/main", "HEAD")
     for name in ("lead", "worker", "outsider"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(tmp_path)))
     comms.goals.update_goal("lead", SetGoalAction(
@@ -353,7 +358,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus)
+    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
     assert commander.incarnation in heartbeat.reviews
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
     page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(

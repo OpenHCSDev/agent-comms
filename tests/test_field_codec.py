@@ -539,10 +539,9 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     import math
     from typing import Any, Literal
 
-    from agent_comms.field_codec import FieldRepresentation
+    from agent_comms.field_codec import AcceptsNull, FieldRepresentation
 
-    class NullableInteger(FieldRepresentation):
-        accepts_null = True
+    class NullableInteger(AcceptsNull, FieldRepresentation):
 
         @classmethod
         def encode(cls, value):
