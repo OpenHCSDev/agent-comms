@@ -12,6 +12,12 @@ from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
 )
+from .goal_failure_observation import NoFailedTurnEvidence
+from .goal_presentation import (
+    AttemptUnresolvedExecution,
+    CompletedExecution,
+    RunnableExecution,
+)
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
 
@@ -37,13 +43,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         return source.turn.execution(source)
 
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import AttemptUnresolvedExecution
-
         return AttemptUnresolvedExecution(source.goal.id)
 
     def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
-        from .goal_failure_observation import NoFailedTurnEvidence
-
         return NoFailedTurnEvidence()
 
     def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
@@ -89,8 +91,6 @@ class ReadyGeneration(GenerationState):
     ready = True
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import RunnableExecution
-
         return RunnableExecution(source.goal.id)
 
     def turn_permit(
@@ -190,8 +190,6 @@ class BlockedGeneration(Failed, GenerationState):
 @dataclass(frozen=True)
 class CompletedGeneration(Complete, Terminal, GenerationState):
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import CompletedExecution
-
         return CompletedExecution(source.goal.id)
 
 

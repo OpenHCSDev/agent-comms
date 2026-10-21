@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .field_codec import NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
-from .goals import Goal, GoalCheckpoint, GoalDeclaration
+from .goals import Goal, GoalChangedError, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
-from .thread_identity import RecordedThreadIncarnation
+from .thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -232,8 +232,6 @@ class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None
         self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal,
     ) -> None:
         from .goal_actions import GoalPrecondition, ReissuedOrderGoalAction
-        from .goals import GoalChangedError
-        from .thread_identity import CoreWatcherIncarnation
 
         if comms.goals.goal_execution(unit) != self:
             raise GoalChangedError(comms.registry.require(unit), goal.captured)

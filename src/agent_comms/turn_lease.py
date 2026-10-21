@@ -20,8 +20,9 @@ from .field_codec import (
     WireTransient,
     boundary_decoder,
 )
-from .locked_store import DurableFile, JsonDocument, PatternFile
+from .goal_presentation import RunningExecution
 from .lifecycle_capability import Executing, LifecycleCapability
+from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
@@ -217,7 +218,6 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
-        from .goal_presentation import RunningExecution
         if source.owner_alive and source.owner.process_identity.owns_turn(self):
             return RunningExecution(source.goal.id)
         return source.generation.lifecycle.idle_execution(source)
