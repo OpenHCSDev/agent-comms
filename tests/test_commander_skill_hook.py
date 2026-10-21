@@ -143,7 +143,7 @@ def test_compaction_orders_the_sources_read_once(tmp_path, monkeypatch):
 def test_drift_check_rotates_through_the_packaged_tells(tmp_path):
     transcript = tmp_path / "session.jsonl"
     hook = DriftCheck.decode(hook_record(transcript))
-    tells = [line for line in CommanderConfig.packaged_drift().read_text().splitlines() if line.strip()]
+    tells = list(RuleFile.drift_tells())
     hook.drift.write_text("\n".join(tells))
     shown = {line for step in range(len(tells)) for line in
              hook.message(step * DriftCheck.every).splitlines()[1:]}

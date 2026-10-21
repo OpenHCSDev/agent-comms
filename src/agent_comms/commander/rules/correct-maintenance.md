@@ -1,6 +1,7 @@
 ---
 name: correct-maintenance
 description: "the correct-maintenance results every judgment is measured against: required facts have one declaration, and everything supplied outside it is removable excess"
+drift: "A fact restated outside its declaration is slop; deleting the copy deletes every state where the copies disagree."
 audience: fleet
 type: reference
 ---
