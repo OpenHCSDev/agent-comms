@@ -25,7 +25,6 @@ from agent_comms.commander.standing import (
     HeartbeatSilent,
     HolderCannotRun,
     UnitAskUnanswered,
-    UnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
@@ -33,7 +32,9 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, DirectiveGoalAction, SetGoalAction
+from agent_comms.goal_actions import (
+    CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
+)
 from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -79,6 +80,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request="request",
+            assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
@@ -160,9 +162,7 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", UnownedWheelSpin.order_for(
-        todo, "lead", held_bus.registry.require("lead").incarnation,
-    ))
+    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(todo, "lead"))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(

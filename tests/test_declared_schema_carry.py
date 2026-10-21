@@ -170,8 +170,8 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
     created = TodoStore(tmp_path).create(
-        "todo-1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar",
-        creator=lead, goal=GoalRef("lead", 1.0, "goal-1"), owner=lead, generation="initial",
+        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"), "Fix the sidebar",
+        creator=lead, assigner=lead.incarnation, goal=GoalRef("lead", 1.0, "goal-1"), owner=lead, generation="initial",
         review_at=RecordedEventTime(1000.0), order=order)
     with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
         db.execute('ALTER TABLE "todo" RENAME COLUMN "review_at" TO "deadline"')
@@ -195,7 +195,7 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
     for step in CarryChain.at(REPO).steps:
         step.carry(tmp_path, apply=True)
 
-    assert TodoStore(tmp_path).get("todo-1").review_at == created.review_at
+    assert TodoStore(tmp_path).get("P1").review_at == created.review_at
     with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:
         assert "deadline" not in Todo.stored_columns(db)
     with closing(sqlite3.connect(proof)) as db:

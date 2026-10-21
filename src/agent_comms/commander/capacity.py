@@ -27,7 +27,8 @@ class Load(ToolResult):
         forks = tuple(sorted(
             thread.name for thread in snapshot.threads.values()
             if thread.parent.named(owner.name) and snapshot.status(thread.name).receiving
-            and todos.held_for_commander(thread.incarnation)
+            and any(assignment.parent_identity == thread.incarnation
+                    for todo in held for assignment in todo.holder_state.current_assignments())
         ))
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
