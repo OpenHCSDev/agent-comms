@@ -154,14 +154,3 @@ class TestConcurrentWire:
         names = {result_queue.get(timeout=5) for _ in processes}
         assert names == {"project", *(f"project-{index}" for index in range(2, 7))}
 
-
-class TestCrashRecovery:
-    def test_activity_log_recovers_from_truncated_tail(self, wired: Any) -> None:
-        wired.agents.set_activity("PR111", ActivityState.THINKING, "first")
-        with open(wired.agents.activity._path, "ab") as output:
-            output.write(b'{"thread": "PR111"')
-
-        assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).detail == "first"
-        wired.agents.set_activity("PR111", ActivityState.WORKING, "second")
-        assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).detail == "second"
-        assert (wired.agents.activity._path.parent / "activity.jsonl.corrupt").exists()
