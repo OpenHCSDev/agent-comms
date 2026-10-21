@@ -1281,7 +1281,7 @@ class DirectiveText:
     connector's send refuse a text failing any of these."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText, OrderText)
+        FairText, HierarchyText, PlainText)
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
@@ -2544,6 +2544,14 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return ()
 
+    def judged_calls(self) -> tuple[str, ...]:
+        """The holder's tool calls this verdict judges by identity."""
+        return ()
+
+    def judged_through(self, since: float) -> float:
+        """The instant before which no edit is left unjudged once this verdict is recorded."""
+        return since
+
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
 
@@ -2561,6 +2569,9 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
 @dataclass(frozen=True)
 class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     tool_call_id: str
+
+    def judged_calls(self) -> tuple[str, ...]:
+        return (self.tool_call_id,)
 
     def story_text(self) -> str:
         return f"{super().story_text()}; tool call {self.tool_call_id}"
@@ -2615,6 +2626,10 @@ class ReviewedHeadVerdict(QuotedVerdict):
     @property
     def line(self) -> str:
         return f"Reviewed head {self.head}"
+
+    def judged_through(self, since: float) -> float:
+        """Accepting a head judges the whole diff, so every edit made before it is judged."""
+        return max(since, self.at.recorded_at("A head review"))
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
@@ -2965,6 +2980,18 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
     prior_orders: tuple[CheckedProblemOrder, ...] = ()
+
+    @property
+    def judged_calls(self) -> tuple[str, ...]:
+        return tuple(call for verdict in self.verdicts for call in verdict.judged_calls())
+
+    @property
+    def unjudged_since(self) -> float:
+        """Edits before the order, or before a later verdict judging a whole head, are judged."""
+        since = self.order.checked().at.recorded_at("An order")
+        for verdict in self.verdicts:
+            since = verdict.judged_through(since)
+        return since
 
     @property
     def order_history(self) -> tuple[CheckedProblemOrder, ...]:

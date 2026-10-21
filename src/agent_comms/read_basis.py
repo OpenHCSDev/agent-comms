@@ -921,17 +921,18 @@ class DMDisplayScope(MessageDisplayScope):
 
 @dataclass(frozen=True)
 class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
-    """Direct peer messages and every message authored by the first participant."""
+    """Peer requests, direct or channel-addressed, and every reply by the first participant."""
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
-        direct, bindings = super().index_predicate
-        names = tuple(self.first_names)
+        names = tuple(self.first_names | self.second_names)
         marks = ",".join("?" for _ in names)
-        return f"sender IN ({marks}) OR ({direct})", (*names, *bindings)
+        return f"sender IN ({marks})", names
 
     def includes(self, message: Message) -> bool:
-        return message.sender in self.first_names or super().includes(message)
+        return (message.sender in self.first_names or super().includes(message)
+                or (message.sender in self.second_names
+                    and bool(message.response_eligibility(tuple(self.first_names)).recipients)))
 
 
 @dataclass(frozen=True, slots=True)

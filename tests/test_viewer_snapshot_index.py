@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.context_store import UNREAD_CONTEXT
 from agent_comms.wire_log import WireLog
 
 from conftest import publish_initial
@@ -210,7 +211,7 @@ def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_pat
 
     comms, _ = _root(tmp_path)
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
-    comms.contexts.record(manifest(comms.registry.require('Alice')))
+    comms.contexts.record_after(UNREAD_CONTEXT, manifest(comms.registry.require('Alice')))
     with comms.views.presentation.snapshot(viewer=NamedViewer('Alice')) as (_, source):
         assert isinstance(source, OpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
