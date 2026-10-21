@@ -132,6 +132,12 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert saved.messages[-1].actor == fork.incarnation
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
+    # Core's reissue acts as the fork that assigned the unit, under the fork's commander.
+    reissuer = saved.acting_assigner
+    assert reissuer == fork.incarnation and reissuer.commanding_identity == parent.incarnation
+    reissuer.require_may_change(saved)
+    with store.snapshot() as db:
+        store.require_unit_in(db, saved.held().owner_identity, reissuer)
     print(f'Core send actor: {saved.held().parent}; problem commander: {saved.creator}')
     ctx = Commander.read_root(comms.root).model_copy(update={'actor': CommanderForkCaller(fork.name)})
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}

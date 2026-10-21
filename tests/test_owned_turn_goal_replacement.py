@@ -193,6 +193,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
+        assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked unit',
     ))
     blocked = comms.goals.update_goal(
