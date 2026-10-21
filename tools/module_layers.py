@@ -142,6 +142,54 @@ class ClientImportNames(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+class TopLevelNames(ast.NodeVisitor):
+    """The names one module binds at its top level: definitions, assignments and imports,
+    including those inside top-level if and try blocks."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    @classmethod
+    def of(cls, tree: ast.Module) -> frozenset[str]:
+        visitor = cls()
+        for statement in tree.body:
+            visitor.visit(statement)
+        return frozenset(visitor.names)
+
+    def bind(self, target: ast.expr) -> None:
+        match target:
+            case ast.Name(id=name):
+                self.names.add(name)
+            case ast.Tuple(elts=elements) | ast.List(elts=elements):
+                for element in elements:
+                    self.bind(element)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        for target in node.targets:
+            self.bind(target)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.bind(node.target)
+
+    def visit_TypeAlias(self, node: ast.TypeAlias) -> None:
+        self.bind(node.name)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.names.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.names.update(alias.asname or alias.name for alias in node.names)
+
+
 @dataclass(frozen=True)
 class StackClient:
     """A package the stack installs from a git source, read from a checkout of it."""
@@ -295,6 +343,32 @@ class Package:
         """Client imports naming an agent_comms module this tree does not have."""
         return tuple(entry for entry in self.client_imports if not self.provides(entry.module))
 
+    def defined_names(self, module: str) -> frozenset[str]:
+        """Names a module binds at its top level, re-exports included; a module defining
+        __getattr__ answers every name."""
+        path = self.root if module == PACKAGE else self.files[module]
+        return TopLevelNames.of(ast.parse(path.read_text(), str(path)))
+
+    @cached_property
+    def missing_names(self) -> tuple[tuple[ClientImport, str], ...]:
+        """Names a client imports from an existing module that neither defines them nor
+        has them as submodules."""
+        found = []
+        for entry in self.client_imports:
+            if not self.provides(entry.module):
+                continue
+            defined = self.defined_names(entry.module)
+            if "__getattr__" in defined:
+                continue
+            found += [
+                (entry, name)
+                for name in entry.names
+                if name != "*"
+                and name not in defined
+                and f"{entry.module}.{name}" not in self.files
+            ]
+        return tuple(found)
+
     @cached_property
     def client_surface(self) -> dict[str, set[str]]:
         """Each unit a client imports directly, with the clients importing it."""
@@ -402,12 +476,15 @@ def main() -> int:
             sys.stdout.write(package.markdown())
             return 0
         for entry in package.missing:
-            print(f"missing: {entry}", file=sys.stderr)
+            print(f"missing module: {entry}", file=sys.stderr)
+        for entry, name in package.missing_names:
+            print(f"missing name: {entry} {name}", file=sys.stderr)
         print(
             f"{len(package.client_imports)} client imports of {len(package.client_surface)} units; "
-            f"{len(package.missing)} name a module this tree lacks"
+            f"{len(package.missing)} name a module this tree lacks, "
+            f"{len(package.missing_names)} a name its module does not define"
         )
-        return 1 if package.missing else 0
+        return 1 if package.missing or package.missing_names else 0
 
 
 if __name__ == "__main__":
