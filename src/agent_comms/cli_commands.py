@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field, fields, replace
+from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
@@ -620,9 +621,29 @@ class NativeContextInspection(CliResult):
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 
+class CliExecution(Command):
+    """The dispatcher contract, including methods selected through multiple inheritance."""
+
+    @abstractmethod
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Execute against the selected route and write to the caller's stream."""
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        expected, actual = (
+            (iscoroutinefunction(method),
+             tuple((parameter.kind, parameter.default)
+                   for parameter in signature(method).parameters.values()))
+            for method in (CliExecution.execute, cls.execute)
+        )
+        if actual != expected:
+            raise TypeError(f"{cls.__qualname__}.execute{signature(cls.execute)} disagrees with "
+                            f"CliExecution.execute{signature(CliExecution.execute)}")
+
+
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
-    DeclaredFamily, DeclaredOptions, Command, affix="CliCommand",
+    DeclaredFamily, DeclaredOptions, CliExecution, affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):
     multiple_targets: ClassVar[bool] = False
@@ -866,7 +887,7 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(Send, CliCommand):
+class SendCliCommand(CliCommand, Send):
     sender: str = option("--from")
 
     @classmethod
