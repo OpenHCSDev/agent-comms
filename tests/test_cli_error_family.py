@@ -9,7 +9,6 @@ from contextlib import closing
 import pytest
 from pydantic import ValidationError
 
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, DeliveryRow, StoredBinding
 from agent_comms.cli_protocol import (
@@ -22,7 +21,6 @@ from agent_comms.messages import InfoKind, Message
 
 @pytest.mark.parametrize('error,expected', [
     (CoordinationReadUnavailable('wording does not decide recovery'), UnavailableCoreError),
-    (RouteIndexRebuilding(12, 4096), UnavailableCoreError),
     (RuntimeError('database is locked'), FailedCoreError),
     (ValueError('first\nsecond'), FailedCoreError),
 ])

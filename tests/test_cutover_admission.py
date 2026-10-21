@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -95,7 +96,9 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
     sent = source.messaging.send("alice", "bob", "retained message").message.message_id
-    reader = Comms(tmp_path / "reader")
+    reader_root = tmp_path / "reader"
+    Bus.install(Bus.path_in(reader_root))
+    reader = Comms(reader_root)
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()

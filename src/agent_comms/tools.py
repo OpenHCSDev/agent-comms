@@ -134,7 +134,6 @@ from .task_sources import (
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from agent_comms.private_bus_checkpoint import PublicMessages
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -144,7 +143,6 @@ from .thread_execution import (
     StartOwnerControl,
     ThreadCommandAvailability,
 )
-from .tool_output import MAX_INLINE_OUTPUT_BYTES
 from .turn_digests import (
     LastTurns,
     OrderEditsRead,
@@ -1056,13 +1054,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
-        with comms.bus.log.checked_read() as source:
-            original = PublicMessages.require(
-                source.connection, message_id=todo.latest_message.message_id
-            )
+        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            original.reference,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim

@@ -159,14 +159,14 @@ class ContextMove:
 class ContextManifests(Carry):
     staging_reserve_bytes: ClassVar[int] = 1024**3
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+    def backup_files(self) -> tuple[Path, ...]:
+        root = self.root
         return (
             root / "bus.jsonl",
             root / "bus_meta.json",
             root / "private_bus_checkpoint.sqlite3",
             ContextStore.path_in(root),
-            *cls.derived_files(root),
+            *self.derived_files(root),
         )
 
     @classmethod
@@ -181,8 +181,8 @@ class ContextManifests(Carry):
         )
         return tuple(path for pattern in patterns for path in root.glob(pattern))
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
+    def carry(self) -> Carried:
+        root = self.root
         path = root / "private_bus_checkpoint.sqlite3"
         if not path.exists():
             return Carried(0)
@@ -190,9 +190,9 @@ class ContextManifests(Carry):
             if not RecordedContextManifestSources.present(db):
                 return Carried(0)
             count = RecordedContextManifestSources.count(db)
-        if not apply:
+        if not self.apply:
             return Carried(count + 1)
-        return cls._rewrite(root)
+        return self._rewrite(root)
 
     @classmethod
     def _rewrite(cls, root: Path) -> Carried:

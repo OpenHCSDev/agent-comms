@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.bus import Bus
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -38,6 +39,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

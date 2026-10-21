@@ -90,29 +90,6 @@ class Registration:
         with self.store.locked():
             return self.store.private_guard_unlocked().prepare_native(self.store.path)
 
-    def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
-        """Reserve one process against the exact stopped launch it prepared.
-
-        The registry transaction, not a root-wide lock, prevents concurrent
-        starters from replacing each other's reservation. Unrelated metadata
-        comes from the current declaration rather than the launch's old copy.
-        """
-        with self.store.editing() as edit:
-            current = edit.document.require(original.name)
-            if not current.same_launch(original):
-                raise RelationViolationError("Owner launch changed before process reservation.")
-            if current.process_alive:
-                raise RelationViolationError("Thread already has a live owner process.")
-            edit.document.status(current.name).require_visible(
-                "Only visible agent threads can be started.")
-            owned = replace(current.without_turn(), process_identity=process)
-            change = self._commit_registration(edit, edit.document.prepare_registration(
-                owned, _RUNNING_STATUS, new_owner=True))
-            return RegistryOwner(
-                thread=change.thread,
-                claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
-            )
-
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
         """Declare or resume one child and its own request under the registry's lock."""
         with self.store.editing() as edit:
@@ -136,6 +113,29 @@ class Registration:
                     GoalActionContext(goals, change.thread))
                 return self._commit_registration(edit, replace(
                     change, thread=replace(change.thread, goal=goal))).thread
+
+    def reserve_owner(self, original: Thread, process: ProcessIdentity) -> RegistryOwner:
+        """Reserve one process against the exact stopped launch it prepared.
+
+        The registry transaction, not a root-wide lock, prevents concurrent
+        starters from replacing each other's reservation. Unrelated metadata
+        comes from the current declaration rather than the launch's old copy.
+        """
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if not current.same_launch(original):
+                raise RelationViolationError("Owner launch changed before process reservation.")
+            if current.process_alive:
+                raise RelationViolationError("Thread already has a live owner process.")
+            edit.document.status(current.name).require_visible(
+                "Only visible agent threads can be started.")
+            owned = replace(current.without_turn(), process_identity=process)
+            change = self._commit_registration(edit, edit.document.prepare_registration(
+                owned, _RUNNING_STATUS, new_owner=True))
+            return RegistryOwner(
+                thread=change.thread,
+                claimed_generation=edit.document.entry(change.thread.name).claimed_generation,
+            )
 
     @contextmanager
     def external_process(self, name: str, process: ProcessIdentity):

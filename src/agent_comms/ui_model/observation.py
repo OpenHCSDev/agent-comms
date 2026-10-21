@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import itertools
 import multiprocessing
-import os
 import signal
 import sys
 import time
@@ -280,6 +279,7 @@ class StoredRead[T](ABC):
     @abstractmethod
     def raised(self) -> T:
         """The value, or the failure raised again for a caller that answers it itself."""
+
 
 @dataclass(frozen=True)
 class ReadValue[T](StoredRead[T]):

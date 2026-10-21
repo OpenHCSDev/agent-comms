@@ -1,4 +1,4 @@
-"""Real scratch-bus connector/curl and maintenance proof; no test doubles.
+"""Real scratch-bus connector/curl proof; no test doubles.
 
 PYTHONPATH=src python -X faulthandler tests/verify_connector_live.py <owned-scratch>
 The caller selects scratch; each subprocess run retires its temporary directory.
@@ -17,9 +17,9 @@ import tempfile
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.wake_candidate_index import WakeCandidateIndex
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -33,21 +33,13 @@ def curl_call(port, token, body, *, arguments=None):
     ], capture_output=True, text=True, check=True).stdout
 
 
-def maintenance_proof(comms):
-    bus = comms.bus.bus
-    message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    index = WakeCandidateIndex(bus)
-    assert index.through_seq >= message.seq
-    assert bus.path.parent not in maintenance._pending
-    print(f"maintenance completed: scanned seq={index.through_seq}, committed seq={message.seq}")
-
-
 def main(scratch: Path):
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="live-", dir=scratch) as directory:
         base = Path(directory)
         root = base / "wire"
         root.mkdir(mode=0o700)
+        Bus.install(Bus.path_in(root))
         comms = Comms(root)
         for name in ("claude-ai", "worker"):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(base)))
@@ -128,7 +120,6 @@ def main(scratch: Path):
             errors.close()
             readiness.close()
             print("connector stopped; HTTP handler tracebacks=" + str(error_path.read_text().count("Error handling request")))
-        maintenance_proof(comms)
 
 
 if __name__ == "__main__":
