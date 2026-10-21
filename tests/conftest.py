@@ -121,8 +121,9 @@ def pytest_sessionstart(session):
 
     prepare-pi-native keys its build by the pin and reuses a verified one, so an
     unchanged pin costs nothing and a changed pin rebuilds without anyone remembering.
+    Collection loads declarations only; it neither starts workers nor needs a native build.
     """
-    if is_xdist_worker(session) or pinned_location().is_dir():
+    if session.config.option.collectonly or is_xdist_worker(session) or pinned_location().is_dir():
         return
     root = Path(__file__).resolve().parents[1]
     subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
@@ -188,6 +189,22 @@ def _root_lifetime(root: Path) -> Iterator[Path]:
 def tmp_path(tmp_path: Path) -> Iterator[Path]:
     """Join bus workers before pytest applies its passed-directory retention policy."""
     with _root_lifetime(tmp_path) as root:
+        yield root
+
+
+@pytest.fixture
+def scratch_root(tmp_path_factory):
+    from agent_comms.storage_rules import StorageRule
+
+    base = tmp_path_factory.getbasetemp()
+    scratch = StorageRule().scratch_base.resolve()
+    if not base.resolve().is_relative_to(scratch):
+        base = scratch / "pytest"
+        base.mkdir(parents=True, exist_ok=True)
+    with (
+        tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory,
+        _root_lifetime(Path(directory)) as root,
+    ):
         yield root
 
 

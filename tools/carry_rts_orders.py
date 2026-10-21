@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, cast
 
-from agent_comms import todos
+from agent_comms import order_runs, todos
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import Repo
 from agent_comms.comms import Comms
@@ -87,9 +87,9 @@ class MechanicalRunJson(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value: object) -> todos.MechanicalOrderRun:
+    def decode(cls, value: object) -> order_runs.MechanicalOrderRun:
         FieldCodec.decode(type(None), value)
-        return todos.MechanicalOrderRun()
+        return order_runs.MechanicalOrderRun()
 
     @classmethod
     def encode(cls, value: object) -> None:
@@ -100,14 +100,14 @@ class MechanicalRunJson(FieldRepresentation):
         return FieldCodec.value_schema(type(None))
 
 
-class ApplicationRunText(TextRepresentation[todos.ApplicationOrderRun]):
+class ApplicationRunText(TextRepresentation[order_runs.ApplicationOrderRun]):
     @classmethod
-    def from_text(cls, value: str) -> todos.ApplicationOrderRun:
-        return todos.ApplicationOrderRun(value)
+    def from_text(cls, value: str) -> order_runs.ApplicationOrderRun:
+        return order_runs.ApplicationOrderRun(value)
 
     @classmethod
     def encode(cls, value: object) -> str:
-        return cast(todos.ApplicationOrderRun, value).text
+        return cast(order_runs.ApplicationOrderRun, value).text
 
 
 @dataclass(frozen=True)
@@ -120,8 +120,8 @@ class RtsOrder:
     check: tuple[str, str, int]
     disk: bool
     works: (
-        Annotated[todos.MechanicalOrderRun, MechanicalRunJson]
-        | Annotated[todos.ApplicationOrderRun, ApplicationRunText]
+        Annotated[order_runs.MechanicalOrderRun, MechanicalRunJson]
+        | Annotated[order_runs.ApplicationOrderRun, ApplicationRunText]
     )
     started: bool = False
     merged: OrderMerge = NotMerged()

@@ -57,6 +57,7 @@ from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import InfoKind, Message
+from agent_comms.order_runs import OrderRun
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -982,7 +983,7 @@ class OpenPrProgress(GitProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """A linked merge closes its order once the installed checkout contains it."""
+    """The forge proves a linked merge; the order's run owns what still needs doing."""
     precedence: ClassVar[int] = 1
     sha: str
 
@@ -993,7 +994,7 @@ class MergedProgress(FoundProgress):
 
     @property
     def state(self) -> str:
-        return f"merged as {self.sha[:9]}, waiting on install"
+        return f"merged as {self.sha[:9]}"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -1285,62 +1286,6 @@ class DirectiveText:
             raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
 
 
-class OrderRun(DeclaredFamily, affix="OrderRun"):
-    label: ClassVar[str] = "Works when:"
-    mechanical: ClassVar[bool] = False
-
-    def require_artifact(self, path: str) -> None:
-        pass
-
-    @abstractmethod
-    def instructions(self) -> tuple[str, ...]: ...
-
-    @abstractmethod
-    def require_closing(self, works: str) -> None:
-        """Refuse closing evidence that does not show this run happened."""
-
-
-@dataclass(frozen=True)
-class MechanicalOrderRun(OrderRun):
-    mechanical: ClassVar[bool] = True
-
-    def instructions(self) -> tuple[str, ...]:
-        return ()
-
-    def require_closing(self, works: str) -> None:
-        """The order's check alone closes it."""
-
-
-@dataclass(frozen=True)
-class ApplicationOrderRun(OrderRun):
-    def require_artifact(self, path: str) -> None:
-        if not Path(path).is_file():
-            raise ToolRefusedError('This order needs --seen FILE showing its requested run.')
-
-    text: str
-    least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
-    quoted_words: ClassVar[int] = 4
-
-    def __post_init__(self) -> None:
-        if len(self.text.split()) < self.least_words:
-            raise ToolRefusedError(f'Add "{self.label} <the user-visible closing run, '
-                                   f'{self.least_words}+ words>"; a grep never closes a problem.')
-
-    def instructions(self) -> tuple[str, ...]:
-        return (f"{self.label} {self.text}",)
-
-    def require_closing(self, works: str) -> None:
-        quoted = self.phrases(self.text) & self.phrases(works)
-        if len(works.split()) < self.least_words or not quoted:
-            raise ToolRefusedError(
-                f"Describe what worked in {self.least_words}+ words, quoting "
-                f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
-
-    @classmethod
-    def phrases(cls, text: str) -> set[tuple[str, ...]]:
-        words = [word.strip(".,;:!?\"'`()").lower() for word in text.split()]
-        return {tuple(words[at:at + cls.quoted_words])
-                for at in range(len(words) - cls.quoted_words + 1)}
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):
@@ -1423,7 +1368,11 @@ class LocatedProblemFinding(ProblemFinding):
 class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
-    line: ClassVar[str] = "No order"
+
+    @property
+    def line(self) -> str:
+        return "No order"
+
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
@@ -1600,7 +1549,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         if problems:
             raise ValueError("\n".join(problems))
 
-    line: ClassVar[str]
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1633,10 +1581,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                         pulls: PullRequests) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
         source = ProgressSource.of(todo, storage, pulls)
-        return tuple(DoneTodoState.closed(todo, merged)
+        return tuple(self.run.after_merge(todo, merged)
                      for merged in self.observed_merges(repo, source))
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
 
@@ -1645,7 +1593,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
         created = subprocess.run(
-            ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
+            ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
+             "--title", title, "--body-file", "-"),
             input=body,
             cwd=checkout,
             capture_output=True, text=True, timeout=60)
@@ -1708,10 +1657,29 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class MergedProblemOrder(CheckedProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
-    line: ClassVar[str] = "Merged and installed"
+
+    @property
+    def line(self) -> str:
+        return self.run.merged_line
+
+    def closed_in(self, todo: Todo) -> Todo:
+        return DoneTodoState.closed(todo, self)
+
+    def waiting_in(self, todo: Todo) -> Todo:
+        return replace(todo, order=self, revision=todo.revision + 1)
+
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
+        return ()
 
     def require_close(self) -> None:
-        pass
+        self.run.require_merge_close()
+
+    def require_installation(self) -> None:
+        """The observed merge is already in the installed checkout."""
+
+    def installed(self, works: str, artifact: str) -> ProblemOrder:
+        self.run.require_closing(works)
+        return self.copy_as(InstalledMergedProblemOrder, works=works, artifact=artifact)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1777,7 +1745,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             raise ValueError("The order already records a different delivery.")
         return self
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[ProblemOrder, ...]:
+    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         commits = self.delivery.merged_commits(repo)
         return (tuple(self.merged(commit) for commit in commits)
                 or super().observed_merges(repo, source))
@@ -1793,7 +1761,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             self.delivery.installation_commits, Path(self.check.directory)
         )
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> InstalledProblemOrder:
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
@@ -1805,7 +1773,8 @@ class DeliveredProblemOrder(CheckedProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstalledProblemOrder(DeliveredProblemOrder):
+class InstalledEvidence(CheckedProblemOrder, declared_name=None):
+    """Recorded application evidence, shared by delivered and merge-observed orders."""
     works: str
     artifact: str
     line: ClassVar[str] = "Installed"
@@ -1814,20 +1783,17 @@ class InstalledProblemOrder(DeliveredProblemOrder):
     def accepted(self) -> bool:
         return True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         if not self.works.strip() or not self.artifact.strip():
             raise ValueError("Describe what worked and name its artifact file.")
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> Self:
         if (works, artifact) != (self.works, self.artifact):
             raise ValueError("The order already records different installed evidence.")
         return self
 
-    def merged(self, sha: str) -> ProblemOrder:
-        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
-
-    def require_close(self):
+    def require_close(self) -> None:
         pass
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
@@ -1835,8 +1801,14 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstalledMergedProblemOrder(MergedProblemOrder, InstalledProblemOrder):
-    """An installed merge retains the application's existing evidence, without a wrapper."""
+class InstalledProblemOrder(InstalledEvidence, DeliveredProblemOrder):
+    def merged(self, sha: str) -> MergedProblemOrder:
+        return self.copy_as(InstalledMergedProblemOrder, sha=sha)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledMergedProblemOrder(InstalledEvidence, MergedProblemOrder):
+    """The installed merge and the recorded run share the same evidence behavior."""
 
 
 @dataclass(frozen=True)

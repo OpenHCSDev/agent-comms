@@ -396,10 +396,10 @@ class Commander(CommanderContext):
         message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')
         taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
-        fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
-        if not order.run.mechanical and fired:
-            sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
-                     f'Reassign them; only a mechanical run reaches {unit}.')
+        fired = tuple(listed[pid] for pid in group
+                      if pid in listed and listed[pid].struck_out(unit))
+        order.run.require_assignment(self.comms.registry.require(unit).incarnation,
+                                     fired, ProblemGoalOrder.StrikeLimit)
         # A miss already struck on the order this replaces is one miss:
         # the send-back records no second strike.
         struck_already = replacing and listed[group[0]].struck_on_order(unit)

@@ -23,7 +23,9 @@ from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from stored_inputs import stored_inputs
 
@@ -78,14 +80,15 @@ def _is_summary(request: dict) -> bool:
     "threshold", "cap_disabled", "acp_threshold", "overflow", "compacted_resume",
     "summary_failure", "post_compaction_tool_rounds",
 ])
-async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> None:
+async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, native_runtime_package) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
     with TemporaryDirectory(prefix="ac-native-compaction-") as raw:
         root = Path(raw)
         project = root / "project"
-        (project / ".pi").mkdir(parents=True, mode=0o700)
+        project.mkdir(mode=0o700)
+        (project / ".pi").mkdir(mode=0o700)
         (project / ".pi" / "settings.json").write_text(json.dumps({
             "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
             "compaction": {"enabled": case != "cap_disabled"},
@@ -128,7 +131,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
                 summary = _is_summary(request)
                 (summaries if summary else prompts).append(request)
-                if summary and case == "acp_threshold":
+                if summary and case in {"acp_threshold", "post_compaction_tool_rounds"}:
                     summary_entered.set()
                     assert release_summary.wait(timeout=15), "Test did not release compaction"
                 if summary and case == "summary_failure":
@@ -175,15 +178,6 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 }},
             }}}))
             (agent / "models.json").chmod(0o600)
-            preload = root / "local-only.cjs"
-            preload.write_text(
-                "const original=globalThis.fetch;"
-                "globalThis.fetch=(url,...rest)=>{"
-                "const link=url instanceof Request?url.url:String(url);"
-                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
-                "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
-                "return original(url,...rest);};"
-            )
             native_args = [
                 "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
                 "--no-context-files", "--no-tools", "--provider", "openrouter",
@@ -193,17 +187,31 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])
             child_env = {
-                "PI_CODING_AGENT_DIR": str(agent),
+                **RestartEnvironment(native_config=agent, agent_directory=agent).encode_native(),
+                "AGENT_COMMS_NATIVE_ORIGIN": f"http://127.0.0.1:{server.server_port}",
                 "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
-                "NODE_OPTIONS": f"--require={preload}",
                 "PI_OFFLINE": "1",
                 "PI_TASK": "TASK_BRIEF_SENTINEL",
             }
-            if case == "acp_threshold":
+            if case in {"acp_threshold", "post_compaction_tool_rounds"}:
                 await _acp_threshold(root, project, session, native_bin, native_args, child_env,
                                      summary_entered, release_summary, monkeypatch)
-                assert len(summaries) >= 1 and len(prompts) == 1
+                assert len(summaries) >= 1
                 assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
+                if case == "acp_threshold":
+                    assert len(prompts) == 1
+                    return
+                assert len(prompts) == 4
+                for index, request in enumerate(prompts):
+                    serialized = json.dumps(request["messages"])
+                    assert "LEGACY_DISCARDED_HISTORY" not in serialized, f"history resurrected in {index}"
+                    tool_calls = [call["id"] for message in request["messages"]
+                                  for call in message.get("tool_calls", [])]
+                    tool_results = [message["tool_call_id"] for message in request["messages"]
+                                    if message["role"] == "tool"]
+                    assert tool_calls == tool_results == [f"post_compact_{n}" for n in range(1, index + 1)]
+                    for n in range(index):
+                        assert f"TOOL_ROUND_{n}" in serialized
                 return
             pi_session = PersistentPiSession()
             try:
@@ -213,7 +221,10 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                         root=Path(str(project)), env_extra=child_env, session_file=str(session),
                         native_start=lambda *_: True,
                         persistent_session=pi_session,
-                     session_directory=Path(str(project))):
+                        package=native_runtime_package,
+                        tool_mode=NoSelectedTools(),
+                        session_directory=root,
+                    ):
                         events.append(event)
             finally:
                 await pi_session.close()
@@ -234,11 +245,11 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             assert len(compactions) == 1
             return
         if case == "summary_failure":
-            # Pi's engine decides: its failed pre-prompt compaction is reported, the
-            # prompt is still sent once, and nothing is written as a compaction.
-            assert summaries and len(prompts) == 1 and compactions == []
+            # Pi's engine throws the failed pre-prompt compaction. Core reports
+            # incomplete compaction without sending the oversized original prompt.
+            assert summaries and not prompts and compactions == []
             assert len(ends) == 1 and ends[0].aborted
-            assert done.ok is True
+            assert done.ok is False
             return
         assert done.ok is True, done
         assert len(ends) == 1 and not ends[0].aborted
@@ -274,18 +285,6 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             assert len(prompts) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(prompts[0]["messages"])
             return
-        assert case == "post_compaction_tool_rounds"
-        assert len(prompts) == 4
-        for index, request in enumerate(prompts):
-            serialized = json.dumps(request["messages"])
-            assert "LEGACY_DISCARDED_HISTORY" not in serialized, f"history resurrected in {index}"
-            tool_calls = [call["id"] for message in request["messages"]
-                          for call in message.get("tool_calls", [])]
-            tool_results = [message["tool_call_id"] for message in request["messages"]
-                            if message["role"] == "tool"]
-            assert tool_calls == tool_results == [f"post_compact_{n}" for n in range(1, index + 1)]
-            for n in range(index):
-                assert f"TOOL_ROUND_{n}" in serialized
 
 
 async def _acp_threshold(root, project, session, native_bin, native_args, child_env,

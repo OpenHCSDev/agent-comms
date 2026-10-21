@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_arguments import SelectedModel
+from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_pi import (
     NativeContextProof,
     NativePiRpcLaunch,
@@ -221,7 +222,7 @@ async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason,
     turn = object.__new__(TrackedTurnSession)
     output = turn.output = TurnOutput()
     turn.usage, turn.explicit_interrupt = UsageAccount(), False
-    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1, NATIVE_STARTUP_POLICY)
     [update async for update in event.message.stop_reason.apply(turn, event.message)]
 
     assert output.declared_failure == ModelRequestFailed(detail)
