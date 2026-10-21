@@ -15,14 +15,12 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import sqlite3
 import time
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Literal, Type
+from typing import Type
 
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
@@ -37,9 +35,9 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
     PublicationEvidence,
     PublicationIntents,
-    canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.response_acknowledgement import canonical_publication_key
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole
@@ -61,12 +59,15 @@ from agent_comms.typed_table import (
     TypedTable,
 )
 
-from .field_codec import MalformedRecord
 from .locked_store import RegistryFile
 
 
-class ResponseTable(SharedFileTables, DurableTables):
+class ResponseTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
     """An immutable response definition with its write checks and append evidence."""
+
+    @classmethod
+    def install(cls, store) -> None:
+        install_private_response_schema(store)
 
     @classmethod
     def trigger_bodies(cls) -> dict[str, str]:
@@ -76,17 +77,6 @@ class ResponseTable(SharedFileTables, DurableTables):
             "BEGIN SELECT RAISE(ABORT,'response evidence is frozen'); END"
             for operation in ("UPDATE", "DELETE")
         }
-
-
-@dataclass(frozen=True)
-class ResponseSchemaMeta(ResponseTable, TypedTable, PrivateRuntimeSchema):
-    @classmethod
-    def install(cls, store) -> None:
-        install_private_response_schema(store)
-
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[3]
-    ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
 
 @dataclass(frozen=True)
@@ -247,20 +237,10 @@ class SelectedResponseRoute(TypedRow):
             raise IdentityConflict("response sealed route differs from committed source")
 
 
-def _response_digest(schema: dict[str, str]) -> str:
-    return hashlib.sha256(json.dumps(schema, separators=(",", ":")).encode()).hexdigest()
-
-
 def _assert_response_schema(db: sqlite3.Connection) -> None:
-    schema = ResponseTable.declared_schema()
-    try:
-        meta = ResponseSchemaMeta.one(db, singleton=1)
-        drifted = ResponseTable.schema_differs(db)
-    except (sqlite3.Error, MalformedRecord) as error:
-        raise PublicationActivationBlocked("private response schema is not installed") from error
-    if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
-        raise PublicationActivationBlocked("private response schema version is unsupported")
-    if drifted or SQLiteForeignKeys.read(
+    if not ResponseTable.stored_schema(db):
+        raise PublicationActivationBlocked("private response schema is not installed")
+    if ResponseTable.schema_differs(db) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("private response schema has drifted")
@@ -269,11 +249,8 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
 def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
     with store.session.writing() as db:
-        if not ResponseSchemaMeta.present(db):
-            schema = ResponseTable.declared_schema()
-            for statement in schema.values():
-                db.execute(statement)
-            ResponseSchemaMeta(1, 3, _response_digest(schema)).insert(db)
+        if not ResponseTable.stored_schema(db):
+            ResponseTable.create_schema(db)
         _assert_response_schema(db)
 
 

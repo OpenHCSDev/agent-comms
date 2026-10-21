@@ -7,8 +7,7 @@ from pathlib import Path
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
-from .coordination_tables.metadata import SchemaMeta
-from .typed_table import SQLiteUserVersion
+from .coordination_schema import CoordinatorTable
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
 
@@ -32,8 +31,7 @@ class WorkingMemoryAnnotations:
     def reading(path):
         """Borrow one original committed snapshot; readers never install a store."""
         with CoordinationStore.observing(Path(path)) as db:
-            (version,) = SQLiteUserVersion.read(db.execute("PRAGMA user_version"))
-            SchemaMeta.require_current(db, version.user_version)
+            CoordinatorTable.require_schema(db)
             yield db
 
     @classmethod

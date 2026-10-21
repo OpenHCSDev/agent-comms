@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
+from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement, has_private_wire_fields
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .delivery_policy import KeyedResponseAcknowledgement
     from .wire_metadata import WireMetadata
 
 
@@ -44,7 +44,7 @@ class WireRecord(ABC):
 
     @classmethod
     def from_wire(cls, value: Mapping, root_id: str) -> WireRecord:
-        from .bus_publication import CommittedDelivery, has_private_wire_fields
+        from .bus_publication import CommittedDelivery
 
         message = Message.from_committed_wire(value)
         if has_private_wire_fields(value):
@@ -54,7 +54,6 @@ class WireRecord(ABC):
     @classmethod
     def public_from_wire(cls, value: object) -> WireRecord:
         """Display decoding preserves public messages and validates silent rows."""
-        from .bus_publication import has_private_wire_fields
         try:
             if not isinstance(value, Mapping):
                 raise MalformedRecord("Bus row must be an object")
@@ -151,6 +150,3 @@ class WireScan:
             return record
         except MalformedRecord as error:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
-
-
-from .delivery_policy import KeyedResponseAcknowledgement

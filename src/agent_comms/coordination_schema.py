@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cache
 from importlib import import_module
 from pkgutil import iter_modules
 from typing import Final
@@ -13,19 +14,28 @@ from agent_comms.attempt_states import AttemptState, RetryPredecessor
 from agent_comms.execution_states import ExecutionState
 from agent_comms.obligation_states import ResponseState
 from agent_comms.recovery_states import RecoveryCondition
+from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.typed_table import (
+    DurableTables,
+    SharedFileTables,
     TypedTable,
 )
 from agent_comms.wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 11
-
-
 COORDINATION_SNAPSHOT_VERSION: Final = 3
 
 
-class CoordinatorTable:
-    """Capability for the coordinator schema; cases and transitions come from their owners."""
+class CoordinatorTable(SharedFileTables, DurableTables):
+    """The coordinator schema; cases and transitions come from their owners.
+
+    The live objects are compared to these declarations; nothing seals a copy of them.
+    """
+
+    schema_error = SchemaVersionError
+
+    @classmethod
+    def schema_rows(cls):
+        return tuple(cls.declarations())
 
     @classmethod
     def declarations(cls):
@@ -39,8 +49,9 @@ class CoordinatorTable:
 
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False):
+        context = _schema_context(*(family.members_with(family) for family in _CONTEXT_FAMILIES))
         return {
-            name: sql.format(**_schema_context())
+            name: sql.format(**context)
             for name, sql in super().schema_objects(if_not_exists=if_not_exists).items()
         }
 
@@ -67,7 +78,14 @@ def _sql_edges(family, column):
     )
 
 
-def _schema_context():
+_CONTEXT_FAMILIES: Final = (
+    ExecutionState, AttemptState, AssignmentState, WakePolicy, ResponseState, RecoveryCondition,
+)
+
+
+@cache
+def _schema_context(*members):
+    """The SQL the families' members imply; keyed by the members, so a new one rebuilds it."""
     context = dict(
         execution_names=_sql_members(ExecutionState),
         attempt_names=_sql_members(AttemptState),
@@ -139,22 +157,3 @@ def _schema_context():
         + " END"
     )
     return context
-
-
-def coordinator_schema():
-    tables = "\n".join(
-        statement + ";"
-        for row_type in CoordinatorTable.declarations()
-        for statement in row_type.schema_objects().values()
-    )
-    return tables + "\n" + ("""CREATE VIEW retry_disposition_basis AS
-SELECT e.execution_id,
-  CASE WHEN e.current_attempt_ordinal IS NOT NULL
-     AND e.current_attempt_ordinal < e.max_attempts
-     AND EXISTS (SELECT 1 FROM replay_assessments r
-       WHERE r.execution_id = e.execution_id AND r.retry_authorized = 1)
-     AND (e.origin != 'wire' OR (EXISTS (SELECT 1 FROM obligations o
-       WHERE o.execution_id=e.execution_id) AND NOT EXISTS (SELECT 1 FROM obligations o
-       WHERE o.execution_id=e.execution_id AND o.retryable != 1)))
-  THEN 1 ELSE 0 END AS authorized
-FROM executions e;""").format(**_schema_context())
