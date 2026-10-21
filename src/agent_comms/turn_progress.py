@@ -26,7 +26,6 @@ from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_lease import TurnState
-from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
@@ -70,7 +69,6 @@ class TurnProgress(events.AgentEventConsumer):
         self.session_id, self.turn = session_id, turn
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
-        self.result: TurnTerminal = EndedWithoutResult()
         self.terminal_error: events.Error | None = None
         self.publication_measurements = PublicationMeasurements()
         self.publication = TurnEventPublication(
@@ -124,7 +122,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def report_failure(self, error: Exception) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        return await self.result.report_failure(self, error)
+        return await self.turn.terminal.report_failure(self, error)
 
 
     @handles(events.SteeringInterrupted)
@@ -191,11 +189,11 @@ class TurnProgress(events.AgentEventConsumer):
                 ok=False,
                 text=("An identified follow-up input was not started; inspect local diagnostics."),
             )
-        event = self.result.reported(event)
+        event = self.turn.terminal.reported(event)
         event = event.resolve(self.terminal_error, document, self.original)
         # Retain the resolved outcome before transport publication. If delivery
         # throws, failure handling must not classify or resolve it a second time.
-        self.result = event
+        self.turn.terminal = event
         await Coordination.run_worker(partial(event.observe_goal, self.goals))
         return event
 
@@ -262,7 +260,7 @@ class TurnProgress(events.AgentEventConsumer):
         if isinstance(published, events.Done):
             # ACP publication may replace Done with its notification acknowledgement;
             # terminal consumers retain that exact completed outcome.
-            self.result = published
+            self.turn.terminal = published
         await self.publication.dispatch(published)
 
     def publish_success(self) -> tuple[SendResult, ...]:
@@ -326,7 +324,7 @@ class TurnProgress(events.AgentEventConsumer):
             return tuple(results)
 
     async def publish_result(self):
-        terminal = await self.result.prepare_publication(self)
+        terminal = await self.turn.terminal.prepare_publication(self)
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
         await self.report_sends(await Coordination.run_worker(

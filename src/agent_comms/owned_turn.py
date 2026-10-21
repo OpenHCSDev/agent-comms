@@ -43,7 +43,7 @@ from .turn_input_source import (
     ScheduledOriginalInput,
 )
 from .turn_progress import TurnProgress
-from .turn_terminal import TurnTerminal
+from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 
 if TYPE_CHECKING:
@@ -114,6 +114,7 @@ class OwnedTurn:
         self.original_goal_id = original_goal_id
         self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
+        self.terminal: TurnTerminal = EndedWithoutResult()
 
     def authorize(self):
         self.original_display = (
@@ -156,6 +157,14 @@ class OwnedTurn:
         prepared_goal = any(self._prepare_goal_permit(goal, permits) for goal in active_goal)
         if self.autonomous_goal and not prepared_goal:
             return False
+        origin_claims = ExitStack()
+        permits.callback(origin_claims.close)
+        self.goals = TurnGoalAccount(
+            comms=self.runner.comms, owner=self.thread, turn=TurnId(self.turn_id),
+            lease=self.turn_lease, permit=self.goal_permit,
+            pending_origins=self.runner.goals.pending_goal_origins, claims=origin_claims,
+        )
+        permits.callback(self.finish_goals)
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
@@ -295,8 +304,6 @@ class OwnedTurn:
         self.input_cleanup.push_async_callback(
             self.runner.inputs.finish_turn_inputs, self.following
         )
-        origin_claims = ExitStack()
-        permits.callback(origin_claims.close)
         self.progress = TurnProgress(
             comms=self.runner.comms,
             sessions=self.runner.sessions,
@@ -306,22 +313,13 @@ class OwnedTurn:
             session_id=self.session_id,
             turn=self,
             finish_event=self.finish_event,
-            goals=TurnGoalAccount(
-                comms=self.runner.comms,
-                owner=self.thread,
-                turn=TurnId(self.turn_id),
-                lease=self.turn_lease,
-                permit=self.goal_permit,
-                pending_origins=self.runner.goals.pending_goal_origins,
-                claims=origin_claims,
-            ),
+            goals=self.goals,
             sync_goals=self.runner.goals.sync_goal_execution,
         )
-        permits.callback(self.finish_goals)
         resources.push_async_callback(self.close_changed_project)
 
     def finish_goals(self) -> None:
-        self.progress.goals.finish(self.progress.result)
+        self.goals.finish(self.terminal)
 
     async def close_changed_project(self) -> None:
         name = await self.runner.sessions.sync_identity(self.session_id)
@@ -412,9 +410,14 @@ class OwnedTurn:
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permit_cleanup:
-                if not await self.acquire(resources, permit_cleanup):
-                    return
-                await self.run_native()
+                try:
+                    if not await self.acquire(resources, permit_cleanup):
+                        return
+                    await self.run_native()
+                except asyncio.CancelledError as error:
+                    self.terminal = self.terminal.interrupted(
+                        TurnTerminal.from_cancellation(error))
+                    raise
 
     def settle_unbound(self):
         """Close the actual input batch and observe its result under one wire cut."""
@@ -432,9 +435,7 @@ class OwnedTurn:
         try:
             await self.prepare_native()
             await self.stream()
-        except asyncio.CancelledError as error:
-            self.progress.result = self.progress.result.interrupted(
-                TurnTerminal.from_cancellation(error))
+        except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
             state = await Coordination.run_worker(self.settle_unbound)

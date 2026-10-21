@@ -171,6 +171,12 @@ class TurnGoalAccount:
             self.comms.goals, self.thread_name, self.owner.worktree, diagnostic,
         )
 
+    def require_output(self, text: str) -> None:
+        if self.productive_tool is None and not text.strip():
+            self.permit.block(self,
+                "Backend reported success without assistant output "
+                "or tool activity; inspect the session before resuming.")
+
     def settle_launched(self, permit: LaunchPermit, terminal: TurnTerminal) -> None:
         store = self.comms.goals.open_goal_store()
         captured = self.owner.goal.require().require_id(permit.reservation.goal_id)

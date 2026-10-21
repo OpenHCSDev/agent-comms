@@ -280,10 +280,8 @@ class Done(AgentEvent, FailedGoalTurn):
     def observe_goal(self, account) -> None:
         if not self.ok:
             account.permit.block(account, "Backend turn failed; inspect local diagnostics before resuming.")
-        elif account.productive_tool is None and not str(self.text or "").strip():
-            account.permit.block(account,
-                "Backend reported success without assistant output "
-                "or tool activity; inspect the session before resuming.")
+        else:
+            account.require_output(self.text)
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         from .turn_goal_account import VerifiedGoalSettlement
@@ -301,6 +299,9 @@ class Done(AgentEvent, FailedGoalTurn):
 
     def reported(self, event: Done) -> Done:
         return replace(event, ok=False, text="Duplicate native terminal result")
+
+    def require_reported(self) -> Done:
+        return self
 
     async def prepare_publication(self, progress) -> Done:
         return self

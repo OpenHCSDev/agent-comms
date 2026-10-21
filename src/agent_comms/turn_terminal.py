@@ -37,11 +37,14 @@ class TurnTerminal(ABC):
     def reported(self, event: Done) -> Done:
         return event
 
+    def require_reported(self) -> Done:
+        raise RuntimeError("Turn has no reported backend result")
+
     async def prepare_publication(self, progress: TurnProgress) -> Done:
         from .agent_events import Done
 
         await progress.consume(Done(text="Native turn ended without a result", ok=False))
-        return progress.result
+        return progress.turn.terminal.require_reported()
 
     async def report_failure(self, progress: TurnProgress, error: Exception):
         from .agent_events import Done
@@ -49,7 +52,7 @@ class TurnTerminal(ABC):
         cause = error.__cause__ or error
         detail = f"Native turn failed: {type(cause).__name__}: {cause}"
         await progress.consume(Done(text=detail, ok=False))
-        return progress.result.outcome
+        return progress.turn.terminal.require_reported().outcome
 
     @abstractmethod
     def settle_launched(self, account, permit, store, captured, current) -> None: ...

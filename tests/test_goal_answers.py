@@ -77,10 +77,14 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
         assert not account.pending_origins
 
 
-def test_unreported_terminal_still_blocks_goal_on_copied_bus(copied_goal_bus):
+@pytest.mark.parametrize("terminal", [
+    EndedWithoutResult(), events.Done("backend failed", False), events.Done("", True),
+])
+def test_unsuccessful_terminal_still_blocks_goal_on_copied_bus(copied_goal_bus, terminal):
     comms = copied_goal_bus
     with goal_turn(comms, True) as account:
-        account.finish(EndedWithoutResult())
+        terminal.observe_goal(account)
+        account.finish(terminal)
         state = comms.registry.require("worker").goal.require().state
         assert isinstance(state, BlockedGoal)
 
