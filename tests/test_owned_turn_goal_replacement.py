@@ -33,7 +33,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path):
     ))
     initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(tmp_path), request='request',
-        deadline=RecordedEventTime(1000), commander='lead',
+        review_at=RecordedEventTime(1000), commander='lead',
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
     actor = comms.registry.require('lead').incarnation
@@ -46,7 +46,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path):
         todo = comms.goals.todos.get('P1')
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request='request', deadline=RecordedEventTime(2000),
+            commander='lead', request='request', review_at=RecordedEventTime(2000),
             order=replace(order(tmp_path), id='replacement'),
         ))
         with pytest.raises(SelectedToolDenied, match='captured goal permission no longer applies'):
@@ -68,7 +68,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path):
         todo = comms.goals.todos.get('P1')
         latest = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
-            commander='lead', request='request', deadline=RecordedEventTime(3000),
+            commander='lead', request='request', review_at=RecordedEventTime(3000),
             order=replace(order(tmp_path), id='replacement-during-preparation'),
         ))
         assert current.thread.goal == replaced != latest

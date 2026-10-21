@@ -123,12 +123,12 @@ class CheckedPhaseTask(PhaseTask):
     repo: RepositoryName
     text: str
     order: PendingProblemOrder
-    deadline_seconds: float
+    review_seconds: float
     instruction = "Core assigns the declared checked task to a unit and starts it"
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.deadline_seconds) or self.deadline_seconds <= 0:
-            raise ValueError("A phase task needs a finite positive deadline interval.")
+        if not math.isfinite(self.review_seconds) or self.review_seconds <= 0:
+            raise ValueError("A phase task needs a finite positive review interval.")
 
     def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
         history = comms.goals.todos.history_for_commander(commander.incarnation)
@@ -147,7 +147,7 @@ class CheckedPhaseTask(PhaseTask):
             order=order,
             request=order.request(commander, (self.problem,)),
             commander=commander.name,
-            deadline=RecordedEventTime(now + self.deadline_seconds),
+            review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)
 

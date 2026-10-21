@@ -73,7 +73,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_pat
                         problem=problem,
                         order=order,
                         request="request",
-                        deadline=RecordedEventTime(4102444800),
+                        review_at=RecordedEventTime(4102444800),
                         commander="lead",
                         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
                         text="Bind proof to its build",

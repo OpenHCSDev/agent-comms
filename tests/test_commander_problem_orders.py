@@ -26,11 +26,11 @@ def order(root, identity, command='printf 1', expected=1):
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
 
 
-def create(commander, problem, command='printf 1', expected=1, deadline=1000, owner='worker'):
+def create(commander, problem, command='printf 1', expected=1, review_at=1000, owner='worker'):
     comms, caller = commander
     CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
-        request='request', deadline=RecordedEventTime(deadline), commander='lead',
+        request='request', review_at=RecordedEventTime(review_at), commander='lead',
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'), text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
@@ -93,7 +93,7 @@ def stray(commander, problem, generation):
     lead = comms.registry.require('lead')
     return comms.goals.todos.create(
         problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'), 'Fix ' + problem, creator=lead,
-        owner=comms.registry.require('worker'), generation=generation, deadline=RecordedEventTime(1000),
+        owner=comms.registry.require('worker'), generation=generation, review_at=RecordedEventTime(1000),
         order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
 
 

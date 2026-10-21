@@ -31,7 +31,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller = ThreadCaller("lead")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(tmp_path), edits=("Repair the existing record owner",)),
-        request="request", deadline=RecordedEventTime(1000),
+        request="request", review_at=RecordedEventTime(1000),
         commander="lead", repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
@@ -49,7 +49,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     todo = comms.goals.todos.get("P1")
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
-        request="request", deadline=RecordedEventTime(2000),
+        request="request", review_at=RecordedEventTime(2000),
         order=replace(order(tmp_path), id="resent-order"))), comms)
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
