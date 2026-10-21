@@ -180,7 +180,9 @@ class StackClient:
         found: list[ClientImport] = []
         for path in sorted(self.checkout.rglob("*.py")):
             relative = str(path.relative_to(self.checkout))
-            ClientImportNames(self.name, relative, found).visit(ast.parse(path.read_text(), relative))
+            ClientImportNames(self.name, relative, found).visit(
+                ast.parse(path.read_text(), relative)
+            )
         return tuple(found)
 
 
