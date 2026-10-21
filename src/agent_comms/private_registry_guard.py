@@ -37,6 +37,9 @@ from .locked_store import DurableFile, WireWakeFile
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
+    from .acp_extension import CursorAdvancedUpdate, CursorScope
+    from .cursor_publication import CursorPublication
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .private_nk_entrypoint import RootLaunch
 
@@ -113,6 +116,26 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
+    @staticmethod
+    def capture(root: Path) -> RegistryPrivacy:
+        """Read original privacy authority under its registry's existing lock."""
+        from .registry_store import RegistryStore
+        from .store_files import SharedLock
+
+        registry = RegistryStore.at(root)
+        with registry.locked(mode=SharedLock()):
+            return registry.private_guard_unlocked()
+
+    @abstractmethod
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope: ...
+
+    @abstractmethod
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]: ...
+
     @property
     @abstractmethod
     def namespace(self) -> str:
@@ -135,6 +158,18 @@ class RegistryPrivacy(ABC):
 
 
 class PublicRegistry(RegistryPrivacy):
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope:
+        from .acp_extension import NoCursorScope
+
+        return NoCursorScope()
+
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
+        return ()
+
     @property
     def namespace(self) -> str:
         _reject("native namespace requires the original registry guard")
@@ -192,6 +227,28 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     def namespace(self) -> str:
         """The existing native protocol namespace, never the SQLite bus identity."""
         return self.root_id.hex()
+
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope:
+        from .acp_extension import LiveCursorScope, NoCursorScope
+        from .native_input_owner import RegistryOwner
+        from .thread_identity import ClaimedIdentity
+
+        try:
+            owner = RegistryOwner.capture_local(snapshot, thread_name)
+        except RelationViolationError:
+            return NoCursorScope()
+        return LiveCursorScope(
+            session_id, self.namespace,
+            ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
+            owner.thread.require_process().pid,
+        )
+
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
+        return await publication.observed_metadata(thread_name, session_id)
 
     def launch(self, root: Path) -> RootLaunch:
         from .private_nk_entrypoint import PrivateNkLaunch

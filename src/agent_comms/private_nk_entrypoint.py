@@ -29,9 +29,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .store_files import SharedLock
 
 if TYPE_CHECKING:
-    from .acp_extension import CursorScope
     from .active_route import CommsRoute
-    from .cursor_publication import CursorPublication
     from .launch_runtime import LaunchRuntime
     from .threads import Thread
 
@@ -48,13 +46,10 @@ class RootLaunch(ABC):
         The registry guard owns the native namespace; the installed pin owns
         the package. No bus-file metadata participates in either decision.
         """
-        from .locked_store import RegistryFile
-        from .registry_store import RegistryStore
+        from .private_registry_guard import RegistryPrivacy
 
         root = route.observe_root()
-        registry = RegistryStore(RegistryFile.path_in(root))
-        with registry.locked(mode=SharedLock()):
-            return registry.private_guard_unlocked().launch(root)
+        return RegistryPrivacy.capture(root).launch(root)
 
     @property
     @abstractmethod
@@ -97,16 +92,6 @@ class RootLaunch(ABC):
     def package_for(self, command: str) -> VerifiedNativePackage:
         """The reviewed package a native execution of ``command`` runs."""
 
-    @abstractmethod
-    def cursor_scope(self, publication: CursorPublication, thread_name: str,
-                     session_id: str) -> CursorScope:
-        """The cursor scope this process may publish for ``thread_name``."""
-
-    @abstractmethod
-    async def cursor_metadata(self, publication: CursorPublication, thread_name: str,
-                              session_id: str) -> tuple:
-        """The trusted cursor metadata a session publishes."""
-
 
 @dataclass(frozen=True, slots=True)
 class SharedRootLaunch(RootLaunch):
@@ -131,16 +116,6 @@ class SharedRootLaunch(RootLaunch):
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         return VerifiedNativePackage.acquire(pinned_native_package())
 
-    def cursor_scope(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> CursorScope:
-        return publication.shared_scope()
-
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple:
-        return ()
-
 
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch(RootLaunch):
@@ -161,16 +136,6 @@ class PrivateNkLaunch(RootLaunch):
 
     def package_for(self, command: str) -> VerifiedNativePackage:
         return self.validate()
-
-    def cursor_scope(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> CursorScope:
-        return publication.live_scope(self.wire_root_id, thread_name, session_id)
-
-    async def cursor_metadata(
-        self, publication: CursorPublication, thread_name: str, session_id: str,
-    ) -> tuple:
-        return await publication.observed_metadata(thread_name, session_id)
 
     @classmethod
     def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
