@@ -93,7 +93,7 @@ class InjectedInput(CoverageInput):
         original = self.original
         return dict(
             injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
-            stage=TextNativeColumn(type(original.execution).declared_name),
+            stage=TextNativeColumn(FieldCodec.encode(type(original.execution))),
             session_id=TextNativeColumn(original.context.session_id),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
