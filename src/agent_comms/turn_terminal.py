@@ -89,14 +89,15 @@ class FailedGoalTurn(TurnTerminal):
         if permit.has_verified_progress(store):
             return
         observation = self.failure_observation(account, permit, captured)
+        reason = self.failure_reason.value
         with suppress(StaleAttemptError):
             permit.reservation.fail(
-                store, self.failure_reason,
+                store, reason,
                 observation=observation,
             )
         current.block_after_failed_turn(
             account.comms.goals, account.thread_name, account.owner.worktree,
-            self.failure_reason, turn=account.turn,
+            reason, turn=account.turn,
         )
 
 

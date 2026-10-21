@@ -74,7 +74,7 @@ def test_failed_goal_turn_writes_one_block_naming_turn(copied_goal_bus):
         account.finish(terminal)
         blocks = [row.after.require().state for row in comms.goals.goal_history("worker")
                   if isinstance(row.after.require().state, BlockedGoal)]
-        assert blocks == [BlockedGoal(terminal.failure_reason, turn=account.turn)]
+        assert blocks == [BlockedGoal(terminal.failure_reason.value, turn=account.turn)]
 
 
 def test_later_verified_turn_supersedes_failed_turn_block(copied_goal_bus):
