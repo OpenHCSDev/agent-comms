@@ -15,7 +15,9 @@ from agent_comms.bus import (
     PublicRecord,
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource
+from agent_comms.bus_tables import (
+    BusProjectionTables, BusRow, BusTables, DirectReplySource, MessageIdentitySource,
+)
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     HumanSendRefusedError,
@@ -69,6 +71,22 @@ def test_real_message_record_round_trip(tmp_path, declaration, role):
         assert not delivery.direct_for("unaddressed")
     with pytest.raises(RelationViolationError):
         bus.lookup(stored.seq + 1)
+
+
+def test_shared_projection_reset_preserves_stored_history(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    record = bus.append(lambda seq, db: record_from(
+        PrivateRecord, Message("author", "worker", "kept history", InfoKind, seq=seq),
+    ))
+    with bus.writing() as db:
+        stored = {row: row.select(db) for row in BusTables.schema_rows()}
+        assert MessageIdentitySource.count(db) == 1
+        BusProjectionTables.reset_schema(db)
+        BusProjectionTables.require_schema(db)
+        assert all(not row.select(db) for row in BusProjectionTables.schema_rows())
+        assert {row: row.select(db) for row in BusTables.schema_rows()} == stored
+    assert bus.lookup(record.seq) == record
+    assert bus.page(record.seq + 1, 10) == (record,)
 
 
 def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):

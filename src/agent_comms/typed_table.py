@@ -632,6 +632,11 @@ class TableSchema(ABC):
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
 
     @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        """The physical tables this schema owns, dependents before their sources."""
+        return SQLiteTableName.stored(db)
+
+    @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
 
@@ -696,6 +701,11 @@ class SharedFileTables(TableSchema):
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         return TypedTable.objects_of(db, cls.schema_rows())
 
+    @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        names = frozenset(row.declared_name for row in cls.schema_rows())
+        return [table for table in super().stored_tables(db) if table.name in names]
+
 
 class AllObjectsTables(TableSchema):
     """A file that declares every object it holds, SQLite's own included."""
@@ -715,8 +725,8 @@ class DerivedTables(TableSchema):
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
-        """Inside the caller's transaction: every stored table goes, the declared ones come."""
-        for stored in SQLiteTableName.stored(db):
+        """Inside the caller's transaction: rebuild only this schema's derived tables."""
+        for stored in cls.stored_tables(db):
             stored.drop(db)
         cls.create_schema(db)
 
