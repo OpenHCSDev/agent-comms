@@ -25,6 +25,12 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 14, It ignored alarms because its board had rotted: no pattern cites it yet
 - Failure 15, It recited rules instead of following them: no pattern cites it yet
 - Failure 16, It deleted state without checking who was using it: no pattern cites it yet
+- Failure 17, It left every unit blocked with no alarm: no pattern cites it yet
+- Failure 18, It installed a change without the cutover the change required: no pattern cites it yet
+- Failure 19, It ordered units to diagnose and choose the shape: no pattern cites it yet
+- Failure 20, Its own orders stopped the units they were sent to: no pattern cites it yet
+- Failure 21, It reported a state its evidence did not show: no pattern cites it yet
+- Failure 22, It left a unit's question unanswered for hours: no pattern cites it yet
 
 ## plan_idle
 
