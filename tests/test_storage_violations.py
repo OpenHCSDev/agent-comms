@@ -24,7 +24,8 @@ from agent_comms.storage_rules import (
     StorageViolation,
     UnitStorage,
 )
-from agent_comms.todos import GoalRef, MechanicalOrderRun, PendingProblemOrder
+from agent_comms.todos import GoalRef, PendingProblemOrder
+from agent_comms.order_runs import MechanicalOrderRun
 
 
 @pytest.mark.parametrize(

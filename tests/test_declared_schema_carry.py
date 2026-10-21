@@ -17,7 +17,8 @@ from agent_comms.native_session_files import NativeSessionFiles, PrivateSession
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import GoalRef, MechanicalOrderRun, PendingProblemOrder, Todo, TodoStore
+from agent_comms.todos import GoalRef, PendingProblemOrder, Todo, TodoStore
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.typed_table import DurableTables, SharedFileTables
 from cutover.carry_declared_schema import _subclasses, carry
 
