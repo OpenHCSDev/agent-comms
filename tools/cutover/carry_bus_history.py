@@ -539,7 +539,8 @@ class HistoryInput:
                 with bus.observing() as db:
                     if HistoryOffset.present(db):
                         raise RelationViolationError(
-                            f"History input was already staged; restore its backup before retry: {source}"
+                            "History input was already staged; restore its backup "
+                            f"before retry: {source}"
                         )
             return ()
         if not source.is_file() or not original.is_file():
