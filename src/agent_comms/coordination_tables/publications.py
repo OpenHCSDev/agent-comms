@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -27,6 +27,10 @@ from agent_comms.typed_table import (
 )
 
 
+if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
+
+
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(CoordinatorTable, TypedTable):
     """One obligation route's frozen response: the exact Message it publishes."""
@@ -46,6 +50,16 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     def matches_publication(self, message: Message) -> bool:
         """Compare the frozen intent once against the Message-owned content snapshot."""
         return self.message == message.publication_snapshot
+
+    def published_message(self, source: BusReader) -> Message | None:
+        """The bounded durable match for this exact frozen publication intent."""
+        from agent_comms.errors import RelationViolationError
+
+        for message in source.keyed_messages(self.publication_key):
+            if not self.matches_publication(message):
+                raise RelationViolationError("Response publication key has different message content.")
+            return message
+        return None
 
     def validate_acknowledgement(self, acknowledgement: PublicationEvidence) -> None:
         if acknowledgement.message_id != self.expected_message_id:

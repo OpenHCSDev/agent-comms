@@ -100,6 +100,7 @@ class NativeBoundary(ExitStack):
                     self.bus._registry.store.path, mode=SharedLock(),
                     contention=self.contention))
             with self.measurements.operation("registry_snapshot"):
+                self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
             return self
         except BaseException:
