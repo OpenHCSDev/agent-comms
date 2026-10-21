@@ -95,7 +95,7 @@ class TurnGoalAccount:
     claims: ExitStack
     originated: dict[str, GoalTurnPermit] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
-    productive_tool: events.ToolEnd | None = field(default=None, init=False)
+    has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
     def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
@@ -131,8 +131,7 @@ class TurnGoalAccount:
             self.unattributed_usage.append((str(event.response_id), event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
-        if event.ok:
-            self.productive_tool = event
+        self.has_productive_tool |= bool(event.ok)
         if event.name != "comms_set_goal" or event.ok is not True:
             return
         with _store_lock(self.comms._wire_lock_path):
@@ -172,7 +171,7 @@ class TurnGoalAccount:
         )
 
     def require_output(self, text: str) -> None:
-        if self.productive_tool is None and not text.strip():
+        if not (self.has_productive_tool or text.strip()):
             self.permit.block(self,
                 "Backend reported success without assistant output "
                 "or tool activity; inspect the session before resuming.")
