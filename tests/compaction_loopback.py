@@ -43,6 +43,9 @@ class LoopbackProvider:
         }, None
         yield {}, "tool_calls"
 
+    async def after_chunk(self) -> None:
+        """A provider may hold completion after a visible streamed chunk."""
+
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
@@ -96,15 +99,15 @@ class LoopbackProvider:
                     }
                     return b"data: " + json.dumps(chunk).encode() + b"\n\n"
 
-                body = b"".join(
-                    event(delta, reason) for delta, reason in self.response_chunks()
-                ) + b"data: [DONE]\n\n"
                 writer.write(
-                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
-                    + str(len(body)).encode()
-                    + b"\r\nConnection: close\r\n\r\n"
-                    + body
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                    b"Connection: close\r\n\r\n"
                 )
+                for delta, reason in self.response_chunks():
+                    writer.write(event(delta, reason))
+                    await writer.drain()
+                    await self.after_chunk()
+                writer.write(b"data: [DONE]\n\n")
             await writer.drain()
         except (OSError, TimeoutError, asyncio.IncompleteReadError):
             pass

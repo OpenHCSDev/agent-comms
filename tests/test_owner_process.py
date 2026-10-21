@@ -1,7 +1,6 @@
 """Real isolated owners: birth-bound launch, retirement and refusal to interrupt."""
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -10,6 +9,7 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -19,9 +19,11 @@ from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.comms import Comms
 from agent_comms.config_options import ThinkingLevelConfigOption
+from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import compile_decoder
+from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.turn_lease import ActiveTurn
 from agent_comms.launch_root import LaunchRoot
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
@@ -38,17 +40,17 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
     comms = Comms(native_workers.root)
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
-    first = comms.owners.start(
-        "worker", agent_bin="pi", agent_args=[]
-    )
+    first = await Coordination.run_worker(partial(
+        comms.owners.start, "worker", agent_bin="pi", agent_args=[],
+    ))
     owner = comms.registry.require("worker")
     try:
         deadline = time.monotonic() + 10
         while not socket_path(comms.root, first.pid).exists():
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
-            time.sleep(0.02)
-        assert comms.owners.start("worker").pid == owner.require_process().pid
+            await asyncio.sleep(0.02)
+        assert (await Coordination.run_worker(partial(comms.owners.start, "worker"))).pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
         from agent_comms.owner_cutover import StoppedOwnerInstallation
@@ -57,9 +59,9 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         # the removed mutable-package override is not a supported input.
         assert owner.process_alive
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)
-        restarted = comms.owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[]
-        )
+        restarted = await Coordination.run_worker(partial(
+            comms.owners.restart_owners, ["worker"], agent_bin="pi", agent_args=[],
+        ))
         replacement = comms.registry.require("worker")
         assert len(restarted) == 1
         assert replacement.process_alive and not owner.process_alive
@@ -76,14 +78,15 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             def after_stopped(self, lifecycle):
                 assert not replacement.process_alive
 
-        (installed,) = Comms(comms.root).owners.restart_owners(
-            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
-        )
+        (installed,) = await Coordination.run_worker(partial(
+            Comms(comms.root).owners.restart_owners,
+            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch(),
+        ))
         assert installed.previous_pid == replacement.require_process().pid
         assert not replacement.process_alive
         replacement = comms.registry.require("worker")
         assert replacement.process_alive and replacement.require_process().pid == installed.pid
-        comms.owners.stop("worker")
+        await Coordination.run_worker(partial(comms.owners.stop, "worker"))
         assert not replacement.process_alive
         assert comms.registry.status("worker").stopped
         assert comms.registry.require("worker").created_at == declared.created_at
@@ -152,7 +155,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
     comms = Comms(native_workers.root)
-    package = pinned_native_package()
+    package = native_workers.package.path
 
     async def thinking_options():
         async with AsyncExitStack() as lifetime:
@@ -163,10 +166,10 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=model))
 
     declared_options = await thinking_options()
-    thinking = declared_options[0].value
+    thinking = compile_decoder(ThinkingLevelField).decode(declared_options[0].value)
     originals = []
     settings = (
-        ("batch-a", ("--offline", "--no-tools", "--thinking", thinking), "credential-a"),
+        ("batch-a", ("--offline", "--no-tools", "--thinking", thinking.wire_value()), "credential-a"),
         ("batch-b", (), "credential-b"),
     )
 
@@ -225,7 +228,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
-                comms.owners.start(name, agent_args=arguments)
+                await Coordination.run_worker(partial(comms.owners.start, name, agent_args=arguments))
             original = comms.registry.require(name)
             await ready(original)
             originals.append(original)
@@ -234,16 +237,15 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         selected = ["batch-a", "batch-renamed"]
         before = comms.registry.snapshot()
         last = before.require_active("batch-renamed")
-        busy = replace(last, active_turn=ActiveTurn("protected-turn", last.require_process().pid))
-        comms.registry.register(busy)
+        busy = comms.agents.begin_turn(last.name, "protected-turn")
         refusal_source = comms.registry.snapshot()
         with pytest.raises(RelationViolationError):
-            comms.owners.restart_owners(selected, cutover=cutover)
+            await Coordination.run_worker(partial(comms.owners.restart_owners, selected, cutover=cutover))
         assert comms.registry.snapshot() == refusal_source
         assert all(owner.process_alive for owner in originals)
-        comms.registry.register(last)
+        assert comms.agents.finish_turn(busy.turn_lease)
         with pytest.raises(RelationViolationError):
-            comms.owners.restart_owners([selected[0]], cutover=cutover)
+            await Coordination.run_worker(partial(comms.owners.restart_owners, [selected[0]], cutover=cutover))
         assert all(original.process_alive for original in originals)
         original_goals = {name: comms.registry.require(name).goal for name in selected}
         source_files = {
@@ -256,9 +258,9 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         target_runtime = LaunchRuntime.running()
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)
-        receipts = comms.owners.restart_owners(
-            selected, agent_bin=str(target_binary), cutover=cutover
-        )
+        receipts = await Coordination.run_worker(partial(
+            comms.owners.restart_owners, selected, agent_bin=str(target_binary), cutover=cutover,
+        ))
         assert len(receipts) == 2
         assert all(not owner.process_alive for owner in originals)
         for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
@@ -297,7 +299,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     finally:
         for owner in comms.registry.snapshot().threads.values():
             if owner.role.executes(owner.process_alive):
-                comms.owners.stop(owner.name)
+                await Coordination.run_worker(partial(comms.owners.stop, owner.name))
         assert all(not owner.process_alive for owner in originals)
 
 

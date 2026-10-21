@@ -12,6 +12,7 @@ from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
     decode_updates,
+    encode_updates,
 )
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
@@ -226,6 +227,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                     {
                         "sessionUpdate": "config_option_update",
                         "configOptions": [{"id": "model", "currentValue": "new"}],
+                        "_meta": encode_updates(),
                     },
                 )
                 in updates

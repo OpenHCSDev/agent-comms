@@ -5,7 +5,6 @@ import json
 import os
 import select
 import subprocess
-import sys
 from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
