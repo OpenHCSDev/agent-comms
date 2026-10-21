@@ -746,13 +746,16 @@ class DeclaredSpellings:
 
     Classes count under their own name, src modules under their dotted path, and modules and
     top-level functions under a multi-word name; a one-word module or function name is also an
-    ordinary word, so a literal equal to it is not taken as naming it. Enum members are the
-    declared boundary spellings of another program's contract, so literals in an enum's body
-    are the one place such a spelling may appear.
+    ordinary word, so a literal equal to it is not taken as naming it. A one-word class name
+    (Read, Open, Claimed) is an ordinary word too, so a literal equal to it names the class
+    only where a type is expected: an annotation, a return, a class base or a type variable's
+    bound. Enum members are the declared boundary spellings of another program's contract, so
+    literals in an enum's body are the one place such a spelling may appear.
     """
 
     names: dict[str, str]
     enums: frozenset[str]
+    ordinary: frozenset[str]
 
     boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
         kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
@@ -762,12 +765,18 @@ class DeclaredSpellings:
     selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
         call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
+    class_word: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+")
+    type_variable: typing.ClassVar[str] = typing.TypeVar.__name__
     package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
     entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
     @staticmethod
     def multiword(name: str) -> bool:
         return name.strip("_").count("_") > 0
+
+    @classmethod
+    def one_word_class(cls, name: str) -> bool:
+        return len(cls.class_word.findall(name)) == 1
 
     @staticmethod
     def dotted_name(module: Path, packages: set[Path]) -> str:
@@ -798,6 +807,7 @@ class DeclaredSpellings:
         """The spellings declared by the modules, taken in the dictionary's order."""
         names: dict[str, str] = {}
         bases: dict[str, set[str]] = {}
+        ordinary: set[str] = set()
         packages = {Path(path).parent for path in modules if Path(path).name == cls.package_marker}
         for path, declared in modules.items():
             module = Path(path).with_suffix("")
@@ -810,10 +820,46 @@ class DeclaredSpellings:
             for name, parents in declared.classes:
                 names[name] = f"class {path}:{name}"
                 bases.setdefault(name, set()).update(parents)
+                if cls.one_word_class(name):
+                    ordinary.add(name)
         enums = set(cls.boundary_enums)
         while grown := {name for name, parents in bases.items() if parents & enums} - enums:
             enums |= grown
-        return cls(names, frozenset(enums))
+        return cls(names, frozenset(enums), frozenset(ordinary - {
+            name for name, target in names.items() if not target.startswith("class ")}))
+
+    def typed(self, tree: ast.AST) -> set[int]:
+        """Literals sitting where a type is expected, so a one-word class name there names it."""
+        expressions: list[ast.AST | None] = []
+        for node in ast.walk(tree):
+            match node:
+                case ast.FunctionDef(args=arguments, returns=returns) | ast.AsyncFunctionDef(
+                        args=arguments, returns=returns):
+                    expressions.append(returns)
+                    expressions.extend(argument.annotation for argument in (
+                        *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+                        *filter(None, (arguments.vararg, arguments.kwarg))))
+                case ast.AnnAssign(annotation=annotation):
+                    expressions.append(annotation)
+                case ast.ClassDef(bases=parents):
+                    expressions.extend(parents)
+                case ast.Call(func=ast.Name(id=call) | ast.Attribute(attr=call), args=arguments,
+                              keywords=keywords) if call == self.type_variable:
+                    expressions.extend(arguments[1:])
+                    expressions.extend(keyword.value for keyword in keywords)
+        typed = {id(part) for expression in filter(None, expressions) for part in ast.walk(expression)}
+        metadata = {id(part) for node in ast.walk(tree) if id(node) in typed
+                    for part in self.annotated_metadata(node)}
+        return typed - metadata
+
+    @staticmethod
+    def annotated_metadata(node: ast.AST) -> Iterator[ast.AST]:
+        """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
+        match node:
+            case ast.Subscript(value=ast.Name(id=name) | ast.Attribute(attr=name),
+                               slice=ast.Tuple(elts=[_, *extras])) if name == Annotated.__name__:
+                for extra in extras:
+                    yield from ast.walk(extra)
 
     def exempt(self, tree: ast.AST) -> set[int]:
         """Literals no reader takes as identity: prose, interpolation pieces, class-header
@@ -871,8 +917,11 @@ class DeclaredSpellings:
                         left = right
                 case ast.MatchValue(value=value) if self.kind(value):
                     record(value, ComparedKind, "kind matched by spelling")
+        typed = self.typed(tree)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in self.names:
+            if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and node.value in self.names
+                    and (node.value not in self.ordinary or id(node) in typed)):
                 record(node, NamedDeclaration, self.names[node.value])
         return sorted(found.values(), key=lambda site: site.line)
 
