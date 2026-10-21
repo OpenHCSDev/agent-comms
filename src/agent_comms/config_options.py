@@ -333,7 +333,10 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             RestartEnvironment.inherit(os.environ),
-            partial(comms.owners.launch_authority.package_for, agent_bin),
+            partial(
+                NativePiRpcLaunch.package_for_command,
+                agent_bin, LaunchRuntime.running(), comms.root,
+            ),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
