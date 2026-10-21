@@ -1,10 +1,12 @@
 """Public agent-comms and ACP fields consumed by pinned Toad builds."""
 
+from functools import partial
+
 import pytest
 from acp.schema import NewSessionResponse
 
 from agent_comms.acp import CommsAgent
-from agent_comms.agent_event_updates import Routed
+from agent_comms.agent_event_updates import AcpEventConsumer, Routed, RoutedTurnEventConsumer
 from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
@@ -16,7 +18,8 @@ from agent_comms.native_arguments import GivenBinary
 
 
 @pytest.mark.asyncio
-async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
+@pytest.mark.parametrize("consumer", (Routed, partial(RoutedTurnEventConsumer, turn_id="contract-turn")))
+async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer) -> None:
     assert all(
         isinstance(public_type, type)
         for public_type in (Comms, Goal, TranscriptCursor, TranscriptPage, MessageRoute)
@@ -43,9 +46,14 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
             updates.append(update.model_dump(by_alias=True, exclude_none=True))
 
     route = MessageRoute("worker", ("#team",))
-    await Routed(agent, "worker", Client(), route).dispatch(Chunk(text="routed reply"))
+    client = Client()
+    await consumer(agent=agent, session_id="worker", client=client, route=route).dispatch(Chunk(text="routed reply"))
     assert len(updates) == 1
     update = updates[0]
     assert update["content"]["text"] == "routed reply"
     assert decode_updates(update["_meta"]) == (TextRouteUpdate(route),)
+    await AcpEventConsumer(agent, "worker", client).dispatch(Chunk(text="unrouted reply"))
+    assert len(updates) == 2
+    assert updates[1]["content"]["text"] == "unrouted reply"
+    assert "_meta" not in updates[1]
     await agent.shutdown()
