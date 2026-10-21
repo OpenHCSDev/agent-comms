@@ -159,14 +159,14 @@ class TurnProgress(events.AgentEventConsumer):
 
     def publish_progress(self, progress: str) -> tuple[SendResult, ...]:
         """Join the committed notice and consume its streamed text together."""
-        if self.reply_targets:
+        if self.turn.reply_targets:
             if progress and "".join(self.reply_parts) == progress:
                 # Pi committed this assistant message before tool work.
                 # Publish it once as visible, non-waking progress; the
                 # final reply contains only subsequent assistant text.
                 results = tuple(self.comms.messaging.send(
                     self.thread_name, target, progress, role=NoticeRole()
-                ) for target in self.reply_targets)
+                ) for target in self.turn.reply_targets)
                 self.reply_parts.clear()
                 return results
         return ()
@@ -298,7 +298,7 @@ class TurnProgress(events.AgentEventConsumer):
             # failure notice non-waking, including for human reply targets.
             notice_targets = tuple(
                 dict.fromkeys(
-                    (*self.reply_targets,)
+                    (*self.turn.reply_targets,)
                     + tuple(
                         origin.exact_reply_target
                         for origin in self.origins
@@ -315,7 +315,7 @@ class TurnProgress(events.AgentEventConsumer):
             )
             results = []
             for target in notice_targets:
-                prefix = "Request failed" if target in self.reply_targets else "Delivery failed"
+                prefix = "Request failed" if target in self.turn.reply_targets else "Delivery failed"
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
