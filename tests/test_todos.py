@@ -405,7 +405,8 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                     shim.chmod(0o755)
                 monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
                 observed = []
-                for watch in (CommanderHeartbeat(), UnownedOrderWatch()):
+                # Heartbeat also consumes released work; exercise its standalone owner first.
+                for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
                     start = calls.stat().st_size
                     watch.watch_pass(lambda: nullcontext(copied))
                     readings = calls.read_text()[start:].splitlines()
