@@ -24,6 +24,7 @@ import html
 import json
 import logging
 import secrets
+import signal
 import time
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
@@ -46,7 +47,7 @@ from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText, Argument, WireName, WireOmitDefault
 from .goal_actions import DirectiveGoalAction
-from .host_services import HostService
+from .host_services import HostService, SystemdUserService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
@@ -838,8 +839,23 @@ class ServeVerb(ConnectorVerb):
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-        web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
+        asyncio.run(self.serve(app))
         return 0
+
+    async def serve(self, app: web.Application) -> None:
+        """Bind, then report ready, so a restart returns only once the port answers."""
+        runner = web.AppRunner(app, access_log=None)
+        await runner.setup()
+        stopped = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(signum, stopped.set)
+        try:
+            await web.TCPSite(runner, LOOPBACK, self.port).start()
+            SystemdUserService.ready()
+            await stopped.wait()
+        finally:
+            await runner.cleanup()
 
 
 @dataclass(frozen=True, kw_only=True)

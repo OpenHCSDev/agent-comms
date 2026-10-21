@@ -8,6 +8,7 @@ service has no instance of it and contributes nothing: there is no list of servi
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import time
 from abc import abstractmethod
@@ -71,10 +72,33 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 
 @dataclass(frozen=True)
 class SystemdUserService(HostService, declared_name=None):
-    """Systemd owns the unit's process; its definition starts that process again."""
+    """Systemd owns the unit's process; its definition starts that process again.
+
+    Its process reports READY=1 once it serves (``ready``), and ``restart`` declares that
+    to systemd first, so ``systemctl restart`` returns only when the service is serving.
+    """
 
     pid: int
     unit: ClassVar[str]
+    readiness: ClassVar[str] = "[Service]\nType=notify\nNotifyAccess=main\n"
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
+
+    @classmethod
+    def ready(cls) -> None:
+        """Tell the supervisor this process serves.
+
+        Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
+        for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
+        """
+        address = os.environ[cls.notify_variable]
+        target = "\0" + address[1:] if address.startswith("@") else address
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect(target)
+            notify.sendall(b"READY=1")
+
+    @property
+    def readiness_file(self) -> Path:
+        return Path.home() / ".config/systemd/user" / f"{self.unit}.d" / "agent-comms-readiness.conf"
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:
@@ -91,4 +115,7 @@ class SystemdUserService(HostService, declared_name=None):
         return Path(os.fsdecode(executable))
 
     def restart(self) -> None:
+        self.readiness_file.parent.mkdir(parents=True, exist_ok=True)
+        self.readiness_file.write_text(self.readiness, encoding="utf-8")
+        subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)

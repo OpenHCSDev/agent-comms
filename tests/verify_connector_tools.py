@@ -37,7 +37,7 @@ from agent_comms.todos import OperationDelivery, PendingProblemOrder
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
-from verify_connector_live import wait_started
+from connector_readiness import ConnectorReadiness
 
 
 def seed(root: Path, project: Path) -> None:
@@ -322,7 +322,8 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        environment = {**os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1"}
+        readiness = ConnectorReadiness()
+        environment = readiness.environment({**os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1"})
         command = (
             "import faulthandler,signal;faulthandler.register(signal.SIGUSR1,all_threads=True);"
             "from agent_comms.connector import main;raise SystemExit(main())"
@@ -348,7 +349,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                 text=True,
             )
             try:
-                wait_started(service, [])
+                readiness.wait(service, port)
                 with ConnectorStore.at(store_path).granted("scratch timing") as token:
 
                     def call(payload, case=case, port=port, service=service):
@@ -419,6 +420,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
             finally:
                 service.terminate()
                 service.communicate(timeout=15)
+                readiness.close()
     assert len(rows) == len(names)
     (output / "completed.json").write_text(
         json.dumps({"tools": len(rows), "completed": True}) + "\n"

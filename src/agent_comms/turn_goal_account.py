@@ -6,25 +6,22 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
-from contextlib import ExitStack, suppress
-from dataclasses import asdict, dataclass, field
+from contextlib import ExitStack
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from . import agent_events as events
-from .diagnostics import terminal_failure_reason
-from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import (
     GoalAttemptError, GoalAttemptStore, GoalTurnPermit, LaunchPermit, NoLaunchPermit,
-    StaleAttemptError,
 )
-from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from . import agent_events as events
+    from .turn_terminal import TurnTerminal
     from .comms import Comms
     from .goals import Goal, GoalDeclaration
     from .pi_payloads import PiUsage
@@ -77,13 +74,7 @@ class FailedGoalOrigin(MroDispatch):
 
     @handles(ActiveGoal, CompletedGoal)
     def block(self, state) -> None:
-        self.comms.goals.update_goal(
-            self.thread_name,
-            BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal),
-                progress="Goal origin turn did not finish successfully.",
-            ),
-        )
+        self.comms.goals.block_failed_origin(self.thread_name, self.goal)
 
 
 @dataclass(kw_only=True)
@@ -97,7 +88,7 @@ class TurnGoalAccount:
     claims: ExitStack
     originated: dict[str, GoalTurnPermit] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
-    productive_tool: events.ToolEnd | None = field(default=None, init=False)
+    has_productive_tool: bool = field(default=False, init=False)
 
     @staticmethod
     def reserve(*, owner: Thread, goal: Goal, comms: Comms, autonomous: bool) -> GoalTurnPermit:
@@ -133,8 +124,7 @@ class TurnGoalAccount:
             self.unattributed_usage.append((str(event.response_id), event.usage))
 
     def tool_ended(self, event: events.ToolEnd) -> None:
-        if event.ok:
-            self.productive_tool = event
+        self.has_productive_tool |= bool(event.ok)
         if event.name != "comms_set_goal" or event.ok is not True:
             return
         with _store_lock(self.comms._wire_lock_path):
@@ -173,61 +163,24 @@ class TurnGoalAccount:
             self.comms.goals, self.thread_name, self.owner.worktree, diagnostic,
         )
 
-    def done(self, event: events.Done) -> None:
-        if not event.ok:
-            self.permit.block(self, "Backend turn failed; inspect local diagnostics before resuming.")
-        elif self.productive_tool is None and not str(event.text or "").strip():
+    def require_output(self, text: str) -> None:
+        if not (self.has_productive_tool or text.strip()):
             self.permit.block(self,
                 "Backend reported success without assistant output "
-                "or tool activity; inspect the session before resuming."
-            )
+                "or tool activity; inspect the session before resuming.")
 
-    def settle_launched(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
-        if terminal is None:
-            self.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
+    def settle_launched(self, permit: LaunchPermit, terminal: TurnTerminal) -> None:
         store = self.comms.goals.open_goal_store()
         captured = self.owner.goal.require().require_id(permit.reservation.goal_id)
         current = captured.continued_by(self.comms.registry.require(self.thread_name).goal)
-        if terminal is not None and terminal.ok:
-            current.settle(VerifiedGoalSettlement, store, permit, self.turn)
-        if permit.has_verified_progress(store):
-            return
-        snapshot = self.comms.registry.snapshot()
-        observation = None
-        if terminal is None or not terminal.ok:
-            observation = FailedTurnObservation.from_terminal(
-                permit.reservation,
-                owner=self.owner,
-                goal=captured,
-                lease=self.lease,
-                turn_id=self.turn.value,
-                claim_scope=self.lease.claimed_generation,
-                current_owner=snapshot.threads.get(self.thread_name),
-                current_claim=snapshot.claim_generation(self.thread_name),
-                reason=terminal_failure_reason(asdict(terminal) if terminal is not None else {}),
-            )
-        with suppress(StaleAttemptError):
-            permit.reservation.fail(
-                store,
-                "Goal turn ended without verified terminal progress.",
-                observation=observation,
-            )
-        current.block_after_failed_turn(
-            self.comms.goals, self.thread_name, self.owner.worktree,
-            "Goal turn ended without verified terminal progress.",
-        )
+        terminal.settle_launched(self, permit, store, captured, current)
 
-    def finish(self, terminal: events.Done | None) -> None:
+    def finish(self, terminal: TurnTerminal) -> None:
         """Settle all original grants once from the actual producer terminal event."""
         self.permit.settle(self, terminal)
         for goal_id, permit in self.originated.items():
             current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()
-            if terminal is not None and terminal.ok:
-                permit.settle_goal(OriginGoalSettlement, store, current, self.turn)
-            if not permit.has_verified_progress(store):
-                permit.fail_origin(store, goal_id)
-                for goal in current:
-                    FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
+            terminal.settle_origin(self, permit, store, goal_id, current)
             if self.pending_origins.get(self.thread_name) == goal_id:
                 self.pending_origins.pop(self.thread_name, None)

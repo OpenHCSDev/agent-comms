@@ -11,7 +11,6 @@ import os
 import shutil
 import socket
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -23,7 +22,8 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
 from agent_comms.store_files import _store_lock
-from verify_connector_live import curl_call, wait_started
+from connector_readiness import ConnectorReadiness
+from verify_connector_live import curl_call
 
 
 def prove(scratch: Path) -> None:
@@ -50,10 +50,11 @@ def prove(scratch: Path) -> None:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
         project = Path(__file__).resolve().parents[1]
-        environment = {
+        readiness = ConnectorReadiness()
+        environment = readiness.environment({
             **os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1",
             "PYTHONPATH": str(project / "src"),
-        }
+        })
         entrypoint = shutil.which("agent-comms-connector")
         assert entrypoint, "the installed connector entrypoint is required"
         error_path = base / "server.log"
@@ -62,9 +63,8 @@ def prove(scratch: Path) -> None:
                 [entrypoint, "serve", "--root", str(copied), "--port", str(port)],
                 env=environment, stdout=subprocess.PIPE, stderr=errors, text=True,
             )
-            server_log = []
             try:
-                wait_started(service, server_log)
+                readiness.wait(service, port)
                 barrier = MaintenanceBarrier(copied / "registry.json")
                 held = barrier.begin(MaintenanceOperator.current())
                 held = barrier.advance(held, PausedPhase)
@@ -89,7 +89,7 @@ def prove(scratch: Path) -> None:
                         assert (copied / "bus.jsonl").read_bytes() == before
                 print(json.dumps({
                     "entrypoint": entrypoint, "core_source": str(project / "src"),
-                    "interpreter": reply["interpreter"], "phase": held.phase.declared_name,
+                    "phase": held.phase.declared_name,
                     "wire_and_registry_locks": "held exclusively throughout HTTP call",
                     "tool": "comms_send", "status": int(status),
                     "curl_seconds": float(curl_seconds), "wall_seconds": wall,
@@ -100,8 +100,8 @@ def prove(scratch: Path) -> None:
                 assert not original.owners.maintenance.read().turn_pending
             finally:
                 service.terminate()
-                tail, _ = service.communicate(timeout=15)
-                server_log.append(tail)
+                service.communicate(timeout=15)
+                readiness.close()
         assert "Error handling request" not in error_path.read_text(), error_path.read_text()
 
 

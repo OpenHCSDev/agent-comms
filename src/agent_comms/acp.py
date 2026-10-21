@@ -54,6 +54,7 @@ from .acp_extension import (
 from .acp_failure import NativeTurnError
 from .agent_event_updates import AcpEventConsumer
 from .cohort_foreground import _accept_visible_deliveries
+from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
@@ -427,7 +428,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ).schedule()
         return 1
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
         async with AsyncExitStack() as retirement:
             # CursorPublication owns the cross-observation evidence lifetime;
@@ -435,9 +436,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.callback(self.cursors.close)
             retirement.push_async_callback(self.sessions.release_owned)
             retirement.callback(self.inputs.end_sessions)
-            retirement.push_async_callback(self.turns.close)
+            retirement.push_async_callback(self.turns.close, terminal)
             retirement.push_async_callback(self.sessions.close_proxies)
-            retirement.push_async_callback(self.inputs.close)
+            retirement.push_async_callback(self.inputs.close, terminal)
             retirement.push_async_callback(self.annotations.close)
 
     async def _emit_text(

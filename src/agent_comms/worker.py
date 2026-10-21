@@ -16,6 +16,7 @@ from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .native_arguments import GivenBinary, NativeArguments
+from .turn_terminal import OwnerStop
 
 
 async def run() -> None:
@@ -37,18 +38,18 @@ async def run_owner(comms: Comms) -> None:
             runtime_enabled=True,
             agent_bin=GivenBinary(NativeArguments.owner_launcher(LaunchRuntime.running())),
         )
-        stopped = asyncio.Event()
+        stopped = OwnerStop()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stopped.set)
+            loop.add_signal_handler(sig, stopped.request)
         async with AsyncExitStack() as ownership:
-            ownership.push_async_callback(agent.shutdown)
+            ownership.push_async_callback(lambda: agent.shutdown(stopped.terminal))
             await agent.sessions.start_owner(thread.worktree, name)
             if key := ThreadLaunch.take_startup_input():
                 initial = asyncio.create_task(run_startup_input(agent, name, key))
                 ownership.push_async_callback(asyncio.gather, initial, return_exceptions=True)
-                ownership.callback(initial.cancel)
-            await stopped.wait()
+                ownership.callback(lambda: initial.cancel(stopped.terminal))
+            await stopped
 
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
