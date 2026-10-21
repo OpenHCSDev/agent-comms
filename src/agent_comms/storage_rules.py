@@ -28,7 +28,7 @@ from agent_comms.storage_room import (
     TestGateRoomWork,
 )
 from agent_comms.work_branches import WorkBranches
-from agent_comms_hooks.shell import shell_commands
+from agent_comms_hooks.shell import ShellCommand
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -482,32 +482,20 @@ def physical_path(value, cwd):
 
 
 @dataclass(frozen=True)
-class ShellInvocation:
+class ShellInvocation(ShellCommand):
     """One decoded shell command and the directory its preceding commands select."""
 
-    words: tuple[str, ...]
     cwd: Path
-
-    @property
-    def program(self) -> str:
-        return Path(self.words[0]).name
-
-    @property
-    def args(self) -> list[str]:
-        return list(self.words[1:])
 
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
-        for words in shell_commands(command):
-            while words and '=' in words[0]:
-                words.pop(0)
-            if not words:
-                continue
-            if Path(words[0]).name == 'cd' and len(words) > 1:
+        for decoded in ShellCommand.split(command):
+            words = decoded.words
+            if decoded.program == 'cd' and len(words) > 1:
                 target = words[2] if words[1] == '--' and len(words) > 2 else words[1]
                 cwd = physical_path(target, cwd)
                 continue
-            yield cls(tuple(words), cwd)
+            yield cls(words, cwd)
 
 
 class GitWriteOperation(StrEnum):

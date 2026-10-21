@@ -26,6 +26,10 @@ def pre_tool_use(command: str) -> subprocess.CompletedProcess:
     ("timeout 7200 bash -c 'until [ -s f ]; do sleep 5; done'", "timeout N"),
     ("timeout soon bash -c 'until [ -s f ]; do sleep 5; done'", "timeout N"),
     ("timeout 60 bash -c 'while sleep 1 && pgrep -af verify; do :; done'", "pgrep -f"),
+    ("timeout 60 bash -c 'until ! /usr/bin/pgrep -f verify; do sleep 5; done'", "pgrep -f"),
+    ("VAR=x bash -c 'until [ -s f ]; do sleep 5; done'", "timeout N bash -c"),
+    ("/bin/bash -c 'until [ -s f ]; do sleep 5; done'", "timeout N bash -c"),
+    ("timeout 60 until [ -s f ]; do sleep 5; done", "timeout N bash -c"),
 ])
 def test_an_unbounded_wait_is_denied(command, refused):
     result = pre_tool_use(command)
@@ -46,6 +50,7 @@ def test_an_unbounded_wait_is_denied(command, refused):
     """timeout 60 bash -c 'until grep -q "pgrep -f" log; do sleep 5; done'""",
     "timeout 60 bash -c 'until [ -s f ]; do sleep 5; done'; pgrep -f verify",
     "cat > notes.txt <<'EOF'\nwhile true; do sleep 5; done\nEOF",
+    "X=1 timeout 60 /bin/bash -c 'until [ -s f ]; do sleep 5; done'",
 ])
 def test_a_bounded_wait_or_plain_command_passes(command):
     result = pre_tool_use(command)
