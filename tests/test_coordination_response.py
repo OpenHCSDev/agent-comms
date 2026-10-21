@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Complete
+from agent_comms.lifecycle_capability import Active, Complete
 
 from conftest import publish_initial, responder
 import os
@@ -180,7 +180,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             case.store, case.bus, case.fence,
             exact_target=routes[0], owner_witness=case.witness,
         ).value
-        assert partial.execution.lifecycle.active and partial.is_current
+        assert partial.execution.lifecycle.items_with(Active, partial.execution) and partial.is_current
         assert len(partial.publication_evidence) == 1
         assert all(row.lifecycle.require_engagement() for row in partial.assignments)
         settled = publish_fenced_response(
