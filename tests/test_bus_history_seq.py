@@ -2,16 +2,21 @@
 
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
+from agent_comms.bus import Bus, BusSnapshot, PublicRecord
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.bus_tables import BusRow, MessageIdentitySource
+from agent_comms.errors import HumanSendRefusedError
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.locked_store import RegistryFile
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.message_bus import MessageBus
+from agent_comms.messaging import Messaging
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.publisher import Publisher
@@ -78,6 +83,38 @@ def test_message_identity_lookup_preserves_missing_and_ambiguous_refusal(tmp_pat
     messages.bus.append(lambda seq, db: replace(original, seq=seq))
     with pytest.raises(MalformedRecord, match="Expected one"):
         messages.bus.lookup_message(original.message_id)
+
+
+def test_origins_check_message_identity_inside_actual_writer_transaction(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    origin = HumanOrigin("author", 1, str(tmp_path))
+    message = Message("author", "#history", "one human send", InfoKind)
+    with messages.bus.writing() as db:
+        source = BusSnapshot(db)
+        origin.require_source(source, message.sender, message.message_id)
+        seq = BusRow.next_seq(db)
+        PublicRecord.from_message(replace(message, seq=seq)).append_to(db, seq)
+        with pytest.raises(HumanSendRefusedError):
+            origin.require_source(source, message.sender, message.message_id)
+        AgentOrigin().require_source(source, message.sender, message.message_id)
+        assert MessageIdentitySource.exists(db, where="{seq}=?", parameters=(seq,))
+        assert not MessageIdentitySource.exists(
+            db, where="{seq}>?", parameters=(seq,), sender=message.sender)
+        assert not MessageIdentitySource.exists(db, sender="absent")
+    assert messages.bus.revision() == 6
+    assert messages.bus.lookup(6).message_id == message.message_id
+
+
+def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
+    messages = channel_bus(tmp_path / "source")
+    root = messages.bus.path.parent
+    clients = tuple(Messaging(root, Registration(RegistryFile.path_in(root)), messages)
+                    for _ in range(2))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        users = tuple(executor.map(lambda client: client.user_identity(str(root)), clients))
+    assert users[0].incarnation == users[1].incarnation
+    registered = tuple(clients[0].registry.user_thread().existing())
+    assert len(registered) == 1 and registered[0].incarnation == users[0].incarnation
 
 
 def test_reading_scope_reuses_one_read_only_snapshot_and_closes_it(tmp_path):
