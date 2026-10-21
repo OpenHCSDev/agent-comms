@@ -1,11 +1,11 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master, claude/**]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
+  workflow_call:
+
+env:
+  AC_NATIVE_STACK_BIN: ${{ github.workspace }}/stack/bin/pi-native
 
 jobs:
   stack:
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: stack/pyproject.toml
+          python-version-file: pyproject.toml
 
       - name: Install uv
         run: python -m pip install uv==0.12.0
@@ -35,21 +35,13 @@ jobs:
           stack/.venv/bin/agent-comms --help
           stack/.venv/bin/toad --help
 
-      - name: Setup Node for pinned native Pi
-        uses: actions/setup-node@v4
+      - name: Prepare pinned native Pi
+        uses: ./.github/actions/prepare-native
         with:
-          node-version: "22.19.0"
-
-      # prepare-pi-native installs the MCP client's locked dependencies with
-      # `npm ci --offline` so preparation never fetches. Fill the npm cache from
-      # the same lockfile first; the prepared copy is still built offline.
-      - name: Cache locked MCP client dependencies
-        working-directory: extensions/pi-mcp-client
-        run: npm ci --ignore-scripts --omit=dev --omit=peer --no-audit --no-fund
+          python: ${{ github.workspace }}/stack/.venv/bin/python
 
       - name: Build and check native compaction without a provider
         run: |
-          stack/bin/prepare-pi-native
           package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
           for mode in threshold overflow manual; do
             PI_COMPACTION_TEST_PACKAGE="$PWD/$package" node stack/test-native-pi-compaction.mjs "$mode"
@@ -58,8 +50,8 @@ jobs:
       - name: Check native RPC compaction against localhost provider
         run: |
           uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov 'pytest-xdist>=3.6' 'pytest-timeout>=2.3'
-          PYTHONPATH="$PWD/src" AC_NATIVE_STACK_BIN="$PWD/stack/bin/pi-native" \
-            stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_send_now.py --no-cov -q
+          PYTHONPATH="$PWD/src" \
+            stack/.venv/bin/python -m pytest tests/test_stack_native_compaction.py tests/test_stack_persistent_compaction.py --no-cov -q
 
   test:
     runs-on: ${{ matrix.os }}
@@ -84,42 +76,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
 
-      # A stale stack/pi-native.sha256 fails here, by name, before any native step.
+      - name: Prepare pinned native Pi
+        uses: ./.github/actions/prepare-native
+
       - name: Check the native pin matches the tree
-        run: |
-          pytest tests/test_native_pin.py --no-cov -q
+        run: pytest tests/test_native_pin.py --no-cov -q
 
       # The saved-session loopback tests need Pi's published, byte-checked
       # executable. They never use credentials or an external model endpoint.
-      - name: Setup Node for pinned Pi loopback fixture
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22.19.0"
 
       - name: Install pinned Pi loopback fixture
         shell: bash
         run: |
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
 
-      - name: Install locked MCP SDK fixture dependencies
-        working-directory: extensions/pi-mcp-client
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
       # The durable host imports pi-durable, pi-ai and chord from beside it.
       - name: Install locked runtime host dependencies
         working-directory: src/agent_comms
         run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
-
-      # Tests of the native runtime read the pinned package from stack/. The
-      # locked install above fills the npm cache that preparation reads offline.
-      # Preparation runs agent_comms under the stack environment, never this job's python.
-      - name: Prepare pinned native Pi
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          python -m pip install uv==0.12.0
-          uv lock --project stack --upgrade --python "$(command -v python)"
-          uv sync --project stack --locked --python "$(command -v python)"
-          stack/bin/prepare-pi-native
 
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'

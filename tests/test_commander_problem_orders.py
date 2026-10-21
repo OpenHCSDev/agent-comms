@@ -14,9 +14,15 @@ from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tools import (CommsTodoCreateTool)
-from agent_comms.todos import (GoalRef, OrderDelivery,
-    RecordedCommitDelivery, MechanicalOrderRun, PendingProblemOrder,
-    Slop, DeclarationDerivation)
+from agent_comms.todos import (
+    GoalRef,
+    OrderDelivery,
+    RecordedCommitDelivery,
+    PendingProblemOrder,
+    Slop,
+    DeclarationDerivation,
+)
+from agent_comms.order_runs import MechanicalOrderRun
 
 
 def order(root, identity, command='printf 1', expected=1):

@@ -33,7 +33,8 @@ from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
+from agent_comms.todos import OperationDelivery, PendingProblemOrder
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from verify_connector_live import wait_started

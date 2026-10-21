@@ -28,9 +28,9 @@ from ..todos import (
     DeliveredProblemOrder,
     FailedCheckStrike,
     FamilyDeletion,
-    MechanicalOrderRun,
     Todo,
 )
+from agent_comms.order_runs import MechanicalOrderRun
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsTodoCreateTool, ProblemOrdered
 from . import ParityComparison, ParityRow

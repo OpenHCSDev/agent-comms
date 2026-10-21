@@ -22,7 +22,8 @@ from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import OrderCheck, RequestGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import MechanicalOrderRun, PendingProblemOrder
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.todos import PendingProblemOrder
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 root, repository = map(Path, sys.argv[1:])
