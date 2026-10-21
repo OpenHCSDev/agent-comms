@@ -5,6 +5,7 @@ import json
 import os
 
 import pytest
+from acp.schema import SessionNotification
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
@@ -35,8 +36,11 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
 
         class Client:
             async def session_update(self, session_id, update):
-                updates.append(update)
-                text = update.get("content", {}).get("text", "")
+                value = SessionNotification(session_id=session_id, update=update).update.model_dump(
+                    by_alias=True, exclude_none=True,
+                )
+                updates.append(value)
+                text = value.get("content", {}).get("text", "")
                 if "CANCELLED_RESPONSE" in text:
                     first_chunk.set()
                 if "FRESH_RESPONSE" in text:
@@ -58,9 +62,11 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 target=session, text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
             )
             sentinel_before = stored_inputs(owner.inputs.dispositions.root).rows.get("acp:uncertain-sentinel")
-            turn = asyncio.create_task(proxy.request(
-                "prompt", prompt=[{"type": "text", "text": "ORIGINAL_CANCELLED_INPUT"}],
-            ))
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            comms.messaging.send("sender", session, "ORIGINAL_CANCELLED_INPUT")
+            await owner.inputs.drain_inbox(session)
+            turn = owner.inputs.state(session).wake_task
+            assert turn is not None
             fresh_turn = None
             try:
                 await asyncio.wait_for(first_chunk.wait(), 15)
@@ -68,7 +74,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 assert claimed.lifecycle == ReservedGeneration()
                 assert len(requests) == 1
                 await asyncio.wait_for(proxy.request("cancel"), 10)
-                assert (await asyncio.wait_for(turn, 10))["stopReason"] == "cancelled"
+                await asyncio.wait_for(asyncio.gather(turn, return_exceptions=True), 10)
+                assert turn.done() and not owner.turns.session_busy(session)
                 release.set()
                 paused = comms.registry.require(session).goal
                 failed = GoalAttemptStore(store.root).snapshot(goal_id)
@@ -93,9 +100,10 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                 assert ready.attempt_id is None
                 provider.text = "FRESH_RESPONSE"
                 provider.completion_gate = finish_goal
-                fresh_turn = asyncio.create_task(proxy.request(
-                    "prompt", prompt=[{"type": "text", "text": "FRESH_OWNER_INPUT"}],
-                ))
+                comms.messaging.send("sender", session, "FRESH_OWNER_INPUT")
+                await owner.inputs.drain_inbox(session)
+                fresh_turn = owner.inputs.state(session).wake_task
+                assert fresh_turn is not None
                 await asyncio.wait_for(continued.wait(), 15)
                 fresh_claim = store.snapshot(goal_id)
                 assert fresh_claim.lifecycle == ReservedGeneration()
@@ -106,7 +114,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                     expected_revision=current.revision,
                 )
                 finish_goal.set()
-                assert (await asyncio.wait_for(fresh_turn, 10))["stopReason"] == "end_turn"
+                await asyncio.wait_for(fresh_turn, 10)
+                assert not owner.turns.session_busy(session)
                 final = GoalAttemptStore(store.root).snapshot(goal_id)
                 assert final.number == ready.number + 1 and final.lifecycle == ReadyGeneration()
                 assert len(requests) == 2

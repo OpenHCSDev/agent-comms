@@ -30,7 +30,8 @@ from native_backend_fixture import native_backend_fixture
 
 
 @pytest.fixture
-async def native_workers(tmp_path, native_runtime_package):
+async def native_workers(tmp_path, native_runtime_package, source_programs):
+    source_programs.bind(tmp_path)
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         with LaunchRoot.from_path(native.root).selected():
             yield native
@@ -53,7 +54,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         assert (await Coordination.run_worker(partial(comms.owners.start, "worker"))).pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
-        from agent_comms.owner_cutover import StoppedOwnerInstallation
+        from agent_comms.owner_cutover import PreserveOwnerRuntime
 
         # The current launch derives its immutable package from the installation;
         # the removed mutable-package override is not a supported input.
@@ -69,8 +70,8 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         assert replacement.created_at == declared.created_at
         assert replacement.task == declared.task
 
-        class BindInstalledLaunch(StoppedOwnerInstallation):
-            """A fresh lifecycle derives the installed launch itself."""
+        class KeepFixtureRuntime(PreserveOwnerRuntime):
+            """A fresh lifecycle retains its selected fixture runtime."""
 
             def require_selection(self, snapshot, owners):
                 assert [thread.name for thread in owners] == ["worker"]
@@ -80,7 +81,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 
         (installed,) = await Coordination.run_worker(partial(
             Comms(comms.root).owners.restart_owners,
-            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch(),
+            ["worker"], agent_bin="pi", agent_args=[], cutover=KeepFixtureRuntime(),
         ))
         assert installed.previous_pid == replacement.require_process().pid
         assert not replacement.process_alive
@@ -149,7 +150,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
     from agent_comms.owner_launch import RetainedOwnerLaunch
-    from agent_comms.owner_cutover import StoppedOwnerInstallation
+    from agent_comms.owner_cutover import PreserveOwnerRuntime
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     model = 'response-local/fixture'
@@ -173,14 +174,13 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         ("batch-b", (), "credential-b"),
     )
 
-    class RebuildFixtureCheckpoint(StoppedOwnerInstallation):
+    class RebuildFixtureCheckpoint(PreserveOwnerRuntime):
         """An actual declared writer operation; it never starts or stops owners."""
 
         def require_selection(self, snapshot, owners):
             live = {
                 thread.name for thread in snapshot.threads.values()
-                if thread.role.executes(snapshot.statuses[thread.name].active)
-                and thread.process_alive
+                if thread.restart_candidates(snapshot.status(thread.name))
             }
             if {thread.name for thread in owners} != live:
                 raise RelationViolationError("Checkpoint installation requires the complete batch")
@@ -258,12 +258,12 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         target_runtime = LaunchRuntime.running()
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)
-        receipts = await Coordination.run_worker(partial(
+        replacements = await Coordination.run_worker(partial(
             comms.owners.restart_owners, selected, agent_bin=str(target_binary), cutover=cutover,
         ))
-        assert len(receipts) == 2
+        assert len(replacements) == 2
         assert all(not owner.process_alive for owner in originals)
-        for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
+        for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(replacements, settings, strict=True)):
             current = comms.registry.require(acknowledgement.thread)
             await ready(current)
             from agent_comms.owner_lifecycle import OwnerRestartSelection
@@ -297,8 +297,9 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         assert not list(tmp_path.rglob("*.input-proof"))
 
     finally:
-        for owner in comms.registry.snapshot().threads.values():
-            if owner.role.executes(owner.process_alive):
+        snapshot = comms.registry.snapshot()
+        for owner in snapshot.threads.values():
+            if owner.restart_candidates(snapshot.status(owner.name)):
                 await Coordination.run_worker(partial(comms.owners.stop, owner.name))
         assert all(not owner.process_alive for owner in originals)
 
