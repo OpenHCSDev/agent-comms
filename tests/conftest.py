@@ -17,6 +17,7 @@ from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_tool_transport import ToolListener
@@ -220,7 +221,7 @@ def scratch_root(tmp_path_factory):
 
 @pytest.fixture
 def private_directory():
-    """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
+    """An owner-only throwaway directory for isolated runtime checks."""
     if (
         os.name != "posix"
         or not Path("/var/tmp").is_dir()
@@ -234,20 +235,14 @@ def private_directory():
 
 @pytest.fixture
 def private_comms(private_directory):
-    """One throwaway private bus, built as production builds one.
-
-    Its launch derives like any private root's: the marker installed here
-    gives the root ID, this installation the package.
-    """
+    """Install one isolated SQLite bus and select it for this check's lifetime."""
     root = private_directory / "wire"
-    root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
     from agent_comms.launch_root import LaunchRoot
 
-    LaunchRoot.from_path(root).install()
-    comms.route.launch().require_private().check()
-    return comms
+    with LaunchRoot.from_path(root).selected():
+        yield comms
 
 
 @pytest.fixture
@@ -315,13 +310,13 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
+    Bus.install(Bus.path_in(root))
     return Comms(root)
 
 
 @pytest.fixture
 def bus(tmp_path):
     """A freshly installed bus, shared by the record and recipient test families."""
-    from agent_comms.bus import Bus
     return Bus.install(Bus.path_in(tmp_path))
 
 

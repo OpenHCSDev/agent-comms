@@ -1,5 +1,7 @@
 """Retained Git work protects linked rows through the real watcher and heartbeat."""
 
+from agent_comms.bus import Bus
+
 import json
 import os
 from pathlib import Path
@@ -95,7 +97,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
     c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(c.root))
     for name in ('lead', 'worker', 'idle'):
         c.registry.declare(c.registry.new_thread(
             name, frozenset(), str(home), execution=ExternalThreadExecution))

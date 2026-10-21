@@ -1,4 +1,6 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
+
+from agent_comms.bus import Bus
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio
@@ -98,7 +100,7 @@ async def run(arguments):
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
     service = Comms(stage / "wire")
-    service.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",

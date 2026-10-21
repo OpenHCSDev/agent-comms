@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -34,7 +34,7 @@ from agent_comms.locked_store import DurableFile, RegistryFile, StoreCommittedEr
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import SQLiteTableName, WalStore
+from agent_comms.typed_table import WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
@@ -280,19 +280,20 @@ class Bus(BusReader, WalStore, DurableFile, Watched):
         super().__init__(path)
 
     @classmethod
-    def install(cls, path: Path) -> Self:
-        """Create a fresh bus during installation; never migrate an existing file.
+    def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
+        """Install declared schemas and commit optional display-only history atomically.
 
-        Changes to existing history or its projections belong to a declared carry,
-        with its backup and rewritten-file accounting, not ordinary attachment.
+        Original sequences survive; frozen deliveries and resource claims do not.
+        Existing-file migrations still belong to declared carries and their backups.
         """
         bus = cls(path)
         with bus.writer_connection() as db:
+            BusTables.install_schema(db)
+            BusProjectionTables.install_schema(db)
             with bus.write_transaction(db):
-                if not SQLiteTableName.stored(db):
-                    BusTables.create_schema(db)
-                    BusProjectionTables.create_schema(db)
                 cls.require_schema(db)
+                for message in history:
+                    PublicRecord.from_message(message.history_snapshot).append_to(db, message.seq)
         return bus
 
     @classmethod

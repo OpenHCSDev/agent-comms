@@ -1,5 +1,7 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
+from agent_comms.bus import Bus
+
 import os
 import shutil
 from contextlib import ExitStack, contextmanager
@@ -24,7 +26,7 @@ from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
 @pytest.fixture
 def copied_goal_bus(tmp_path):
     source = Comms(tmp_path / "source")
-    source.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(source.root))
     target = tmp_path / "copy"
     shutil.copytree(source.root, target)
     return Comms(target)

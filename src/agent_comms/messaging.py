@@ -12,10 +12,9 @@ from .errors import MessageAcknowledgmentError, RelationViolationError, Unregist
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
-from .publisher import InitialWrites, OwnerPublisher
+from .publisher import OwnerPublisher
 from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
-from .store_files import _store_lock
 from .task_sources import (
     CurrentTaskScopeSelection,
     HumanConstraintPin,
@@ -36,7 +35,6 @@ class Messaging:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self._wire_lock_path = root / "wire"
 
     def send(
         self,
@@ -92,12 +90,6 @@ class Messaging:
             with self.bus.bus.reading() as source:
                 return inputs.answered_by(lease, source, self.registry.snapshot(), target)
         return ()
-
-    def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
-        """Initialize a fresh root; selected public history grants no delivery."""
-        publisher: InitialWrites = self.bus.publisher
-        with _store_lock(self._wire_lock_path):
-            return publisher.initialize_private_protocol(history=history)
 
     def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")

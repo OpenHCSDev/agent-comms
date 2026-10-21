@@ -1,5 +1,7 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
+from agent_comms.bus import Bus
+
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.messages import NoticeRole
@@ -54,7 +56,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
         TurnTaskScope, UserTaskDrop, UserTaskSupersession,
     )
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(comms.root)))
     comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
@@ -117,7 +119,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root), goal=Goal('Original goal', 'goal-one', published_seq=0)))
     subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
                                                 worktree=owner.worktree)
@@ -154,7 +156,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = admit(comms, "alpha")
     admit(comms, "beta")
     comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal", published_seq=0)))
@@ -213,7 +215,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
 
 
 def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypatch):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     alpha = admit(comms, "alpha")
     beta = admit(comms, "beta")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
@@ -275,7 +277,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep checked root", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
@@ -343,7 +345,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     owner = admit(comms, "alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "A", "rejected": ["B"], "to": "#team"}
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
     owner, claim_scope = comms.registry.live_owner_with_claim("alpha")
@@ -358,7 +360,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
@@ -406,7 +408,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     )
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"

@@ -1,5 +1,7 @@
 """Source-owned history predicates and sound use of the existing offset index."""
 
+from agent_comms.bus import Bus
+
 import json
 from dataclasses import replace
 
@@ -22,7 +24,7 @@ def history(tmp_path):
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(old.registry.new_thread(name, frozenset({'ops'}), str(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
-    old.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(old.root))
     rows = []
     for seq in range(1, 241):
         message = Message(

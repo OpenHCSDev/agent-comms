@@ -1,4 +1,6 @@
 """Physical locking, not fake store objects: nesting must keep outsiders out."""
+
+from agent_comms.bus import Bus
 import asyncio
 from contextvars import copy_context
 import fcntl
@@ -110,7 +112,7 @@ def test_async_and_sync_nest_but_independent_tasks_and_threads_do_not(tmp_path):
 
 def test_checked_async_worker_explicitly_borrows_the_original_acquisition(tmp_path):
     comms = wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     async def run():
         with comms.bus.log.locked() as outer:
             def read(source):

@@ -3,6 +3,8 @@
 All live inputs are read-only. Existing immutable sources retain their original
 byte prefix records; no archive schema repair or resealing occurs.
 """
+
+from agent_comms.bus import Bus
 import json
 import os
 from pathlib import Path
@@ -52,7 +54,7 @@ def test_all_declared_saved_checkpoints_keep_original_checked_prefixs():
 def test_current_saved_history_has_no_live_claim_or_delivery(tmp_path):
     original=max(current_sources(),key=lambda source:(Path(source.root)/'bus.jsonl').stat().st_size)
     comms=wire(tmp_path/'destination')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     reference_actual_history(comms.root, Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     source=max(comms.bus.history.sources(),key=lambda source:source.size)
     live_before=(comms.root/'bus.jsonl').read_bytes()
