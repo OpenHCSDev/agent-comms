@@ -1,95 +1,180 @@
+import multiprocessing
+import os
+import signal
 import sqlite3
-from contextlib import closing
-from dataclasses import fields, replace
+from contextlib import closing, contextmanager
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-from agent_comms.bus import Bus, BusRecord, KeyedPublicRecord, PrivateRecord, PublicRecord
-from agent_comms.bus_publication import Delivered
-from agent_comms.bus_tables import BusTables, KeyedPublication
+from agent_comms.bus import (
+    Bus, BusRecord, ClaimRecord, KeyedPrivateRecord, MessageNotificationError,
+    PrivateRecord, PublicRecord,
+)
+from agent_comms.bus_publication import Delivered, HumanOrigin
+from agent_comms.bus_tables import BusRow, BusTables, KeyedPublication
+from agent_comms.envelope_claim_transitions import ClaimRelease, ReleasedClaims
+from agent_comms.errors import HumanSendRefusedError, RelationViolationError
+from agent_comms.messages import ClaimMessage, InfoKind, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
-from agent_comms.errors import RelationViolationError
-from agent_comms.messages import InfoKind, Message
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 
 
 def record_from(declaration, message):
-    values = {item.name: getattr(message, item.name) for item in fields(Message)}
+    capabilities = {}
     if issubclass(declaration, Delivered):
         audience = freeze_audience(
             message, (FrozenRecipient("b" * 32, message.target),), "c" * 64,
             sender_lookup="a" * 32, sender_name=message.sender)
-        values.update(audience=audience, decisions=resolve_wake_cohort(
+        capabilities.update(audience=audience, decisions=resolve_wake_cohort(
             message, frozen_audience=audience, control=ControlClassification.ORDINARY),
             control=ControlClassification.ORDINARY.value)
     if issubclass(declaration, KeyedPublication):
-        values["acknowledgement"] = KeyedResponseAcknowledgement(
+        capabilities["acknowledgement"] = KeyedResponseAcknowledgement(
             "d" * 32, "e" * 32, canonical_publication_key("e" * 32, message.target),
             public_envelope_digest(message.to_wire()))
-    return declaration(**values)
+    if issubclass(declaration, ClaimMessage):
+        return declaration.of(message, ReleasedClaims(
+            owner=message.sender, incarnation="1", seq=message.seq,
+            message_id=message.message_id,
+            releases=(ClaimRelease("/owned/resource", "f" * 32),),
+        ))
+    return declaration.of(message, **capabilities)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
 def test_real_message_record_round_trip(tmp_path, declaration):
-    bus = Bus(tmp_path / "bus.sqlite3")
+    bus = Bus(Bus.path_in(tmp_path))
     message = Message("author", "worker", "hello", InfoKind, seq=1)
     record = record_from(declaration, message)
-    seq = bus.append(record)
-    assert seq > 0
-    assert bus.lookup(seq) == replace(record, seq=seq)
-    assert Bus(bus.path).lookup(seq).seq == seq
-    assert bus.page(seq + 1, 10) == (replace(record, seq=seq),)
+    stored = bus.append(lambda seq: replace(record, seq=seq))
+    assert stored.seq > 0
+    assert bus.lookup(stored.seq) == stored == record
+    assert Bus(bus.path).lookup(stored.seq) == stored
+    assert bus.page(stored.seq + 1, 10) == (stored,)
     with pytest.raises(RelationViolationError):
-        bus.lookup(seq + 1)
+        bus.lookup(stored.seq + 1)
 
 
 def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):
-    path = tmp_path / "bus.sqlite3"
-    bus = Bus(path)
-    record = record_from(KeyedPublicRecord, Message("author", "worker", "first", InfoKind))
-    first = bus.append(record)
-    with closing(sqlite3.connect(path)) as db:
+    bus = Bus(Bus.path_in(tmp_path))
+    record = record_from(KeyedPrivateRecord, Message("author", "worker", "first", InfoKind))
+    first = bus.append(lambda seq: replace(record, seq=seq))
+    with closing(sqlite3.connect(bus.path)) as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
-    assert bus.append(replace(record, body="different")) == first
-    with closing(sqlite3.connect(path)) as db:
+    assert bus.append(lambda seq: replace(record, seq=seq, body="different")) == first
+    with closing(sqlite3.connect(bus.path)) as db:
         assert {table: table.count(db) for table in TypedTable.members_with(BusTables)} == before
-        assert db.execute("SELECT seq FROM sqlite_sequence").fetchall() == [(first,)]
-    assert bus.lookup(first) == replace(record, seq=first)
+        assert db.execute("SELECT seq FROM sqlite_sequence").fetchall() == [(first.seq,)]
+    assert bus.lookup(first.seq) == first
 
 
 def test_every_bus_table_rejects_update_and_delete(tmp_path):
-    path = tmp_path / "bus.sqlite3"
-    bus = Bus(path)
-    declaration = next(member for member in BusRecord.members_with(BusRecord)
-                       if issubclass(member, Delivered) and issubclass(member, KeyedPublication))
-    record = record_from(declaration, Message("author", "worker", "kept", InfoKind, seq=1))
-    seq = bus.append(record)
-    with closing(sqlite3.connect(path)) as db:
+    bus = Bus(Bus.path_in(tmp_path))
+    record = record_from(KeyedPrivateRecord, Message("author", "worker", "kept", InfoKind, seq=1))
+    stored = bus.append(lambda seq: replace(record, seq=seq))
+    with closing(sqlite3.connect(bus.path)) as db:
         for table in TypedTable.members_with(BusTables):
             with pytest.raises(sqlite3.DatabaseError, match="append-only"):
                 db.execute(f'UPDATE "{table.declared_name}" SET seq=seq')
             with pytest.raises(sqlite3.DatabaseError, match="append-only"):
                 db.execute(f'DELETE FROM "{table.declared_name}"')
-    assert bus.lookup(seq) == replace(record, seq=seq)
+    assert bus.lookup(stored.seq) == stored
 
 
 def test_inbox_filters_target_and_orders_by_sequence(tmp_path):
-    bus = Bus(tmp_path / "bus.sqlite3")
-    first = record_from(PublicRecord, Message("author", "worker", "one", InfoKind))
-    other = record_from(PublicRecord, Message("author", "other", "two", InfoKind))
-    last = record_from(PrivateRecord, Message("author", "worker", "three", InfoKind, seq=3))
-    first_seq = bus.append(first)
-    bus.append(other)
-    last_seq = bus.append(last)
-    stored_first, stored_last = replace(first, seq=first_seq), replace(last, seq=last_seq)
-    assert first_seq < last_seq
-    assert bus.inbox("worker", 0, 10) == (stored_first, stored_last)
-    assert bus.inbox("worker", first_seq, 10) == (stored_last,)
-    assert bus.inbox("worker", 0, 1) == (stored_first,)
-    assert bus.inbox("other", 0, 10) == (replace(other, seq=first_seq + 1),)
+    bus = Bus(Bus.path_in(tmp_path))
+    first = bus.append(lambda seq: PublicRecord.of(
+        Message("author", "worker", "one", InfoKind, seq=seq)))
+    other = bus.append(lambda seq: PublicRecord.of(
+        Message("author", "other", "two", InfoKind, seq=seq)))
+    last = bus.append(lambda seq: record_from(
+        PrivateRecord, Message("author", "worker", "three", InfoKind, seq=seq)))
+    assert first.seq < last.seq
+    assert bus.inbox("worker", 0, 10) == (first, last)
+    assert bus.inbox("worker", first.seq, 10) == (last,)
+    assert bus.inbox("worker", 0, 1) == (first,)
+    assert bus.inbox("other", 0, 10) == (other,)
     assert bus.inbox("absent", 0, 10) == ()
-    assert bus.page(last_seq + 1, 2) == (stored_last, replace(other, seq=first_seq + 1))
+    assert bus.page(last.seq + 1, 2) == (last, other)
+
+
+def append_until_header(path, ready):
+    def header_inserted():
+        ready.send("header inserted")
+        os.kill(os.getpid(), signal.SIGSTOP)
+        return 0
+
+    class PausedBus(Bus):
+        @contextmanager
+        def writing(self):
+            with super().writing() as db:
+                db.create_function("header_inserted", 0, header_inserted)
+                db.execute(
+                    f'CREATE TEMP TRIGGER pause_header AFTER INSERT ON "{BusRow.declared_name}" '
+                    'BEGIN SELECT header_inserted(); END'
+                )
+                yield db
+
+    bus = PausedBus(path)
+    bus.append(lambda seq: PublicRecord.of(Message("author", "worker", "interrupted", seq=seq)))
+
+
+def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    with closing(sqlite3.connect(bus.path)) as db:
+        before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
+    context = multiprocessing.get_context("fork")
+    reader, writer = context.Pipe(duplex=False)
+    process = context.Process(target=append_until_header, args=(bus.path, writer))
+    process.start()
+    writer.close()
+    try:
+        assert reader.poll(15), "publisher never reached its inserted header"
+        assert reader.recv() == "header inserted"
+        process.kill()
+        process.join(5)
+        assert process.exitcode == -signal.SIGKILL
+        with closing(sqlite3.connect(bus.path)) as db:
+            assert {table: table.count(db) for table in TypedTable.members_with(BusTables)} == before
+        stored = bus.append(lambda seq: PublicRecord.of(
+            Message("author", "worker", "after crash", seq=seq)))
+        assert stored.seq == 1
+        print("SIGKILL after header: every BusTables count unchanged; next committed seq=1")
+    finally:
+        if process.is_alive():
+            process.kill()
+            process.join(5)
+        reader.close()
+
+
+def test_human_refusal_rolls_back_the_header(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    with closing(sqlite3.connect(bus.path)) as db:
+        db.execute(
+            f'CREATE TRIGGER refuse_message BEFORE INSERT ON "{Message.table.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'refused'); END"
+        )
+    origin = HumanOrigin("author", 1, str(tmp_path))
+    with pytest.raises(HumanSendRefusedError, match="was not sent"):
+        origin.append(bus, lambda seq: record_from(
+            PrivateRecord, Message("author", "worker", "refused", seq=seq)))
+    with closing(sqlite3.connect(bus.path)) as db:
+        assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
+
+
+def test_notification_failure_carries_the_committed_message(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    bus.path.with_suffix(".changed").mkdir()
+    origin = HumanOrigin("author", 1, str(tmp_path))
+    with pytest.raises(MessageNotificationError) as failed:
+        origin.append(bus, lambda seq: record_from(
+            PrivateRecord, Message("author", "worker", "sent", seq=seq)))
+    assert failed.value.record.seq == 1
+    assert bus.lookup(1) == failed.value.record
+    assert failed.value.record.body == "sent"
+    print("Change notification failure: committed message returned on MessageNotificationError.record")

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing, contextmanager
+from collections.abc import Callable
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,8 +19,10 @@ from agent_comms.bus_tables import (
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message
-from agent_comms.typed_table import SQLiteTableName, StoreWriter
+from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.messages import ClaimMessage, Message
+from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
 
 
 @dataclass(frozen=True)
@@ -28,7 +31,7 @@ class PublicRecord(BusRecord, Message):
 
 
 @dataclass(frozen=True)
-class KeyedPublicRecord(PublicRecord, KeyedPublication):
+class ClaimRecord(PublicRecord, ClaimMessage):
     pass
 
 
@@ -42,8 +45,18 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
 
 
-class Bus(StoreWriter):
+class MessageNotificationError(RuntimeError):
+    """The message committed; only notifying its readers failed."""
+
+    def __init__(self, record: BusRecord) -> None:
+        self.record = record
+        super().__init__(f"Message {record.seq}/{record.message_id} was sent, but notification failed.")
+
+
+class Bus(StoreWriter, DurableFile):
     """One SQLite transaction owns the sequence and all of a record's fields."""
+
+    filename = "bus.sqlite3"
 
     def __init__(self, path: Path):
         super().__init__(path)
@@ -61,9 +74,18 @@ class Bus(StoreWriter):
             with self.transaction(db):
                 yield db
 
-    def append(self, record: BusRecord) -> int:
-        with self.writing() as db:
-            return record.append_to(db)
+    def append(self, build: Callable[[int], BusRecord]) -> BusRecord:
+        with ExitStack() as writes:
+            db = writes.enter_context(self.writing())
+            MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
+            seq = BusRow.next_seq(db)
+            record = build(seq)
+            committed = self._record(db, BusRow.require(db, seq=record.append_to(db, seq)))
+            try:
+                writes.close()
+            except StoreNotificationError as error:
+                raise MessageNotificationError(committed) from error
+            return committed
 
     @staticmethod
     def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
