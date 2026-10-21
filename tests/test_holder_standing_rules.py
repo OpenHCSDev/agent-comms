@@ -9,6 +9,8 @@ from uuid import uuid4
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
@@ -58,7 +60,7 @@ def held_bus(comms, tmp_path):
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
-                id=f"order-{problem}", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
+                id=f"order-{problem}", owner=FileLine(__file__, 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
                 check=OrderCheck(str(tmp_path), "printf 1", CountCheckResult(1)),
                 edits=("Repair the existing owner",), banned=("No second store",),
                 report="Report the result", at=RecordedEventTime(now - 3600),
