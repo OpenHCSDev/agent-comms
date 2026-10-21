@@ -1034,9 +1034,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             (cls.declared_name,)))[0]
 
     @classmethod
-    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> bool:
+        condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {condition})",
             parameters))[0]
 
     @classmethod
