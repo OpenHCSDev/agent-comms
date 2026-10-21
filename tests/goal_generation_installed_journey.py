@@ -15,10 +15,13 @@ from pathlib import Path
 import shlex
 import sys
 
-from agent_comms.comms import Comms
-from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
+from agent_comms.goal_states import BlockedGoal, CompletedGoal
+from agent_comms.launch_runtime import ThreadLaunch
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
+from agent_comms.progress_claims import WorkingClaim
 from native_backend_fixture import native_backend_fixture
 
 
@@ -45,13 +48,20 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 async def wait(self):
                     number = native.provider.posts
                     if number == 1:
-                        native.provider.tool_call = ('comms_set_goal', {'text': 'Model-authored retry objective'})
+                        native.provider.tool_call = ('comms_set_goal', {'text': 'Prove an explicit Retry starts the next generation'})
                     elif number in (2, 4):
-                        goal = Comms(native.root).registry.require(session).require_goal()
+                        goal = comms.registry.require(session).require_goal()
+                        claims: tuple[WorkingClaim, ...] = ()
+                        if number == 4:
+                            resumed = store.require_generation(goal.id)
+                            assert resumed.number == before.number + 1
+                            screenshot = app.save_screenshot(str(stage / 'retry-after-click.svg'))
+                            claims = (WorkingClaim(screenshot),)
                         native.provider.tool_call = ('comms_goal', {
                             'goal_id': goal.id,
                             'status': 'blocked' if number == 2 else 'completed',
                             'progress': 'Need an explicit user Retry decision' if number == 2 else 'Retry completed',
+                            'claims': [FieldCodec.encode(claim) for claim in claims],
                         })
                     elif number not in (3, 5):
                         raise AssertionError(f'Unexpected provider request {number}; no extra continuation allowed')
@@ -73,17 +83,17 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                             assert app._exception is None, app._exception
 
                 await until(lambda: app.selected_session.conversation is not None
-                            and app.selected_session.conversation.agent_ready)
+                            and app.selected_session.conversation.agent_binding.ready)
                 view = app.selected_session.conversation
                 await until(lambda: 'Original saved answer' in '\n'.join(
                     strip.text for strip in app.screen._compositor.render_strips()))
                 view.prompt.text = f'[{stage.name}] Set your own persistent goal, then block it for my explicit Retry.'
                 view.prompt.focus()
                 await pilot.press('enter')
-                await until(lambda: comms.registry.require(session).goal is not None
-                            and comms.registry.require(session).goal.state.declared_name == 'blocked'
+                await until(lambda: any(isinstance(goal.state, BlockedGoal)
+                                        for goal in comms.registry.require(session).goal)
                             and not comms.registry.require(session).executing)
-                blocked = comms.registry.require(session).goal
+                blocked = comms.registry.require(session).require_goal()
                 store = comms.goals.open_goal_store()
                 before = store.require_generation(blocked.id)
                 assert before.lifecycle == BlockedGeneration(), before
@@ -92,9 +102,10 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                             and 'Retry' in str(view.query_one('#goal-toggle').render()))
                 app.save_screenshot(str(stage / 'blocked-before-retry.svg'))
                 assert await pilot.click('#goal-toggle'), 'Click the actual visible Retry control'
-                await until(lambda: comms.registry.require(session).goal.state.declared_name == 'completed'
+                await until(lambda: any(isinstance(goal.state, CompletedGoal)
+                                        for goal in comms.registry.require(session).goal)
                             and not comms.registry.require(session).executing)
-                completed = comms.registry.require(session).goal
+                completed = comms.registry.require(session).require_goal()
                 generation = store.require_generation(completed.id)
                 assert completed.id == blocked.id
                 assert generation.number == before.number + 1
@@ -102,8 +113,8 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
                 assert native.provider.posts == 5
                 assert len(native.saved_inputs()) == 3  # SDK seed, initial prompt, fresh Retry continuation.
                 assert native.session.read_bytes().startswith(original)
-                await until(lambda: view.goal_display.snapshot is not None
-                            and view.goal_display.snapshot.state.declared_name == 'completed')
+                await until(lambda: any(isinstance(goal.state, CompletedGoal)
+                                        for goal in view.goal_display.snapshot))
                 app.save_screenshot(str(stage / 'completed-after-retry.svg'))
                 print(json.dumps({'installed_core': inspect.getfile(Goals),
                                   'saved_history_visible': True, 'model_set_then_blocked': True,
@@ -120,5 +131,6 @@ if __name__ == '__main__':
     parser.add_argument('--extension', type=Path, required=True,
                         help='Approved compiled comms entry from the native deployment manifest')
     args = parser.parse_args()
+    ThreadLaunch.strip(os.environ)
     asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True),
                     package=VerifiedNativePackage.acquire(pinned_native_package())))
