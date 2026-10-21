@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -19,7 +18,6 @@ from agent_comms.errors import (
 from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
-    _canonical,
 )
 
 from .field_codec import FieldCodec
@@ -34,22 +32,6 @@ if TYPE_CHECKING:
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
-_DECISION_DOMAIN: Final = b"agent-comms:cohort-decisions:v1\0"
-
-
-def decisions_wire(decisions: tuple[RecipientDecision, ...]) -> list[dict[str, str]]:
-    return [decision.to_wire() for decision in decisions]
-
-
-def decisions_digest(decisions: list[dict[str, str]]) -> str:
-    from .audience_manifest import MAX_AUDIENCE_BYTES
-
-    encoded = _canonical(decisions)
-    if len(encoded) > MAX_AUDIENCE_BYTES:
-        raise ValueError("Private decision set exceeds its byte bound.")
-    return hashlib.sha256(_DECISION_DOMAIN + encoded).hexdigest()
-
-
 class Delivered(BusRecord, declared_name=None):
     audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
