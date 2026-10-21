@@ -67,12 +67,21 @@ from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySo
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
-from agent_comms.recorded_time import EventTime, RecordedEventSeconds, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import (
+    EventTime,
+    RecordedEventSeconds,
+    RecordedEventTime,
+    UnrecordedEventTime,
+)
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.storage_rules import StorageRule
-from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
+from agent_comms.thread_identity import (
+    CoreWatcherIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+)
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
@@ -3168,11 +3177,21 @@ class TodoStore(DurableStore):
             current = self._current(db, old.id)
             current.require_result(old)
             self._current(db, newer.id).require_result(newer)
-            result = replace(current, order=current.order.copy_as(
-                DroppedProblemOrder, replacing_message=newer.messages[-1].message_id), assignment=None,
-                released=(*current.released, ReleaseTodo(current.revision, commander,
-                    current.held(), StrikeReason(f'Order on {problem} was replaced by the newer order on {by} without a strike.'))),
-                revision=current.revision + 1)
+            result = replace(
+                current,
+                order=current.order.copy_as(
+                    DroppedProblemOrder, replacing_message=newer.messages[-1].message_id
+                ),
+                assignment=None,
+                released=(
+                    *current.released,
+                    ReleaseTodo(
+                        current.revision, commander, current.held(),
+                        StrikeReason(f'Order {problem} replaced by newer {by} without a strike.'),
+                    ),
+                ),
+                revision=current.revision + 1,
+            )
             result.upsert(db)
             return result
 
@@ -3187,7 +3206,9 @@ class TodoStore(DurableStore):
             replace(source, state=DoneTodoState, order=source.order.folded(into, why),
                     assignment=None, revision=source.revision + 1).upsert(db)
 
-    def link(self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str) -> None:
+    def link(
+        self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str
+    ) -> None:
         sent = self.resolve_order(commander, unit, held_problem)
         with self.writing() as db:
             source, target = self._current(db, sent.id), self._current(db, problem)

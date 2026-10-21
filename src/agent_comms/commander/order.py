@@ -972,7 +972,11 @@ class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     problem: Annotated[
-        str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})
+        str,
+        Argument(
+            flags=("problem",),
+            options={"metavar": "PROBLEM", "help": "the held problem id from order board"},
+        ),
     ]
     sha: Annotated[
         str,
@@ -1145,8 +1149,20 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
 class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
     unit: Annotated[str, Argument(flags=("unit",))]
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})]
-    by: Annotated[str, Argument(flags=("--by",), options={"metavar": "PROBLEM", "help": "the newer held problem id from order board"})]
+    problem: Annotated[
+        str,
+        Argument(
+            flags=("problem",),
+            options={"metavar": "PROBLEM", "help": "the held problem id from order board"},
+        ),
+    ]
+    by: Annotated[
+        str,
+        Argument(
+            flags=("--by",),
+            options={"metavar": "PROBLEM", "help": "the newer held problem id from order board"},
+        ),
+    ]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.problem, self.by)
@@ -1170,7 +1186,13 @@ class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
     pid: Annotated[str, Argument(flags=("pid",))]
     unit: Annotated[str, Argument(flags=("unit",))]
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})]
+    problem: Annotated[
+        str,
+        Argument(
+            flags=("problem",),
+            options={"metavar": "PROBLEM", "help": "the held problem id from order board"},
+        ),
+    ]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.problem)

@@ -165,7 +165,8 @@ class VerdictVerb(JudgeVerb):
     ]
     why: str
     problem: Annotated[
-        str, Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"})
+        str,
+        Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"}),
     ] = ""
     lines: Annotated[
         tuple[str, ...],
@@ -263,7 +264,10 @@ class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
     by: Annotated[
         str,
-        Argument(flags=("--by",), options={"metavar": "PROBLEM", "help": "the replacing held problem id from order board"}),
+        Argument(
+            flags=("--by",),
+            options={"metavar": "PROBLEM", "help": "the replacing problem id from order board"},
+        ),
     ]
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
@@ -283,7 +287,8 @@ class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
     # A bare annotation would inherit VerdictVerb's default; field() keeps it required.
     problem: Annotated[
-        str, Argument(options={"metavar": "PROBLEM", "help": "the required held problem id from order board"})
+        str,
+        Argument(options={"metavar": "PROBLEM", "help": "required problem id from order board"}),
     ] = field()
     roast: Annotated[
         str, Argument(options={"help": "blunt, why it is stupid, with because"})

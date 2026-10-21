@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from agent_comms.commander.order import OrderFile
+from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.todos import SendBackVerdict, StrikeReason, Todo
@@ -13,7 +14,6 @@ from agent_comms.tools import (
     CommsTodoCreateTool,
     CommsVerdictTool,
 )
-from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
 
 
 class StoryCase(LifecycleCase):

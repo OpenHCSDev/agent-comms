@@ -89,7 +89,7 @@ One line per unit touched, then the next unit.
 - **Fork a backlog slice when it helps; nothing refuses orders for load.** `capacity` reports load and live forks. A fork commands with the same tools and posts its verdicts and open items before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
-- **Two strikes on one task take it away.** `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT ORDER --sha` only after reading the diff that meets the order.
+- **Two strikes on one task take it away.** `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM --sha` only after reading the diff that meets the order.
 - **Work lives on main or on a branch with a linked PR.** Core's standing rules report unlinked work in the heartbeat; each branch goes to its owner.
 
 ## Merging
