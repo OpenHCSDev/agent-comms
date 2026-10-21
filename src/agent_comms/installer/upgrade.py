@@ -168,16 +168,18 @@ class RefusedOwner(OwnerStart):
 class InstallRolledBack(UpgradeRefused):
     """The original installation was restored after a failed live pass."""
 
-    def __init__(self, error: BaseException, started: tuple[OwnerStart, ...], backup: str):
+    def __init__(self, error: BaseException, started: tuple[OwnerStart, ...], backup: str,
+                 *, runtime: LaunchRuntime):
         self.error = error
         self.started = started
         self.backup = backup
+        self.runtime = runtime
         super().__init__("; ".join(self.lines()))
 
     def lines(self) -> tuple[str, ...]:
         return (
             f"Install rolled back: {type(self.error).__name__}: {self.error}",
-            "Original runtime selected again",
+            f"Original runtime selected again: {self.runtime.prefix}",
             *(line for owner in self.started for line in owner.lines()),
             f"Backup: {self.backup}",
         )
@@ -823,7 +825,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
               f"original runtime selected; owners: {started}; "
               f"backup: {backup.description}",
               file=sys.stderr)
-        raise InstallRolledBack(error, started, backup.description) from error
+        raise InstallRolledBack(error, started, backup.description,
+                                runtime=installed.runtime) from error
     # Installed: the carries ran and the runtime is published. Starting the owners it
     # stopped is reported per owner and never rolls the install back.
     started = staged.start(root, running)

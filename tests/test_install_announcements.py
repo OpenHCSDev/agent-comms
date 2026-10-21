@@ -1,5 +1,7 @@
 """Typed installer results use the real publisher and retained channel history."""
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -15,6 +17,7 @@ from agent_comms.installer.upgrade import (
     InstallRolledBack, RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
     StepRun, UnchangedRun, Upgrade,
 )
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
 
@@ -30,7 +33,8 @@ from conftest import declare_test_bus
     ),
     UnchangedRun(),
     CreatedRun(("connector",), "created route"),
-    RetiredRun(("connector",), "created route", ("worker",), Path("retired-bus")),
+    RetiredRun(services=("connector",), route="created route", stopped=("worker",),
+               retired=Path("retired-bus")),
 ), ids=("carried", "unchanged", "created", "retired"))
 def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):
     comms = declare_test_bus(private_comms, channels=("comms",))
@@ -58,7 +62,9 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
 def test_rollback_and_refusal_are_published_from_their_error_types(private_comms):
     comms = declare_test_bus(private_comms, channels=("comms",))
     error = UpgradeRefused("carry_order_scopes refused its rows")
-    restored = InstallRolledBack(error, (StartedOwner("worker"),), "saved-original-bus")
+    runtime = LaunchRuntime(Path("/saved-original-runtime/bin/python"))
+    restored = InstallRolledBack(error, (StartedOwner("worker"),), "saved-original-bus",
+                                runtime=runtime)
     report = InstallReport(comms.root)
     report.failed(error)
     report.failed(restored)
@@ -67,6 +73,14 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     assert all(message.sender == "installer" for message in messages)
     assert all(line in messages[1].body for line in restored.lines())
     assert str(error) in messages[1].body
+    assert str(runtime.prefix) in messages[1].body
+    completed = subprocess.run(
+        [sys.executable, "-m", "agent_comms.cli", "--root", str(comms.root),
+         "history", "--target", "#comms"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
     print("POSTED", *(message.body for message in messages), sep="\n")
 
 
