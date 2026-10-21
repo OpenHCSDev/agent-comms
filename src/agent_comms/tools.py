@@ -830,7 +830,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ),
         )
         goal = goal.require()
-        if not goal.state.active or goal.progress != progress:
+        if not goal.state.active_items(goal) or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
         return GoalUpdated(goal)
 

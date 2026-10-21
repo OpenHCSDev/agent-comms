@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from .declared_family import DeclaredFamily
 from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext, ProblemOrderGoalAction
@@ -49,9 +50,6 @@ class RuntimePause(PauseSource):
 
 @dataclass(frozen=True)
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
-    active: ClassVar[bool] = False
-    terminal: ClassVar[bool] = False
-
     def after_failed_turn(self, diagnostic: str) -> GoalState:
         return self
 
@@ -88,10 +86,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return {"kind": cls.declared_name}
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GoalState], ...]: ...
 
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         if not self.may_become(nxt):
@@ -138,11 +132,7 @@ class OpenGoal(BlockingOnFailure, GoalState):
 
 
 @dataclass(frozen=True)
-class ActiveGoal(OpenGoal, FromOpenGoal):
-    active = True
-
-    def require_active(self) -> None:
-        pass
+class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
     @property
     def toggle(self) -> type[GoalAction]:
@@ -273,8 +263,7 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
-    terminal = True
+class CompletedGoal(Complete, Terminal, BlockingOnFailure, GoalState, FromOpenGoal):
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)

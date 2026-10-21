@@ -10,14 +10,13 @@ from typing import TYPE_CHECKING, Annotated
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
 from .pi_counts import PiCount, UnreportedCount
-from .lifecycle_capability import LifecycleCapability, Successful
+from .lifecycle_capability import Failed, LifecycleCapability, Successful
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
 class PiStopReason(LifecycleCapability, DeclaredFamily, affix="StopReason"):
-    failed = False
     tool_round = False
     explicit_abort = False
     tracked_failure = "Provider returned an unsuccessful terminal"
@@ -112,10 +111,8 @@ class StopStopReason(Successful, FinishedPiStop, PiStopReason):
             yield event
 
 
-class FailedPiStop(FinishedPiStop):
+class FailedPiStop(Failed, FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
-
-    failed = True
 
     @classmethod
     def error_notice(cls, message) -> str:

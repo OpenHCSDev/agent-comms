@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -13,6 +12,7 @@ from .goal_attempt_phase import (
     GoalAttemptPhase,
 )
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Complete, Failed, Terminal
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 if TYPE_CHECKING:
@@ -21,13 +21,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
-    terminal: ClassVar[bool] = False
     ready: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
 
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]: ...
+    def resume_status(self, generation, goal, ctx) -> None:
+        if not self.allows_resume(ctx.thread.executing):
+            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
     def validate_attempt(self, attempt_id: str | None) -> None:
         if not attempt_id:
@@ -107,8 +105,22 @@ class ReservedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(GenerationState, RetryableGeneration):
-    failed = True
+class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
+    def resume_status(self, generation, goal, ctx) -> None:
+        from .goal_actions import required_block_reason
+        from .goal_states import BlockedGoal
+
+        if generation.attempt_id:
+            refusal = required_block_reason(
+                "The interrupted goal attempt is unresolved. Inspect it, then use "
+                "Retry to authorize a new attempt. Your messages can still be sent."
+            )
+            blocked = replace(goal, state=BlockedGoal(refusal), revision=goal.revision + 1)
+            ctx.goals.registry.register(
+                replace(ctx.thread, goal=blocked), ctx.goals.registry.status(ctx.thread.name)
+            )
+            raise ValueError(refusal)
+        super().resume_status(generation, goal, ctx)
 
     def require_failure(self) -> None:
         return None
@@ -133,22 +145,12 @@ class BlockedGeneration(GenerationState, RetryableGeneration):
 
 
 @dataclass(frozen=True)
-class CompletedGeneration(GenerationState):
-    terminal = True
-
-    @classmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]:
-        return ()
+class CompletedGeneration(Complete, Terminal, GenerationState):
+    pass
 
 
 @dataclass(frozen=True)
-class CancelledGeneration(GenerationState):
-    terminal = True
-
+class CancelledGeneration(Terminal, GenerationState):
     def validate_attempt(self, attempt_id: str | None) -> None:
         if attempt_id is not None and not attempt_id:
             raise ValueError("A retired attempt identity must be nonempty.")
-
-    @classmethod
-    def successors(cls) -> tuple[type[GenerationState], ...]:
-        return ()

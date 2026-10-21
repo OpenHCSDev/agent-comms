@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
+from .lifecycle_capability import Complete, LifecycleCapability
 from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
@@ -300,23 +301,20 @@ class UnseenDelivery(TypedRow):
 
 
 @dataclass(frozen=True)
-class RouteIndexState:
+class RouteIndexState(LifecycleCapability):
     """How far one writer sync left the committed index behind its cut."""
-
-    complete: ClassVar[bool]
 
     def defer_read(self, through: int, size: int) -> NoReturn:
         raise RouteIndexRebuilding(through, size)
 
 
 @dataclass(frozen=True)
-class RouteIndexReady(RouteIndexState):
-    complete: ClassVar[bool] = True
+class RouteIndexReady(Complete, RouteIndexState):
+    pass
 
 
 @dataclass(frozen=True)
 class RouteIndexBehind(RouteIndexState):
-    complete: ClassVar[bool] = False
     through: int
     size: int
 
@@ -324,8 +322,6 @@ class RouteIndexBehind(RouteIndexState):
 @dataclass(frozen=True)
 class RouteIndexBlocked(RouteIndexState):
     """Another writer holds the lock; this call could not make progress."""
-
-    complete: ClassVar[bool] = False
 
     def defer_read(self, through: int, size: int) -> NoReturn:
         raise CoordinationReadUnavailable("Route projection writer is busy")
@@ -639,5 +635,5 @@ class CompletingRouteCounts(OpenedRouteCounts):
 
     def _prepare(self) -> None:
         self._preparation = self.sync(self.source, self._decode)
-        while not self._preparation.complete:
+        while self._preparation.unsettled_items(self):
             self._preparation = self.sync(self.source, self._decode)

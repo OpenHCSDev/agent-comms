@@ -555,8 +555,8 @@ class RequestGoalOrder(GoalOrder):
         pass
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goal.state.terminal:
-            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
+        for previous in goal.state.unsettled_items(goal):
+            raise ValueError(f"Request {previous.id} is still open; mark it done first.")
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         if self.serving(goal, goals, owner):
@@ -570,10 +570,10 @@ class RequestGoalOrder(GoalOrder):
 
     def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
         """A closed request is replaced by one the directive opens; an open one records it."""
-        if goal.state.terminal:
-            return directive.request(goal, ctx)
-        return replace(goal, revision=goal.revision + 1, order=replace(
-            self, directives=(*self.directives, directive.directive())))
+        for previous in goal.state.unsettled_items(goal):
+            return replace(previous, revision=previous.revision + 1, order=replace(
+                self, directives=(*self.directives, directive.directive())))
+        return directive.request(goal, ctx)
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
         return tuple(directive.original(goals) for directive in self.directives)
@@ -963,7 +963,7 @@ class Goal(RecordMember, GoalDeclaration):
             raise ValueError("Goal changed during resume; refresh its state.")
 
     def accepts_following_handoff(self) -> bool:
-        return self.state.active
+        return bool(self.state.active_items(self))
 
     @property
     def objective(self) -> str:
@@ -1006,7 +1006,7 @@ class Goal(RecordMember, GoalDeclaration):
         return self if self.id == goal_id else NoGoal()
 
     def active(self) -> GoalDeclaration:
-        return self if self.state.active else NoGoal()
+        return next(iter(self.state.active_items(self)), NoGoal())
 
     def reports_turn(self, turn_id: str) -> bool:
         return self.reported_turn.reports(turn_id)

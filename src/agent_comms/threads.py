@@ -488,7 +488,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def executing(self) -> bool:
-        return self.turn_record.executing
+        return bool(self.turn_record.executing_items(self))
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""

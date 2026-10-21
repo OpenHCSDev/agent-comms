@@ -106,7 +106,7 @@ class RecoverySnapshot:
         return intent, acknowledgement
 
     def completed_response(self) -> bool:
-        return self.execution.lifecycle.completed
+        return bool(self.execution.lifecycle.completed_items(self))
 
     @property
     @boundary_decoder
@@ -192,7 +192,7 @@ class RecoverySnapshot:
         if self.is_current != (
             self.current_execution_id.otherwise(None) == execution_id
             and self.current_attempt_ordinal.otherwise(None) == execution.lifecycle.current_attempt_ordinal
-            and execution.lifecycle.active
+            and bool(execution.lifecycle.active_items(attempt))
             and attempt is not None
             and attempt.lifecycle.accepts_active_execution()
         ):

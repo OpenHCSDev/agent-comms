@@ -16,7 +16,7 @@ from .assignment_states import (
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .lifecycle_capability import Terminal
+from .lifecycle_capability import Active, Complete, Failed, Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 
@@ -26,13 +26,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
-    active: ClassVar[bool] = False
     starts_attempt: ClassVar[bool] = False
     retry: ClassVar[bool] = False
     queued: ClassVar[bool] = False
     unstarted: ClassVar[bool] = False
-    completed: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
 
     @property
     def current_attempt_ordinal(self) -> int | None:
@@ -51,10 +48,6 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     @classmethod
     @abstractmethod
     def load(cls, ordinal: int | None) -> ExecutionState: ...
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[ExecutionState], ...]: ...
 
     @classmethod
     @abstractmethod
@@ -148,8 +141,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
             raise IntegrityViolationError("active/completed execution requires an attempt")
 
 
-class ActiveExecution(AttemptExecution):
-    active = True
+class ActiveExecution(Active, AttemptExecution):
 
     def require_final_response(self) -> None:
         pass
@@ -175,8 +167,7 @@ class ActiveExecution(AttemptExecution):
             raise IntegrityViolationError("active snapshot must carry exact owner pointer")
 
 
-class CompletedExecution(Terminal, AttemptExecution):
-    completed = True
+class CompletedExecution(Complete, Terminal, AttemptExecution):
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:
@@ -197,7 +188,7 @@ class InterruptedExecution(AttemptReference, ExecutionState):
     ordinal: int | None = None
 
     def accepts_attempt(self, phase):
-        return phase.failed
+        return phase.accepts_interrupted_execution()
 
 
 class DeferredExecution(StartsAttempt, InterruptedExecution):
@@ -230,8 +221,7 @@ class DeferredExecution(StartsAttempt, InterruptedExecution):
         return authorized and attempt.permits_retry() and not is_current
 
 
-class FailedExecution(Terminal, InterruptedExecution):
-    failed = True
+class FailedExecution(Failed, Terminal, InterruptedExecution):
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:

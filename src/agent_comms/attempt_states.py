@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .lifecycle_capability import Terminal
+from .lifecycle_capability import Failed, Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
@@ -32,7 +32,6 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
-    failed: ClassVar[bool] = False
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
@@ -75,10 +74,6 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     @property
     def publication_ready(self) -> bool:
         return False
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[AttemptState], ...]: ...
 
     @classmethod
     @abstractmethod
@@ -290,10 +285,8 @@ class SucceededAttempt(TerminalAttempt):
     succeeded = True
 
 
-class UnsuccessfulTerminal(TerminalAttempt):
+class UnsuccessfulTerminal(Failed, TerminalAttempt):
     """A terminal attempt that did not succeed, irrespective of retry authority."""
-
-    failed = True
 
     def disposition(self, snapshot, attempt):
         from .execution_states import FailedExecution

@@ -311,7 +311,7 @@ class SourceCoverage:
         policy = decision.wake_policy()
         if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not policy.active:
+        if not policy.active_items(policy):
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
         if policy.proves_source(evidence) and all(

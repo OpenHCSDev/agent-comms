@@ -126,10 +126,9 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
         round = NativeToolRound.decode(len(self.rounds), content, decode_call)
-        if self.rounds and not all(call.complete for call in self.rounds[-1].declared):
-            raise SelectedToolDenied(
-                "Native tool round was announced again before its calls completed"
-            )
+        if self.rounds:
+            for call in self.rounds[-1].declared:
+                call.assert_complete()
         return round
 
     def announce(self, round: NativeToolRound[Call]) -> None:

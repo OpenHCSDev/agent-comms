@@ -55,11 +55,12 @@ class CandidateMaintenance(threading.Thread):
                             record, root_id=snapshot.metadata.root_id
                         ),
                     )
-                if result.caught_up and route_result.complete:
-                    with _guard:
-                        if self.through_bytes <= result.checkpoint_bytes:
-                            _pending.pop(root)
-                            return
+                for completed in route_result.completed_items(result):
+                    if completed.caught_up:
+                        with _guard:
+                            if self.through_bytes <= completed.checkpoint_bytes:
+                                _pending.pop(root)
+                                return
         except (
             OSError,
             ValueError,

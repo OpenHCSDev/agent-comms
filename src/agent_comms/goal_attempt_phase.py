@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Terminal
 
 if TYPE_CHECKING:
     import sqlite3
@@ -24,16 +25,11 @@ class ReadyAttempt(ABC):
 
 @dataclass(frozen=True)
 class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
-    terminal: ClassVar[bool] = False
     launched: ClassVar[bool] = False
     verified_progress: ClassVar[bool] = False
 
     def require_failure(self) -> None:
         raise FailureNotObserved("missing_binding")
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GoalAttemptPhase], ...]: ...
 
 
 class ReservedAttempt(GoalAttemptPhase):
@@ -62,20 +58,12 @@ class FailedAttempt(ReadyAttempt, GoalAttemptPhase):
         return (ResolvedAttempt,)
 
 
-class SucceededAttempt(ReadyAttempt, GoalAttemptPhase):
-    terminal = verified_progress = True
+class SucceededAttempt(Terminal, ReadyAttempt, GoalAttemptPhase):
+    verified_progress = True
 
     def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
         attempt.advance(db, self, progress_witness=note)
 
-    @classmethod
-    def successors(cls):
-        return ()
 
-
-class ResolvedAttempt(GoalAttemptPhase):
-    terminal = True
-
-    @classmethod
-    def successors(cls):
-        return ()
+class ResolvedAttempt(Terminal, GoalAttemptPhase):
+    pass

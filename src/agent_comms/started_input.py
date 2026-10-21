@@ -25,7 +25,7 @@ class StartedInput:
         row = document.lookup(key).require_started(scope.claimed_generation)
         for key in self.keys:
             stored = document.rows.get(key)
-            if stored is not None and not stored.unresolved:
+            if stored is not None and not stored.unresolved_items(stored):
                 await inputs.emit_input_disposition(session_id, stored)
         item = inputs.state(session_id).queued.get(self.accepted_id)
         text = await item.started(inputs) if item is not None else self.notice_text

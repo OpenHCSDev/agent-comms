@@ -226,9 +226,10 @@ class Goals:
                     message.target,
                     message.body,
                 )
-            if row.owner in owners and row.unresolved:
-                unknown[key] = row
-                eligible.add(key)
+            for pending in row.unresolved_items(row):
+                if pending.owner in owners:
+                    unknown[key] = pending
+                    eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -11,7 +10,7 @@ from .coordination_errors import IntegrityViolationError, IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
-from .lifecycle_capability import Successful, Terminal
+from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
 
 
@@ -26,13 +25,7 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     allows_intent: ClassVar[bool] = False
     requires_intent: ClassVar[bool] = False
     published: ClassVar[bool] = False
-    pending: ClassVar[bool] = False
     publishing: ClassVar[bool] = False
-    deferred: ClassVar[bool] = False
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[ResponseState], ...]: ...
 
     @property
     def published_message_id(self) -> str | Unpublished:
@@ -78,9 +71,8 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("publication acknowledgement exists iff published")
 
 
-class PendingResponse(ResponseState):
+class PendingResponse(Pending, ResponseState):
     retryable = True
-    pending = True
 
     def require_preparation(self) -> None:
         pass
@@ -106,9 +98,8 @@ class PublishingResponse(ResponseState):
         return PublishedResponse, FailedResponse
 
 
-class DeferredResponse(ResponseState):
+class DeferredResponse(Deferred, ResponseState):
     retryable = True
-    deferred = True
 
     @classmethod
     def successors(cls):
@@ -158,5 +149,5 @@ class SilentResponse(Successful, ResponseState):
     pass
 
 
-class FailedResponse(Terminal, ResponseState):
+class FailedResponse(Failed, Terminal, ResponseState):
     allows_intent = True

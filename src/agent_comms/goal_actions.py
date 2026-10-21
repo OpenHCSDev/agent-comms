@@ -235,24 +235,7 @@ class ActiveGoalAction(
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         thread = ctx.thread
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        if generation.lifecycle.failed and generation.attempt_id:
-            # A status-only Resume cannot authorize an uncertain attempt.
-            refusal = required_block_reason(
-                "The interrupted goal attempt is unresolved. Inspect it, then use "
-                "Retry to authorize a new attempt. Your messages can still be sent."
-            )
-            blocked = replace(
-                goal,
-                state=BlockedGoal(refusal),
-                progress=goal.progress,
-                revision=goal.revision + 1,
-            )
-            ctx.goals.registry.register(
-                replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
-            )
-            raise ValueError(refusal)
-        elif not generation.lifecycle.allows_resume(thread.turn_record.executing):
-            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
+        generation.lifecycle.resume_status(generation, goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -434,11 +417,12 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
         # Revoke the old protected goal before replacing its registry identity.
         attempts = ctx.goals.open_goal_store()
         generation = attempts.snapshot(goal.id)
-        if generation is not None and not generation.lifecycle.terminal:
-            attempts.retire_goal(
-                goal.id, expected_generation=generation.number,
-                attempt_id=generation.attempt_id,
-            )
+        if generation is not None:
+            for previous in generation.lifecycle.unsettled_items(generation):
+                attempts.retire_goal(
+                    goal.id, expected_generation=previous.number,
+                    attempt_id=previous.attempt_id,
+                )
 
 
 @dataclass(frozen=True, kw_only=True)

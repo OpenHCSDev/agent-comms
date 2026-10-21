@@ -2,23 +2,21 @@
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
 
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
+from .lifecycle_capability import LifecycleCapability, Unresolved
 
 
 @dataclass(frozen=True)
-class RecoveryCondition(DeclaredFamily, affix="Recovery"):
-    unresolved: ClassVar[bool] = False
+class RecoveryCondition(LifecycleCapability, DeclaredFamily, affix="Recovery"):
 
     @classmethod
     @abstractmethod
     def validate_audit(cls, snapshot, attempt) -> None: ...
 
 
-class IncidentRecovery:
-    unresolved = True
+class IncidentRecovery(Unresolved):
 
     @classmethod
     def validate_audit(cls, snapshot, attempt):
@@ -57,11 +55,11 @@ class RecoveredRecovery(RecoveryCondition):
     def validate_audit(cls, snapshot, attempt):
         incident = snapshot.last_recovery
         if (
-            not snapshot.execution.lifecycle.active
+            not snapshot.execution.lifecycle.active_items(snapshot.execution)
             or not attempt.lifecycle.running
             or incident is None
             or incident.attempt != attempt.attempt_ordinal
-            or not incident.kind.unresolved
+            or not incident.kind.unresolved_items(incident)
         ):
             raise IdentityConflict(
                 "recovered requires a current unresolved incident and resumed model"

@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
+from .lifecycle_capability import Complete, Executing, LifecycleCapability
+
 
 
 if TYPE_CHECKING:
@@ -48,9 +50,10 @@ class CoordinationBusy(SelectedToolDenied):
         )
 
 
-class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
-    executing = False
-    complete = False
+class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+    def accepts_current_request(self, call, candidate) -> bool:
+        call.correlate(candidate)
+        return True
 
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
         raise SelectedToolDenied("Native tool request/event differs from the declared call")
@@ -88,11 +91,7 @@ class AnnouncedCall(CallObservation):
         call.progress.started.set()
 
 
-class ExecutingCall(CallObservation):
-    executing = True
-
-    def require_executing(self) -> None:
-        pass
+class ExecutingCall(Executing, CallObservation):
 
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
@@ -105,11 +104,8 @@ class ExecutingCall(CallObservation):
         call.progress.observation = CompletedCall()
 
 
-class CompletedCall(CallObservation):
-    complete = True
-
-    def assert_complete(self) -> None:
-        pass
+class CompletedCall(Complete, CallObservation):
+    pass
 
 
 class UncertainCall(CallObservation):
@@ -229,15 +225,8 @@ class NativeToolCall(ABC):
             raise SelectedToolDenied("Native tool terminal identity/result changed")
         self.progress.observation.finish(self, is_error, directory, input_id, round_number)
 
-    @property
-    def complete(self) -> bool:
-        return self.progress.observation.complete
-
     def accepts_current_request(self, candidate: NativeToolCall) -> bool:
-        if self.complete:
-            return False
-        self.correlate(candidate)
-        return True
+        return self.progress.observation.accepts_current_request(self, candidate)
 
     def assert_complete(self) -> None:
         self.progress.observation.assert_complete()

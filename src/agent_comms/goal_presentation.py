@@ -162,7 +162,8 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
         return self.state.view.waiting
 
     def waiting_for(self, goal: Goal) -> bool:
-        return goal.state.active and self.goal_id == goal.id and self.standby()
+        return any(self.goal_id == active.id and self.standby()
+                   for active in goal.state.active_items(goal))
 
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)
