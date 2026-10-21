@@ -568,11 +568,6 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
 
-    @property
-    def publication_snapshot(self) -> Message:
-        """A bus record adds delivery capabilities to the declared Message content."""
-        return Message.from_message(self).publication_snapshot
-
 
 @dataclass(frozen=True, kw_only=True)
 class Claimed(BusCapability):
