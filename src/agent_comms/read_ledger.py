@@ -32,7 +32,7 @@ from .sealed import Sealed
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .wire_log import WireLog
+from .bus import Bus
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
-    from .wire_log import OpenedWireSource
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):
@@ -104,20 +103,20 @@ class ReadDocument:
     notice: ReadNotice = field(default_factory=NoReadNotice)
 
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
-                source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
+                source: ObservedPath) -> Iterator[ReadCursor]:
         if self.bus_identity.matches(source):
             thread = snapshot.threads[snapshot.canonical_name(viewer)]
             for owner in thread.incarnation.recorded_names(snapshot):
                 yield self.messages.get(owner, ReadCursor())
 
     def cursor(self, viewer: str, snapshot: RegistryProvenance,
-               source: ObservedPath | OpenedWireSource) -> ReadCursor:
+               source: ObservedPath) -> ReadCursor:
         return ReadCursor.union(cursor.current(snapshot)
                                 for cursor in self.cursors(viewer, snapshot, source))
 
     def for_conversation(self, viewer: str, conversation: Conversation,
                          snapshot: RegistryProvenance,
-                         source: ObservedPath | OpenedWireSource) -> ConversationCursor:
+                         source: ObservedPath) -> ConversationCursor:
         keys = tuple(conversation.recorded_keys(snapshot))
         return ConversationCursor.union(
             cursor.for_conversation(key)
@@ -146,7 +145,7 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
-    def capture_indexed(self, viewer, messages, snapshot, source, index, *,
+    def capture(self, viewer, messages, snapshot, source: Bus, *,
                         document: ReadDocument, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
@@ -158,15 +157,13 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
             viewer, snapshot.threads[viewer].created_at,
             tuple(DisplayedConversation(
                 conversation, sequences := tuple(sorted(members)),
-                index.proved_read_prefix(conversation.scope(provenance),
-                    document.for_conversation(viewer, conversation, snapshot, source),
-                    sequences, source.boundary),
+                0,
             ) for conversation, members in grouped.items()),
-            source.bus_identity,
+            RecordedBusIdentity.capture(source.path),
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
-        if not displayed.bus_identity.matches(ObservedPath.at(WireLog.path_in(self.path.parent))):
+        if not displayed.bus_identity.matches(ObservedPath.at(Bus.path_in(self.path.parent))):
             raise DMScopeChanged("Display bus changed; refresh the displayed page.")
         if viewer != displayed.viewer:
             raise DMScopeChanged("Display belongs to a different viewer.")
@@ -192,7 +189,7 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> ReadCursor:
         document = self.read() if document is None else document
-        return document.cursor(viewer, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent)))
+        return document.cursor(viewer, snapshot, ObservedPath.at(Bus.path_in(self.path.parent)))
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
@@ -227,7 +224,7 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
         document = (self.read_conversation(incarnation.name, conversation, snapshot)
                     if document is None else document)
         if message.seq in document.for_conversation(
-            incarnation.name, conversation, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent))
+            incarnation.name, conversation, snapshot, ObservedPath.at(Bus.path_in(self.path.parent))
         ):
             return (incarnation,)
         return ()
