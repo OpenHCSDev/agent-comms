@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import time
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import cached_property
@@ -17,11 +17,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.locked_store import DurableFile
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -34,8 +35,10 @@ from agent_comms_hooks.shell import ShellCommand
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
     from agent_comms.todos import Todo, TodoStore
+    from agent_comms.ui_model.unit_state import UnitState
 
 StoragePath = Annotated[Path, PathText]
 
@@ -70,7 +73,8 @@ class MemoryUse:
 
 
 @dataclass(frozen=True)
-class StorageRule(RoomAllocation):
+class StorageRule(RoomAllocation, DurableFile):
+    filename: ClassVar[str] = "storage.json"
     floor_gib: float = 5.0  # under this nothing that allocates may run
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
@@ -93,7 +97,7 @@ class StorageRule(RoomAllocation):
 
     @classmethod
     def load(cls, root: Path):
-        path = root / 'storage.json'
+        path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
     def initial_roots(self, name):
@@ -342,13 +346,26 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        todos = cls.todos(comms, commander)
-        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+        units = {todo.held().owner_identity for todo in cls.todos(comms, commander)}
+        return cls.for_units(comms, units)
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        held = StandingRule.holders(comms, commander)
+        return cls.for_units(comms, (unit for state in observed
+                                    for unit in state.readable_units() if unit in held))
+
+    @classmethod
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
         registry = comms.registry
         members = cls.members_with(cls)
         found = []
-        for unit in units:
-            storage = UnitStorage.read(registry.storage_rule, registry.require(unit))
+        for unit in sorted(set(units), key=lambda unit: unit.name):
+            thread = registry.require(unit.name)
+            if thread.incarnation != unit:
+                raise ValueError("Observed unit incarnation changed")
+            storage = UnitStorage.read(registry.storage_rule, thread)
             found.extend(member(storage) for member in members if member.violated(storage))
         return tuple(found)
 

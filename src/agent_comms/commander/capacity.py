@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ..comms import Comms
 from ..field_codec import projected
 from ..tool_result import ToolResult
 from ..turn_digests import OrderEditCountRead
+from ..ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
@@ -22,14 +24,17 @@ class Load(ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
+        return cls.from_states(comms, commander, UnitState.current(comms, commander))
+
+    @classmethod
+    def from_states(cls, comms: Comms, commander: str, observed: Sequence[UnitState]) -> Load:
         snapshot, todos, now = comms.registry.snapshot(), comms.goals.todos, time.time()
         owner = snapshot.require(commander)
         held = todos.held_for_commander(owner.incarnation)
         owed = tuple(t for t in held if t.pending)
         forks = tuple(sorted(
-            thread.name for thread in snapshot.threads.values()
-            if thread.parent.named(owner.name)
-            and comms.agents.is_working(thread.incarnation, snapshot)
+            state.unit.name for state in observed
+            if state.source.thread.parent.named(owner.name) and state.source.working
         ))
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)

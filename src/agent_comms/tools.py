@@ -40,6 +40,7 @@ from .cli_commands import (
 )
 from .cli_result import ToolCatalogResult
 from .commander.capacity import Load
+from .ui_model.unit_state import UnitState
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -1005,7 +1006,9 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.name)
+        states = UnitState.current(comms, caller.name)
+        broken = (*StandingRule.broken(comms, caller.name, observed=states),
+                  *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
             tuple(rule.line() for rule in broken

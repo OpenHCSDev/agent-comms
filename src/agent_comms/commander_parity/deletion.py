@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..change_report import FileLine
 from ..child_process import CountPrinted, ExitedOutcome
+from ..commander.config import CommanderConfig
 from ..commander.order import OrderFile
 from ..field_codec import FieldCodec
 from ..goal_actions import CreateProblemGoalAction
@@ -22,6 +23,7 @@ from ..goals import CountCheckResult, OrderCheck
 from ..progress_claims import MergedClaim
 from ..recorded_time import RecordedEventTime
 from ..repo import Repo
+from ..storage_rules import StorageRule
 from ..todos import (
     CheckedCommitDelivery,
     CommitDelivery,
@@ -85,10 +87,10 @@ class DeletionPath(ABC):
                 prefix="parity-deletion-", dir=rule.checkout_base
             ) as checkouts:
                 root = original.commander.root
-                (root / "storage.json").write_text(
+                StorageRule.path_in(root).write_text(
                     json.dumps(FieldCodec.encode(replace(rule, checkout_base=Path(checkouts))))
                 )
-                (root / "commander.json").write_text(original.commander.model_dump_json())
+                CommanderConfig.path_in(root).write_text(original.commander.model_dump_json())
                 run = replace(original, commander=MeasuredCommander.read_root(root))
                 return cls.exercise(run)
 

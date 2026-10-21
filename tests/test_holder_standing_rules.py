@@ -17,10 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.standing import (
-    Detached,
-    GoalCannotRun,
     HeartbeatSilent,
-    HolderCannotRun,
     UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -38,7 +35,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import InfoKind, Message, QuestionKind
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.read_basis import DMDisplayScope
@@ -49,12 +46,14 @@ from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (
+    ClaimOrder, OrderClaim, OrderMessage,
     PendingProblemOrder,
     TodoConflict,
 )
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
+from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 
 
 @pytest.fixture
@@ -106,6 +105,28 @@ def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
     assert comms.registry.store.path.read_bytes() == before
 
 
+@pytest.fixture
+def claim_order(held_bus):
+    """Publish the real order and claim messages, using their retained identities."""
+    def claim(problem):
+        todo = held_bus.goals.todos.get(problem)
+        lead = held_bus.registry.require("lead").incarnation
+        worker = held_bus.registry.require("worker").incarnation
+        original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+        todo = held_bus.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead, original.message_id))
+        claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
+                                      "Review the published repair", original.reference)
+        claimed = replace(claimed, message=replace(
+            claimed.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
+        ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(held_bus.goals, todo.id)
+        return claimed
+    return claim
+
+
+def unanswered(comms):
+    return UnitAskUnanswered.broken(comms, "lead", observed=UnitState.current(comms, "lead"))
+
+
 def blocked_holder(comms):
     """Settle a real failed turn; never manufacture a stored backend block."""
     owner = comms.registry.require("worker")
@@ -127,7 +148,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     store.recover_unreserved_ready(goal.id, generation.number)
     store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
     reserved = store.require_generation(goal.id)
-    violation, = GoalCannotRun.violations(held_bus, "lead")
+    violation, = Blocked.violations(held_bus, "lead")
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal.require() == goal
@@ -137,7 +158,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
 
 def publish(comms, sender, target, timestamp, *, answers=()):
     return comms.bus.publisher.publish_ordinary(
-        Message(sender=sender, target=target, type=InfoKind, body="Not a question", timestamp=timestamp,
+        Message(sender=sender, target=target, type=QuestionKind, body="Inspect the pending work", timestamp=timestamp,
                 answers=answers), origin=AgentOrigin(),
     )
 
@@ -150,14 +171,14 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     orders = held_bus.goals.todos.held_orders()
     inputs = InputDispositions(held_bus.root)
     unresolved = inputs.lookup("unresolved-input")
-    violation, = GoalCannotRun.violations(held_bus, "lead")
+    violation, = Blocked.violations(held_bus, "lead")
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal == goal
     assert held_bus.goals.todos.held_orders() == orders
     assert store.require_generation(goal.id) == generation
     assert inputs.lookup("unresolved-input") == unresolved
-    assert GoalCannotRun.violations(held_bus, "lead") == (violation,)
+    assert Blocked.violations(held_bus, "lead") == (violation,)
 
 
 def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):
@@ -194,7 +215,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
                 await Coordination.run_worker(partial(held_bus.owners.stop, "worker"))
                 assert held_bus.registry.require("worker").goal == goal
                 assert isinstance(held_bus.goals.goal_execution("worker"), RunnableExecution)
-                for violation in GoalCannotRun.violations(held_bus, "lead"):
+                for violation in Blocked.violations(held_bus, "lead"):
                     violation.enforce(held_bus, "lead")
                 assert held_bus.goals.todos.held_orders() == orders
                 assert InputDispositions(held_bus.root).lookup("unresolved-input") == unresolved
@@ -223,7 +244,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     lease = owner.thread.turn_lease
     assert lease is not None
     try:
-        assert GoalCannotRun.violations(held_bus, "lead") == ()
+        assert Blocked.violations(held_bus, "lead") == ()
     finally:
         held_bus.agents.finish_turn(lease)
 
@@ -231,21 +252,21 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
     publish(held_bus, "worker", "lead", now - 7200)  # before every held order
-    publish(held_bus, "worker", "lead", now - UnitAskUnanswered.seconds + 30)
+    publish(held_bus, "worker", "lead", now - AwaitingCommander.seconds + 30)
     publish(held_bus, "outsider", "lead", now - 1800)  # not a holder
     publish(held_bus, "worker", "outsider", now - 1800)  # not its commander
     question = publish(held_bus, "worker", "lead", now - 901)
     # An unrelated later answer and message text do not answer this reference.
     publish(held_bus, "lead", "worker", now - 800)
-    violation, = UnitAskUnanswered.violations(held_bus, "lead")
+    violation, = unanswered(held_bus)
     assert violation.message.reference == question.reference
     print(violation.line())
     held_bus.messaging.send("lead", "worker", "Responding", answers=(question.reference,))
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert unanswered(held_bus) == ()
     another = publish(held_bus, "worker", "lead", now - 950)
     held_bus.messaging.send("lead", "outsider", "Answer in another conversation",
                             answers=(another.reference,))
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert unanswered(held_bus) == ()
 
 
 @pytest.mark.parametrize('target,body', [
@@ -254,15 +275,15 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
 ])
 def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
     question = held_bus.bus.publisher.publish_ordinary(
-        Message(sender='worker', target=target, type=InfoKind, body=body,
-                timestamp=time.time() - UnitAskUnanswered.seconds - 1), origin=AgentOrigin(),
+        Message(sender='worker', target=target, type=QuestionKind, body=body,
+                timestamp=time.time() - AwaitingCommander.seconds - 1), origin=AgentOrigin(),
     )
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / 'reply.txt'
     reply.write_text('Responding to the worker with the actual commander command')
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert unanswered(held_bus) == ()
     # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
     assert SayVerb(
         units="worker", body_file="unused", answers=("not-a-message",)
@@ -270,7 +291,7 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
 
 
 def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
-    question = publish(held_bus, "worker", "lead", time.time() - UnitAskUnanswered.seconds - 1)
+    question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
@@ -279,7 +300,7 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
         with pytest.raises(SystemExit, match=question.message_id):
             verb.apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert unanswered(held_bus) == ()
     # Naming it again after it was answered names nothing open, so it answers nothing.
     assert SendVerb(
         unit="worker", body_file="unused", answers=(question.message_id,)
@@ -287,18 +308,18 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
-    first = publish(held_bus, "worker", "lead", time.time() - UnitAskUnanswered.seconds - 2)
-    second = publish(held_bus, "worker", "lead", time.time() - UnitAskUnanswered.seconds - 1)
+    first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
+    second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root)
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(SystemExit, match=second.message_id):
         SayVerb(units="worker", body_file=str(reply), answers=(first.message_id,)).apply(ctx)
-    assert {owed.message.message_id for owed in UnitAskUnanswered.violations(held_bus, "lead")} == {
+    assert {owed.message.message_id for owed in unanswered(held_bus)} == {
         first.message_id, second.message_id}
     SayVerb(units="worker", body_file=str(reply),
             answers=(first.message_id, second.message_id)).apply(ctx)
-    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    assert unanswered(held_bus) == ()
 
 
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
@@ -319,7 +340,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
 
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
 def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
-    held_bus.messaging.send('worker', '#comms', body)
+    held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
     assert UnitAskUnanswered.asks(held_bus, 'lead', time.time()) == ()
 
 
@@ -388,24 +409,22 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
 
 
-def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, installed_runtime):
-    blocked_holder(held_bus)
+def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_runtime):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
-    assert detached.unit == "worker" and set(detached.orders) == {"P1", "P2"}
-    family = HolderCannotRun.violations(held_bus, "lead")
-    assert detached in family
-    blocked, = GoalCannotRun.violations(held_bus, "lead")
-    broken = StandingRule.broken(held_bus, "lead")
-    assert blocked in broken
-    assert all(rule in broken for rule in family)
+    assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
+    blocked_holder(held_bus)
+    blocked, = Blocked.violations(held_bus, "lead")
+    states = UnitState.current(held_bus, "lead")
+    assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
+    assert blocked not in StandingRule.broken(held_bus, "lead", observed=states)
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
-        *GoalCannotRun.violations(held_bus, "lead"), *UnitAskUnanswered.violations(held_bus, "lead"),
+        *Blocked.violations(held_bus, "lead"), *unanswered(held_bus),
     ))
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
@@ -432,16 +451,20 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     review = CommanderReview(frozenset())
     CommanderHeartbeat.register(held_bus.registry)
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    states = UnitState.current(held_bus, "lead")
     with held_bus.bus.locked():
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
+        review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
+        review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
     page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
         CommanderHeartbeat.sender, "lead", held_bus.registry.snapshot(),
     )))
     changed, unchanged = (message for message in page.messages
                           if message.sender == CommanderHeartbeat.sender)
     assert "Standing rules clear." in changed.body
-    assert unchanged.body == f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations."
+    assert unchanged.body.splitlines() == [
+        f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations.",
+        *(state.line() for state in states),
+    ]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     later = unchanged.timestamp + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)

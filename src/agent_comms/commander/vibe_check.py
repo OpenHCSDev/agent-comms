@@ -12,7 +12,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
@@ -27,7 +27,12 @@ from agent_comms.goal_actions import (
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.service_sender import ServiceSender
-from agent_comms.standing_rules import OwedAnswer, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import (
+    IndependentStandingRule, OwedAnswer, StandingRule, UndatedStandingRule,
+)
+
+if TYPE_CHECKING:
+    from agent_comms.ui_model.unit_state import UnitState
 
 
 class EscalationSender(ServiceSender):
@@ -106,7 +111,8 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 
     @classmethod
     @abstractmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> tuple[Sign, ...]:
         """How the signal shows now, one sign per occurrence; empty while it does not."""
 
     @classmethod
@@ -132,10 +138,11 @@ class AnswersOwedDegradation(Degradation):
     """Messages to the commander are waiting past their window; each message is one sign."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> tuple[Sign, ...]:
         return tuple(
             Sign(cls, (rule.cited,), rule.line())
-            for rule in OwedAnswer.broken(comms, commander)
+            for rule in OwedAnswer.broken(comms, commander, observed=observed)
             if not isinstance(rule, Escalation)
         )
 
@@ -145,7 +152,8 @@ class PlanStalledDegradation(Degradation):
     phase stops the commander when it crosses the window and again each time its age doubles."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> tuple[Sign, ...]:
         now = time.time()
         return tuple(
             Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
@@ -166,8 +174,9 @@ class OverloadDegradation(Degradation):
     round_seconds: ClassVar[int] = 30 * 60
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
-        load = Load.of(comms, commander)
+    def found(cls, comms: Comms, commander: str,
+              observed: Sequence[UnitState]) -> tuple[Sign, ...]:
+        load = Load.from_states(comms, commander, observed)
         if load.share < cls.ceiling:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
@@ -183,11 +192,12 @@ class VibeCheck(UndatedStandingRule):
     sign: Sign
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
         return tuple(
             cls(sign)
             for member in Degradation.members_with(Degradation)
-            for sign in member.found(comms, commander)
+            for sign in member.found(comms, commander, observed)
         )
 
     def heartbeat_group(self) -> object:
@@ -218,7 +228,7 @@ class VibeCheck(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
+class VibeCheckUnanswered(Escalation, IndependentStandingRule, OwedAnswer, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
 
     seconds: ClassVar[int] = 5 * 60
@@ -262,7 +272,7 @@ class Indictment:
 
 
 @dataclass(frozen=True)
-class Chokehold(UndatedStandingRule):
+class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: every unit under the commander is paused and the
     commander is told, in a burst it cannot skim, what brings them back."""
 
@@ -311,7 +321,7 @@ class Chokehold(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
+class ChokeholdUnanswered(Escalation, IndependentStandingRule, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
     @classmethod
@@ -327,7 +337,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
+class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_name=None):
     """The commander's newest answer to a chokehold, once every chokehold message is answered."""
 
     answer: Message

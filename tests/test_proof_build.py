@@ -358,7 +358,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = Comms(tmp_path / "bus")
     config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.root_path(bus.root).write_text(config.model_dump_json())
+    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
 
     due = InstallDue.violations(bus, "lead")
 
