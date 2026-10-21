@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .message_reference import MessageReference
+
 
 class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
@@ -17,6 +19,17 @@ class UnknownChannelError(ToolRefusedError):
 
 class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
+
+
+class MessageAcknowledgmentError(RelationViolationError):
+    """Core could not confirm every requested message; no partial read is committed."""
+
+    def __init__(self, recipient: str, references: tuple[MessageReference, ...]) -> None:
+        self.recipient = recipient
+        self.references = references
+        named = ", ".join(f"{reference.seq}/{reference.message_id}" for reference in references)
+        super().__init__(f"Core cannot acknowledge messages for {recipient!r}: {named}. "
+                         "Delivery remains unconfirmed; no reads were changed.")
 
 
 class ThreadNotStoppedError(ToolRefusedError, RelationViolationError):
