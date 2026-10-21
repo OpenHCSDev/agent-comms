@@ -19,7 +19,11 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import AnswersTo, PlanStalled, UnansweredBurst
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.goal_actions import ActiveGoalAction, ChokeholdPausedGoalAction, OwnerInvocable
+from agent_comms.goal_actions import (
+    ChokeholdPausedGoalAction,
+    CompliedGoalAction,
+    OwnerInvocable,
+)
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.service_sender import ServiceSender
@@ -335,7 +339,8 @@ class ChokeholdReleased(ChokeholdAnswer):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         for unit in self.held(comms):
-            comms.goals.update_goal(unit, ActiveGoalAction(), actor=OwnerInvocable)
+            comms.goals.update_goal(
+                unit, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdSender.burst(
             comms,
             commander,
