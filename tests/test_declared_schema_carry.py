@@ -19,7 +19,7 @@ from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import GoalRef, MechanicalOrderRun, PendingProblemOrder, Todo, TodoStore
 from agent_comms.typed_table import DurableTables, SharedFileTables
-from tools.cutover.carry_declared_schema import _subclasses, carry
+from cutover.carry_declared_schema import _subclasses, carry
 
 REPO = Path(__file__).resolve().parents[1]
 
