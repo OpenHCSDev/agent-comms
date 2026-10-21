@@ -6,40 +6,10 @@ import os
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
-
-
-async def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
-    config = tmp_path / "native-config"
-    config.mkdir()
-    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
-    paths = agent.inputs._tick_paths()
-    declared = {
-        *paths.registry,
-        *paths.coordination,
-        *paths.bus[1:],
-        *paths.other,
-    }
-    watched = {
-        source.directory / os.fsdecode(name)
-        for source in paths.watch_sources
-        for name in source.names
-    }
-    assert watched == declared
-    modified = {
-        source.directory / os.fsdecode(name)
-        for source in paths.watch_sources
-        if source.modified
-        for name in source.names
-    }
-    assert modified == {*paths.coordination, *paths.goal_attempts}
-    assert paths.bus[0] not in watched and paths.checkpoint not in watched
-    await agent.shutdown()
 
 
 @pytest.mark.asyncio

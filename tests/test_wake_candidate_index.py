@@ -1,5 +1,7 @@
 """Real SQLite appends drive bounded wake scans and dependency reply reads."""
 
+import asyncio
+from contextlib import AsyncExitStack
 from dataclasses import replace
 
 import pytest
@@ -20,7 +22,8 @@ from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
-from agent_comms.wake_candidate_index import CommittedAppendHint, WakeCandidateIndex
+from agent_comms.wake_candidate_index import CommittedAppendHint, ThreadWake, WakeCandidateIndex
+from agent_comms.watched import ChangeSignal
 from agent_comms.wake_policy import FullWake, MessageAudience
 from test_bus import record_from
 
@@ -73,6 +76,26 @@ def test_three_committed_messages_are_candidates_by_their_bus_sequences(bus, own
     assert tuple(row.source_seq for row in page.entries) == tuple(row.seq for row in messages)
     assert tuple(row.message_id for row in page.entries) == tuple(row.message_id for row in messages)
     assert not page.has_more
+
+
+@pytest.mark.asyncio
+async def test_committed_candidates_wake_only_their_recipient(bus, owner, peer):
+    recipients = (owner, *(RecordedThreadIncarnation(f"idle-{n}", 2000.0 + n)
+                           for n in range(22)))
+    sources = tuple(ThreadWake.at(bus.path.parent, recipient.lookup)
+                    for recipient in recipients)
+    async with AsyncExitStack() as stack:
+        signals = tuple([await stack.enter_async_context(ChangeSignal.opened(source))
+                         for source in sources])
+        for signal in signals:
+            signal.prepare()
+        message = append_reply(bus, peer, owner)
+        index = WakeCandidateIndex(bus)
+        assert index.maintain() == message.seq
+        await asyncio.wait_for(signals[0].wait(), 1)
+        assert index.page(root_id="a" * 32, recipient_lookup=owner.lookup,
+                          after_seq=0, required_through_seq=message.seq).entries[0].source_seq == message.seq
+        assert all(signal.empty() for signal in signals[1:])
 
 
 def test_rebuild_recreates_the_same_candidate_rows(bus, owner, peer):
