@@ -411,7 +411,7 @@ class SendArguments(argparse.Namespace):
     command: str
 
 class SendReport(field_codec.SubclassUnion, affix=""):
-    def send(self, ctx: Comms, request: Send) -> SendResult:
+    def send(self, ctx: Comms, request: SendRequest) -> SendResult:
         return self.emit(partial(ctx.messaging.send, request.sender, request.target,
                                  request.body, request.type, role=request.role()))
 
@@ -431,7 +431,7 @@ class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Send(Operation):
+class SendRequest(DeclaredOptions):
     help = "Send to a thread (DM), #channel, or #all"
     sender: str = option("--from", default="")
     target: str = option("--to")
@@ -442,7 +442,10 @@ class Send(Operation):
     report: SendReport = option("--report", default=MissingReport(),
         help="Change report fields as a JSON object", type=FieldCodec.parse)
 
-    async def execute(self, bridge: CliBridge) -> None:
+
+@dataclass(frozen=True, kw_only=True)
+class Send(SendRequest, Operation[OperationBridge]):
+    async def execute(self, bridge: OperationBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
         await bridge.show_sent(await asyncio.to_thread(request.report.send, bridge.comms, request))
 
