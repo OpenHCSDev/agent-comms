@@ -242,7 +242,8 @@ class BusReader(RouteCounts, ABC):
         )
 
     def received(self, lookup: str, *, after=0, before=None, limit=100,
-                 sender_lookups=(), descending=True, source: type[ReceivedSource] = ReceivedSource):
+                 sender_lookups=(), descending=True, source: type[ReceivedSource] = ReceivedSource,
+                 sequences=()):
         sender = ""
         if sender_lookups:
             marks = ",".join("?" for _ in sender_lookups)
@@ -251,7 +252,7 @@ class BusReader(RouteCounts, ABC):
         return self._source_page(
             f'SELECT seq FROM "{source.declared_name}" WHERE lookup=?{sender}',
             (lookup, *sender_lookups), after=after, before=before, limit=limit,
-            descending=descending,
+            descending=descending, sequences=sequences,
         )
 
     def unanswered_page(

@@ -77,7 +77,6 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
 from agent_comms.recorded_time import (
     EventTime,
@@ -2673,13 +2672,10 @@ class PeerAcceptedVerdict(AcceptedVerdict):
     peer: str
 
     def prepare(self, goals, current):
-        with goals.bus.log.opened_wire_snapshot() as opened, goals.bus.log.checked_read() as source:
-            message = PublicMessages.message_by_id(source, opened, self.peer)
-        if message is None:
-            raise ValueError("The peer order message does not exist.")
+        message = goals.bus.bus.lookup_message(self.peer)
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
-                 current.holder not in {mention.name for mention in message.mentions})):
+                 current.holder not in {mention.thread for mention in message.mentions})):
             raise ValueError("--peer must name another sender's message to this unit.")
         self.require_quote(message.body)
         return self
