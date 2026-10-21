@@ -15,15 +15,14 @@ from .field_codec import (
     FieldCodec,
     FieldRepresentation,
 )
+from .lifecycle_capability import Failed, LifecycleCapability, Successful
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
-class PiStopReason(ExternalName, affix="StopReason"):
-    failed = False
-    successful = False
+class PiStopReason(LifecycleCapability, ExternalName, affix="StopReason"):
     tool_round = False
     explicit_abort = False
     tracked_failure = "Provider returned an unsuccessful terminal"
@@ -68,9 +67,9 @@ class PiStopReason(ExternalName, affix="StopReason"):
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
-    def require_failed_terminal(cls):
+    def require_failed_terminal(cls) -> None:
         # A saved tool round cannot establish whether the live owner accepted it.
-        if cls.successful or cls.tool_round:
+        if cls.items_with(Successful, cls):
             raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
@@ -98,8 +97,7 @@ class FinishedPiStop:
         return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
 
 
-class StopStopReason(FinishedPiStop, PiStopReason):
-    successful = True
+class StopStopReason(Successful, FinishedPiStop, PiStopReason):
 
     @classmethod
     async def apply(cls, session, message):
@@ -108,10 +106,8 @@ class StopStopReason(FinishedPiStop, PiStopReason):
             yield event
 
 
-class FailedPiStop(FinishedPiStop):
+class FailedPiStop(Failed, FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
-
-    failed = True
 
     @classmethod
     def error_notice(cls, message) -> str:
@@ -132,6 +128,11 @@ class LengthStopReason(FailedPiStop, PiStopReason):
 
 class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
     tool_round = True
+
+    @classmethod
+    def require_failed_terminal(cls):
+        # A saved tool round cannot establish whether the live owner accepted it.
+        raise ValueError("Saved assistant message did not end its turn as a failure")
 
     @classmethod
     async def apply(cls, session, message):

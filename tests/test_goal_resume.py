@@ -47,7 +47,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
-    assert FieldCodec.decode(Goal, result).state.active
+    FieldCodec.decode(Goal, result).require_active()
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
 
@@ -286,12 +286,14 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     retried = invoke_tool(comms, "comms_goal",
                           {"goal_id": goal_id, "status": "retry", "progress": "cause fixed"})
     goal = comms.registry.require("owner").goal
-    assert retried["goal"]["state"] == {"kind": "active"} and goal.state.active and goal.progress == "cause fixed"
+    goal.require_active()
+    assert retried['goal']['state'] == {'kind': 'active'} and goal.progress == 'cause fixed'
 
     failed_turn("Provider failed again.")
     commander_retry = comms.goals.update_goal(
         "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
-    assert commander_retry.state.active and comms.registry.require("owner").goal == commander_retry
+    commander_retry.require_active()
+    assert comms.registry.require('owner').goal == commander_retry
 
     failed_turn("Provider failed a third time.")
     store.reserve(goal_id, store.require_generation(goal_id).number)
@@ -300,5 +302,6 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     assert comms.registry.require("owner").goal.state.declared_name == "blocked"
 
     replaced = comms.goals.update_goal("owner", SetGoalAction(text="a fresh objective"))
-    assert replaced.id != goal_id and replaced.state.active
+    replaced.require_active()
+    assert replaced.id != goal_id
     assert comms.registry.require("owner").goal == replaced

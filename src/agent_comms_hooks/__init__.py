@@ -54,17 +54,20 @@ class ClaudeHook(HookRecord):
     def read(cls) -> Self:
         return cls.decode(json.load(sys.stdin))
 
+    def respond(self, **fields: str) -> None:
+        """Claude Code's answer to this event: its event name plus the given fields."""
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
+
     def warn(self, reason: str) -> None:
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": self.hook_event_name,
-                        "additionalContext": reason,
-                    }
-                }
-            )
-        )
+        self.respond(additionalContext=reason)
+
+
+@dataclass(frozen=True)
+class ClaudeToolHook(ClaudeHook):
+    """What Claude Code adds for a tool-call event: the tool and its input."""
+
+    tool_name: str
+    tool_input: dict
 
 
 @dataclass(frozen=True)
@@ -131,3 +134,13 @@ class ClaudeHookProgram(ABC):
     def entry(cls) -> dict[str, object]:
         """This program's entry, marked so install can replace what it wrote."""
         return {"writer": cls.writer, "hooks": [{"type": "command", "command": cls.command()}]}
+
+
+class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
+    """A program Claude Code runs only on calls of the one tool it names."""
+
+    tool: ClassVar[str]
+
+    @classmethod
+    def entry(cls) -> dict[str, object]:
+        return {**super().entry(), "matcher": cls.tool}

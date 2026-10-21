@@ -477,7 +477,7 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
         assert attempt.progress_witness is None
         assert FailedTurnEvidence.count(conn) == 0
     assert stopped.goal == claimed_owner.goal
-    assert stopped.goal.require().state.active
+    stopped.goal.require().require_active()
     # Repeated recovery is a no-op; it never creates another ready generation.
     RecoveryMonitorCapability.settle_stopped_owner(comms.root, stopped)
     assert store.require_generation(goal_id) == successor
