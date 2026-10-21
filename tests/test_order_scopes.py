@@ -125,7 +125,7 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
         assert result.returncode == 0, result.stderr
         assert report in result.stdout
         assert copied.goals.todos.get(current.id).state is DoneTodoState
-    assert comms.goals.todos.get('P1').order.pending
+    assert comms.goals.todos.get('P1').pending
 
 
 def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path, source_repository):

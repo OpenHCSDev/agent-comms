@@ -5,10 +5,24 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from agent_comms import field_codec
+from agent_comms.goals import (
+    Goal,
+    GoalChangedError,
+    GoalCheckpoint,
+    GoalDeclaration,
+    GoalOrder,
+    NoGoal,
+    ProblemGoalOrder,
+    ReportedTurn,
+    RequestDirective,
+    RequestGoalOrder,
+    UnobservedGoalCheckpoint,
+    UnorderedGoalOrder,
+)
 from agent_comms.input_disposition import InputDispositions
 
 from .change_report import FileLine, NoSourceReference
@@ -29,20 +43,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.goals import (
-    Goal,
-    GoalCheckpoint,
-    GoalChangedError,
-    GoalDeclaration,
-    GoalOrder,
-    NoGoal,
-    ProblemGoalOrder,
-    ReportedTurn,
-    RequestDirective,
-    RequestGoalOrder,
-    UnorderedGoalOrder,
-    UnobservedGoalCheckpoint,
-)
+from .lifecycle_capability import Settled
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
@@ -234,26 +235,8 @@ class ActiveGoalAction(
         return ActiveGoal()
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
-        thread = ctx.thread
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
-        if generation.lifecycle.failed and generation.attempt_id:
-            # A status-only Resume cannot authorize an uncertain attempt.
-            refusal = required_block_reason(
-                "The interrupted goal attempt is unresolved. Inspect it, then use "
-                "Retry to authorize a new attempt. Your messages can still be sent."
-            )
-            blocked = replace(
-                goal,
-                state=BlockedGoal(refusal),
-                progress=goal.progress,
-                revision=goal.revision + 1,
-            )
-            ctx.goals.registry.register(
-                replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
-            )
-            raise ValueError(refusal)
-        elif not generation.lifecycle.allows_resume(thread.turn_record.executing):
-            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
+        generation.lifecycle.resume_status(generation, goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -443,7 +426,7 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
         # Revoke the old protected goal before replacing its registry identity.
         attempts = ctx.goals.open_goal_store()
         generation = attempts.snapshot(goal.id)
-        if generation is not None and not generation.lifecycle.terminal:
+        if generation is not None and not generation.lifecycle.items_with(Settled, generation):
             attempts.retire_goal(
                 goal.id, expected_generation=generation.number,
                 attempt_id=generation.attempt_id,

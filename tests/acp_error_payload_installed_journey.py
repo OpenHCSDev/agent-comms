@@ -183,7 +183,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                 assert len(requests) == 2, "Failure/history reattachment replayed original input"
                 assert native.read_bytes() == original
                 assert stored_inputs(root) == dispositions
-                assert not comms.registry.require("error-native").active_turn.executing
+                assert not comms.registry.require('error-native').executing
                 users = [row["message"] for row in map(json.loads, original.splitlines())
                          if row.get("type") == "message" and row["message"].get("role") == "user"]
                 assert len(users) == 2

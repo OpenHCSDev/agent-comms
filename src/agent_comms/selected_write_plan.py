@@ -190,7 +190,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 self.root_id, IdentityConflict("Selected write requires its original native namespace"),
             )
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if not owner.process_identity.runs_here() or owner.turn_record.executing:
+            if not owner.process_identity.runs_here() or owner.executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.bus.delivery(source_seq)
             if initial.message.message_id != source_message_id:
@@ -199,11 +199,11 @@ class SelectedWritePlans(DurableFile, PatternFile):
             with Coordination(str(CoordinationStore.path_in(self.comms.root))) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
-                    assignment
+                    pending
                     for assignment in assignments
-                    if assignment.source == MessageReference(source_seq, source_message_id)
-                    and assignment.recipient == owner.name
-                    and assignment.lifecycle.full_pending
+                    for pending in assignment.lifecycle.writable_pending_assignments(assignment)
+                    if pending.source == MessageReference(source_seq, source_message_id)
+                    and pending.recipient == owner.name
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")

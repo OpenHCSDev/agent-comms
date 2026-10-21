@@ -48,7 +48,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
                 assert not owner.process_alive
                 await ready(results[0].pid)
                 assert comms.registry.require('worker').session_file == SavedSessionFile(str(native.session))
-                assert not comms.registry.require('worker').turn_record.read().executing
+                assert not comms.registry.require('worker').executing
                 assert comms.agents.runtime_info.path.read_bytes() == metadata
                 assert comms.ledger.path.read_bytes() == collaboration
                 reopened = wire(comms.root)

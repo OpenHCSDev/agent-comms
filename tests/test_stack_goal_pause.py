@@ -263,7 +263,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     )
                 assert comms.registry.require("project").goal == paused
                 release.set()
-                await until(lambda: not comms.registry.require("project").active_turn.executing)
+                await until(lambda: not comms.registry.require('project').executing)
                 await asyncio.sleep(0.4)
                 preserved = wire(root / "wire").registry.require("project").goal
                 assert preserved == paused
