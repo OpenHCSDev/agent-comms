@@ -17,7 +17,7 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -332,8 +332,7 @@ class ImageContent(WireModel):
         return '[image]'
 
 
-class AssistantText(AssistantBlock, TextContent):
-    wire_tag = 'text'
+class AssistantText(TextWire, AssistantBlock, TextContent):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
@@ -399,8 +398,8 @@ class ResultPart(TaggedWire, ABC):
     def result_text(self) -> str: ...
 
 
-class ResultText(TextContent, ResultPart):
-    wire_tag = 'text'
+class ResultText(TextWire, TextContent, ResultPart):
+    pass
 
 
 class ResultImage(ImageContent, ResultPart):
@@ -497,8 +496,7 @@ class UserBlock(TaggedWire, ABC):
         return ''
 
 
-class UserText(UserBlock, TextContent):
-    wire_tag = 'text'
+class UserText(TextWire, UserBlock, TextContent):
 
     def prompt_text(self) -> str:
         return self.text

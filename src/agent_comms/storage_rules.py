@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import UndatedStandingRule
 from agent_comms.work_branches import WorkBranches
 from agent_comms.storage_room import (
@@ -98,8 +100,18 @@ class StorageRule(RoomAllocation):
         return StorageRoots(self.scratch_base / name)
 
     def order_checkout(self, name: str, problem: str) -> Path:
-        """Allocation path for a new problem checkout; an existing source may be reused."""
+        """Allocation path for a new problem checkout of its order's check repository; an
+        existing source may be reused."""
         return self.checkout_base.resolve() / f'{name}--{problem}'
+
+    def repository_checkout(self, name: str, problem: str, repository: RepositoryName) -> Path:
+        """The same problem's checkout of another repository, changed in lockstep with it."""
+        return self.order_checkout(name, problem).with_name(f'{name}--{problem}--{repository.name}')
+
+    def problem_checkouts(self, name: str, problem: str) -> tuple[Path, ...]:
+        """Every checkout allocated to one problem: its check repository's, then each other's."""
+        checkout = self.order_checkout(name, problem)
+        return (checkout, *sorted(checkout.parent.glob(f'{checkout.name}--*')))
 
     def work_for_problem(
         self, problem: Todo, registry: Registration, todos: TodoStore,
@@ -108,7 +120,8 @@ class StorageRule(RoomAllocation):
         related = todos.related_problems(problem)
         found = []
         for owner in registry.all_threads().values():
-            paths = tuple(self.order_checkout(owner.name, row.id) for row in related)
+            paths = tuple(path for row in related
+                          for path in self.problem_checkouts(owner.name, row.id))
             present = []
             for path in paths:
                 try:
@@ -128,10 +141,16 @@ class StorageRule(RoomAllocation):
         return tuple(found)
 
     def owns_checkout(self, owner: Thread, path: Path) -> bool:
-        problem = path.name.removeprefix(f'{owner.name}--')
-        return (path == owner.project_path
-                or (bool(re.fullmatch(r'P[1-9][0-9]*', problem))
-                    and path == self.order_checkout(owner.name, problem)))
+        """A checkout of another repository is named for the repository its origin declares."""
+        if path == owner.project_path:
+            return True
+        problem, _, repository = path.name.removeprefix(f'{owner.name}--').partition('--')
+        if not re.fullmatch(r'P[1-9][0-9]*', problem):
+            return False
+        if not repository:
+            return path == self.order_checkout(owner.name, problem)
+        return ((path / '.git').exists()
+                and path == self.repository_checkout(owner.name, problem, Repo.of(path).github))
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and order locations; Git metadata supplies their branches."""
@@ -247,8 +266,9 @@ class StorageRule(RoomAllocation):
         """The rule uses the same declared paths as storage enforcement."""
         return (
             f'Storage (refused without a strike): your checkouts are '
-            f'{self.order_checkout(thread.name, "P<n>")}, at most '
-            f'{self.max_checkouts} besides your home checkout {thread.project_path}, '
+            f'{self.order_checkout(thread.name, "P<n>")} (another repository changed in the '
+            f'same problem: {self.order_checkout(thread.name, "P<n>")}--<repository name>), '
+            f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
             f'{thread.storage_roots.scratch}/, capped at {self.scratch_cap_gib:g} GB together with '
