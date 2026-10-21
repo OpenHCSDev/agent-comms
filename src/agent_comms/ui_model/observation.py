@@ -1104,7 +1104,22 @@ class ObservationFailed(ServiceResult):
         raise process.ended(self.error)
 
 
-class ObserverDied(CoordinationError):
+class ObserverStatus(ABC):
+    """The reported observer outcome owns whether a request can proceed."""
+
+    @abstractmethod
+    def raise_if_failed(self) -> None: ...
+
+    def ended(self, pid: int, exit_status: int | None, error: str | None) -> ObserverDied:
+        return ObserverDied(pid, exit_status, error)
+
+
+class NoObserverFailure(ObserverStatus):
+    def raise_if_failed(self) -> None:
+        return None
+
+
+class ObserverDied(CoordinationError, ObserverStatus):
     """The observation service's process ended while the UI was using it.
 
     The UI does not run on what it last observed: it reports this and exits.
@@ -1119,6 +1134,12 @@ class ObserverDied(CoordinationError):
         else:
             how = f"exited with status {exit_status}"
         super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
+
+    def raise_if_failed(self) -> None:
+        raise self
+
+    def ended(self, pid: int, exit_status: int | None, error: str | None) -> ObserverDied:
+        return self
 
 
 class ObservationService:
@@ -1278,8 +1299,7 @@ class ObservationProcess(AbstractContextManager):
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
-        # Set by ``results`` when it reads that the service ended.
-        self.died: ObserverDied | None = None
+        self.status: ObserverStatus = NoObserverFailure()
         context = multiprocessing.get_context("spawn")
         with ExitStack() as acquisition:
             self.connection, child = context.Pipe()
@@ -1304,8 +1324,7 @@ class ObservationProcess(AbstractContextManager):
 
     def request(self, request: ObservationRequest) -> None:
         """Tell the service what the UI shows, or report its end to this caller."""
-        if self.died is not None:
-            raise self.died
+        self.status.raise_if_failed()
         if self.connection.closed:
             raise StaleRevision("Cannot request a retired Comms observation process")
         try:
@@ -1322,9 +1341,10 @@ class ObservationProcess(AbstractContextManager):
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         self._reader.close()
         self.process.join(timeout=2)
-        self.died = ObserverDied(self.process.pid, self.process.exitcode, error)
-        self.abandon_reads(self.died)
-        return self.died
+        died = self.status.ended(self.process.pid, self.process.exitcode, error)
+        self.status = died
+        self.abandon_reads(died)
+        return died
 
     async def read(self, request: AwaitedRead):
         """Send ``request`` and await its answer, delivered by ``results``.

@@ -97,8 +97,9 @@ async def test_broken_pipe_ends_subscription_with_observer_died(headless_owner):
             process.request(StopObserving())
         with pytest.raises(ObserverDied) as failed_read:
             await pending
-        assert failed_send.value is failed_read.value is process.died
-        assert process.died.pid == process.process.pid
+        assert failed_send.value is failed_read.value is process.status
+        assert process.ended(None) is failed_send.value
+        assert failed_send.value.pid == process.process.pid
         assert process.reads == {}
     finally:
         process.close()
