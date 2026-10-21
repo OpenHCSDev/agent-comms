@@ -167,8 +167,7 @@ def test_upgrade_preflight_failure_is_inside_the_reporting_lifetime(reported_ins
     comms, report, tree = reported_install
     checkout = tmp_path / "not-a-checkout"
     checkout.mkdir()
-    scratch = tmp_path / "install-scratch"
-    scratch.mkdir()
+    scratch = tree.scratch
     with pytest.raises(UpgradeRefused) as caught:
         upgrade(checkout, comms.root, tree.revision, UnnamedInstaller(), True, False,
                 tmp_path, scratch, lambda: InstallResult(NoConfigFile(), {}), report)

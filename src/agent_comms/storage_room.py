@@ -19,6 +19,7 @@ from uuid import uuid4
 from .activity import ActivityState
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
+from .repo import Checkout
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, TypedTable
 from .wire_watch import ModifiedWatchSource, WireWatch
@@ -303,6 +304,10 @@ class RoomAllocation:
             yield
             return
         self.require_allocation(thread)
+        # The unit works in its own checkout, which needs no bus lock: a submodule store an
+        # interrupted clone left broken is rebuilt before any lock is taken, and one git cannot
+        # rebuild refuses this start.
+        Checkout(thread.project_path).prepare()
         reservation = asyncio.run(self.wait_for_room((UnitStartRoomWork,), thread, root))
         try:
             yield
