@@ -495,6 +495,20 @@ def test_moved_class_growth_is_rejected(repo: Repository) -> None:
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
 
 
+def test_formatting_a_god_class_is_not_growth(repo: Repository) -> None:
+    import black
+
+    wide = "    wide = combine(" + ", ".join(f"argument_{index}" for index in range(30)) + ")\n"
+    unformatted = owner("Wide", 501) + wide
+    formatted = black.format_str(unformatted, mode=black.Mode())
+    assert formatted.count("\n") > unformatted.count("\n")
+    base = repo.commit({"wide.py": unformatted})
+    head = repo.commit({"wide.py": formatted})
+    status, report = repo.compare(base, head)
+    assert report["delta"][f"GodClassExcess:{repo.root}/wide.py::Wide"] == 0
+    assert status == 0
+
+
 def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Repository) -> None:
     nested = "class Outer:\n" + owner("Inner", 501, "    ")
     base = repo.commit({"one.py": nested, "two.py": owner("Inner", 500)})
