@@ -193,6 +193,22 @@ def tmp_path(tmp_path: Path) -> Iterator[Path]:
 
 
 @pytest.fixture
+def scratch_root(tmp_path_factory):
+    from agent_comms.storage_rules import StorageRule
+
+    base = tmp_path_factory.getbasetemp()
+    scratch = StorageRule().scratch_base.resolve()
+    if not base.resolve().is_relative_to(scratch):
+        base = scratch / "pytest"
+        base.mkdir(parents=True, exist_ok=True)
+    with (
+        tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory,
+        _root_lifetime(Path(directory)) as root,
+    ):
+        yield root
+
+
+@pytest.fixture
 def private_directory():
     """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
     if (
