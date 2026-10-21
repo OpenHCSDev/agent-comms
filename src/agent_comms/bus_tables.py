@@ -105,16 +105,18 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
-    def latest_answer(
+    def _answer_rows(
         cls, db: sqlite3.Connection, requesters: frozenset[str], responders: frozenset[str],
-        since: float,
-    ) -> tuple[messages.BusRecord, ...]:
+        since: float, selection: str,
+    ) -> sqlite3.Cursor:
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
         content = messages.Message.table
         query = (
-            f'SELECT reply.seq FROM "{identity}" AS reply '
+            'WITH matches AS (SELECT reply.seq, '
+            + content._sql('reply_message.{timestamp} AS timestamp ')
+            + f'FROM "{identity}" AS reply '
             f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
             f'WHERE reply.sender IN ({replying}) AND '
             + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
@@ -124,11 +126,32 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
             f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
             f'AND asked.sender IN ({asking}) AND '
-            + content._sql('question.{timestamp} >= ?) ORDER BY reply.seq DESC LIMIT 1')
+            + content._sql('question.{timestamp} >= ?)) ') + selection
         )
-        sequences = db.execute(query, (*responders, since, *requesters, since))
+        return db.execute(query, (*responders, since, *requesters, since))
+
+    @classmethod
+    def latest_answer(
+        cls, db: sqlite3.Connection, requesters: frozenset[str], responders: frozenset[str],
+        since: float,
+    ) -> tuple[messages.BusRecord, ...]:
+        sequences = cls._answer_rows(
+            db, requesters, responders, since,
+            'SELECT seq FROM matches ORDER BY seq DESC LIMIT 1',
+        )
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+    @classmethod
+    def answer_timestamp(
+        cls, db: sqlite3.Connection, requesters: frozenset[str], responders: frozenset[str],
+        since: float,
+    ) -> float:
+        row = cls._answer_rows(
+            db, requesters, responders, since,
+            'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
+        ).fetchone()
+        return FieldCodec.decode(float, row[0])
 
 
 @dataclass(frozen=True)
