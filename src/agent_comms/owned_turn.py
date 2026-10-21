@@ -329,12 +329,9 @@ class OwnedTurn:
                 await persistent.close_idle()
 
     async def prepare_native(self):
-        await self.runner.effects._emit_event(
-            self.session_id,
-            await Coordination.run_worker(partial(
-                self.runner.current_turn_update, self.session_id,
-            )),
-        )
+        await self.progress.consumer.dispatch(await Coordination.run_worker(partial(
+            self.runner.current_turn_update, self.session_id,
+        )))
         await self.runner.inputs.emit_input_delivery_changed(self.session_id)
         # This turn already holds the session authority. Publish its cursor
         # without reacquiring the observer lock held by a selected handoff;
@@ -439,9 +436,7 @@ class OwnedTurn:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
             state = await Coordination.run_worker(self.settle_unbound)
-            await self.runner.effects._emit_event(
-                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
-            )
+            await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
         except (NativeRequestFailure, RequestError) as error:
             await self.fail(error, error)
