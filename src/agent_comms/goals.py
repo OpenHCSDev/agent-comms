@@ -698,12 +698,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @abstractmethod
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration: ...
+                                diagnostic: str, turn: TurnId) -> GoalDeclaration: ...
 
     @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
-    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId) -> GoalDeclaration:
         return self
 
     def after_verified_turn(self, captured: GoalDeclaration, turn: TurnId) -> GoalDeclaration:
@@ -798,7 +798,7 @@ class NoGoal(NullMember, GoalDeclaration):
         pass
 
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
+                                diagnostic: str, turn: TurnId) -> GoalDeclaration:
         return self
 
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
@@ -909,7 +909,7 @@ class Goal(RecordMember, GoalDeclaration):
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str, turn: TurnId | None = None) -> GoalDeclaration:
+                                diagnostic: str, turn: TurnId) -> GoalDeclaration:
         return goals.block_goal_after_failed_turn(
             name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic, turn=turn,
         )
@@ -1028,7 +1028,7 @@ class Goal(RecordMember, GoalDeclaration):
                 return replace(self, state=state, revision=self.revision + 1)
         return self
 
-    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> Goal:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId) -> Goal:
         progress = self.order.failed_turn_progress(self, diagnostic)
         state = self.state.after_failed_turn(diagnostic, turn)
         if state is self.state:

@@ -26,6 +26,13 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.thread_identity import TurnId
+
+
+@pytest.fixture
+def failed_turn() -> TurnId:
+    """A failure identity for direct goal-state transition checks."""
+    return TurnId(uuid.uuid4().hex)
 
 
 class TranscriptRecords:

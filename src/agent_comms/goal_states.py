@@ -53,7 +53,7 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
 
-    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId) -> GoalState:
         return self
 
     def after_verified_turn(self, captured: GoalState, turn: TurnId) -> GoalState:
@@ -129,10 +129,10 @@ class FromOpenGoal:
 class BlockingOnFailure:
     """An eligible state owns the failed-turn transition and reason validation."""
 
-    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId) -> GoalState:
         from .goal_actions import required_block_reason
 
-        return BlockedGoal(required_block_reason(diagnostic), turn=turn)
+        return FailedTurnBlockedGoal(required_block_reason(diagnostic), turn=turn)
 
 
 class OpenGoal(BlockingOnFailure, GoalState):
@@ -160,7 +160,7 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
-    def after_failed_turn(self, diagnostic: str, turn: TurnId | None = None) -> GoalState:
+    def after_failed_turn(self, diagnostic: str, turn: TurnId) -> GoalState:
         if self.protected:
             return self
         return super().after_failed_turn(diagnostic, turn)
@@ -239,25 +239,6 @@ class BlockedState(GoalState, FromOpenGoal):
 @dataclass(frozen=True)
 class BlockedGoal(BlockedState):
     block_reason: str
-    turn: TurnId | None = None
-
-    @classmethod
-    def successors(cls) -> tuple[type[GoalState], ...]:
-        return (*super().successors(), ActiveGoal)
-
-    def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
-        super().check_transition(nxt, owner=owner)
-        if nxt.active:
-            raise ValueError(self.transition_refusal())
-
-    def after_verified_turn(self, captured: GoalState, turn: TurnId) -> GoalState:
-        # The captured state was read before this turn was allocated. Equality
-        # excludes blocks written during it; UUIDs themselves have no ordering.
-        if self.turn is not None and self == captured and self.turn != turn:
-            active = ActiveGoal()
-            if self.may_become(active):
-                return active
-        return self
 
     def __post_init__(self) -> None:
         reason = self.block_reason
@@ -281,6 +262,18 @@ class BlockedGoal(BlockedState):
         reason = " ".join(self.block_reason.split())
         summary = reason[:157] + "…" if len(reason) > 160 else reason
         return "!", f"Blocked · {summary}"
+
+
+@dataclass(frozen=True)
+class FailedTurnBlockedGoal(BlockedGoal):
+    turn: TurnId
+
+    def after_verified_turn(self, captured: GoalState, turn: TurnId) -> GoalState:
+        # Captured before this turn was allocated: equality excludes blocks
+        # written during it, without inventing ordering for UUIDs.
+        if self == captured and self.turn != turn:
+            return ActiveGoal()
+        return self
 
 
 @dataclass(frozen=True)

@@ -440,7 +440,7 @@ class Goals:
         started_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
-        turn: TurnId | None = None,
+        turn: TurnId,
     ) -> GoalDeclaration:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):

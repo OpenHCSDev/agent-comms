@@ -64,7 +64,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     assert (tmp_path / "registry.json").read_bytes() == before_registry
 
 
-def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
+def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path, failed_turn):
     comms, started = _owner(tmp_path)
     progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress="Verified step"))
     assert progressed is not None
@@ -73,6 +73,7 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
         started_goal=started,
         expected_worktree=str(tmp_path),
         diagnostic="Attempt outcome uncertain; inspect before Retry.",
+        turn=failed_turn,
     )
     assert blocked is not None
     assert blocked.progress == "Verified step\n\nAttempt outcome uncertain; inspect before Retry."

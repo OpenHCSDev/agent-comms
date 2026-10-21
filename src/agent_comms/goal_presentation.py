@@ -50,7 +50,7 @@ class StateExecutionPresentation(ExecutionPresentation):
     state: type[GoalState]
 
     def represents(self, state: GoalState) -> bool:
-        return state.__class__ is self.state
+        return isinstance(state, self.state)
 
     def render(self, execution: GoalExecution) -> tuple[str, str]:
         return FieldCodec.decode(

@@ -14,7 +14,7 @@ from agent_comms.goal_actions import (
 
 
 @pytest.mark.parametrize("attribution", ["model", "runtime"])
-def test_nonowner_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
+def test_nonowner_pause_does_not_bypass_failure_block(wired, tmp_path, attribution, failed_turn):
     wired.registry.declare(wired.registry.new_thread(name='project', tags=frozenset(), worktree=str(tmp_path)))
     initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
     if attribution == "model":
@@ -30,14 +30,14 @@ def test_nonowner_pause_does_not_bypass_failure_block(wired, tmp_path, attributi
         "project", PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id))
     )
     blocked = wired.goals.block_goal_after_failed_turn(
-        "project", started_goal=initial, expected_worktree=str(tmp_path), diagnostic="Failed"
+        "project", started_goal=initial, expected_worktree=str(tmp_path), diagnostic="Failed", turn=failed_turn,
     )
-    assert blocked.state.declared_name == "blocked"
+    assert blocked.state.turn == failed_turn
     assert blocked.revision == paused.revision + 1
     assert blocked.state.reason == "Failed"
 
 
-def test_stale_owner_pause_does_not_bypass_failure_block(wired, tmp_path):
+def test_stale_owner_pause_does_not_bypass_failure_block(wired, tmp_path, failed_turn):
     wired.registry.declare(wired.registry.new_thread(name='project', tags=frozenset(), worktree=str(tmp_path)))
     initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
     wired.goals.update_goal(
@@ -54,8 +54,8 @@ def test_stale_owner_pause_does_not_bypass_failure_block(wired, tmp_path):
         "project", PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id))
     )
     blocked = wired.goals.block_goal_after_failed_turn(
-        "project", started_goal=initial, expected_worktree=str(tmp_path), diagnostic="Failed"
+        "project", started_goal=initial, expected_worktree=str(tmp_path), diagnostic="Failed", turn=failed_turn,
     )
-    assert blocked.state.declared_name == "blocked"
+    assert blocked.state.turn == failed_turn
     assert blocked.revision == paused.revision + 1
     assert blocked.state.reason == "Failed"

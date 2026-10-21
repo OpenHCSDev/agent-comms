@@ -11,6 +11,7 @@ from .coordinator import Coordination
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
+from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 
@@ -116,13 +117,14 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     except RelationViolationError as missing:
                         raise error from missing
                     pending[0].require_dependency_wake(error)
-                    await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
+                    await Coordination.run_worker(partial(inputs.comms.goals.update_goal,
                         owner.name,
-                        started_goal=started_goal,
-                        expected_worktree=owner.worktree,
-                        diagnostic=(
-                            "Standby wake launch authority unavailable; inspect the UNKNOWN "
-                            "input before explicit Retry. No input was replayed."
+                        BlockedGoalAction(
+                            expect=GoalPrecondition(expected_goal=started_goal),
+                            block_reason=(
+                                "Standby wake launch authority unavailable; inspect the UNKNOWN "
+                                "input before explicit Retry. No input was replayed."
+                            ),
                         ),
                     ))
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)

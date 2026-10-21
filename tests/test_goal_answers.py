@@ -13,7 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ClearGoalAction, SetGoalAction
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
-from agent_comms.goal_states import BlockedGoal
+from agent_comms.goal_states import ActiveGoal, BlockedGoal, FailedTurnBlockedGoal
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.thread_identity import TurnId
@@ -74,7 +74,8 @@ def test_failed_goal_turn_writes_one_block_naming_turn(copied_goal_bus, original
         account.finish(terminal)
         blocks = [row.after.require().state for row in comms.goals.goal_history("worker")
                   if isinstance(row.after.require().state, BlockedGoal)]
-        assert blocks == [BlockedGoal(terminal.failure_reason.value, turn=account.turn)]
+        assert blocks == [FailedTurnBlockedGoal(terminal.failure_reason.value, turn=account.turn)]
+        assert comms.goals.goal_execution("worker").presentation("worker").summary.startswith("Blocked")
 
 
 def test_later_verified_turn_supersedes_failed_turn_block(copied_goal_bus):
@@ -82,6 +83,9 @@ def test_later_verified_turn_supersedes_failed_turn_block(copied_goal_bus):
     with goal_turn(comms, True) as failed:
         failed.finish(events.Done("backend failed", False))
         blocked = comms.registry.require("worker").goal.require()
+        assert not blocked.state.may_become(ActiveGoal())
+        with pytest.raises(ValueError):
+            blocked.state.check_transition(ActiveGoal(), owner=True)
     with worker_turn(comms) as later:
         assert later.turn != failed.turn
         later.tool_ended(events.ToolEnd("work", "read", True, "read source"))
@@ -102,7 +106,7 @@ def test_goal_action_block_survives_later_verified_turn(copied_goal_bus):
         later.tool_ended(events.ToolEnd("work", "read", True, "read source"))
         later.finish(events.Done("", True))
     assert Comms(comms.root).registry.require("worker").goal == blocked
-    assert blocked.state.turn is None
+    assert blocked.state == BlockedGoal("Need owner decision")
 
 
 @pytest.mark.parametrize("original_goal", [False, True])
