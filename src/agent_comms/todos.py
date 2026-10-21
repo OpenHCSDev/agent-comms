@@ -3163,6 +3163,7 @@ class TodoStore(DurableStore):
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise ValueError('Only a live newer order to the same unit replaces an old one.')
+        newer.require_replacement()
         with self.writing() as db:
             current = self._current(db, old.id)
             current.require_result(old)
