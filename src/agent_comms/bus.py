@@ -426,7 +426,7 @@ class BusSnapshot(PresentPath, BusReader):
     _connection: sqlite3.Connection
 
     @classmethod
-    def from_connection(cls, connection: sqlite3.Connection) -> BusSnapshot:
+    def from_connection(cls, connection: sqlite3.Connection) -> Self:
         database = SQLiteDatabase.read(connection.execute(
             "SELECT * FROM pragma_database_list WHERE name='main'",
         ))[0]
