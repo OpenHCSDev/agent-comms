@@ -40,7 +40,7 @@ from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.todos import PendingProblemOrder, TodoConflict
+from agent_comms.todos import DeliverTodo, OperationDelivery, PendingProblemOrder, TodoConflict
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
@@ -124,6 +124,18 @@ def test_blocked_holder_republishes_every_order_without_replaying_unknown(held_b
     assert inputs.lookup("unresolved-input") == unresolved
     assert comms.registry.require("worker").goal.require() == original
     assert Blocked.violations(held_bus, "lead") == ()
+
+
+def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
+    delivered = held_bus.goals.todos.get("P2")
+    delivered = held_bus.goals.todos.apply("P2", DeliverTodo(
+        delivered.revision, held_bus.registry.require("lead").incarnation,
+        OperationDelivery(at=RecordedEventTime(time.time())), delivered.order.id))
+    blocked_holder(held_bus)
+    violation, = Blocked.violations(held_bus, "lead")
+    assert violation.orders == ("P1",)
+    violation.enforce(held_bus, "lead")
+    assert held_bus.goals.todos.get("P2") == delivered
 
 
 def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):

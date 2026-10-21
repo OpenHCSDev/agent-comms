@@ -40,7 +40,7 @@ class HolderCannotRun(UndatedStandingRule, declared_name=None):
     @staticmethod
     def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
         held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in StandingRule.todos(comms, commander):
+        for todo in StandingRule.pending_todos(comms, commander):
             held.setdefault(todo.held().owner_identity, []).append(todo)
         return held
 
