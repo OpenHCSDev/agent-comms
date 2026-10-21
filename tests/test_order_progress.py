@@ -148,6 +148,18 @@ def test_a_deleted_file_is_no_edit_time(tmp_path):
     assert tuple(PresentCheckout(worktree).edits()) == ()
 
 
+def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
+    """10:09 on 2026-10-21: one unit checkout whose submodule pointed at a removed git directory
+    failed every commander heartbeat pass for half an hour."""
+    package = unit_checkout(tmp_path / 'package')
+    worktree = unit_checkout(tmp_path / 'worker--P1')
+    git(worktree, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(package), 'pinned')
+    git(worktree, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'pin')
+    (worktree / 'pinned' / '.git').write_text('gitdir: ../.git/modules/removed\n')
+    edited(worktree, 'owner.py', 700.0)
+    assert tuple(PresentCheckout(worktree).edits()) == (700.0,)
+
+
 @pytest.fixture
 def held(tmp_path):
     """P1 ordered long ago and held by a running worker whose own checkout has no commit for it."""
