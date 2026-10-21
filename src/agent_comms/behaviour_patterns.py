@@ -393,7 +393,7 @@ class StrikeOnNamedProblemPattern(BehaviourPattern):
         " not strikes on a problem."
     )
     checks = (CallableCheck(TodoStore.apply),)
-    sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes, then fire."))
+    sources = (ProblemFix("P194", "b26843727"), CommanderRule("Two strikes on one task take it away."))
 
 
 class ReportInsteadOfStatePattern(BehaviourPattern):
