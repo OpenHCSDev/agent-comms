@@ -14,6 +14,7 @@ from test_todos import order
 from agent_comms.change_report import FileLine, MissingSourceLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import RequestGoalOrder
@@ -148,10 +149,10 @@ def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path)
         folded = FoldedProblemOrder(original=original.order, into='P9', why='Merged findings')
         db.execute('UPDATE todo SET "order"=json_remove(?, ?) WHERE id=?',
                    (json.dumps(FieldCodec.encode(folded)), '$.original.scope', original.id))
-    before = {file: file.read_bytes() for file in OrderScopes.backup_files(copied)}
+    before = CoordinationStore.digest(path)
     dry_run = OrderScopes.carry(copied, apply=False)
     assert dry_run == Carried(len(TRIAGE_PROBLEMS) + 2)
-    assert {file: file.read_bytes() for file in OrderScopes.backup_files(copied)} == before
+    assert CoordinationStore.digest(path) == before
     applied = OrderScopes.carry(copied, apply=True)
     assert applied == Carried(len(TRIAGE_PROBLEMS) + 2, rewritten=tuple(
         str(file.relative_to(copied)) for file in SQLiteFile.files(path)))
