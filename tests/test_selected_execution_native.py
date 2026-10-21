@@ -28,9 +28,6 @@ from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex,
-)
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
@@ -59,7 +56,6 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=DeclaredModel("selected-offline/fixture"), thinking_level=LowThinkingLevel))
-    assert WakeCandidateIndex(comms.bus.bus).rebuild()
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []

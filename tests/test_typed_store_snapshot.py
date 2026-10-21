@@ -10,8 +10,6 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.wake_candidate_index import WakeCandidateIndex
-from agent_comms.bus import Bus
 
 
 @pytest.mark.parametrize("make_store", (
@@ -36,16 +34,6 @@ def test_missing_snapshot_has_declared_read_only_schema_without_creating_root(tm
     assert not root.exists()
     with pytest.raises(sqlite3.ProgrammingError):
         connection.execute("SELECT 1")
-
-
-def test_missing_wake_projection_snapshot_does_not_create_derived_storage(tmp_path):
-    store = WakeCandidateIndex(Bus(Bus.path_in(tmp_path)))
-    before = set(tmp_path.iterdir())
-    with store.snapshot() as connection:
-        store.require_schema(connection)
-        assert all(row.select(connection) == [] for row in store.rows)
-        assert connection.execute("PRAGMA query_only").fetchone()[0] == 1
-    assert set(tmp_path.iterdir()) == before
 
 
 def test_first_write_does_not_change_the_opened_empty_snapshot(tmp_path):

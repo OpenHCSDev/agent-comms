@@ -15,7 +15,6 @@ import tempfile
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
-from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -35,8 +34,6 @@ def curl_call(port, token, body, *, arguments=None):
 def maintenance_proof(comms):
     bus = comms.bus.bus
     message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    maintenance.schedule_candidate_catchup(bus, message.seq)
-    maintenance.drain_candidate_catchup(comms.root)
     index = WakeCandidateIndex(bus)
     assert index.through_seq >= message.seq
     assert bus.path.parent not in maintenance._pending

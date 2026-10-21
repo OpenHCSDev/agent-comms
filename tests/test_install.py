@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
-from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
@@ -34,7 +33,6 @@ def bus(directory: Path) -> tuple[Path, str]:
     comms.registry.declare(comms.registry.new_thread("worker", frozenset({"team"}), str(directory)))
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.messaging.send("worker", "#team", "hello")
-    drain_candidate_catchup(root)
     return root, root_id
 
 

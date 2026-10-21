@@ -29,7 +29,7 @@ from .comms import Comms
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict
+from .bus import Bus
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .drain_failures import (
@@ -61,8 +61,8 @@ from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
-from .wake_candidate_index import ThreadWake
-from .watched import ChangeSignal
+from .proven_source_coverage import SourcePrefix
+from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
     from agent_comms.following_inputs import OwnerFollowingInputs
@@ -77,19 +77,28 @@ class PrivateObservationState(ABC):
 
     settled = False
 
+    @abstractmethod
+    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool: ...
+
 
 class NoPrivateObservation(PrivateObservationState):
-    pass
+    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool:
+        return True
 
 
 @dataclass(frozen=True, slots=True)
 class PrivateObservation(PrivateObservationState):
     """One drain's observation: its message cut, registry entry and own coordination work."""
 
-    wire: tuple
+    source_prefix: SourcePrefix
     entry: RegistryEntry
     work: tuple
     settled = True
+
+    def has_unobserved_inputs(self, bus: Bus, lookup: str) -> bool:
+        self.source_prefix.require_current(bus)
+        return bool(bus.received(
+            lookup, after=self.source_prefix.through_seq, limit=1, descending=False))
 
     async def drain(self, inputs, session_id: str, root_id: str) -> int:
         await DeliveredInput.recover_interrupted(inputs, session_id, root_id)
@@ -182,10 +191,19 @@ class InputObservation(ABC):
 
     async def observe(self, session_id: str) -> None:
         initial = await self._own_entry(session_id)
-        source = ThreadWake.at(self.comms.root, initial.entry.thread.incarnation.lookup)
-        async with aclosing(self.comms.bus.bus.watch_sources(source)) as observations:
+        bus = self.comms.bus.bus
+        lookup = initial.entry.thread.incarnation.lookup
+        state = self.state(session_id)
+        state.forget_observation()
+        sources = tuple(FileSource(path) for path in bus.source_paths(self.comms.root))
+        async with aclosing(bus.watch_sources(*sources)) as observations:
             async for watcher in observations:
-                self.state(session_id).observation_watcher = watcher
+                state.observation_watcher = watcher
+                if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
+                    changed = await Coordination.run_worker(partial(
+                        state.idle_revision.has_unobserved_inputs, bus, lookup))
+                    if not changed:
+                        continue
                 try:
                     read = await self._own_entry(session_id)
                 except UNAVAILABLE_DRAIN_ERRORS as error:
@@ -228,7 +246,7 @@ class InputObservation(ABC):
             pass
 
     def _private_observation_revision(
-        self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
+        self, session_id: str, root_id: str, source_prefix: SourcePrefix, entry: RegistryEntry,
         store: Coordination,
     ) -> PrivateObservation:
         """Original owner/work observations, never delivery or replay authority.
@@ -241,13 +259,13 @@ class InputObservation(ABC):
         owner = RegistryOwner(thread=entry.thread, claimed_generation=entry.claimed_generation)
         with store.session.read():
             participant = store.participants.get(owner.thread.incarnation.lookup)
-            pending = next_sealed_assignment(
-                store, participant.lookup, owner.thread.name, after_seq=wire[-1],
-            )
             cursor = CursorOwner(
                 thread=owner.thread, claimed_generation=owner.claimed_generation,
                 wire_root_id=root_id, generation=participant.participant_generation,
-            ).cursor(store.session._connection)
+            ).state(store.session._connection)
+            pending = next_sealed_assignment(
+                store, participant.lookup, owner.thread.name, after_seq=cursor.covered_seq,
+            )
             original = store.session.path.stat()
         observation = PrivateObservation
         if (
@@ -256,7 +274,7 @@ class InputObservation(ABC):
         ):
             observation = ExecutionWaitingObservation
         maintenance = MaintenanceBarrier(self.comms.registry.store.path)._current_unlocked()
-        return observation(wire, entry, (
+        return observation(source_prefix, entry, (
             root_id,
             self.auto_wake,
             self.sessions.runtime_enabled,
@@ -272,28 +290,20 @@ class InputObservation(ABC):
 
     async def _observe_private_revision(self, session_id: str, root_id: str) -> PrivateObservation:
         # Pending acquisition is not an inbox failure or a completed read.
-        # Cancellation retires only this observation's waiting descriptor.
-        def wire_revision(source):
-            if source.marker.root_id != root_id:
-                raise IdentityConflict("private drain original root changed")
-            return (
-                source.witness.source_identity,
-                source.committed_sequence(),
-                source.marker.claimed_after_seq,
-            )
-        wire = await self.comms.bus.log.read_checked_async(wire_revision)
+        source_prefix = await Coordination.run_worker(partial(
+            SourcePrefix.capture, self.comms.bus.bus, 0))
         entry = (await self._own_entry(session_id)).entry
-        return await self._observe_coordination(session_id, root_id, wire, entry)
+        return await self._observe_coordination(session_id, root_id, source_prefix, entry)
 
     async def _observe_coordination(
-        self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
+        self, session_id: str, root_id: str, source_prefix: SourcePrefix, entry: RegistryEntry,
     ) -> PrivateObservation:
         # Release all bus locks before starting registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_read_async(
             CoordinationStore.path_in(self.comms.root),
-            partial(self._private_observation_revision, session_id, root_id, wire, entry),
+            partial(self._private_observation_revision, session_id, root_id, source_prefix, entry),
         )
 
 
