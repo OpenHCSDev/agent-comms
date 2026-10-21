@@ -3,43 +3,45 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
 from abc import abstractmethod
+from collections.abc import Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.goals import Goal
 from agent_comms.goal_presentation import BlockedExecution
-from agent_comms.message_page import MessageReadRequest
+from agent_comms.goals import Goal
+from agent_comms.message_bus import WatchPass
+from agent_comms.message_page import MessageReadRequest, PageBounds
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.read_basis import RepliesDisplayScope
-from agent_comms.bus_page_index import BusPageIndex
-from agent_comms.wire_log import WireSnapshot
-from agent_comms.message_bus import WatchPass
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.message_page import PageBounds
-from agent_comms.read_basis import NamedViewer
+from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_phases import PlanPhase
+from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    DatedStandingRule, OwedAnswer, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule,
+    OwedAnswer,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.wire_log import WireSnapshot
 from agent_comms.work_branches import WorkBranches
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms.commander.config import CommanderConfig
-from agent_comms.phase_evidence import PlanReading
-from agent_comms.plan_phases import PlanPhase
 
 
 @dataclass(frozen=True)
@@ -131,24 +133,20 @@ class Detached(HolderCannotRun):
 
 @dataclass(frozen=True)
 class GoalCannotRun(UndatedStandingRule):
-    """An ordered unit whose goal execution supplies the block and its action."""
+    """Report blocked work without rewriting the unit's goal or orders."""
 
     unit: str
     orders: tuple[str, ...]
-    goal: Goal
     execution: BlockedExecution
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         return tuple(
-            cls(owner.name, tuple(todo.id for todo in todos), view.goal.require(), block)
+            cls(owner.name, tuple(todo.id for todo in todos), block)
             for owner, todos in cls.holders(comms, commander).items()
             for view in (comms.goals.goal_snapshot(owner.name),)
             for block in view.execution.unit_blocks()
         )
-
-    def enforce(self, comms: Comms, commander: str) -> None:
-        self.execution.enforce_unit_block(comms, commander, self.unit, self.orders, self.goal)
 
     def line(self) -> str:
         return self.execution.unit_block_line(self.unit, self.orders)
