@@ -17,7 +17,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalHumanDecision
+from agent_comms.goal_attempts import GoalWorkDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
@@ -94,7 +94,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     assert store.snapshot(goal.id).number == 2
     with sqlite3.connect(store.path) as database:
         assert (
-            database.execute(f"SELECT count(*) FROM {GoalHumanDecision.declared_name}").fetchone()[
+            database.execute(f"SELECT count(*) FROM {GoalWorkDecision.declared_name}").fetchone()[
                 0
             ]
             == 1

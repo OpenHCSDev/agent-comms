@@ -4,14 +4,25 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable, Sequence
+from abc import abstractmethod
+from contextlib import closing
 from dataclasses import dataclass, field
-from typing import ClassVar
+from pathlib import Path
+from typing import ClassVar, Self
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..goals import Goal
+from ..goals import Goal, GoalRevision
+from ..goal_states import BlockedState
+from ..goal_history import GoalHistoryStore
+from ..message_page import MessageReadRequest
+from ..message_reference import MessageReference
+from ..messages import Message
+from ..read_basis import RepliesDisplayScope
+from ..bus_page_index import BusPageIndex
+from ..wire_log import WireSnapshot
 from ..message_bus import WatchPass
-from ..standing_rules import ReasonedStandingRule, UndatedStandingRule
+from ..standing_rules import ReasonedStandingRule, StandingRule, UndatedStandingRule
 from agent_comms.storage_rules import OrderCheckoutWork
 from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
@@ -22,24 +33,84 @@ from .config import CommanderConfig
 
 
 @dataclass(frozen=True)
-class Detached(UndatedStandingRule):
+class HolderCannotRun(UndatedStandingRule, declared_name=None):
     unit: str
-    unread: int = field(compare=False)
     orders: tuple[str, ...]
 
+    @staticmethod
+    def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
+        held: dict[ThreadIncarnation, list[Todo]] = {}
+        for todo in StandingRule.todos(comms, commander):
+            held.setdefault(todo.held().owner_identity, []).append(todo)
+        return held
+
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Detached, ...]:
-        owed: dict[str, list[str]] = {}
-        for todo in cls.todos(comms, commander):
-            owed.setdefault(todo.holder, []).append(todo.id)
+    def scan_owner(cls) -> type[StandingRule]:
+        return HolderCannotRun
+
+    @staticmethod
+    @abstractmethod
+    def stalled(comms: Comms, thread: Thread) -> bool: ...
+
+    @classmethod
+    @abstractmethod
+    def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self: ...
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         registry = comms.registry.snapshot()
-        away = [unit for unit in sorted(owed) if not registry.receiving(unit)]
-        unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in registry.threads))
-        return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
+        found: list[Self] = []
+        members = cls.members_with(cls)
+        for owner, todos in cls.holders(comms, commander).items():
+            thread = registry.require(owner.name)
+            if thread.incarnation != owner:
+                raise ValueError("Held order owner incarnation changed")
+            orders = tuple(todo.id for todo in todos)
+            found.extend(member.found(comms, thread, orders)
+                         for member in members if member.stalled(comms, thread))
+        return tuple(found)
+
+
+@dataclass(frozen=True)
+class Detached(HolderCannotRun):
+    unread: int = field(compare=False)
+
+    @staticmethod
+    def stalled(comms: Comms, thread: Thread) -> bool:
+        return not comms.registry.status(thread.name).receiving
+
+    @classmethod
+    def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
+        return cls(thread.name, orders, comms.bus.pending_count(thread.name))
 
     def line(self) -> str:
         return (f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
                 " -> wake it or reassign")
+
+
+@dataclass(frozen=True)
+class Blocked(HolderCannotRun):
+    block_record: Path
+    goal: GoalRevision
+
+    @staticmethod
+    def stalled(comms: Comms, thread: Thread) -> bool:
+        return not thread.executing and any(isinstance(goal.state, BlockedState) for goal in thread.goal)
+
+    @classmethod
+    def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
+        return cls(thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require().revision_key)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        for problem in self.orders:
+            todo = comms.goals.todos.get(problem)
+            comms.goals.update_goal(self.unit, UnownedWheelSpin.order_for(
+                todo, commander, CoreWatcherIncarnation.watcher()))
+
+    def line(self) -> str:
+        return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
+                f"block record {self.block_record}, goal {self.goal.id}@{self.goal.revision} "
+                "-> Core reissues the orders")
 
 
 @dataclass(frozen=True)
@@ -57,6 +128,56 @@ class RequestStalled(UndatedStandingRule):
     def line(self) -> str:
         return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
                 " -> order its next step or mark it done")
+
+
+@dataclass(frozen=True, slots=True)
+class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
+    scope: RepliesDisplayScope
+    since: float
+    before: float
+    empty: ClassVar[tuple[Message, ...]] = ()
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        answered: set[MessageReference] = set()
+        found: list[Message] = []
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            for row in self.indexed_records(source, offsets):
+                message = row.message
+                if message.sender in self.scope.first_names:
+                    answered.update(message.answers)
+                elif message.timestamp <= self.before and message.reference not in answered:
+                    found.append(message)
+        return tuple(found)
+
+
+@dataclass(frozen=True)
+class UnitAskUnanswered(UndatedStandingRule):
+    unit: str
+    reference: MessageReference
+    sent_at: float
+    seconds: ClassVar[int] = 15 * 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        held = HolderCannotRun.holders(comms, commander)
+        if not held:
+            return ()
+        snapshot = comms.registry.snapshot()
+        peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
+        since = min(todo.order.checked().at.recorded_at("A held order")
+                    for todos in held.values() for todo in todos)
+        request = UnansweredUnitAsks(
+            RepliesDisplayScope(snapshot.names_for(commander), peers), since, time.time() - cls.seconds,
+        )
+        return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
+                     for message in comms.bus.log.read_page(request))
+
+    def line(self) -> str:
+        age = max(0, int((time.time() - self.sent_at) // 60))
+        return (f"UNANSWERED {self.unit}: message {self.reference.seq}:{self.reference.message_id}, "
+                f"{age} min old -> commander must answer")
 
 
 @dataclass(frozen=True)

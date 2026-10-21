@@ -2263,7 +2263,7 @@ class Assignment(TodoHolder):
         return self
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
-        if self.generation == proposed.generation:
+        if self.generation == proposed.generation and self.owner_identity != proposed.owner_identity:
             raise TodoConflict(current)
         return self.handed_to(proposed)
 

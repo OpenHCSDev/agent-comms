@@ -41,6 +41,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
+    @staticmethod
+    def enforce_all(comms: Comms, commander: str, rules: Iterable[StandingRule]) -> None:
+        for rule in rules:
+            rule.enforce(comms, commander)
+
     def heartbeat_group(self) -> object:
         """Ordinary violations each own one heartbeat line."""
         return self

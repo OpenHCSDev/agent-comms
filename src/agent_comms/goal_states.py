@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
@@ -11,7 +11,8 @@ from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction
+    from .goal_actions import GoalAction, GoalActionContext, ProblemOrderGoalAction
+    from .goals import Goal
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
 
     def after_failed_turn(self, diagnostic: str) -> GoalState:
         return self
+
+    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return action.continue_goal(goal, ctx)
 
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
@@ -196,6 +200,12 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
 
 class BlockedState(GoalState, FromOpenGoal):
+    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
+        ordered = action.continue_goal(goal, ctx)
+        # A checked fresh order is new work authority, not a replay of the failed input.
+        ctx.goals.open_goal_store().authorize_current_retry(goal.id, action.order.id)
+        return replace(ordered, state=ActiveGoal())
+
     def failure_projection(self, reason: str) -> tuple[str, str]:
         return "backend_suspended", reason
 
@@ -265,6 +275,10 @@ class UnrecordedBlockGoal(BlockedState):
 @dataclass(frozen=True)
 class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
     terminal = True
+
+    def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        return action.create(ctx)
 
     @property
     def toggle(self) -> None:
