@@ -94,17 +94,20 @@ jobs:
           from pathlib import Path
           from agent_comms.installer.upgrade import Stack, run
           from agent_comms.launch_runtime import LaunchRuntime
+          from agent_comms.storage_rules import StorageRule
 
           checkout = Path.cwd()
           bootstrap = Stack(checkout, runtime=LaunchRuntime.running())
           bootstrap.uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
           bootstrap.uv.symlink_to(shutil.which('uv'))
           installed = Stack.build(checkout)
+          scratch = StorageRule().scratch_base
+          scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
           run(bootstrap.uv, 'pip', 'install', '--python', installed.python,
               '-r', 'pyproject.toml', '--extra', 'dev', cwd=checkout)
           print(run('timeout', '300', installed.python, '-m', 'pytest', '-n', '0', '-q', '-s',
                     '-o', 'pythonpath=. tools', '-o', 'faulthandler_timeout=60',
-                    '--basetemp', bootstrap.home / '.cache/agent-scratch/p447-installed-tests',
+                    '--basetemp', scratch / 'p447-installed-tests',
                     '-p', 'no:cacheprovider', 'tests/test_install_rehearsal.py',
                     'tests/test_native_input_bus_path.py', cwd=checkout,
                     env=installed.environment()))
