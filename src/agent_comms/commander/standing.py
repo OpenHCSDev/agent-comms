@@ -240,7 +240,7 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.message.seq}:{self.message.message_id}, "
+        return (f"UNANSWERED {self.unit}: message {self.cited}, "
                 f"{age} min old -> commander must answer")
 
 
