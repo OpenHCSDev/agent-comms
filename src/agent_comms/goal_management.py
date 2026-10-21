@@ -11,6 +11,8 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.lifecycle_capability import Unresolved
+
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -28,7 +30,6 @@ from .goal_waits import (
     GoalInputReview,
     GoalWait,
     GoalWaits,
-    NoGoalWait,
     RecordedGoalWait,
     StandbyReview,
 )
@@ -226,9 +227,10 @@ class Goals:
                     message.target,
                     message.body,
                 )
-            if row.owner in owners and row.unresolved:
-                unknown[key] = row
-                eligible.add(key)
+            for pending in row.items_with(Unresolved, row):
+                if pending.owner in owners:
+                    unknown[key] = pending
+                    eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,
