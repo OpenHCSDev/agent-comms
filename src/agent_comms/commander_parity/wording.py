@@ -301,7 +301,9 @@ class DecisionAlertsComparison:
                 (decision_message,) = source.messages_for_references((result.reference,))
             decision = decision_message.require_decision()
             with comms.bus.log.checked_read() as checked:
-                decision_message.require_task_publication(sender, comms.registry.snapshot(), checked)
+                decision_message.require_task_publication(
+                    sender, comms.registry.snapshot(), checked
+                )
             alert = comms.messaging.send(
                 sender,
                 target,
@@ -330,8 +332,7 @@ class DecisionAlertsComparison:
                     ("decision keeps its declared project", decision.scope == scope),
                     (
                         "authored decision remains an info notice",
-                        decision_message.type is InfoKind
-                        and decision_message.role == NoticeRole(),
+                        decision_message.type is InfoKind and decision_message.role == NoticeRole(),
                     ),
                     (
                         "bare alert publishes without a decision",
@@ -339,7 +340,9 @@ class DecisionAlertsComparison:
                     ),
                     (
                         "failure notice never starts a turn",
-                        not alert.role.response_policy(alert).starts_turn,
+                        not alert.response_eligibility((target,)).policy.starts_turn_for(
+                            alert, target
+                        ),
                     ),
                     ("both actual wire messages retained", saved == (decision_message, alert)),
                 ),
