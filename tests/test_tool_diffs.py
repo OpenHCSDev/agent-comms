@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import NoToolDiff, ToolDiff, tool_result_content
+from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
 from agent_comms.native_entries import TranscriptProjection
 from conftest import transcript_records
 
@@ -66,7 +66,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     result = PiToolResult.from_wire(raw)
     message, = read_history(comms)
     assert result.sent_message(True) == SentTranscript.from_message(message)
-    assert result.sent_message(False) is None
+    assert result.sent_message(False) == NoSentMessage()
     saved = ToolResultMessage.from_wire({
         "role": "toolResult", "toolCallId": "original-send", "toolName": "comms_send",
         **raw, "isError": False,

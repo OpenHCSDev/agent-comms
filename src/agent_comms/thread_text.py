@@ -25,6 +25,9 @@ class TextChoice(ABC):
     def require(self, missing: str) -> str:
         """The given text; the absent member refuses with ``missing``."""
 
+    @abstractmethod
+    def texts(self) -> tuple[str, ...]: ...
+
 
 class GivenText(SingleFieldValue, TextChoice):
     """The given member: its declared ``text`` field is the whole wire value."""
@@ -38,6 +41,9 @@ class GivenText(SingleFieldValue, TextChoice):
     def require(self, missing: str) -> str:
         return self.text
 
+    def texts(self) -> tuple[str, ...]:
+        return (self.text,)
+
 
 class AbsentText(NullMember, TextChoice):
     """The absent member: JSON null, and the reader's default."""
@@ -49,6 +55,9 @@ class AbsentText(NullMember, TextChoice):
 
     def require(self, missing: str) -> str:
         raise ValueError(missing)
+
+    def texts(self) -> tuple[str, ...]:
+        return ()
 
 
 class ThreadText(SubclassUnion, TextChoice, affix="ThreadText"):
@@ -64,9 +73,6 @@ class ThreadText(SubclassUnion, TextChoice, affix="ThreadText"):
     def applied(self, previous: ThreadText) -> ThreadText:
         """The text a redeclaration keeps: its own, or the previous one."""
 
-    @abstractmethod
-    def texts(self) -> tuple[str, ...]: ...
-
 
 @dataclass(frozen=True, slots=True)
 class GivenThreadText(GivenText, ThreadText):
@@ -75,9 +81,6 @@ class GivenThreadText(GivenText, ThreadText):
     def applied(self, previous: ThreadText) -> GivenThreadText:
         return self
 
-    def texts(self) -> tuple[str, ...]:
-        return (self.text,)
-
 
 @dataclass(frozen=True, slots=True)
 class NoThreadText(AbsentText, ThreadText):
@@ -85,9 +88,6 @@ class NoThreadText(AbsentText, ThreadText):
 
     def applied(self, previous: ThreadText) -> ThreadText:
         return previous
-
-    def texts(self) -> tuple[str, ...]:
-        return ()
 
 
 class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):

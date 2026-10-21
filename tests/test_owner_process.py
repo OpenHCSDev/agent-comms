@@ -28,6 +28,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.wire_metadata import UndeclaredMarker
 from agent_comms.thread_text import GivenThreadText, NoSessionFile
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
@@ -202,14 +203,14 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             # prefix record. Live old-schema ownership remains a separate cutover.
             with bus.locked():
                 marker = bus.read_metadata_unlocked()
-                before = replace(marker, checkpoint_version=None, checkpoint_seal=None)
+                before = replace(marker, checkpoint_version=UndeclaredMarker(), checkpoint_seal=UndeclaredMarker())
                 source = bus.path.read_bytes()
                 checkpoint = lifecycle.root / "private_bus_checkpoint.sqlite3"
                 checkpoint.rename(checkpoint.with_suffix(".retained-original"))
                 bus.write_metadata_unlocked(before)
                 install_private_bus_checkpoint(bus, _bus_locked=True)
                 assert replace(
-                    bus.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None
+                    bus.read_metadata_unlocked(), checkpoint_version=UndeclaredMarker(), checkpoint_seal=UndeclaredMarker()
                 ) == before
                 assert bus.path.read_bytes() == source
 

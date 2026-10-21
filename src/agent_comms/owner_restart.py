@@ -123,7 +123,7 @@ class OwnerRestartHandoff:
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.binary, GivenArguments(tuple(source.arguments)), environment=source.environment,
+            thread, source.binary, GivenArguments(source.arguments), environment=source.environment,
             launch_runtime=runtime,
         ))
 

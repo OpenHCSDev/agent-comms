@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,7 +10,7 @@ from typing import TYPE_CHECKING
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from . import launch_runtime
-from .native_arguments import NativeArguments
+from .native_arguments import InheritedArguments, NativeArguments
 from .registry_document import RegistrySnapshot
 
 if TYPE_CHECKING:
@@ -63,6 +62,5 @@ class RetainedOwnerLaunch:
         return self.environment[NativeArguments.binary_key]
 
     @property
-    def arguments(self) -> tuple[str, ...] | None:
-        arguments = self.environment.get(NativeArguments.arguments_key)
-        return tuple(shlex.split(arguments)) if arguments is not None else None
+    def arguments(self) -> tuple[str, ...]:
+        return InheritedArguments().configured(self.environment).argv

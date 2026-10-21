@@ -112,6 +112,17 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
         replace(owner, launch=unrelated).require_current(snapshot)
 
 
+@pytest.mark.parametrize(("environment", "arguments"), [
+    ({}, ()),
+    ({"AGENT_COMMS_AGENT_ARGS": ""}, ()),
+    ({"AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'"}, ("--no-tools", "authored value")),
+])
+def test_retained_arguments_restart_from_the_original_environment(environment, arguments):
+    launch = RetainedOwnerLaunch(ProcessIdentity(2147483647, 1), "/authored/python", environment)
+    assert launch.arguments == arguments
+    assert InheritedArguments().restarted(launch.arguments).argv == arguments
+
+
 def test_retirement_capture_refuses_changed_original_incarnation(*, thread_registration):
     thread, snapshot = stopped(registry=thread_registration)
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",

@@ -13,6 +13,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent, reply_turn_finished
 from native_backend_fixture import NativeBackendFixture
 
@@ -34,7 +35,7 @@ async def main(base: Path) -> None:
     async with Coordination.worker(CoordinationStore.path_in(comms.root)):
         agent = canonical_agent(
             comms, auto_wake=False, runtime_enabled=True,
-            agent_bin="pi", agent_args=NativeBackendFixture.native_arguments(),
+            agent_bin=GivenBinary("pi"), agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
         )
         try:
             await agent.sessions.start_owner(str(base / "project"), "beta")

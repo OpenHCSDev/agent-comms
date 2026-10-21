@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import SubclassUnion, boundary_decoder
 from agent_comms.native_arguments import ModelArgument, NativeArguments, ProviderArgument, SelectedModel
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
