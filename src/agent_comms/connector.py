@@ -11,6 +11,7 @@ subsequent sign-ins need no repeated step. Grant storage retains only secret dig
 Usage:
   agent-comms-connector serve --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector round_trip ROOT [--port PORT]
+  agent-comms-connector install-service --root ROOT [--port PORT] [--issuer URL]
   agent-comms-connector revoke
 """
 
@@ -25,6 +26,7 @@ import json
 import logging
 import secrets
 import signal
+import sys
 import time
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
@@ -39,13 +41,15 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
-from .cli_commands import DeclaredOptions
+from .cli_bridges.shared import DeclaredOptions
 from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText, Argument, WireName, WireOmitDefault
+from .field_codec import (
+    Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
+)
 from .goal_actions import DirectiveGoalAction
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
@@ -794,13 +798,15 @@ class ConnectorVerb(
 ):
     """One connector command: its options are its fields, and its parser comes from them."""
 
+    program: ClassVar[str] = "agent-comms-connector"
+
     @abstractmethod
     def apply(self, ctx: ConnectorStore) -> int | str: ...
 
     @classmethod
-    def parse(cls, argv: Sequence[str] | None) -> ConnectorVerb:
+    def parse(cls, argv: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(
-            prog="agent-comms-connector",
+            prog=cls.program,
             description=__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -812,8 +818,9 @@ class ConnectorVerb(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ServeVerb(ConnectorVerb):
-    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
+class ConnectorOptions(ConnectorVerb, declared_name=None):
+    """The endpoint's CLI fields and their declared argument spelling."""
+
     root: Annotated[
         Path,
         PathText,
@@ -831,6 +838,16 @@ class ServeVerb(ConnectorVerb):
             flags=("--issuer",), options={"help": "Public origin the OAuth metadata names"}
         ),
     ] = f"http://{LOOPBACK}:{PORT}"
+
+    def command_arguments(self) -> tuple[str, ...]:
+        return (self.declared_name, *(word for plan in FieldCodec.field_plans(type(self))
+                for word in (Argument.declared(plan.annotation).flags_for(plan.name)[0],
+                             str(plan.current(self)))))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(ConnectorOptions):
+    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
@@ -869,5 +886,7 @@ class RevokeVerb(ConnectorVerb):
         return 0
 
 
+@boundary_decoder
 def main(argv: Sequence[str] | None = None) -> int | str:
-    return ConnectorVerb.parse(argv).apply(ConnectorStore.owned())
+    arguments = sys.argv[1:] if argv is None else argv
+    return ConnectorVerb.parse(arguments).apply(ConnectorStore.owned())
