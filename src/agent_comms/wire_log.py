@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 import os
-import sqlite3
 import stat
 import sys
 import time
@@ -22,6 +21,7 @@ from typing import TYPE_CHECKING, BinaryIO
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
+from agent_comms.locked_store import DurableFile, WireWakeFile
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .bus_page_index import BusPageIndex, BusPageRow
@@ -49,8 +49,6 @@ from .errors import (
     StoredHistoryUnreadable,
 )
 from .field_codec import FieldCodec, MalformedRecord
-from .locked_store import DurableFile, RegistryFile, WireWakeFile
-from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead, WritableCheckpoint
 from .private_path import AbsentPath, FileIdentity, FileRevision, MissingFile, ObservedPath
@@ -74,12 +72,6 @@ from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
     from .message_page import MessageReadRequest
-
-
-def _notify_candidates(log: WireLog, through_bytes: int) -> None:
-    from .candidate_maintenance import schedule_candidate_catchup
-
-    schedule_candidate_catchup(log, through_bytes)
 
 
 @dataclass(frozen=True)
@@ -764,60 +756,6 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
                 if on_row is not None:
                     on_row(offset, line, record)
                 yield record
-
-    def append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
-        """Durably reserve a sequence, append one row, then sync its parent.
-
-        A failed append or bus parent sync leaves the outcome UNKNOWN. Every bus write lands
-        here, so maintenance refuses each writer here once, whichever operation it came
-        through; the holder's own children carry its nonce.
-        """
-        StoreLock.current_release().require_active()
-        metadata.access.require_append()
-        MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
-        encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
-        WireRecord.require_row_size(encoded, message="Private bus row exceeds the byte limit.")
-        record = WireRecord.from_wire(row, metadata.root_id)
-        metadata.last_seq = record.sequence_after(metadata.last_seq)
-        self.write_metadata_unlocked(metadata)
-        descriptor = os.open(
-            self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600
-        )
-        try:
-            info = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o600
-            ):
-                raise RelationViolationError("Private bus append target is not owner-only.")
-            with os.fdopen(descriptor, "ab", closefd=False) as output:
-                output.write(encoded)
-                output.flush()
-                os.fsync(output.fileno())
-        finally:
-            os.close(descriptor)
-        directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        from .private_bus_checkpoint import (
-            append_private_bus_checkpoint_unlocked,
-            checked_prefix_exists,
-        )
-
-        if checked_prefix_exists(self.path):
-            try:
-                append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
-            except (OSError, sqlite3.Error, ValueError) as error:
-                # This append owns the already-fsynced bus row. Checkpoint
-                # storage or validation failure cannot mean the row is absent.
-                raise RelationViolationError(
-                    "Private bus checkpoint publication outcome UNKNOWN."
-                ) from error
-        self._sync_page_index_unlocked(ExclusiveLock(), metadata)
-        StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""

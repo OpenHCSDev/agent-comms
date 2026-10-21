@@ -6,14 +6,16 @@ import builtins
 import hashlib
 import re
 import time
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
 from agent_comms.bus_tables import Addressed, BusCapability
 from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
+from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -26,17 +28,16 @@ from .field_codec import (
     InlineRecord,
     MalformedRecord,
     NullMember,
-    compile_decoder,
-    projected,
     PublicationExclude,
     WireName,
     WireOmitDefault,
     WireOrder,
+    compile_decoder,
+    projected,
 )
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
-from .response_policy import InformationalPolicy, ResponseEligibility
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
@@ -181,6 +182,9 @@ class MessageRoleWire:
 
 class MessageRole(InlineRecord):
     category: ClassVar[type[MessageCategory]]
+
+    @abstractmethod
+    def response_policy(self, message: Message) -> ResponsePolicy: ...
 
     @classmethod
     def wire_record(cls):
@@ -371,6 +375,20 @@ class Message(Addressed, BusCapability):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
+    @classmethod
+    def from_message(cls, message: Message, **capabilities: object) -> Self:
+        return FieldCodec.construct(cls, {
+            **{item.name: getattr(message, item.name) for item in fields(Message)},
+            **capabilities,
+        })
+
+    @property
+    def message(self) -> Self:
+        return self
+
+    def messages(self) -> tuple[Self, ...]:
+        return (self,)
+
     @property
     def text_size(self) -> int:
         return len(self.body)
@@ -533,6 +551,21 @@ class Message(Addressed, BusCapability):
         return self.sender_role.reply_target(self)
 
 
+@dataclass_transform(frozen_default=True, kw_only_default=True)
+class BusRecord(Message, DeclaredFamily, affix="Record"):
+    """Every record declaration owns its frozen value and derived tables."""
+
+    @property
+    def publication_snapshot(self) -> Message:
+        """Delivery capabilities are not message content in a publication intent."""
+        return Message.from_message(self).publication_snapshot
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        dataclass(cls, frozen=True, kw_only=True)
+        cls.tables()
+
+
 @dataclass(frozen=True, kw_only=True)
 class ClaimMessage(Message):
     """An original claim envelope, distinct from a fresh conversation message."""
@@ -540,9 +573,8 @@ class ClaimMessage(Message):
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
     @classmethod
-    def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
-                   claim_transition=transition)
+    def of(cls, message: Message, transition: ClaimTransition) -> Self:
+        return cls.from_message(message, claim_transition=transition)
 
     def __post_init__(self) -> None:
         super().__post_init__()

@@ -3,38 +3,35 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.bus import Bus, ClaimRecord, PrivateRecord, PublicRecord
+from agent_comms.bus_publication import InitialOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
-
+from agent_comms.field_codec import Id128Text
+from agent_comms.messages import ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
+from agent_comms.store_files import _store_lock
 
 from .active_route import guard_original_root_write
-from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
 from .bus_activity_index import ActivityClocks
-from .bus_publication import (
-    PRIVATE_WIRE_FIELD,
-    InitialOrigin,
-    initial_sideband,
-)
 from .channel_targets import CommandTarget, NamedTarget
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
-from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
     ClaimOwner,
     ClaimRelease,
-    ClaimScope,
     ClaimTransition,
+    RecordedScope,
     ReleasedClaims,
     WakeClaims,
 )
@@ -43,16 +40,13 @@ from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from .field_codec import FieldCodec, Id128Text
 from .mentions import ThreadMention
-from .messages import ClaimMessage, ClaimNoticeKind, Message
 from .private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
-from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
@@ -76,6 +70,10 @@ class Publisher:
     registry: Registration
     channels: ChannelCatalog
     opened_activity: Callable[[], AbstractContextManager[ActivityClocks]]
+    bus: Bus = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.bus = Bus(Bus.path_in(self.log.path.parent))
 
     @classmethod
     def prepare_root(cls, root: Path) -> None:
@@ -178,36 +176,30 @@ class ClaimWrites(PrivateWrites):
             previous = source.claim(resource)
         return previous.acquire(claim, snapshot, publish)
 
-    def _publish_claim_transition_unlocked[Change: ClaimTransition](
+    def _publish_claim_transition_unlocked(
         self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, message: Message,
-        make_transition: Callable[..., Change], *, activity: ActivityClocks,
-    ) -> Change:
+        make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
+    ) -> ClaimTransition:
         """One typed transition, checked before append under the registry cut."""
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
         sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
-            # The checkpoint high-water also covers a prior visible append;
-            # accepting new input never replays a historical message or claim.
-            last_sequence = max(metadata.last_seq, source.committed_sequence())
-            if last_sequence >= MAX_WIRE_SEQ:
-                raise RelationViolationError("Claim bus sequence is exhausted.")
-            stored = self._prepare_message_unlocked(
-                message, sender=sender, target=target,
-                sequence=last_sequence + 1, snapshot=snapshot,
-            )
-            transition = make_transition(owner=stored.sender, seq=stored.seq,
-                                         message_id=stored.message_id)
-            transition = source.prepare_claim(transition, snapshot)
-        stored = ClaimMessage.of(stored, transition)
-        try:
-            self.log.append_private_unlocked(metadata, stored.to_wire())
-        except (OSError, RelationViolationError) as error:
-            raise ClaimEnvelopeUnknownError(
-                "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
-            ) from error
-        return transition
+            def build(seq: int) -> ClaimRecord:
+                stored = self._prepare_message_unlocked(
+                    message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
+                )
+                transition = make_transition(owner=stored.sender, seq=seq,
+                                             message_id=stored.message_id)
+                return ClaimRecord.of(stored, source.prepare_claim(transition, snapshot))
+
+            try:
+                return self.bus.append(build).require_claim_transition()
+            except (OSError, RelationViolationError) as error:
+                raise ClaimEnvelopeUnknownError(
+                    "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
+                ) from error
 
 
 class InitialWrites(PrivateWrites):
@@ -246,14 +238,16 @@ class InitialWrites(PrivateWrites):
         # Selected public history precedes this root's first writable sequence. It is
         # display content, never a copied delivery or permission to run old input.
         previous = 0
-        rows = []
         for message in history:
             if message.seq <= previous:
                 raise ValueError("Initial history must have ascending unique sequences")
             previous = message.seq
-            rows.append(json.dumps(message.history_snapshot.to_wire(), ensure_ascii=False) + "\n")
-        if rows:
-            _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
+            def build_history(
+                seq: int, original: Message = message.history_snapshot,
+            ) -> PublicRecord:
+                return PublicRecord.from_message(replace(original, seq=seq))
+
+            self.bus.append(build_history)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
@@ -297,9 +291,6 @@ class InitialWrites(PrivateWrites):
 
             source = resources.enter_context(bus_lock.current_source(self.log, metadata))
             source.require_marker(metadata)
-            previous_sequence = source.committed_sequence()
-            if metadata.last_seq >= MAX_WIRE_SEQ:
-                raise RelationViolationError("Private bus sequence is exhausted.")
             # The registry and catalog writers' own locks hold one revision
             # from this decision through its append.
             catalog = resources.enter_context(self.channels.reading(self.registry.store))
@@ -317,64 +308,41 @@ class InitialWrites(PrivateWrites):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
-            stored = self._prepare_message_unlocked(
-                message,
-                sender=sender,
-                target=target,
-                sequence=max(metadata.last_seq, previous_sequence) + 1,
-                snapshot=snapshot,
-                original_source=source,
-            )
-            origin.require_source(source, sender, stored.message_id)
-            revision = hashlib.sha256(
-                repr(
-                    (
+            def build(seq: int) -> PrivateRecord:
+                stored = self._prepare_message_unlocked(
+                    message, sender=sender, target=target, sequence=seq,
+                    snapshot=snapshot, original_source=source,
+                )
+                origin.require_source(source, sender, stored.message_id)
+                revision = hashlib.sha256(
+                    repr((
                         FileRevision.capture(self.registry.store.path),
                         self.channels.revision(),
-                        sorted(
-                            (name, thread.created_at, sorted(thread.tags))
-                            for name, thread in snapshot.threads.items()
-                        ),
-                    )
-                ).encode()
-            ).hexdigest()
-            audience = freeze_audience(
-                stored,
-                tuple(
-                    FrozenRecipient(lookup, name)
-                    for lookup, name in zip(lookups, names, strict=True)
-                ),
-                revision,
-                sender_lookup=sender_lookup,
-                sender_name=sender,
-            )
-            decisions = resolve_wake_cohort(
-                stored, frozen_audience=audience, control=ControlClassification.ORDINARY
-            )
-            row = {
-                **stored.to_wire(),
-                PRIVATE_WIRE_FIELD: FieldCodec.encode(
-                    InitialDeliveryPolicy(
-                        version=1,
-                        initial=initial_sideband(
-                            metadata.root_id,
-                            stored,
-                            audience,
-                            decisions,
-                            control=ControlClassification.ORDINARY.value,
-                        ),
-                    )
-                ),
-            }
-            # Every frozen subscriber needs an identity, including stopped
-            # observers. Register from this authoritative registry snapshot,
-            # before publishing; an inbox must never invent owners from a row.
-            with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
-                sender_thread.role.register_sender(store.participants, sender_lookup, sender)
-                for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(lookup, thread.name, thread.name, committed=True)
-            origin.append(self.log, metadata, row, stored)
-            return stored
+                        sorted((name, thread.created_at, sorted(thread.tags))
+                               for name, thread in snapshot.threads.items()),
+                    )).encode()
+                ).hexdigest()
+                audience = freeze_audience(
+                    stored,
+                    tuple(FrozenRecipient(lookup, name)
+                          for lookup, name in zip(lookups, names, strict=True)),
+                    revision, sender_lookup=sender_lookup, sender_name=sender,
+                )
+                decisions = resolve_wake_cohort(
+                    stored, frozen_audience=audience, control=ControlClassification.ORDINARY,
+                )
+                # Register the frozen subscribers before publishing; inboxes never
+                # invent participant identities from a committed message.
+                with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
+                    sender_thread.role.register_sender(store.participants, sender_lookup, sender)
+                    for thread, lookup in zip(selected, lookups, strict=True):
+                        store.participants.register(lookup, thread.name, thread.name, committed=True)
+                return PrivateRecord.from_message(
+                    stored, audience=audience, decisions=decisions,
+                    control=ControlClassification.ORDINARY.value,
+                )
+
+            return origin.append(self.bus, build)
 
 
 class ResponseWrites(PrivateWrites):
@@ -406,21 +374,15 @@ class ResponseWrites(PrivateWrites):
         role.require_executable(RelationViolationError("Keyed response sender must be executable."))
         if intent.publication_key != canonical_publication_key(intent.execution_id, target.name):
             raise RelationViolationError("Response publication key does not match its route.")
-        last_sequence = max(metadata.last_seq, previous_sequence)
-        if last_sequence >= MAX_WIRE_SEQ:
-            raise RelationViolationError("Private bus sequence is exhausted.")
-        stored = self._prepare_message_unlocked(
-            message,
-            sender=sender,
-            target=target,
-            sequence=last_sequence + 1,
-            snapshot=registry_snapshot,
-        )
-        if not intent.matches_publication(stored):
-            raise RelationViolationError("Stored response does not match publication intent.")
-        row = conversation.record(metadata.root_id, stored, intent)
-        self.log.append_private_unlocked(metadata, row)
-        return stored
+        def build(seq: int):
+            stored = self._prepare_message_unlocked(
+                message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
+            )
+            if not intent.matches_publication(stored):
+                raise RelationViolationError("Stored response does not match publication intent.")
+            return conversation.record(seq, stored, intent)
+
+        return self.bus.append(build)
 
 
 class OwnerPublisher(InitialWrites, ClaimWrites):

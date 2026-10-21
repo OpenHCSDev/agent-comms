@@ -4,33 +4,38 @@ from __future__ import annotations
 
 import hashlib
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Annotated
-
+from typing import TYPE_CHECKING, Annotated, Final, Self
 
 from agent_comms.audience_manifest import FrozenAudience
-from agent_comms.bus_tables import BusCapability
+from agent_comms.errors import (
+    HumanSendRefusedError,
+    MessageNotificationError,
+    RelationViolationError,
+)
+from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
-    NoResponseAcknowledgement, ResponseAcknowledgement,
-    _PRIVATE_WIRE_PREFIX, _canonical, has_private_wire_fields,
+    _PRIVATE_WIRE_PREFIX,
+    NoResponseAcknowledgement,
+    ResponseAcknowledgement,
+    _canonical,
+    has_private_wire_fields,
 )
 
 from .delivery_policy import DeliveryPolicy
-from .errors import HumanInitialUnknownError, RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
-from .messages import Message
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
 
 if TYPE_CHECKING:
+    from agent_comms.bus import Bus, PrivateRecord
+
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
     from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .wire_log import WireLog
-    from .wire_metadata import WireMetadata
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -57,11 +62,25 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
     return hashlib.sha256(_DECISION_DOMAIN + encoded).hexdigest()
 
 
-@dataclass(frozen=True)
-class Delivered(BusCapability):
+class Delivered(BusRecord, declared_name=None):
     audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
     control: str
+
+    def deliveries(self) -> tuple[Self, ...]:
+        return (self,)
+
+    def direct_for(self, recipient_lookup: str) -> bool:
+        """Direct reply semantics and the committed addressed incarnation agree."""
+        policy = self.message.role.response_policy(self.message)
+        return (policy.starts_turn and policy.separate_turn
+                and self.audience.includes_lookup(recipient_lookup))
+
+    def compaction_messages_for(self, recipient_lookup: str) -> tuple[Message, ...]:
+        addressed = self.audience.includes_lookup(recipient_lookup)
+        authored = (self.audience.sender_lookup == recipient_lookup
+                    and self.message.retains_authored_task)
+        return self.messages() if addressed or authored else ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,19 +103,17 @@ class CommittedDelivery(MessageWireRecord):
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
         policy = self.message.role.response_policy(self.message)
-        return (
-            policy.starts_turn
-            and policy.separate_turn
-            and self.audience.includes_lookup(recipient_lookup)
-        )
+        return (policy.starts_turn and policy.separate_turn
+                and self.audience.includes_lookup(recipient_lookup))
 
     def compaction_messages_for(self, recipient_lookup):
         addressed = self.audience.includes_lookup(recipient_lookup)
-        authored = (
-            self.audience.sender_lookup == recipient_lookup
-            and self.message.retains_authored_task
-        )
+        authored = (self.audience.sender_lookup == recipient_lookup
+                    and self.message.retains_authored_task)
         return self.messages() if addressed or authored else ()
+
+    def deliveries(self) -> tuple[CommittedDelivery, ...]:
+        return (self,)
 
     @classmethod
     def attest(
@@ -161,19 +178,11 @@ class CommittedDelivery(MessageWireRecord):
         """The delivery a proved policy declares for its message."""
         raw = policy.initial
         return cls(
-            wire_root_id,
-            message,
-            raw.audience,
-            decisions,
-            raw.decisions_digest,
-            raw.control.value,
-            raw.resolver_version,
-            raw.policy_version,
+            wire_root_id=wire_root_id, message=message, audience=raw.audience,
+            decisions=decisions, decisions_digest=raw.decisions_digest, control=raw.control.value,
+            resolver_version=raw.resolver_version, policy_version=raw.policy_version,
             acknowledgement=acknowledgement,
         )
-
-    def deliveries(self) -> tuple[CommittedDelivery, ...]:
-        return (self,)
 
     def require_claim(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
@@ -245,10 +254,8 @@ class InitialOrigin(ABC):
         """Check the sender and message ID against the bus before appending."""
 
     @abstractmethod
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
-        """Append the reserved row, reporting a failure as this origin requires."""
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
+        """Commit the record, reporting failure as this origin requires."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,10 +272,8 @@ class AgentOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
 
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
-        log.append_private_unlocked(metadata, row)
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
+        return bus.append(build)
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,17 +298,13 @@ class HumanOrigin(InitialOrigin):
     def require_source(self, source: CheckedRead, sender: str, message_id: str) -> None:
         source.require_new_human_message(sender, message_id)
 
-    def append(
-        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
-    ) -> None:
+    def append(self, bus: Bus, build: Callable[[int], PrivateRecord]) -> BusRecord:
         try:
-            log.append_private_unlocked(metadata, row)
-        except BaseException as error:
-            # Even cancellation/interrupt after entry can follow a durable
-            # reservation or row. Never claim absence or retry this ID.
-            raise HumanInitialUnknownError(
-                metadata.root_id, stored.seq, stored.message_id
-            ) from error
+            return bus.append(build)
+        except MessageNotificationError:
+            raise
+        except Exception as error:
+            raise HumanSendRefusedError(f"Message was not sent: {error}") from error
 
     def require_registered(self, snapshot: RegistrySnapshot) -> None:
         """Check the determining USER declaration, never a transport or prose role."""

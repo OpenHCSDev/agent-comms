@@ -164,28 +164,6 @@ def test_same_file_double_slash_alias_conflicts_without_second_message(tmp_path)
     assert dict(comms.bus.log.claim_projection()) == {canonical: conflict.value.existing}
 
 
-def test_raw_alias_claim_is_refused_before_append_or_projection(tmp_path):
-    comms, worktree = _participants(tmp_path)
-    first = acquire_message(comms, "alice", Path("a.py"))
-    alias = str(worktree) + "//a.py"
-    assert os.path.samefile(str(worktree / "a.py"), alias)
-    second = Message("bob", "bob", "Invalid raw alias", ClaimNoticeKind, seq=first.seq + 1)
-    record = second.to_wire()
-    record["claim_transition"] = {
-        **first.to_wire()["claim_transition"], "owner": "bob",
-        "incarnation": str(comms.registry.require("bob").created_at),
-        "seq": second.seq, "message_id": second.message_id, "claims": [alias],
-    }
-    with store_files._store_lock(comms.bus.log.path):
-        metadata = comms.bus.log.private_marker_unlocked()
-        with pytest.raises(ValueError):
-            comms.bus.log.append_private_unlocked(metadata, record)
-    assert read_history(comms) == [first]
-    assert list(comms.bus.log.claim_projection()) == [str(worktree / "a.py")]
-    with pytest.raises(RelationViolationError):
-        comms.bus.log.messages_for_references((second.reference,))
-
-
 def test_same_tick_new_owner_cannot_share_live_claim_identity(tmp_path):
     comms, worktree = _participants(tmp_path)
     claimed = acquire_message(comms, "alice", Path("a.py"))
