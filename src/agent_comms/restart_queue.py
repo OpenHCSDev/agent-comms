@@ -17,7 +17,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated
 
 
 from .child_process import OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess
@@ -25,6 +25,7 @@ from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
+from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
@@ -40,24 +41,26 @@ from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .watched import ChangeSignal, DirectorySource, FileSource
 
+if TYPE_CHECKING:
+    from .threads import Thread
+
 DIRECTORY = "owner-restart-queue"
 
 
 @dataclass(frozen=True, kw_only=True)
-class RestartState(DeclaredFamily, affix="Restart"):
+class RestartState(LifecycleCapability, DeclaredFamily, affix="Restart"):
     reason: Annotated[str, WireOmitDefault()] = ""
-    pending: ClassVar[bool] = False
-    attempting: ClassVar[bool] = False
-    active: ClassVar[bool] = False
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
         # A terminal write interrupted before its move is still settled.
         return previous
 
+    def restart(self, comms: Comms, record: QueuedRestart, owner: Thread) -> Iterator[QueuedRestart]:
+        return iter(())
 
-class PendingRestart(RestartState):
-    pending = active = True
+
+class PendingRestart(Pending, Active, RestartState):
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
@@ -72,8 +75,28 @@ class RestartAlreadyAttemptingError(RelationViolationError):
     """An attempted restart cannot be replaced or replayed by enqueue."""
 
 
-class AttemptingRestart(RestartState):
-    attempting = active = True
+class AttemptingRestart(Active, RestartState):
+    def restart(self, comms: Comms, record: QueuedRestart, owner: Thread) -> Iterator[QueuedRestart]:
+        try:
+            request = OwnerRestartRequest(
+                OwnersNamed((owner.name,)),
+                expected=record.selection,
+                runtime=record.target.runtime,
+                agent_bin=GivenBinary(record.target.agent_bin),
+                launch_runtime=record.target.launch_runtime,
+            )
+            (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)
+        except RestartRefusal as refusal:
+            yield record.transition(refusal.queue_state())
+        except StoppedOwnerFailure as exc:
+            yield record.transition(UncertainRestart(reason=str(exc)))
+        except (OSError, ValueError) as exc:
+            yield record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
+        else:
+            yield record.transition(RestartedRestart(
+                previous=record.selection.process,
+                current=ProcessIdentity.capture(acknowledgement.pid),
+            ))
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
@@ -208,8 +231,9 @@ class RestartQueue:
         return FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding='utf-8')))
 
     def path_for(self, record: QueuedRestart) -> Path:
-        return (self.active_path(record.selection.identity.incarnation.require_recorded())
-                if record.state.active else self.settled_path(record))
+        for current in record.state.items_with(Active, record):
+            return self.active_path(current.selection.identity.incarnation.require_recorded())
+        return self.settled_path(record)
 
     def move(self, path: Path, record: QueuedRestart) -> None:
         destination = self.path_for(record)
@@ -226,14 +250,14 @@ class RestartQueue:
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
         _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True), fsync_parent=True)
-        if not record.state.active:
+        if not record.state.items_with(Active, record):
             self.move(path, record)
 
     def _active_record(self, path: Path) -> Iterator[QueuedRestart]:
         record = self.read(path)
         if path != self.active_path(record.selection.identity.incarnation.require_recorded()):
             raise ValueError('Restart queue record has another owner key')
-        if record.state.active:
+        if record.state.items_with(Active, record):
             yield record
         else:
             self.move(path, record)
@@ -306,8 +330,8 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     changed = []
     with queue.locked():
         for record in queue.active_for(owner):
-            if record.state.pending:
-                cancelled = record.transition(CancelledRestart())
+            for pending in record.state.items_with(Pending, record):
+                cancelled = pending.transition(CancelledRestart())
                 queue.save(cancelled)
                 changed.append(cancelled)
     return changed
@@ -318,7 +342,7 @@ def step(comms: Comms) -> None:
     with queue.locked():
         initial_records = tuple(queue.active_records())
     for initial in initial_records:
-        if not initial.state.pending or not initial.target.is_current_watcher:
+        if not initial.state.items_with(Pending, initial) or not initial.target.is_current_watcher:
             continue
         with queue.locked():
             current = tuple(queue.active_for(initial.selection.identity.incarnation.require_recorded()))
@@ -346,32 +370,9 @@ def step(comms: Comms) -> None:
                         # Persist before any side effect; crashes cannot authorize replay.
                         record = record.transition(AttemptingRestart())
             queue.save(record)
-        if not record.state.attempting:
-            continue
-        try:
-            request = OwnerRestartRequest(
-                OwnersNamed((owner.name,)),
-                expected=record.selection,
-                runtime=record.target.runtime,
-                agent_bin=GivenBinary(record.target.agent_bin),
-                launch_runtime=record.target.launch_runtime,
-            )
-            (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)
-        except RestartRefusal as refusal:
-            record = record.transition(refusal.queue_state())
-        except StoppedOwnerFailure as exc:
-            record = record.transition(UncertainRestart(reason=str(exc)))
-        except (OSError, ValueError) as exc:
-            record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
-        else:
-            record = record.transition(
-                RestartedRestart(
-                    previous=record.selection.process,
-                    current=ProcessIdentity.capture(acknowledgement.pid),
-                )
-            )
-        with queue.locked():
-            queue.save(record)
+        for result in record.state.restart(comms, record, owner):
+            with queue.locked():
+                queue.save(result)
 
 
 async def run(comms: Comms) -> None:
@@ -419,7 +420,7 @@ def main() -> None:
         queue = RestartQueue(comms.root / DIRECTORY)
         with queue.locked():
             for record in queue.active_records():
-                if record.state.pending and record.target.is_current_watcher:
+                if record.state.items_with(Pending, record) and record.target.is_current_watcher:
                     queue.save(record.transition(
                         BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
                     ))

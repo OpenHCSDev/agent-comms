@@ -1,16 +1,12 @@
 """The real bus publishes only files declared by their existing state owners."""
 
-from agent_comms.bus import Bus
-
 from pathlib import Path
 import sqlite3
 
 import pytest
 
-from agent_comms.bus import Bus
-from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.installer.backup import bus_files
-from agent_comms.typed_table import DerivedStore
+from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeInputProof
 from agent_comms.comms import Comms
@@ -27,8 +23,7 @@ from test_todos import order
 @pytest.fixture
 def comms(tmp_path: Path) -> Comms:
     root = tmp_path / "bus"
-    Bus.install(Bus.path_in(root))
-    return Comms(root)
+    return prepare_native_comms(Comms(root))
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
@@ -40,7 +35,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     with NativeBoundary(comms.bus) as boundary:
         owner = boundary.registry.require("owner")
         claim = comms.bus.publisher._publish_acquisition_unlocked(
-            boundary.bus_lock, boundary.registry, owner,
+            boundary.registry, owner,
             ExistingFileClaim(resource).normalized(tmp_path),
             NativeClaim(
                 owner_claimed_generation=boundary.registry.claim_generation(owner.name),
@@ -65,17 +60,6 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     runtime = RuntimeFile.paths_in(comms.root)
     assert declared == durable | runtime
     assert not durable & runtime
-
-
-def test_a_derived_index_written_by_a_running_owner_is_never_carried(tmp_path: Path, comms: Comms) -> None:
-    for name in ("owner", "peer"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.messaging.send("peer", "owner", "Index this message")
-    written = {path for path in BusPageIndex.files_in(comms.root) if path.exists()}
-    assert written  # the real send built the page index
-    carried = set(bus_files(comms.root))
-    assert not {str(path.relative_to(comms.root)) for path in written} & carried
-    assert all(issubclass(store, RuntimeFile) for store in DerivedStore.__subclasses__())
 
 
 @pytest.mark.parametrize("journal_mode", ("DELETE", "WAL"))

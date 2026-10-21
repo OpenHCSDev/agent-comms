@@ -83,7 +83,7 @@ from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
-from .bus import Bus
+from .bus import Bus, BusSnapshot
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
@@ -391,11 +391,7 @@ class ChannelReadMark(ABC):
 class ReadAll(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
-        source = presentation.bus.bus
-        with CapturedSelection.reading(
-            presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer), source.activity_clocks(),
-        ) as basis:
+        with presentation.snapshot(NamedViewer(viewer)) as (basis, source):
             scope = basis.scope(target)
             yield scope.capture_all(
                 presentation.bus.reads, basis.require_viewer(), basis.registry, source,
@@ -435,7 +431,7 @@ class BusPresentation:
         self._path = bus.bus.path
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, Bus]]:
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         """Borrow the bus-owned source cut without preparing a second store."""
         with self.bus.snapshot(viewer) as selected:
             yield selected
@@ -481,7 +477,7 @@ class BusPresentation:
 
     def display_view_metrics(
         self,
-        source: Bus,
+        source: BusSnapshot,
         basis: CapturedSelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
@@ -491,10 +487,8 @@ class BusPresentation:
         Derived maxima are committed by the append, never prepared by this reader.
         """
         seen = basis.seen(source)
-        with source.reading() as captured:
-            activity = {scope.channel: scope.activity(captured) for scope in basis.scopes}
-            unread = captured.display_unread(
-                basis.scopes, basis.viewer_names, seen, basis.registry)
+        activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
+        unread = source.display_unread(basis.scopes, basis.viewer_names, seen, basis.registry)
         return activity, unread
 
 

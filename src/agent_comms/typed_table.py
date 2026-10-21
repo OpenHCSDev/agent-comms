@@ -554,6 +554,13 @@ class SQLiteSchemaDifference:
 
 
 @dataclass(frozen=True)
+class SQLiteDatabase(TypedRow):
+    seq: int
+    name: str
+    file: str
+
+
+@dataclass(frozen=True)
 class SQLiteSchemaObject(TypedRow):
     name: str
     sql: str

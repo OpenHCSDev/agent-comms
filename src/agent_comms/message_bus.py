@@ -11,7 +11,7 @@ from contextlib import AbstractContextManager, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.bus import Bus
+from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.bus_activity_index import ActivityClocks
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
@@ -23,7 +23,6 @@ from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest,
 from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
 from agent_comms.messages import Message
 from agent_comms.page_traversal import NewerTraversal
-from agent_comms.private_path import ObservedPath
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
     AnonymousViewer, CapturedSelection, DisplayBasis, DisplayViewer,
@@ -90,12 +89,11 @@ class MessageBus[Writes: Publisher]:
             return self._channels.read().views(activity)
 
     @contextmanager
-    def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, Bus]]:
-        with CapturedSelection.reading(
-            self._registry, self._channels, self.reads, viewer,
-            self.bus.activity_clocks(),
+    def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+        with self.bus.reading() as source, CapturedSelection.reading(
+            self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
         ) as basis:
-            yield basis, self.bus
+            yield basis, source
 
     def inbox(
         self, name: str, target: CommandTarget = AnyChannel.target(), *,
@@ -190,17 +188,17 @@ class MessageBus[Writes: Publisher]:
             return {name: sum(counts.values())
                     for name, counts in self._pending_projection(source, basis, names).items()}
 
-    def _pending_projection(self, source: Bus, basis: CapturedSelection, names: Sequence[str]):
+    def _pending_projection(self, source: BusSnapshot, basis: CapturedSelection, names: Sequence[str]):
         actors = {name: basis.registry.canonical_name(name) for name in names}
         deliveries = {actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
                       for actor in set(actors.values())}
-        seen = {actor: basis.document.cursor(actor, basis.registry, ObservedPath.at(source.path))
+        seen = {actor: basis.document.cursor(actor, basis.registry, source)
                 for actor in deliveries}
         counts = source.unseen_counts(basis.registry, deliveries, seen)
         return {name: counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(
-        self, source: Bus, selection: CapturedSelection, *, conversations: Iterable[str] = (),
+        self, source: BusSnapshot, selection: CapturedSelection, *, conversations: Iterable[str] = (),
     ) -> Mapping[str, int]:
         actor = selection.require_viewer()
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)

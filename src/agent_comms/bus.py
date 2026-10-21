@@ -7,7 +7,7 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -37,7 +37,8 @@ from agent_comms.locked_store import BusFile, RegistryFile, StoreCommittedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import WalStore
+from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.typed_table import SQLiteDatabase, WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
@@ -70,10 +71,10 @@ class BusReader(RouteCounts, ABC):
     def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
     @contextmanager
-    def reading(self) -> Iterator[BusReader]:
-        """Keep a batch of queries on one admitted SQLite snapshot."""
+    def reading(self) -> Iterator[BusSnapshot]:
+        """Keep queries and their physical identity on one admitted snapshot."""
         with self.observing() as db:
-            yield BusSnapshot(db)
+            yield BusSnapshot.from_connection(db)
 
     def revision(self) -> int:
         with self.observing() as db:
@@ -409,12 +410,25 @@ class Bus(BusReader, WalStore, BusFile, Watched):
         return self._publish(acquire).require_claim_transition().claimed(resource)
 
 
-class BusSnapshot(BusReader):
-    """The surrounding reading scope owns this already validated connection."""
+@dataclass(frozen=True, slots=True)
+class BusSnapshot(PresentPath, BusReader):
+    """One held connection owns both its source cut and captured file identity."""
 
-    def __init__(self, connection: sqlite3.Connection):
-        self._connection = connection
+    path: Path
+    _connection: sqlite3.Connection
+
+    @classmethod
+    def from_connection(cls, connection: sqlite3.Connection) -> BusSnapshot:
+        database = SQLiteDatabase.read(connection.execute(
+            "SELECT * FROM pragma_database_list WHERE name='main'",
+        ))[0]
+        path = Path(database.file)
+        return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
         yield self._connection
+
+    @contextmanager
+    def reading(self) -> Iterator[BusSnapshot]:
+        yield self

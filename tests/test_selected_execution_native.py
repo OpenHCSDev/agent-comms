@@ -27,7 +27,7 @@ from agent_comms.native_input_record import TriageNativeExecution, FullNativeExe
 from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
 
 from agent_comms.messages import Message, InfoKind
-from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.cursor_owner import CursorOwner
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -235,8 +235,9 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert assignment.wire_seq == initial.message.seq
-            state = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
-                owner_name="beta", source_reads=source_reads
+            state = await CursorOwner.read_async(
+                comms.bus, wire_root_id=root_id,
+                owner_name="beta", source_reads=source_reads,
             )
             assert state.injected_seq == initial.message.seq
             assert state.covered_seq >= state.injected_seq

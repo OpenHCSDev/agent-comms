@@ -28,12 +28,12 @@ from .read_basis import (
     DMConversation,
     ReadCursor,
 )
-from .recorded_bus import NoRecordedBus, RecordedBusIdentity
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .sealed import Sealed
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .bus import Bus
+from .bus import Bus, BusReader
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
@@ -146,7 +146,7 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
-    def capture(self, viewer, messages, snapshot, source: Bus, *,
+    def capture(self, viewer, messages, snapshot, source: BusReader, *,
                         document: ReadDocument, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
@@ -154,22 +154,22 @@ class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument
         for message in messages:
             conversation = self.conversation(message, provenance)
             grouped.setdefault(conversation, set()).add(message.seq)
-        return DisplayBasis(
-            viewer, snapshot.threads[viewer].created_at,
-            tuple(DisplayedConversation(
-                conversation, sequences := tuple(sorted(members)),
-                self._proved_read_prefix(
-                    source, conversation.scope(provenance),
-                    document.for_conversation(
-                        viewer, conversation, snapshot, ObservedPath.at(source.path)),
-                    sequences),
-            ) for conversation, members in grouped.items()),
-            RecordedBusIdentity.capture(source.path),
-        )
+        with source.reading() as captured:
+            return DisplayBasis(
+                viewer, snapshot.threads[viewer].created_at,
+                tuple(DisplayedConversation(
+                    conversation, sequences := tuple(sorted(members)),
+                    self._proved_read_prefix(
+                        captured, conversation.scope(provenance),
+                        document.for_conversation(viewer, conversation, snapshot, captured),
+                        sequences),
+                ) for conversation, members in grouped.items()),
+                RecordedBus(captured.identity),
+            )
 
     @staticmethod
     def _proved_read_prefix(
-        source: Bus, scope: MessageDisplayScope, previous: ConversationCursor,
+        source: BusReader, scope: MessageDisplayScope, previous: ConversationCursor,
         sequences: tuple[int, ...],
     ) -> int:
         """Find the first unread scoped seq; never decode the intervening history."""

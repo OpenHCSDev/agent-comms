@@ -35,6 +35,7 @@ from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
     Column,
+    SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
     TypedRow,
@@ -217,13 +218,6 @@ class SnapshotMeta(TypedTable):
 
 
 @dataclass(frozen=True)
-class _Database(TypedRow):
-    seq: int
-    name: str
-    file: str
-
-
-@dataclass(frozen=True)
 class _QuickCheck(TypedRow):
     quick_check: str
 
@@ -246,7 +240,7 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         raise IdentityConflict("Sidecar schema objects have drifted.")
     if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
         raise IdentityConflict("Sidecar schema declaration differs.")
-    databases = _Database.read(connection.execute("PRAGMA database_list"))
+    databases = SQLiteDatabase.read(connection.execute("PRAGMA database_list"))
     if not databases or any(
         row.name not in {"main", "temp"} or row.file != "" for row in databases
     ):

@@ -1,109 +1,26 @@
-"""Runtime rebuilds retain history without re-admitting pre-cutover inputs."""
-
-import json
+"""Attached retained history remains readable and refuses publication."""
 
 import pytest
 
-from agent_comms.cohort_foreground import _accept_visible_deliveries
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.channels import AnyChannel
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
-from agent_comms.wire_metadata import WireMetadata
-from agent_comms.proven_source_coverage import SourceCoverage
-from agent_comms.cursor_owner import ActivationFloorCursor
 from test_private_human_ingress import _root
-
-
-@pytest.mark.asyncio
-async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path, *, source_reads):
-    comms, old_store, root_id, lookups = _root(tmp_path)
-    old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
-    accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
-    assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
-    old_store.close()
-    # Preserve the actual old acknowledgement database for history; rebuild only runtime.
-    (comms.root / "coordination.sqlite").rename(comms.root / "prior-runtime.sqlite")
-    with comms.bus.log.locked():
-        marker = comms.bus.log.private_marker_unlocked()
-        marker.claimed_after_seq = marker.last_seq
-        comms.bus.log.write_metadata_unlocked(marker)
-
-    with Coordination(str(comms.root / "coordination.sqlite")) as store:
-        install_private_cohort_schema(store)
-        install_private_response_schema(store)
-        install_native_runtime_schema(store)
-        for name, lookup in lookups.items():
-            store.participants.register(lookup, name, name, committed=True)
-        for _ in range(2):
-            reopened = Comms(comms.root)
-            assert (
-                await _accept_visible_deliveries(
-                    reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
-                )
-                == old.seq
-            )
-            assert sealed_cohort_assignments(store, lookups["bob"]) == ()
-            with pytest.raises(IdentityConflict):
-                accept_delivery_cohort(reopened.bus, root_id, old.seq, store)
-            coverage = SourceCoverage(
-                reopened.bus,
-                store,
-                wire_root_id=root_id,
-                recipient_lookup=lookups["bob"],
-            ).since(ActivationFloorCursor(old.seq), source_reads=source_reads)
-            assert coverage.covered_seq == old.seq
-            assert coverage.injected_source_seqs == ()
-
-        fresh = reopened.messaging.send_user_message("bob", "fresh input", worktree=str(tmp_path))
-        assert fresh.seq > old.seq
-        with reopened.bus.log.locked():
-            assert reopened.bus.log.private_marker_unlocked().claimed_after_seq == old.seq
-        for _ in range(2):
-            await _accept_visible_deliveries(
-                reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
-            )
-        assignments = sealed_cohort_assignments(store, lookups["bob"])
-        assert [assignment.wire_seq for assignment in assignments] == [fresh.seq]
-        coverage = SourceCoverage(
-            reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).since(ActivationFloorCursor(old.seq), source_reads=source_reads)
-        assert coverage.covered_seq == old.seq
-        assert coverage.injected_source_seqs == ()
-        assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.
-        assert list(reopened.views.history_page(AnyChannel.target()).messages) == [old, fresh]
-
-
-def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
-    comms, store, _root_id, _lookups = _root(tmp_path)
-    store.close()
-    path = comms.bus.log.metadata_path
-    data = json.loads(path.read_text())
-    del data[FieldCodec.record_key(WireMetadata, "claimed_after_seq")]
-    path.write_text(json.dumps(data))
-    with pytest.raises(RelationViolationError), comms.bus.log.locked():
-        comms.bus.log.private_marker_unlocked()
 
 
 def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
-    sent = source.messaging.send("alice", "bob", "retained message").message.message_id
+    sent = source.messaging.send("alice", "bob", "retained message").message.reference
     reader_root = tmp_path / "reader"
     Bus.install(Bus.path_in(reader_root))
     reader = Comms(reader_root)
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
-    before = snapshot.bus.log.path.read_bytes()
-    assert [message.message_id for message in list(snapshot.views.history_page(AnyChannel.target()).messages)] == [sent]
+    before = snapshot.bus.bus.revision()
+    assert [message.reference for message in snapshot.views.history_page(AnyChannel.target()).messages] == [sent]
     with pytest.raises(RelationViolationError):
-        snapshot.messaging.send("alice", "bob", "must never append").message.message_id
-    assert snapshot.bus.log.path.read_bytes() == before
+        snapshot.messaging.send("alice", "bob", "must never append")
+    assert snapshot.bus.bus.revision() == before
     attached.validate()

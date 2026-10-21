@@ -295,10 +295,10 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
     from agent_comms.read_basis import AllChannelDisplayScope, AllConversation
-    source = comms.bus.bus
-    basis = AllChannelDisplayScope("#any").capture_all(
-        comms.bus.reads, viewer, snapshot, source, document=comms.bus.reads.read(),
-        through=source.revision)
+    with comms.bus.bus.reading() as source:
+        basis = AllChannelDisplayScope("#any").capture_all(
+            comms.bus.reads, viewer, snapshot, source, document=comms.bus.reads.read(),
+            through=source.revision())
     assert tuple(item.conversation for item in basis.conversations) == (AllConversation(),)
     assert tuple(seen.conversations) == (AllConversation(),)
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))

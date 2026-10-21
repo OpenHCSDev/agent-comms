@@ -113,7 +113,7 @@ def test_origins_check_message_identity_inside_actual_writer_transaction(tmp_pat
     origin = HumanOrigin("author", 1, str(tmp_path))
     message = Message("author", "#history", "one human send", InfoKind)
     with messages.bus.writing() as db:
-        source = BusSnapshot(db)
+        source = BusSnapshot.from_connection(db)
         origin.require_source(source, message.sender, message.message_id)
         seq = BusRow.next_seq(db)
         PublicRecord.from_message(replace(message, seq=seq)).append_to(db, seq)

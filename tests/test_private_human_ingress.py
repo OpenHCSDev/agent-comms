@@ -39,6 +39,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = prepare_native_comms(Comms(root))
+    comms.channels.create_tag("team")
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))

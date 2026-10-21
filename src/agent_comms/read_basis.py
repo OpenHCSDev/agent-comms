@@ -27,8 +27,8 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
-from .private_path import FileObservation, MissingFile, ObservedPath
-from .recorded_bus import RecordedBusIdentity
+from .private_path import FileObservation, MissingFile
+from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -99,7 +99,7 @@ class NamedViewer(SingleFieldValue, DisplayViewer):
             conversation_snapshot=historical.provenance, document=document)))
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
-        return document.cursor(self.name, snapshot, ObservedPath.at(source.path))
+        return document.cursor(self.name, snapshot, source)
 
     def aliases(self, snapshot) -> frozenset[str]:
         return snapshot.names_for(self.name)
@@ -300,7 +300,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
-    from .bus import Bus, BusReader
+    from .bus import Bus, BusReader, BusSnapshot
     from .channels import TagChannel
     from .historical_views import DMHistory, HistoryArchive, HistorySource
     from .history_views import HistoryViews
@@ -822,12 +822,12 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
                                   descending=descending, limit=limit, kinds=kinds)
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: Bus, *, document, through: int) -> DisplayBasis:
+                    source: BusSnapshot, *, document, through: int) -> DisplayBasis:
         return self.capture_deliveries(reads, viewer, snapshot, source,
                                        document=document, audience=self, through=through)
 
     def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                           source: Bus, *, document,
+                           source: BusSnapshot, *, document,
                            audience: MessageDisplayScope, through: int) -> DisplayBasis:
         prefixes: dict[Conversation, int] = {}
         predicate, parameters = self.intersection(audience)
@@ -836,7 +836,7 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
             prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
             tuple(DisplayedConversation(conversation, (), sequence)
-                  for conversation, sequence in prefixes.items()), RecordedBusIdentity.capture(source.path))
+                  for conversation, sequence in prefixes.items()), RecordedBus(source.identity))
 
     def intersection(self, other: MessageDisplayScope):
         predicate, parameters = self.index_predicate
@@ -1017,10 +1017,10 @@ class AllChannelDisplayScope(AllTargetsDisplayScope):
     """Only the complete wire view can acknowledge every conversation at once."""
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: Bus, *, document, through: int) -> DisplayBasis:
+                    source: BusSnapshot, *, document, through: int) -> DisplayBasis:
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
             (DisplayedConversation(AllConversation(), (), through),),
-            RecordedBusIdentity.capture(source.path))
+            RecordedBus(source.identity))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1030,7 +1030,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
     participant_names: frozenset[str] = frozenset()
 
     def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                           source: Bus, *, document,
+                           source: BusSnapshot, *, document,
                            audience: MessageDisplayScope, through: int) -> DisplayBasis:
         # Partial channel selections acknowledge exact rows, never unseen prefixes.
         rows = source.selected_sequences(*self.intersection(audience), through)
@@ -1086,7 +1086,7 @@ class CapturedSelection:
     reads: ReadLedger
     document: ReadDocument
 
-    def seen(self, source) -> ReadCursor:
+    def seen(self, source: BusSnapshot) -> ReadCursor:
         return self.viewer.cursor(self.reads, self.registry, self.document, source)
 
     @classmethod

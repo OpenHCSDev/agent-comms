@@ -1,6 +1,6 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
-from agent_comms.bus import Bus
+from agent_comms.bus import Bus, PublicRecord
 
 from bus_history import read_history
 from agent_comms.messages import Membership
@@ -14,10 +14,8 @@ from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import OlderTraversal
-from agent_comms.store_files import _store_lock
 from test_private_human_ingress import _root
 
 
@@ -54,25 +52,18 @@ def saved_catalog(root):
 
 
 def test_saved_projection_preserves_preferences_history_and_has_no_writable_alias(tmp_path):
+    Bus.install(Bus.path_in(tmp_path))
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
     ]
-    before = "".join(json.dumps(row.to_wire()) + "\n" for row in rows)
-    with _store_lock(tmp_path / "wire"), comms.bus.log.locked():
-        comms.bus.log.path.write_text(before)
-        comms.bus.log.path.chmod(0o600)
-        marker = comms.bus.log.read_metadata_unlocked(required=True)
-        marker.last_seq = marker.claimed_after_seq = 4
-        marker.unseal()
-        comms.bus.log.write_metadata_unlocked(marker)
-        (tmp_path / "private_bus_checkpoint.sqlite3").unlink()
-        install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
+    for row in rows:
+        comms.bus.bus.append(lambda seq, db: PublicRecord.from_message(replace(row, seq=seq)))
+    before = comms.bus.bus.revision()
     catalog = comms.channels.catalog
     imported = catalog.read()
     assert json.loads(catalog.path.read_text()) == original  # read is not activation
@@ -102,7 +93,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     ):
         with pytest.raises(ValueError):
             send()
-    assert comms.bus.log.path.read_text() == before
+    assert comms.bus.bus.revision() == before
     assert "audiences" not in json.loads(catalog.path.read_text())
     assert catalog.read() == imported
     assert FieldCodec.decode(type(imported), json.loads(catalog.path.read_text())) == imported
@@ -116,7 +107,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
         replace(imported.saved_views["engineering"], original_targets=frozenset())
     )
     assert catalog.read().saved_views["engineering"].original_targets == {"#engineering"}
-    assert comms.bus.log.path.read_text() == before
+    assert comms.bus.bus.revision() == before
 
 
 def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_path):
@@ -124,10 +115,10 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     comms.channels.set_saved_view(
         SavedView("team-view", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"team"})))
     )
-    before = comms.bus.log.latest_sequence()
+    before = comms.bus.bus.revision()
     with pytest.raises(ValueError):
         comms.messaging.send_user_message("#team-view", "blocked", worktree=str(comms.root))
-    assert comms.bus.log.latest_sequence() == before
+    assert comms.bus.bus.revision() == before
     comms.messaging.send_user_message("#team", "exact", worktree=str(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
     rows = read_history(comms, "#team")
@@ -141,6 +132,7 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
     source_root.mkdir()
     saved_catalog(source_root)
     source = ChannelCatalog(source_root / "catalog.json").read()
+    Bus.install(Bus.path_in(tmp_path / "destination"))
     comms = wire(tmp_path / "destination")
     comms.channels.create_tag("api")
     current = SavedView(

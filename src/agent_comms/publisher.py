@@ -146,7 +146,7 @@ class ClaimWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=snapshot,
-                original_source=BusSnapshot(db),
+                original_source=BusSnapshot.from_connection(db),
             )
             transition = make_transition(owner=stored.sender, seq=seq,
                                          message_id=stored.message_id)
@@ -214,7 +214,7 @@ class InitialWrites(Publisher):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)
 
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
-                source = BusSnapshot(db)
+                source = BusSnapshot.from_connection(db)
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
                     snapshot=snapshot, original_source=source,
@@ -273,7 +273,7 @@ class ResponseWrites(Publisher):
         def build(seq: int, db: sqlite3.Connection):
             stored = self._prepare_message_unlocked(
                 message, sender=sender, target=target, sequence=seq, snapshot=registry_snapshot,
-                original_source=BusSnapshot(db),
+                original_source=BusSnapshot.from_connection(db),
             )
             if not intent.matches_publication(stored):
                 raise RelationViolationError("Stored response does not match publication intent.")

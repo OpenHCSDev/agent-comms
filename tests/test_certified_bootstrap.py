@@ -1,9 +1,6 @@
-"""Fresh canonical roots check before publication or native source observation."""
-
-from agent_comms.bus import Bus
+"""Fresh roots refuse unproven source coverage and unconfigured native owners."""
 
 import os
-from pathlib import Path
 
 import pytest
 
@@ -12,46 +9,33 @@ from agent_comms.comms import Comms
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
-from agent_comms.coordination_errors import PublicationActivationBlocked
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.errors import RelationViolationError
-from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.proven_source_coverage import SourceCoverage
-from agent_comms.cursor_owner import ActivationFloorCursor
+from agent_comms.cursor_owner import UnstartedCursor
+from bus_record_fixture import prepare_native_comms
 from test_private_human_ingress import _root
-
-
-def source_witness(bus):
-    with bus.log.locked(blocking=False):
-        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log.private_marker_unlocked())
 
 
 def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
         install_native_runtime_schema(store)
-        witness = source_witness(comms.bus)
-        assert isinstance(witness, PrefixWitness)
-        assert witness.root_id == root_id and witness.through_seq == witness.offset == 0
-        assert comms.bus.log.read_metadata_unlocked(required=True).claims
+        assert comms.bus.bus.revision() == 0
         empty = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).since(ActivationFloorCursor(0), source_reads=source_reads)
+        ).since(UnstartedCursor(), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
-        sent = comms.messaging.send_user_message(
-            "bob", "fresh selected input", worktree=str(tmp_path)
-        )
-        before = SourceCoverage(
+        sent = comms.messaging.send_user_message("bob", "fresh selected input", worktree=str(tmp_path))
+        reader = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).since(ActivationFloorCursor(0), source_reads=source_reads)
+        )
+        before = reader.since(UnstartedCursor(), source_reads=source_reads)
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-        selected = SourceCoverage(
-            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).since(ActivationFloorCursor(0), source_reads=source_reads)
+        selected = reader.since(UnstartedCursor(), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
+        assert Comms(comms.root).bus.bus.revision() == sent.seq
 
 
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
@@ -68,33 +52,9 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
         page = reader.read(limit=1, partial=True, source_reads=source_reads)
         assert page.more_sources and page.blocked_seq == first.seq
         assert page.covered_seq == 0 and page.injected_source_seqs == ()
-        assert [message.seq for message in list(comms.views.history_page(AnyChannel.target()).messages)] == [first.seq, second.seq]
+        assert [message.seq for message in comms.views.history_page(AnyChannel.target()).messages] == [first.seq, second.seq]
         with pytest.raises(ValueError):
             reader.read(limit=True, source_reads=source_reads)
-
-
-def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
-    import agent_comms.wire_log as wire_log
-
-    comms = Comms(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
-    write = wire_log._atomic_write_text
-
-    def fail_seal(path, contents, **kwargs):
-        if Path(path).name == "bus_meta.json" and "checkpoint_seal" in contents:
-            raise OSError("checkpoint seal disk failure")
-        return write(path, contents, **kwargs)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(wire_log, "_atomic_write_text", fail_seal)
-        with pytest.raises(OSError):
-            Bus.install(Bus.path_in(comms.root))
-    assert (comms.root / "private_bus_checkpoint.sqlite3").exists()
-    with pytest.raises(RelationViolationError):
-        Comms(comms.root).registry.snapshot()
-    with pytest.raises(RelationViolationError):
-        source_witness(comms.bus)
-    assert comms.bus.log.path.read_bytes() == b""
 
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
@@ -110,17 +70,13 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     reason="Prepared native package required; no provider request",
 )
 async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
-    comms = Comms(tmp_path / "wire")
-    Bus.install(Bus.path_in(comms.root))
-    agent = CommsAgent(
-        comms,
-        auto_wake=False,
-    )
+    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    agent = CommsAgent(comms, auto_wake=False)
     try:
         fresh = await agent.new_session(cwd=str(tmp_path))
         assert fresh.session_id in comms.registry
         await agent.load_session(cwd=str(tmp_path), session_id=fresh.session_id)
         assert agent.sessions.require(fresh.session_id) == fresh.session_id
-        assert source_witness(comms.bus).through_seq == 0
+        assert comms.bus.bus.revision() == 0
     finally:
         await agent.shutdown()
