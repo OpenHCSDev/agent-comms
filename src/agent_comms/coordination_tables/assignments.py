@@ -27,20 +27,24 @@ from agent_comms.typed_table import (
     GuardedInserts,
     GuardedUpdates,
     ImmutableRows,
+    IncrementingColumn,
     Index,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     TypedTable,
 )
 from agent_comms.wake_policy import MessageAudience
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAssignment(GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="wake_claims"):
+class WakeAssignment(IncrementingColumn, MonotoneColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="wake_claims"):
+    column_orders = (NonDecreasing(('updated_at_ms',)),)
+
     immutable_columns = ('assignment_id', 'recipient_lookup', 'wire_seq', 'message_id', 'recipient', 'audience', 'resolver_version', 'policy_version', 'accepted_at_ms')
     update_condition = """((json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind'))) OR
-        ((({assignment_mode_new})) IS NOT (({assignment_mode_old})) OR NEW.revision != OLD.revision + 1 OR
-        NEW.updated_at_ms < OLD.updated_at_ms) OR (((({assignment_verdict_old})) IS NOT NULL AND
-        (({assignment_verdict_new})) IS NOT (({assignment_verdict_old}))) OR ((json_extract(OLD.lifecycle,
+        ((({assignment_mode_new})) IS NOT (({assignment_mode_old}))) OR (((({assignment_verdict_old})) IS NOT NULL
+        AND (({assignment_verdict_new})) IS NOT (({assignment_verdict_old}))) OR ((json_extract(OLD.lifecycle,
         '$.decision.execution_id')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT
         (json_extract(OLD.lifecycle, '$.decision.execution_id'))) OR ((json_extract(OLD.lifecycle,
         '$.decision.exact_target')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT

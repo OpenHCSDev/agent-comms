@@ -29,9 +29,12 @@ from agent_comms.typed_table import (
     GuardedColumns,
     GuardedInserts,
     GuardedUpdates,
+    IncrementingColumn,
     Index,
     IntegerStorage,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     TextStorage,
     TypedTable,
 )
@@ -95,10 +98,11 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class CurrentExecutions(GuardedInserts, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+class CurrentExecutions(IncrementingColumn, GuardedInserts, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+    revision_column = 'pointer_revision'
+
     insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations WHERE owner_lookup = NEW.owner_lookup)"""
     immutable_columns = ('owner_lookup',)
-    update_condition = """NEW.pointer_revision != OLD.pointer_revision + 1"""
 
     @property
     def unresolved(self) -> bool:
@@ -167,14 +171,15 @@ FROM executions e"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord(GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
+class ExecutionRecord(IncrementingColumn, MonotoneColumns, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="executions"):
+
+    column_orders = (NonDecreasing(('updated_at_ms',)),)
 
     immutable_columns = ('execution_id', 'origin', 'owner_lookup', 'owner_thread', 'max_attempts', 'created_at_ms')
-    update_condition = """NEW.revision != OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms OR (json_extract(NEW.lifecycle,
-        '$.kind') = 'active' AND (json_extract(OLD.lifecycle, '$.kind') NOT IN ({startable_execution_names}) OR
-        json_extract(NEW.lifecycle, '$.ordinal') != coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR
-        (json_extract(NEW.lifecycle, '$.kind') != 'active' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT
-        json_extract(OLD.lifecycle, '$.ordinal'))"""
+    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = 'active' AND (json_extract(OLD.lifecycle, '$.kind') NOT IN
+        ({startable_execution_names}) OR json_extract(NEW.lifecycle, '$.ordinal') !=
+        coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR (json_extract(NEW.lifecycle, '$.kind') !=
+        'active' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))"""
     column_guards = (
         ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges}))
         OR (json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names}) AND

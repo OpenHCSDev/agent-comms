@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 
-from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 
 from .native_runtime_input import NativeRuntimeTable
-from .typed_table import SQLiteForeignKeys
 
 
 def install_native_runtime_schema(store: Coordination) -> None:

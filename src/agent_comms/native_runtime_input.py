@@ -43,7 +43,9 @@ from .typed_table import (
     FrozenColumns,
     GuardedUpdates,
     IntegerStorage,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     SharedFileTables,
     TextStorage,
     TypedRow,
@@ -312,10 +314,11 @@ class NativeRuntimeInput(GuardedUpdates, FrozenColumns, NoDelete, NativeInputRec
             raise StaleFence("native proof was previously committed")
 
 @dataclass(frozen=True)
-class CurrentNativeCursor(GuardedUpdates, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(MonotoneColumns, GuardedUpdates, FrozenColumns, NoDelete, NativeInputContext, NativeRuntimeTable, TypedTable):
+    column_orders = (NonDecreasing(('covered_seq', 'injected_seq')),)
+
     immutable_columns = ('wire_root_id', 'recipient_lookup', 'owner_thread', 'owner_generation', 'owner_claimed_generation')
-    update_condition = """NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq OR (NEW.injected_seq =
-        OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)"""
+    update_condition = """(NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)"""
 
     @property
     def context_anchor(self) -> NativeColumn:

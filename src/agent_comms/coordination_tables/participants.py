@@ -16,7 +16,9 @@ from agent_comms.typed_table import (
     GuardedColumns,
     GuardedUpdates,
     ImmutableRows,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     TypedTable,
 )
 
@@ -37,11 +39,12 @@ class OwnerRecord:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Participants(GuardedColumns, NoDelete, CoordinatorTable, TypedTable):
+class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, TypedTable):
+
+    column_orders = (NonDecreasing(('committed',)),)
 
     column_guards = (
         ColumnGuard(('participant_lookup',), """1"""),
-        ColumnGuard(('committed',), """OLD.committed = 1 AND NEW.committed = 0"""),
     )
 
     participant_lookup: Annotated[

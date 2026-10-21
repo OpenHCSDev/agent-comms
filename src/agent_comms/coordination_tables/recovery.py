@@ -20,10 +20,12 @@ from agent_comms.typed_table import (
     Column,
     ForeignKey,
     FrozenColumns,
-    GuardedUpdates,
     ImmutableRows,
+    IncrementingColumn,
     Index,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     RowId,
     TextStorage,
     TypedTable,
@@ -43,10 +45,11 @@ class ACPClientConnectivity(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectivityFacet(ExecutionReference, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="connectivity"):
+class ConnectivityFacet(IncrementingColumn, MonotoneColumns, ExecutionReference, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, declared_name="connectivity"):
+
+    column_orders = (NonDecreasing(('observed_at_ms',)),)
 
     immutable_columns = ('execution_id',)
-    update_condition = """NEW.revision != OLD.revision + 1 OR NEW.observed_at_ms < OLD.observed_at_ms"""
 
     execution_id: Annotated[str, field_codec.SnapshotExclude(), Column(primary_key=True)]
     owner: OwnerConnectivity

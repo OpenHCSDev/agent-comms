@@ -26,6 +26,7 @@ from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
+    AccumulatingBits,
     Column,
     ColumnGuard,
     ForeignKey,
@@ -34,7 +35,11 @@ from agent_comms.typed_table import (
     GuardedColumns,
     GuardedInserts,
     GuardedUpdates,
+    IncrementingColumn,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
+    NonIncreasing,
     TextStorage,
     TypedTable,
 )
@@ -86,7 +91,9 @@ class NoPreviousAttempt(PreviousAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class AttemptRecord(OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+class AttemptRecord(IncrementingColumn, MonotoneColumns, OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable, PreviousAttempt, declared_name="attempts"):
+
+    column_orders = (NonDecreasing(('updated_at_ms', 'last_progress_at_ms')),)
 
     insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id AND e.owner_lookup =
         NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts AND ((NEW.attempt_ordinal = 1 AND (e.status =
@@ -106,19 +113,17 @@ class AttemptRecord(OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates,
         a.phase IN ({retry_attempt_phases}) AND a.backend_done = 1 AND a.process_dead = 1 AND NEW.owner_generation >
         a.owner_generation AND NEW.owner_token_digest != a.owner_token_digest))"""
     immutable_columns = ('execution_id', 'attempt_ordinal', 'owner_lookup', 'owner_thread', 'owner_generation', 'owner_token_digest', 'created_at_ms')
-    update_condition = """NEW.revision != OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms OR ((CASE WHEN
-        json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle,
-        '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN
-        ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0) OR ((CASE
+    update_condition = """((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE
+        json_extract(OLD.lifecycle, '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind')
+        IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0) OR ((CASE
         WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE
         json_extract(OLD.lifecycle, '$.process_dead') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind')
         IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) = 0) OR
-        (OLD.last_progress_at_ms IS NOT NULL AND (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms <
-        OLD.last_progress_at_ms)) OR ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND
-        (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle,
-        '$.lease_expires_at_ms')) < (json_extract(OLD.lifecycle, '$.lease_expires_at_ms'))) OR
-        ((json_extract(OLD.lifecycle, '$.kind')) IN ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle,
-        '$.kind')) = (json_extract(OLD.lifecycle, '$.kind')))"""
+        ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle,
+        '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) <
+        (json_extract(OLD.lifecycle, '$.lease_expires_at_ms'))) OR ((json_extract(OLD.lifecycle, '$.kind')) IN
+        ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle,
+        '$.kind')))"""
     column_guards = (
         ColumnGuard(('lifecycle',), """(json_extract(NEW.lifecycle, '$.kind')) != (json_extract(OLD.lifecycle, '$.kind')) AND NOT ({attempt_edges})"""),
     )
@@ -296,10 +301,11 @@ class AttemptRecord(OwnerRecord, GuardedInserts, GuardedColumns, GuardedUpdates,
         )
 
 @dataclass(frozen=True, slots=True)
-class ReplayAssessments(ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+class ReplayAssessments(IncrementingColumn, MonotoneColumns, AccumulatingBits, ExecutionReference, RetryPartition, FrozenColumns, NoDelete, CoordinatorTable, TypedTable):
+    column_orders = (NonDecreasing(('side_effects_possible',)), NonIncreasing(('replay_safe',)),)
+    accumulating_columns = ('facts',)
+
     immutable_columns = ('execution_id',)
-    update_condition = """NEW.revision != OLD.revision + 1 OR (NEW.facts | OLD.facts) != NEW.facts OR (OLD.replay_safe = 0 AND
-        NEW.replay_safe = 1) OR (OLD.side_effects_possible = 1 AND NEW.side_effects_possible = 0)"""
 
     @property
     def allows_retry(self) -> bool:

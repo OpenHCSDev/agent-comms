@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
 
 from agent_comms.coordination_contracts import (
@@ -25,7 +24,7 @@ from agent_comms.coordination_tables.participants import (
     ParticipantAliases,
     Participants,
 )
-from agent_comms.field_codec import MalformedRecord, WireName
+from agent_comms.field_codec import MalformedRecord
 
 
 @dataclass(frozen=True, slots=True)

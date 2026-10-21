@@ -15,7 +15,6 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from dataclasses import dataclass
 from functools import partial
@@ -53,7 +52,6 @@ from agent_comms.typed_table import (
     DurableTables,
     ForeignKey,
     ImmutableRows,
-    SQLiteForeignKeys,
     SharedFileTables,
     SqlValue,
     TypedRow,

@@ -734,6 +734,86 @@ class FrozenColumns(MutationCapability):
             row, columns=row.immutable_columns, when=condition, message="Column values are immutable"),)
 
 
+class OneWayColumn(MutationCapability):
+    """Every update consumes one declared old-to-new column transition."""
+
+    transition_column: ClassVar[str]
+    transition_from: ClassVar[int]
+    transition_to: ClassVar[int]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.transition_column,))
+        condition = (f"OLD.{column} IS NOT {row.transition_from} "
+                     f"OR NEW.{column} IS NOT {row.transition_to}")
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=condition, suffix="_one_way", message="Column transition is one-way"),)
+
+
+class IncrementingColumn(MutationCapability):
+    revision_column: ClassVar[str] = "revision"
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        column = row._column_list((row.revision_column,))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=f"NEW.{column} != OLD.{column} + 1", suffix="_revision",
+            message="Revision must advance once"),)
+
+
+@dataclass(frozen=True)
+class ColumnOrder(ABC):
+    columns: tuple[str, ...]
+
+    @property
+    @abstractmethod
+    def comparison(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def suffix(self) -> str: ...
+
+    def trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        conditions = (
+            f'(OLD."{field.wire_name}" IS NOT NULL AND (NEW."{field.wire_name}" IS NULL '
+            f'OR NEW."{field.wire_name}" {self.comparison} OLD."{field.wire_name}"))'
+            for field in row._fields_named(self.columns))
+        return RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(conditions), suffix=self.suffix,
+            message="Column ordering is monotone")
+
+
+class NonDecreasing(ColumnOrder):
+    comparison = "<"
+    suffix = "_increasing"
+
+
+class NonIncreasing(ColumnOrder):
+    comparison = ">"
+    suffix = "_decreasing"
+
+
+class MonotoneColumns(MutationCapability):
+    column_orders: ClassVar[tuple[ColumnOrder, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        return tuple(order.trigger(row) for order in row.column_orders)
+
+
+class AccumulatingBits(MutationCapability):
+    accumulating_columns: ClassVar[tuple[str, ...]]
+
+    @classmethod
+    def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
+        conditions = (
+            f'((NEW."{field.wire_name}" | OLD."{field.wire_name}") != NEW."{field.wire_name}")'
+            for field in row._fields_named(row.accumulating_columns))
+        return (RowMutation.UPDATE.abort_trigger(
+            row, when=" OR ".join(conditions), suffix="_accumulating",
+            message="Observed bits cannot be erased"),)
+
+
 class GuardedUpdates(MutationCapability):
     update_condition: ClassVar[str]
 

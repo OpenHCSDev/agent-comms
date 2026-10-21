@@ -18,13 +18,15 @@ from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
     Column,
     ColumnGuard,
-    ForeignKey,
     FrozenColumns,
     Generated,
     GuardedColumns,
     GuardedInserts,
     GuardedUpdates,
+    IncrementingColumn,
+    MonotoneColumns,
     NoDelete,
+    NonDecreasing,
     TextStorage,
     TypedTable,
 )
@@ -32,17 +34,18 @@ from agent_comms.coordination_tables import ExecutionReference, RetryPartition
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseObligation(ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
+class ResponseObligation(IncrementingColumn, MonotoneColumns, ExecutionReference, RetryPartition, GuardedUpdates, FrozenColumns, GuardedColumns, GuardedInserts, NoDelete, CoordinatorTable, TypedTable, declared_name="obligations"):
+    column_orders = (NonDecreasing(('updated_at_ms',)),)
+
     """One original reply-route obligation within an execution."""
 
     immutable_columns = ('execution_id', 'exact_target', 'created_at_ms')
-    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')) OR (NEW.revision !=
-        OLD.revision + 1 OR NEW.updated_at_ms < OLD.updated_at_ms) OR ((json_extract(NEW.lifecycle, '$.kind') IN
-        ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1 FROM publication_intents WHERE execution_id
-        = NEW.execution_id AND exact_target = NEW.exact_target )) OR (json_extract(NEW.lifecycle, '$.kind') =
-        'published' AND NOT EXISTS ( SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id AND
-        exact_target = NEW.exact_target AND message_id = json_extract(NEW.lifecycle, '$.message_id') AND seq =
-        json_extract(NEW.lifecycle, '$.seq') ))))"""
+    update_condition = """(json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')) OR (FALSE) OR
+        ((json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})) AND ((NOT EXISTS ( SELECT 1
+        FROM publication_intents WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target )) OR
+        (json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS ( SELECT 1 FROM publication_receipts
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND message_id =
+        json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq') ))))"""
     insert_condition = """(NOT EXISTS ( SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id WHERE
         e.execution_id=NEW.execution_id AND e.origin='wire' AND c.exact_target=NEW.exact_target )) OR
         (json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names}))"""
