@@ -8,7 +8,11 @@ import ast
 import dataclasses
 import enum
 import importlib
+import inspect
+import importlib.resources
+import importlib.util
 import io
+import itertools
 import json
 import os
 import re
@@ -54,6 +58,8 @@ from audit.handler_declarations import BuiltinHandlerDeclarations
 from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
+import agent_comms
+from agent_comms import coordinated_runtime_schema, coordination_schema, field_codec, typed_table
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -495,6 +501,14 @@ class ChangedSource:
         base_source = git(repo, "show", f"{base}:{path}") if listed else b""
         return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines), base_source)
 
+    @classmethod
+    def departed(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
+        """A changed module present at the base, read for what left it; a module the head
+        deleted is empty there."""
+        listed = git(repo, "ls-tree", "--name-only", head, "--", path).strip()
+        source = git(repo, "show", f"{head}:{path}") if listed else b""
+        return cls(path, source, frozenset(), git(repo, "show", f"{base}:{path}"))
+
 
 class ScopeNames(ast.NodeVisitor):
     """Each node's enclosing class and function names, dotted, through the AST's own dispatch."""
@@ -528,7 +542,9 @@ class CleanChangedLines(OccurrenceMeasure):
 
     An occurrence is identified by its enclosing scope and its source text, so rewriting
     the rest of a line around an unchanged occurrence writes nothing new, while a different
-    occurrence elsewhere never pays for a new one.
+    occurrence elsewhere never pays for a new one. Scopes are class and function names, not
+    modules, so an occurrence that leaves one changed module and arrives in another, as a
+    class moved between files, is the same occurrence moved, not a new one written.
     """
 
     @staticmethod
@@ -536,11 +552,24 @@ class CleanChangedLines(OccurrenceMeasure):
         return range(node.lineno, node.end_lineno + 1)
 
     @staticmethod
-    def introduced(repo: Path, base: str, head: str, path: str) -> dict[str, list[int]]:
-        """Each strict measure's sites on the path's changed lines."""
-        source = ChangedSource.read(repo, base, head, path)
-        return {f"{measure.__name__}:{path}": measure.changed_sites(source)
-                for measure in Measure.members_with(CleanChangedLines)}
+    def introduced(
+        repo: Path, base: str, head: str, paths: tuple[str, ...], departed_from: tuple[str, ...],
+    ) -> dict[str, list[int]]:
+        """Each strict measure's sites on each path's changed lines. Occurrences that left the
+        changed modules in ``departed_from`` (those present at the base) pay for the same
+        occurrences arriving elsewhere."""
+        sources = [ChangedSource.read(repo, base, head, path) for path in paths]
+        left = [ChangedSource.departed(repo, base, head, path) for path in departed_from]
+        found: dict[str, list[int]] = {}
+        for measure in Measure.members_with(CleanChangedLines):
+            departed: Counter[tuple[str, str]] = Counter()
+            for source in left:
+                gone = measure.identities(source.base_tree, source.path)
+                gone.subtract(measure.identities(source.tree, source.path))
+                departed.update(+gone)
+            for source in sources:
+                found[f"{measure.__name__}:{source.path}"] = measure.changed_sites(source, departed)
+        return found
 
     @staticmethod
     def scopes(tree: ast.AST) -> dict[ast.AST, str]:
@@ -560,8 +589,9 @@ class CleanChangedLines(OccurrenceMeasure):
         return found
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        """The first changed line of each occurrence written there that the base lacks."""
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+        """The first changed line of each occurrence written there that the base lacks and no
+        changed module gave up; a moved occurrence spends the departure it came from."""
         scopes = cls.scopes(source.tree)
         unwritten = cls.identities(source.tree, source.path)
         unwritten.subtract(cls.identities(source.base_tree, source.path))
@@ -570,13 +600,64 @@ class CleanChangedLines(OccurrenceMeasure):
             if ((count := cls.occurrences(node))
                     and (touched := source.lines.intersection(cls.site_lines(node)))):
                 identity = scopes[node], ast.unparse(node)
-                written = max(0, min(count, unwritten[identity]))
-                unwritten[identity] -= written
-                sites.extend([min(touched)] * written)
+                arrived = max(0, min(count, unwritten[identity]))
+                unwritten[identity] -= arrived
+                moved = min(arrived, departed[identity])
+                departed[identity] -= moved
+                sites.extend([min(touched)] * (arrived - moved))
         return sites
 
 
+class OwnInstanceWrites(ast.NodeVisitor):
+    """A method body's object.__setattr__ calls on its own instance; nested scopes own theirs."""
+
+    def __init__(self, instance: str) -> None:
+        self.instance = instance
+        self.found: list[ast.Call] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """A nested scope's writes are its own."""
+
+    def visit_Call(self, node: ast.Call) -> None:
+        written = [*map(ast.unparse, node.args[:1])]
+        if FrozenFieldWrite.occurrences(node) and written == [self.instance]:
+            self.found.append(node)
+        self.generic_visit(node)
+
+
 class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
+    """object.__setattr__ writes past a frozen class; only the class's own __post_init__ may
+    write its own instance, because there the instance is still being constructed."""
+
+    construction: typing.ClassVar[str] = "__post_init__"
+
+    @classmethod
+    def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        constructing = {id(write) for node in ast.walk(tree) for write in cls.constructing(node)}
+        return (node for node in ast.walk(tree) if id(node) not in constructing)
+
+    @classmethod
+    def constructing(cls, node: ast.AST) -> Iterator[ast.Call]:
+        match node:
+            case ast.ClassDef(body=members):
+                for member in members:
+                    match member:
+                        case ast.FunctionDef(name=FrozenFieldWrite.construction,
+                                             args=ast.arguments(args=[instance, *_]), body=body):
+                            writes = OwnInstanceWrites(instance.arg)
+                            for statement in body:
+                                writes.visit(statement)
+                            yield from writes.found
+
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         match node:
@@ -627,8 +708,9 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
-    def changed_sites(cls, source: ChangedSource) -> list[int]:
-        return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
+    def changed_sites(cls, source: ChangedSource, departed: Counter[tuple[str, str]]) -> list[int]:
+        prose = cls.prose_lines(source) & source.lines
+        return [*super().changed_sites(source, departed), *prose]
 
 
 @dataclass(frozen=True)
@@ -803,55 +885,98 @@ class ModuleDeclarations:
     classes: tuple[tuple[str, tuple[str, ...]], ...]
 
 
-class TypePositions(MroDispatch):
-    """The expressions where a type is expected, each position declared by the node owning it."""
-
-    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
-    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
+class DeclaredPositions(MroDispatch):
+    """Where a literal is used as a declaration's name, each position declared by its node."""
 
     def __init__(self) -> None:
-        self.types: list[ast.expr] = []
-        self.metadata: list[ast.expr] = []
+        self.found: list[ast.expr] = []
+        self.excluded: list[ast.expr] = []
 
     @staticmethod
     def called(node: ast.expr) -> str:
         return ast.unparse(node).rpartition(".")[2]
 
+    @classmethod
+    def literals(cls, tree: ast.AST) -> Iterator[ast.AST]:
+        """The nodes inside a position, so a name spelled there names its declaration."""
+        positions = cls()
+        for node in ast.walk(tree):
+            positions.dispatch_sync(node)
+        excluded = {id(part) for expression in positions.excluded for part in ast.walk(expression)}
+        return (part for expression in positions.found for part in ast.walk(expression)
+                if id(part) not in excluded)
+
+
+class TypePositions(DeclaredPositions):
+    """The expressions where a type is expected, so a one-word class name there names it."""
+
+    type_variable: typing.ClassVar[str] = typing.cast(type, typing.TypeVar).__name__
+    annotated: typing.ClassVar[str] = typing.cast(type, Annotated).__name__
+
     @handles(ast.FunctionDef, ast.AsyncFunctionDef)
     def signature(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         arguments = node.args
-        self.types.extend(filter(None, (node.returns, *(argument.annotation for argument in (
+        self.found.extend(filter(None, (node.returns, *(argument.annotation for argument in (
             *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
             *filter(None, (arguments.vararg, arguments.kwarg)))))))
 
     @handles(ast.AnnAssign)
     def annotation(self, node: ast.AnnAssign) -> None:
-        self.types.append(node.annotation)
+        self.found.append(node.annotation)
 
     @handles(ast.ClassDef)
     def bases(self, node: ast.ClassDef) -> None:
-        self.types.extend(node.bases)
+        self.found.extend(node.bases)
 
     @handles(ast.Call)
     def type_variable_bound(self, node: ast.Call) -> None:
         if self.called(node.func) == self.type_variable:
-            self.types.extend((*node.args[1:], *(keyword.value for keyword in node.keywords)))
+            self.found.extend((*node.args[1:], *(keyword.value for keyword in node.keywords)))
 
     @handles(ast.Subscript)
     def annotated_metadata(self, node: ast.Subscript) -> None:
         """Annotated[T, ...] declares T; what follows it is metadata, not a type."""
         if self.called(node.value) == self.annotated:
-            self.metadata.extend(typing.cast(ast.Tuple, node.slice).elts[1:])
+            self.excluded.extend(typing.cast(ast.Tuple, node.slice).elts[1:])
 
-    @classmethod
-    def literals(cls, tree: ast.AST) -> Iterator[ast.AST]:
-        """The nodes inside a type position, so a one-word class name there names its class."""
-        positions = cls()
-        for node in ast.walk(tree):
-            positions.dispatch_sync(node)
-        metadata = {id(part) for expression in positions.metadata for part in ast.walk(expression)}
-        return (part for expression in positions.types for part in ast.walk(expression)
-                if id(part) not in metadata)
+
+class ModulePositions(DeclaredPositions):
+    """Where a string selects a module: an importer's argument, a key of the module table or
+    the module an interpreter runs. Anywhere else a module's name is a word, a table or a path
+    that happens to share it."""
+
+    importers: typing.ClassVar[frozenset[str]] = frozenset(
+        call.__name__ for call in (importlib.import_module, __import__, importlib.util.find_spec,
+                                   importlib.resources.files))
+    # CPython's command-line option for running a module by name: another program's contract.
+    run_module: typing.ClassVar[str] = ast.dump(ast.Constant("-m"))
+    module_table: typing.ClassVar[str] = ".".join((sys.__name__, next(
+        name for name, value in vars(sys).items() if value is sys.modules)))
+
+    @handles(ast.Call)
+    def imported(self, node: ast.Call) -> None:
+        if self.called(node.func) in self.importers:
+            self.found.extend(node.args[:1])
+
+    @handles(ast.Call)
+    def table_method(self, node: ast.Call) -> None:
+        if ast.unparse(node.func).rpartition(".")[0] == self.module_table:
+            self.found.extend(node.args[:1])
+
+    @handles(ast.Subscript)
+    def table_entry(self, node: ast.Subscript) -> None:
+        if ast.unparse(node.value) == self.module_table:
+            self.found.append(node.slice)
+
+    @handles(ast.Compare)
+    def table_membership(self, node: ast.Compare) -> None:
+        if self.module_table in map(ast.unparse, node.comparators):
+            self.found.append(node.left)
+
+    @handles(ast.Tuple, ast.List)
+    def interpreter_module(self, node: ast.Tuple | ast.List) -> None:
+        self.found.extend(argument for option, argument in itertools.pairwise(node.elts)
+                          if ast.dump(option) == self.run_module)
 
 
 @dataclass(frozen=True)
@@ -863,14 +988,17 @@ class DeclaredSpellings:
     ordinary word, so a literal equal to it is not taken as naming it. A one-word class name
     (Read, Open, Claimed) is an ordinary word too, so a literal equal to it names the class
     only where a type is expected: an annotation, a return, a class base or a type variable's
-    bound. Enum members are the declared boundary spellings of another program's contract, so
-    literals in an enum's body are the one place such a spelling may appear.
+    bound. A module's name names it only where a string selects a module: an importer's
+    argument or a key of ``sys.modules``; elsewhere it is a word, a table or a path that shares
+    the spelling. Enum members are the declared boundary spellings of another program's
+    contract, so literals in an enum's body are the one place such a spelling may appear.
     """
 
     names: dict[str, str]
     enums: frozenset[str]
     unmistakable: dict[str, str]
-    """The names a literal names wherever it appears: all but the one-word class names."""
+    """The names a literal names wherever it appears: all but one-word classes and modules."""
+    modules: dict[str, str]
 
     boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
         kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
@@ -938,8 +1066,13 @@ class DeclaredSpellings:
             enums |= grown
         ordinary = set(filter(cls.one_word_class, (
             name for name, target in names.items() if target.startswith("class "))))
+        functions = {function for declared in modules.values() for function in declared.functions}
+        selected = {name: target for name, target in names.items()
+                    if target.startswith("module ") and name not in functions}
+        positioned = ordinary | selected.keys()
         return cls(names, frozenset(enums),
-                   {name: target for name, target in names.items() if name not in ordinary})
+                   {name: target for name, target in names.items() if name not in positioned},
+                   selected)
 
     def exempt(self, tree: ast.AST) -> set[int]:
         """Literals no reader takes as identity: prose, interpolation pieces, class-header
@@ -998,7 +1131,8 @@ class DeclaredSpellings:
                 case ast.MatchValue(value=value) if self.kind(value):
                     record(value, ComparedKind, "kind matched by spelling")
         for spellings, nodes in ((self.unmistakable, ast.walk(tree)),
-                                 (self.names, TypePositions.literals(tree))):
+                                 (self.names, TypePositions.literals(tree)),
+                                 (self.modules, ModulePositions.literals(tree))):
             for node in nodes:
                 if (isinstance(node, ast.Constant) and isinstance(node.value, str)
                         and node.value in spellings):
@@ -1210,13 +1344,15 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
         return self.generic_visit(node)
 
     # GitMeasure supplies complete repository-relative paths. Only those exact
-    # original modules own codec/schema behavior; nested package tails do not.
-    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
-        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
-        ("agent_comms", "coordination_schema.py"),
-        ("agent_comms", "coordinated_runtime_schema.py"),
-        ("toad", "agent_schema.py"), ("toad", "db.py"),
-    })
+    # original modules own codec/schema behavior; nested package tails do not. Our own
+    # modules are named by their files; Toad's live in another repository, named by path.
+    mechanism_modules = frozenset((
+        *(Path("src", Path(inspect.getfile(module)).relative_to(
+            Path(inspect.getfile(agent_comms)).parents[1]))
+          for module in (field_codec, typed_table,
+                         coordination_schema, coordinated_runtime_schema)),
+        *(Path("src", "toad", module) for module in ("agent_schema.py", "db.py")),
+    ))
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
@@ -1936,8 +2072,11 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
         parts = {measure: [pool.submit(part)
                            for part in measure.parts(repo, base, head, paths, root)]
                  for measure in measures}
-        sites = [pool.submit(CleanChangedLines.introduced, repo, base, head, path)
-                 for path in sorted(paths & python_paths(repo, head, root))]
+        sites = [pool.submit(
+            CleanChangedLines.introduced, repo, base, head,
+            tuple(sorted(paths & python_paths(repo, head, root))),
+            tuple(sorted(paths & python_paths(repo, base, root))),
+        )]
         # Each measure combines as soon as its parts finish, while slower checkers still run.
         measured = {}
         owners = {future: measure for measure, futures in parts.items() for future in futures}
