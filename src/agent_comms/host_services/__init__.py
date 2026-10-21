@@ -109,7 +109,7 @@ class SystemdUserService(HostService, declared_name=None):
                                       ensure_ascii=False)
                            for word in (str(executable), *arguments))
         return (
-            f"[Unit]\nDescription={self.unit}\nAfter=network-online.target\n\n"
+            f"[Unit]\nDescription={self.unit}\n\n"
             "[Service]\nType=notify\nNotifyAccess=main\n"
             f"ExecStart={command}\nRestart=on-failure\n\n"
             "[Install]\nWantedBy=default.target\n"
