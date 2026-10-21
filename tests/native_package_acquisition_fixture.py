@@ -25,7 +25,7 @@ class AcquisitionSample:
 
 
 @dataclass
-class AcquisitionTrace:
+class PackageTrace:
     digest_code: CodeType
     tree_hash_calls: int = 0
     content_reads: int = 0
@@ -46,7 +46,7 @@ def measure_acquisition(source: Path) -> AcquisitionSample:
     namespace = runpy.run_path(str(source))
     owner = cast(type[VerifiedNativePackage], namespace["VerifiedNativePackage"])
     digest = cast(FunctionType, namespace["package_tree_digest"])
-    trace = AcquisitionTrace(digest.__code__)
+    trace = PackageTrace(digest.__code__)
     sys.setprofile(trace)
     started = perf_counter()
     try:
