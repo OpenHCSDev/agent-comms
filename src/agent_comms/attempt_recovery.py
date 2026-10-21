@@ -41,6 +41,7 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution
 from agent_comms.native_claim_epoch import UnrecordedNativeClaim
+from agent_comms.typed_table import RowNotFoundError
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
@@ -91,21 +92,22 @@ class VerifiedOwnerLoss(ABC):
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
-            source = NativeRuntimeInput.one(
-                store.session._connection,
-                **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
-            )
-            if source is not None and source.owner_identity != attempt.owner_identity:
-                raise RecoveryBlocked("native attempt has a conflicting dispatched owner")
             try:
                 release = comms.owners.releases.get(attempt.owner_thread)
             except (OSError, RelationViolationError, MalformedRecord) as error:
                 raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
             try:
-                if source is None:
+                try:
+                    source = NativeRuntimeInput.require(
+                        store.session._connection,
+                        **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
+                    )
+                except RowNotFoundError:
                     release = release.require_owner_loss(registry, attempt.owner_identity)
                     proof = UndispatchedOwnerLoss(attempt, release, store, boundary)
                 else:
+                    if source.owner_identity != attempt.owner_identity:
+                        raise RecoveryBlocked("native attempt has a conflicting dispatched owner")
                     release = release.require_native_loss(registry, source)
                     proof = DispatchedOwnerLoss(attempt, release, store, boundary, native_input=source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
@@ -177,8 +179,8 @@ class DispatchedOwnerLoss(VerifiedOwnerLoss):
             owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
             execution_id=execution_id,
         )
-        pointer = CurrentExecutions.one(store.session._connection, owner_lookup=owner.incarnation.lookup)
-        if pointer is not None and pointer.unresolved:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
+        if pointer.unresolved:
             execution_id = pointer.execution_id.require("the owner pointer names no execution")
             try:
                 recovery_cls.recover_released_native_attempt(store, execution_id)
