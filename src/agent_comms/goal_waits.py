@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
@@ -23,7 +23,7 @@ from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, DurableTables, ForeignKey, Index, TypedStore, TypedTable
+from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
@@ -298,7 +298,7 @@ class GoalWaitTargetRow(TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
+class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)

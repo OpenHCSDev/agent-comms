@@ -45,7 +45,7 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, SQLiteFile
+from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -1108,8 +1108,12 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreWriter(DurableFile, SQLiteFile, FileStore):
-    """A transaction capability shared by stores and their turn-owned writers."""
+class StoreWriter(SQLiteFile, FileStore):
+    """A transaction capability shared by stores and their turn-owned writers.
+
+    Whether the file outlives an installation belongs to each store: it inherits
+    DurableFile or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
+    """
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -1153,7 +1157,7 @@ class StoreWriter(DurableFile, SQLiteFile, FileStore):
 class TypedStore(StoreWriter, TableSchema):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
-    Members name the file and their rows, and inherit DerivedTables or DurableTables.
+    Members name the file and their rows, and inherit DurableStore or DerivedStore.
     A transaction installs an absent store; a snapshot reads it as an empty in-memory
     schema without creating storage. Readers refuse a schema that differs; the
     writer reconciles it as the member's kind of file does.
@@ -1258,3 +1262,12 @@ class TypedStore(StoreWriter, TableSchema):
     def writing(self) -> Iterator[sqlite3.Connection]:
         with self.writer_connection() as connection, self.transaction(connection):
             yield connection
+
+
+class DurableStore(TypedStore, DurableTables, DurableFile):
+    """Rows nothing else can rebuild, in a file every installation carries."""
+
+
+class DerivedStore(TypedStore, DerivedTables, RuntimeFile):
+    """Rows rebuilt from another source, in a file running owners rewrite at any time,
+    maintenance included, so no installation backs it up, carries it or checks it."""

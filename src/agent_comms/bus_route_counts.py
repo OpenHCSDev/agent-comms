@@ -14,11 +14,12 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NoReturn, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
+from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
@@ -339,7 +340,7 @@ class RouteIndexRebuilding(CoordinationReadUnavailable):
         super().__init__(f"Route index covers {through} of {size} bytes")
 
 
-class BusRouteCounts(StoreWriter):
+class BusRouteCounts(StoreWriter, RuntimeFile):
     filename = f"bus_route_counts.v{RouteTable.schema}.sqlite3"
     rebuild_bytes = 4 * 1024 * 1024
 

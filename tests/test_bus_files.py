@@ -5,7 +5,9 @@ import sqlite3
 
 import pytest
 
+from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.installer.backup import bus_files
+from agent_comms.typed_table import DerivedStore
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeInputProof
 from agent_comms.candidate_maintenance import drain_candidate_catchup
@@ -57,6 +59,19 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path) -> None:
     runtime = RuntimeFile.paths_in(comms.root)
     assert declared == durable | runtime
     assert not durable & runtime
+
+
+def test_a_derived_index_written_by_a_running_owner_is_never_carried(tmp_path: Path) -> None:
+    comms = Comms(tmp_path / "bus")
+    comms.messaging.initialize_private_initial_protocol()
+    for name in ("owner", "peer"):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send("peer", "owner", "Index this message")
+    written = {path for path in BusPageIndex.files_in(comms.root) if path.exists()}
+    assert written  # the real send built the page index
+    carried = set(bus_files(comms.root))
+    assert not {str(path.relative_to(comms.root)) for path in written} & carried
+    assert all(issubclass(store, RuntimeFile) for store in DerivedStore.__subclasses__())
 
 
 @pytest.mark.parametrize("journal_mode", ("DELETE", "WAL"))

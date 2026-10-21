@@ -12,7 +12,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Literal, Annotated
+from typing import TYPE_CHECKING, Annotated, BinaryIO, Literal
 
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
@@ -27,7 +27,7 @@ from .read_basis import (
     MessageDisplayScope,
     ReadCursor,
 )
-from .typed_table import Column, DerivedTables, Index, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, DerivedStore, Index, TypedRow, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
@@ -110,7 +110,7 @@ class LatestConversation(TypedRow):
     seq: int
 
 
-class BusPageIndex(TypedStore, DerivedTables):
+class BusPageIndex(DerivedStore):
     filename = "bus_page_index.sqlite3"
     rows = tuple(TypedTable.members_with(PageIndexTable))
     schema_error = StaleBusPageIndexError

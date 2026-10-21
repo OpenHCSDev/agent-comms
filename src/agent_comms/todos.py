@@ -15,7 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -28,6 +28,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
+from agent_comms.order_runs import OrderRun
 
 from . import skills
 from .bus_publication import AgentOrigin
@@ -52,17 +53,16 @@ from .field_codec import (
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
-    WireValue,
-    boundary_decoder,
     WireOmitDefault,
     WireTransient,
+    WireValue,
+    boundary_decoder,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
 from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import InfoKind, Message
-from agent_comms.order_runs import OrderRun
 from .order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from .plan_phases import OrderPhase, UnplannedPhase
 from .private_bus_checkpoint import PublicMessages
@@ -72,15 +72,14 @@ from .repo import Repo
 from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
-from .thread_identity import RecordedThreadIncarnation, CoreWatcherIncarnation, ThreadIncarnation
+from .thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import (
     Column,
-    DurableTables,
+    DurableStore,
     Index,
     JsonStorage,
     TextStorage,
-    TypedStore,
     TypedTable,
 )
 from .work_branches import WorkBranchError, WorkBranches
@@ -3150,7 +3149,7 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True, slots=True)
-class TodoStore(TypedStore, DurableTables):
+class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain

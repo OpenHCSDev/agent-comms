@@ -15,13 +15,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+from agent_comms.response_acknowledgement import ResponseAcknowledgement
+
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from agent_comms.response_acknowledgement import ResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
-from .typed_table import Column, DerivedTables, Index, TypedStore, TypedTable
+from .typed_table import Column, DerivedStore, Index, TypedTable
 from .wake_policy import WakePolicy
 from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireLog, WireSnapshot
 from .wire_record import WireRecord
@@ -256,7 +257,7 @@ class FirstBuild(ResumeIndex):
         return 0
 
 
-class WakeCandidateIndex(TypedStore, DerivedTables):
+class WakeCandidateIndex(DerivedStore):
     """Bounded candidate pages and maintenance of their disposable source state.
 
     Never call ``maintain`` in the send or wake path. Each call only

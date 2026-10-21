@@ -1,20 +1,21 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
-from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity
-
 import hashlib
 import os
 import sqlite3
-from typing import Annotated
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Annotated
+
+from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.native_session_reopen import NativeSessionIdentity
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
+from .locked_store import DurableFile
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -95,7 +96,7 @@ class _SessionRoutes:
         self.close()
 
 
-class TranscriptRoutes(StoreWriter):
+class TranscriptRoutes(StoreWriter, DurableFile):
     filename = "transcript_routes.sqlite3"
 
     def __init__(self, root: Path):
