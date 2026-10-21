@@ -66,7 +66,6 @@ class NoReadNotice(NullMember, ReadNotice):
 @dataclass(frozen=True)
 class PendingReadNotice(ReadNotice):
     text: str
-    accepts_null = False
 
     @classmethod
     def from_wire(cls, data: object) -> PendingReadNotice:

@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, FieldRepresentation
+from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
@@ -284,8 +284,7 @@ class NoThinkingOverride(ThinkingChoice):
         raise refusal
 
 
-class ThinkingLevelValue(FieldRepresentation):
-    accepts_null = True
+class ThinkingLevelValue(AcceptsNull, FieldRepresentation):
 
     @classmethod
     def decode(cls, value: object) -> type[ThinkingChoice]:

@@ -17,7 +17,6 @@ from functools import singledispatch
 from typing import (
     TYPE_CHECKING,
     Annotated,
-    Any,
     ClassVar,
     Literal,
     Self,
@@ -27,6 +26,7 @@ from typing import (
 )
 from uuid import uuid4
 
+from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
@@ -217,8 +217,6 @@ def project_array(value, target):
 
 class PiPayload:
     wire_tag: ClassVar[str | None] = None
-    opaque: ClassVar[bool] = False
-    strict_fields: ClassVar[bool] = False
 
     @classmethod
     def normalize_wire(cls, value):
@@ -229,18 +227,17 @@ class PiPayload:
         if issubclass(cls, DeclaredFamily):
             member = cls.wire_member(value)
             data["kind"] = member.declared_name
-        declared = FieldCodec.record_fields(member)
-        names = {key for _, key in declared}
-        if member.strict_fields and set(value) - names - {member.wire_tag}:
-            raise MalformedRecord(f"Unexpected {member.__name__} fields")
-        hints = FieldCodec._types(member)
-        for f, key in declared:
+        return member.normalize_record(value, data)
+
+    @classmethod
+    def normalize_record(
+        cls, value: dict[str, JsonValue], data: dict[str, object],
+    ) -> dict[str, object]:
+        hints = FieldCodec._types(cls)
+        for f, key in FieldCodec.record_fields(cls):
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                data[key] = member.normalize_field(hints[f.name], key, value[key], value)
-        if member.opaque:
-            # An opaque member keeps the whole record beside the fields it declares.
-            data.update(payload=value)
+                data[key] = cls.normalize_field(hints[f.name], key, value[key], value)
         return data
 
     @classmethod
@@ -262,6 +259,53 @@ class PiPayload:
     def wire_discriminator(self):
         """Refined internal members borrow their original external declaration."""
         return FieldCodec.encode(type(self))
+
+
+@dataclass(frozen=True, kw_only=True)
+class Opaque(PiPayload):
+    """Own the original external JSON value and its normalization."""
+
+    payload: JsonValue
+
+    @classmethod
+    def normalize_record(
+        cls, value: dict[str, JsonValue], data: dict[str, object],
+    ) -> dict[str, object]:
+        return dict(super().normalize_record(value, data), payload=value)
+
+    def to_wire(self) -> JsonValue:
+        return self.payload
+
+
+class UnknownPayload(Opaque):
+    """The declaration an open family selects for an unknown external tag."""
+
+
+class StrictFields(PiPayload):
+    """A closed native record rejects every undeclared external field."""
+
+    @classmethod
+    def normalize_record(
+        cls, value: dict[str, JsonValue], data: dict[str, object],
+    ) -> dict[str, object]:
+        names = {key for _, key in FieldCodec.record_fields(cls)}
+        if set(value) - names - {cls.wire_tag}:
+            raise MalformedRecord(f"Unexpected {cls.__name__} fields")
+        return super().normalize_record(value, data)
+
+
+class OpenPayload(PiPayload, DeclaredFamily):
+    """An external tag selects its member or the family's declared unknown payload."""
+
+    wire_tag = "type"
+
+    @classmethod
+    def wire_member(cls, value: dict[str, JsonValue]) -> type[Self]:
+        try:
+            return cls.member_named(FieldCodec.decode(str, value.get(cls.wire_tag)))
+        except (UnknownFamilyMember, MalformedRecord):
+            member, = cls.members_with(UnknownPayload)
+            return member
 
 
 @dataclass(frozen=True)
@@ -422,13 +466,13 @@ class UnreportedUsage(PiUsage):
 
 
 @dataclass(frozen=True)
-class PiContent(PiPayload, DeclaredFamily, affix="Content"):
+class PiContent(OpenPayload, affix="Content"):
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return ()
 
     def preserve_evidence(self, raw: dict) -> PiContent:
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
-        return self if self.to_wire() == raw else UnknownContent(raw)
+        return self if self.to_wire() == raw else UnknownContent(payload=raw)
 
     def user_transcript(self, position: int, timestamp: float):
         return []
@@ -436,7 +480,6 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     def assistant_transcript(self, position: int, timestamp: float):
         return []
 
-    wire_tag = "type"
     text: ClassVar[str] = ""
     tool_round_allowed: ClassVar[bool] = False
 
@@ -445,13 +488,6 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         from .native_failures import NativePiUnavailable
 
         raise NativePiUnavailable("Native Pi assistant returned non-text content")
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownContent
 
 
 @dataclass(frozen=True)
@@ -526,12 +562,8 @@ class ImageContent(PiContent):
 
 
 @dataclass(frozen=True)
-class UnknownContent(PiContent):
-    payload: dict[str, Any]
-    opaque = True
-
-    def to_wire(self):
-        return self.payload
+class UnknownContent(UnknownPayload, PiContent):
+    pass
 
 
 class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
@@ -700,16 +732,8 @@ class ProviderTransportDetails(PiPayload):
 
 
 @dataclass(frozen=True)
-class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
-    wire_tag = "type"
+class PiDiagnostic(OpenPayload, affix="Diagnostic"):
     provider_connection_failure: ClassVar[bool] = False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownDiagnostic
 
     def refine_model_request_failure(self, failure):
         return failure
@@ -744,13 +768,12 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class UnknownDiagnostic(PiDiagnostic):
-    payload: dict[str, Any]
-    opaque = True
+class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
+    pass
 
 
 @dataclass(frozen=True)
-class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+class PiMessage(OpenPayload, affix="Message"):
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
@@ -831,13 +854,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @property
     def retry_progress(self):
         return False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownMessage
 
     @property
     def text(self) -> str:
@@ -1026,23 +1042,14 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownMessage(PiMessage):
-    payload: dict[str, Any]
-    opaque = True
+class UnknownMessage(UnknownPayload, PiMessage):
+    pass
 
 
 @dataclass(frozen=True)
-class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
-    wire_tag = "type"
+class PiDelta(OpenPayload, affix="Delta"):
     progress: ClassVar[bool] = False
     response_progress: ClassVar[bool] = False
-
-    @classmethod
-    def wire_member(cls, value):
-        try:
-            return cls.member_named(value.get(cls.wire_tag))
-        except UnknownFamilyMember:
-            return UnknownDelta
 
     def events(self):
         return ()
@@ -1057,13 +1064,17 @@ class NoDelta(PiOmitted, PiDelta, declared_name=None):
 
 
 @dataclass(frozen=True)
-class TextDelta(PiDelta, declared_name="text_delta"):
+class ContentDelta(PiDelta, declared_name=None):
     delta: str
-    response_progress = True
 
     @property
     def progress(self):
         return bool(self.delta)
+
+
+@dataclass(frozen=True)
+class TextDelta(ContentDelta, declared_name="text_delta"):
+    response_progress = True
 
     def events(self):
         return (events.Chunk(text=self.delta),)
@@ -1074,13 +1085,7 @@ class TextDelta(PiDelta, declared_name="text_delta"):
 
 
 @dataclass(frozen=True)
-class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
-    delta: str
-
-    @property
-    def progress(self):
-        return bool(self.delta)
-
+class ThinkingDelta(ContentDelta, declared_name="thinking_delta"):
     def events(self):
         return (events.Thinking(text=self.delta),) if self.delta else ()
 
@@ -1088,9 +1093,6 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
 class ToolDelta:
     progress = True
     response_progress = True
-
-    async def emit(self, session):
-        return ()
 
 
 class ToolcallStartDelta(ToolDelta, PiDelta, declared_name="toolcall_start"):
@@ -1106,12 +1108,8 @@ class ToolcallEndDelta(ToolDelta, PiDelta, declared_name="toolcall_end"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UnknownDelta(PiDelta):
-    payload: dict[str, Any]
-    opaque = True
-
-    async def emit(self, session):
-        return ()
+class UnknownDelta(UnknownPayload, PiDelta):
+    pass
 
 
 @dataclass(frozen=True)
@@ -1219,10 +1217,8 @@ class MissingData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class SessionSwitchData(PiResponseData):
+class SessionSwitchData(StrictFields, PiResponseData):
     """The SDK's actual session-replacement outcome, not a local readiness flag."""
-
-    strict_fields = True
     cancelled: bool
 
     def require_switched(self) -> None:
@@ -1361,10 +1357,7 @@ class ReportedCompaction(PiReported[CompactionData]):
 
 
 @dataclass(frozen=True)
-class UnknownData(PiResponseData):
-    payload: Any
-    opaque = True
-
+class UnknownData(Opaque, PiResponseData):
     @classmethod
     def normalize_wire(cls, value):
         return {"kind": cls.declared_name, "payload": value}
@@ -1493,10 +1486,8 @@ class StorageDenialToolDetails(NativeToolDetails):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublishedMessageToolDetails(NativeToolDetails):
+class PublishedMessageToolDetails(StrictFields, NativeToolDetails):
     """The send owner supplies its original committed message, not a guessed acknowledgement."""
-
-    strict_fields = True
     id: str
     message: SentTranscript
     correction: CorrectionResult = field(default_factory=CorrectionUnreported)
@@ -1524,19 +1515,14 @@ class NoToolDetails(NativeToolDetails):
 
 
 @dataclass(frozen=True)
-class OpaqueToolDetails(NativeToolDetails):
-    payload: Any
-    opaque = True
-
+class OpaqueToolDetails(Opaque, NativeToolDetails):
     def edit_diff(self):
         return NativeEditDetails.capture_diff(self.payload)
 
 
 @dataclass(frozen=True, kw_only=True)
-class FileMutationToolDetails(NativeToolDetails, NativeEditDetails):
+class FileMutationToolDetails(StrictFields, NativeToolDetails, NativeEditDetails):
     """Known native publisher metadata, retaining the existing edit evidence."""
-
-    strict_fields = True
     artifact: Annotated[NativeFileArtifact, WireName("agentCommsArtifact")]
 
     def edit_diff(self):
