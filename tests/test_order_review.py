@@ -1,6 +1,9 @@
 """The commander's first review of an order is measured from retained deliveries."""
 
 import pytest
+from dataclasses import replace
+
+from agent_comms.recorded_time import RecordedEventTime
 
 from agent_comms.todos import MeasuredReview, TodoStore
 from test_commander_problem_orders import order
@@ -9,7 +12,8 @@ from test_commander_problem_orders import order
 @pytest.mark.parametrize('rates', ((), (15.0,)))
 def test_measured_review_rounds_up_and_keeps_two_minute_floor(tmp_path, rates, source_repository):
     measured = MeasuredReview(rates)
-    assert measured.review_at(order(source_repository, 'new-order')).at == 240
+    checked = replace(order(source_repository, 'new-order'), at=RecordedEventTime(100))
+    assert measured.review_at(checked).at == 240
 
 
 def test_empty_measurement_does_not_create_a_store(tmp_path):

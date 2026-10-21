@@ -230,7 +230,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for graph in proof_build_checkouts
         if graph.repository.github == CorePackage.repository
     )
-    source = Comms(tmp_path / "source")
+    source = Comms(tmp_path / "bus")
     source.messaging.initialize_private_initial_protocol()
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
