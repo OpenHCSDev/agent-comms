@@ -31,6 +31,7 @@ from agent_comms.pi_payloads import (
     PiDelta,
     PiDiagnostic,
     PiMessage,
+    PiPayload,
     PiResponseData,
     SessionSwitchData,
     StateData,
@@ -262,6 +263,71 @@ def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them(
     with pytest.raises(MalformedRecord):
         SessionSwitchData.from_wire({"cancelled": False, "extra": True})
     assert StateData.from_wire({"extra": True}) == StateData.from_wire({})
+
+
+def test_external_null_members_and_nullable_names_use_their_declarations():
+    from agent_comms.field_codec import ExternalNullMember
+    from agent_comms.pi_payloads import PiModel
+
+    for family in (PiMessage, PiModel, PiResponseData):
+        member, = family.members_with(ExternalNullMember)
+        assert family.from_wire(None) == member()
+
+    @dataclass(frozen=True)
+    class NullableName(PiPayload):
+        ending: type[PiStopReason] | None
+
+    assert NullableName.from_wire({"ending": None}).ending is None
+    known = PiStopReason.member_named("stop")
+    assert NullableName.from_wire({"ending": "stop"}).ending is known
+    assert FieldCodec.decode(type[PiStopReason], known) is known
+
+
+def test_response_command_owns_data_normalization_without_redecoding_its_identity():
+    from agent_comms.pi_commands import PiCommand
+    from agent_comms.pi_events import Response
+
+    seen = []
+
+    class ObservedReply(PiCommand):
+        response_payload = StateData
+
+        @classmethod
+        def normalize_response_data(cls, value):
+            seen.append(value)
+            return super().normalize_response_data(value)
+
+    payload = {"model": None}
+    response = Response.from_wire({
+        "type": "response", "command": ObservedReply.declared_name,
+        "data": payload, "success": True,
+    })
+    assert response.command is ObservedReply
+    assert response.data == StateData.from_wire(payload)
+    assert seen == [payload]
+
+
+@pytest.mark.parametrize("command", [None, False, 1, {}])
+def test_malformed_response_commands_are_not_unknown_commands(command):
+    from agent_comms.pi_events import Response
+
+    with pytest.raises(MalformedRecord):
+        Response.from_wire({"type": "response", "command": command})
+
+
+def test_exact_envelope_derives_additional_response_fields():
+    from agent_comms.pi_events import Response
+
+    @dataclass(frozen=True, kw_only=True)
+    class HeaderProofResponse(Response):
+        receipt: str = ""
+
+    wire = {"type": HeaderProofResponse.declared_name, "command": "switch_session",
+            "id": "proof", "success": False, "error": "failed", "receipt": "seen"}
+    assert HeaderProofResponse.from_wire(wire).receipt == "seen"
+    del wire["receipt"]
+    with pytest.raises(MalformedRecord):
+        HeaderProofResponse.from_wire(wire)
 
 
 @dataclass

@@ -37,7 +37,7 @@ from uuid import uuid4
 
 from typing_extensions import TypeAliasType
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .declared_family import DeclaredFamily
 from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
@@ -723,6 +723,36 @@ class ExternalField(ABC):
     def normalize_external(cls, value: object, record: Mapping[str, object]) -> object: ...
 
 
+class ExternalNullMember:
+    """The family member representing an external null, without changing retained wire form."""
+
+
+class ExternalNull(ExternalField, MroDispatch):
+    """A family's declared null member owns nullable external ingress."""
+
+    @classmethod
+    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+        handler = getattr(cls, next(cls.handler_names_for(type(value))))
+        return handler(value, record)
+
+    @handles(type(None))
+    @classmethod
+    def normalize_null(cls, value: object, record: Mapping[str, object]) -> object:
+        family = cast(type[DeclaredFamily], cls)
+        member, = (member for member in family._member_declarations()
+                   if issubclass(member, ExternalNullMember))
+        return member()
+
+    @handles(object)
+    @classmethod
+    def normalize_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return super().normalize_external(value, record)
+
+    @classmethod
+    def from_wire(cls, value: object):
+        return FieldCodec.decode(cls, cls.normalize_external(value, {}))
+
+
 class DefaultExternalName:
     """The family member selected when an external name is absent or unrecognized."""
 
@@ -730,17 +760,13 @@ class DefaultExternalName:
 class ExternalName(ExternalField, DeclaredFamily):
     @classmethod
     def from_external(cls, value: object) -> type[Self]:
-        if value is not None:
-            try:
-                return cls.member_named(FieldCodec.decode(str, value))
-            except UnknownFamilyMember:
-                pass
-        member, = cls.members_with(DefaultExternalName)
-        return member
+        return cls.member_or_default(
+            FieldCodec.decode(str | None, value), DefaultExternalName,
+        )
 
     @classmethod
     def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return FieldCodec.encode(cls.from_external(value))
+        return cls.from_external(value)
 
 
 class FieldRepresentation(MroDispatch, ABC):
@@ -1759,6 +1785,18 @@ class _ContextDecoder[T](ValueDecoder[T]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
 
 
+class _NominalDecoder[T](_ContextDecoder[T]):
+    """A resolved nominal value stays resolved; raw records cross their decoder once."""
+
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
+        if self.accepts_value(data):
+            return cast(T, data)
+        return self.decode_record(data, context)
+
+    @abstractmethod
+    def decode_record(self, data: object, context: Mapping[str, object]) -> T: ...
+
+
 class _ChoiceDecoder[T](ValueDecoder[T]):
     """A finite domain: its command line offers exactly the editor's choices."""
 
@@ -1955,6 +1993,8 @@ class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
         return tuple((name, name) for name in self.bound.names())
 
     def decode(self, data):
+        if self.accepts_value(data):
+            return data
         if type(data) is not str:
             raise MalformedRecord("Expected a declared family name.")
         return _declared_member(self.bound, data)
@@ -2005,7 +2045,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
         return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
 
     def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
-        if data is None:
+        if self.accepts_value(data):
             return
         for alternative in self.alternatives:
             yield from alternative.external_union_normalizers(data)
@@ -2210,7 +2250,7 @@ class _PairKeyDictDecoder(_DictDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Any]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](_NominalDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
@@ -2243,7 +2283,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Any]):
             key: value for key, value in data.items() if key != tag
         }
 
-    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
+    def decode_record(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
 
@@ -2259,7 +2299,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(_ContextDecoder[Any]):
+class _RecordDecoder(_NominalDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
@@ -2299,7 +2339,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
     def field_names(self) -> tuple[str, ...]:
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
 
-    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
+    def decode_record(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={},

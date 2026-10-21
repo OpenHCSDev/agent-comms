@@ -15,7 +15,6 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
-    ExternalField,
     FieldCodec,
     MalformedRecord,
     WireAbsentNone,
@@ -70,7 +69,7 @@ class MutatesSession:
 
 
 @dataclass(frozen=True, kw_only=True)
-class PiCommand(ExternalField, DeclaredFamily):
+class PiCommand(DeclaredFamily):
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
@@ -129,17 +128,15 @@ class PiCommand(ExternalField, DeclaredFamily):
     def response_owner(cls, name: object) -> type[PiCommand]:
         try:
             return cls.member_named(FieldCodec.decode(str, name))
-        except (UnknownFamilyMember, MalformedRecord):
+        except UnknownFamilyMember:
             return UnknownCommand
 
     @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        owner = cls.response_owner(value)
-        owner.validate_response(record)
-        return FieldCodec.encode(owner)
+    def normalize_response_data(cls, value: object) -> object:
+        return cls.response_payload.normalize_external(value, {})
 
     @staticmethod
-    def validate_response(record: Mapping[str, object]) -> None:
+    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
         pass
 
     @classmethod
@@ -153,13 +150,13 @@ class ExactResponse:
     """A selected operation's response contains exactly its declared success or error envelope."""
 
     @staticmethod
-    def validate_response(record: Mapping[str, object]) -> None:
-        success = record.get("success")
-        payload = "data" if success is True else "error" if success is False else None
-        if (payload is None
-            or set(record) != {"id", "type", "command", "success", payload}
-            or payload == "error" and not isinstance(record[payload], str)):
+    def validate_response(record: Mapping[str, object], response: type[Response]) -> None:
+        outcome = response.outcome(record)
+        expected = {key for _, key in FieldCodec.record_fields(response)} | {response.wire_tag}
+        expected.difference_update(outcome.excluded_fields())
+        if set(record) != expected:
             raise MalformedRecord("Unexpected selected response envelope")
+        outcome.validate_payload(record)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -26,6 +26,8 @@ from pydantic import JsonValue
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     ExternalField,
+    ExternalNull,
+    ExternalNullMember,
     FieldCodec,
     Id128Text,
     MalformedRecord,
@@ -196,7 +198,9 @@ class PiPayload(ExternalField):
         hints = FieldCodec._types(cls)
         for f, key in FieldCodec.record_fields(cls):
             # Native null means omitted where the declaration names its not-reported member.
-            if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
+            if key in value and key not in data and not (
+                value[key] is None and isinstance(f.default, PiPayload)
+            ):
                 data[key] = FieldCodec.normalize_external(hints[f.name], value[key], value)
         return data
 
@@ -385,17 +389,16 @@ class CostAmount(ValidatedScalar):
         return FieldCodec.value_schema(float)
 
 
+PiCostAmount = Annotated[float, CostAmount]
+
+
 @dataclass(frozen=True)
 class PiCost(PiPayload):
-    input: PiField[Annotated[float, CostAmount]] = (
-        0.0
-    )
-    output: PiField[Annotated[float, CostAmount]] = 0.0
-    cache_read: Annotated[PiField[float], CostAmount, WireName("cacheRead")] = 0.0
-    cache_write: Annotated[PiField[float], CostAmount, WireName("cacheWrite")] = 0.0
-    total: PiField[Annotated[float, CostAmount]] = (
-        0.0
-    )
+    input: PiField[PiCostAmount] = 0.0
+    output: PiField[PiCostAmount] = 0.0
+    cache_read: Annotated[PiField[PiCostAmount], WireName("cacheRead")] = 0.0
+    cache_write: Annotated[PiField[PiCostAmount], WireName("cacheWrite")] = 0.0
+    total: PiField[PiCostAmount] = 0.0
 
     def charged(self) -> Decimal:
         return Decimal(str(self.total))
@@ -742,7 +745,7 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class PiMessage(OpenPayload, affix="Message"):
+class PiMessage(ExternalNull, OpenPayload, affix="Message"):
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
@@ -790,12 +793,6 @@ class PiMessage(OpenPayload, affix="Message"):
         if isinstance(self.stop_reason, str):
             object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
 
-    @classmethod
-    def normalize_wire(cls, value):
-        if value is None:
-            return {"kind": AbsentMessage.declared_name}
-        return super().normalize_wire(value)
-
     @property
     def measured_tokens(self) -> PiCount:
         return self.stop_reason.measured(self.usage.total_tokens)
@@ -833,7 +830,7 @@ class PiMessage(OpenPayload, affix="Message"):
         return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
 
 
-class AbsentMessage(PiMessage):
+class AbsentMessage(ExternalNullMember, PiMessage):
     """An omitted external message permits neither new input nor output."""
 
     update_context = True
@@ -1072,14 +1069,8 @@ class UnknownDelta(UnknownPayload, PiDelta):
 
 
 @dataclass(frozen=True)
-class PiModel(PiPayload, DeclaredFamily, affix="Model"):
+class PiModel(ExternalNull, PiPayload, DeclaredFamily, affix="Model"):
     context_window: ClassVar[PiCount] = UnreportedCount()
-
-    @classmethod
-    def normalize_wire(cls, value):
-        if value is None:
-            return {"kind": UnreportedModel.declared_name}
-        return super().normalize_wire(value)
 
     @classmethod
     def wire_member(cls, value):
@@ -1092,7 +1083,7 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
         raise ValueError("Prepared native model does not match the owner selection")
 
 
-class UnreportedModel(PiModel):
+class UnreportedModel(ExternalNullMember, PiModel):
     """The external state has not reported a model; no identity is implied."""
 
 
@@ -1133,15 +1124,7 @@ class PiContextUsage(PiPayload):
 
 
 @dataclass(frozen=True)
-class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
-    @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        from .pi_commands import PiCommand
-
-        owner = PiCommand.response_owner(record.get("command"))
-        return ({"kind": MissingData.declared_name} if value is None
-                else owner.response_payload.normalize_wire(value))
-
+class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 
     @property
     def session_busy(self) -> bool:
@@ -1174,7 +1157,7 @@ class EmptyData(PiResponseData):
     pass
 
 
-class MissingData(PiResponseData):
+class MissingData(ExternalNullMember, PiResponseData):
     """An omitted/null native payload is not a successful data observation."""
 
     def require_payload(self):

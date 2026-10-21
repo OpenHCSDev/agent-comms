@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
-from .field_codec import FieldCodec, WireName, WireOmitDefault
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, FieldPlan, WireName, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -733,6 +734,19 @@ class Response(NativePiEvent, DurablePiEvent):
     id: PiRequestId = AnonymousRequest()
     success: ReportedFlag | PiOmitted = PiOmitted()
 
+    @classmethod
+    def normalize_record(cls, value, data):
+        owner = (PiCommand.response_owner(value["command"])
+                 if "command" in value else cls.command)
+        owner.validate_response(value, cls)
+        return super().normalize_record(value, dict(
+            data, command=owner, data=owner.normalize_response_data(value.get("data")),
+        ))
+
+    @classmethod
+    def outcome(cls, record: Mapping[str, object]) -> type[ResponseOutcome]:
+        return ResponseOutcome.from_record(record)
+
     @property
     def succeeded(self) -> bool:
         """Pi reported success; an omitted success is not one."""
@@ -766,6 +780,44 @@ class Response(NativePiEvent, DurablePiEvent):
             return
         for event in owner.on_response(self, session):
             yield event
+
+
+class ResponseOutcome(DeclaredFamily, affix="ResponseOutcome"):
+    """Each declared outcome owns its selected payload and validation."""
+
+    success_value: ClassVar[bool]
+    payload_field: ClassVar[FieldPlan]
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, object]) -> type[ResponseOutcome]:
+        success = FieldCodec.decode(bool, record.get("success"))
+        member, = (member for member in cls.members_with(cls)
+                   if member.success_value == success)
+        return member
+
+    @classmethod
+    def excluded_fields(cls) -> set[str]:
+        keys = {member.payload_field.key
+                for member in ResponseOutcome.members_with(ResponseOutcome)}
+        return keys - {cls.payload_field.key}
+
+    @classmethod
+    def validate_payload(cls, record: Mapping[str, object]) -> None:
+        pass
+
+
+class SucceededResponseOutcome(ResponseOutcome):
+    success_value = True
+    payload_field = FieldCodec.field_plan(Response, "data")
+
+
+class FailedResponseOutcome(ResponseOutcome):
+    success_value = False
+    payload_field = FieldCodec.field_plan(Response, "error")
+
+    @classmethod
+    def validate_payload(cls, record: Mapping[str, object]) -> None:
+        FieldCodec.decode(str, record[cls.payload_field.key])
 
 
 class SteeringInterruptCompleted(NativePiEvent):
