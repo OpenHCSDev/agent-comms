@@ -22,7 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
-from agent_comms.native_package import verify_native_package
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
@@ -44,7 +44,7 @@ async def run(stage, package):
     # Persistent fixture roots must also leave room for POSIX socket names.
     assert stage.is_relative_to(Path('/home/ts/wt'))
     stage.mkdir(mode=0o700, exist_ok=False)
-    verify_native_package(package)
+    VerifiedNativePackage.acquire(package)
     public = wire()
     snapshot = public.registry.snapshot()
     source = snapshot.require_active('openhcs-helper')

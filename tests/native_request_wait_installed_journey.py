@@ -17,7 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_package import verify_native_package
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
@@ -52,7 +52,7 @@ async def run(arguments):
     assert stage.is_relative_to("/home/ts/wt")
     stage.mkdir(mode=0o700, exist_ok=False)
     package = arguments.package.absolute()
-    verify_native_package(package)
+    VerifiedNativePackage.acquire(package)
     project, config = stage / "project", stage / "pi"
     project.mkdir(); config.mkdir(mode=0o700)
     posts, connections = [], set()
