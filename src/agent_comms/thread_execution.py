@@ -85,6 +85,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
+    def require_commander_fork(cls) -> None:
+        raise RelationViolationError('This thread is not a declared commander fork.')
+
+    @classmethod
     def restart_candidates(cls, thread: Thread, status):
         return ()
 
@@ -175,3 +179,15 @@ class ExternalThreadExecution(ThreadExecution):
         from .agent_activity import ExternalRecipientActivity
 
         return ExternalRecipientActivity(thread.incarnation)
+
+
+class CommanderForkExecution(ExternalThreadExecution):
+    """A commander child uses its CLI inbox, not a native process or bridge."""
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        return requested
+
+    @classmethod
+    def require_commander_fork(cls) -> None:
+        pass
