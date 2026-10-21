@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -10,7 +11,8 @@ import pytest
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.candidate_maintenance import drain_candidate_catchup
-from agent_comms.comms import Comms
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
@@ -217,3 +219,19 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
         for _ in range(2):
             assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
             assert '"failed"' not in capsys.readouterr().out
+
+
+def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
+    root = private_directory / "bus"
+    comms = wire(root)
+    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
+    comms.registry.declare(comms.registry.new_thread(
+        "owner", frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid())))
+    lease = comms.agents.begin_turn("owner", "turn").turn_lease
+    turn = comms.registry.require("owner").turn_record.path
+    assert turn in comms.registry.store.cut_paths
+
+    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+        copied = Comms(copy).registry.require("owner")
+        assert copied.turn_lease.identity == lease.identity
+        assert copied.turn_record.read().executing

@@ -8,23 +8,90 @@ file:line text shape, its parsing and its existence check at a branch head.
 from __future__ import annotations
 
 import ast
-import inspect
 import re
 import subprocess
-import textwrap
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_comms.errors import ToolRefusedError
+
 from .field_codec import (
-    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue, boundary_decoder,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireValue,
 )
+from .goals import CheckedCommit, GitCommandFailed
+
+if TYPE_CHECKING:
+    from .repo import Repo
+    from .todos import PullRequestLink
 
 
 class MissingSourceLine(ToolRefusedError):
-    """A cited file:line is not in the checkout it must exist in; the caller cites another."""
+    """A cited file:line is not in its declared source revision."""
+
+
+@dataclass(frozen=True)
+class SourceRevision(ABC):
+    """One validation call captures each repository's successfully fetched commit once."""
+
+    _commits: dict[Path, str] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+
+    @property
+    @abstractmethod
+    def reference(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def fetch_refspec(self) -> str: ...
+
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        if repository not in self._commits:
+            CheckedCommit.git(str(repository), 'fetch', 'origin', self.fetch_refspec)
+            self._commits[repository] = CheckedCommit.git(
+                str(repository), 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
+            ).strip()
+        commit = self._commits[repository]
+        root = repository.absolute()
+        path = (root / file).relative_to(root).as_posix()
+        try:
+            text = CheckedCommit.git(str(repository), 'show', f'{commit}:{path}')
+            return tuple(text.splitlines())
+        except GitCommandFailed as error:
+            if error.source_path_absent(commit, path):
+                raise MissingSourceLine(
+                    f'Source file {file} does not exist at {commit}.'
+                ) from error
+            raise
+
+
+class MainRevision(SourceRevision):
+    @property
+    def reference(self) -> str:
+        return 'origin/main'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return 'main'
+
+
+@dataclass(frozen=True)
+class PullRequestHeadRevision(SourceRevision):
+    link: PullRequestLink
+
+    @property
+    def reference(self) -> str:
+        return f'refs/agent-comms/cited/{self.link.number}'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return f'+pull/{self.link.number}/head:{self.reference}'
 
 
 class SourceReference(ABC):
@@ -73,28 +140,38 @@ class FileLine(WireValue, SourceReference):
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
 
-    def require_exists(self, root: Path) -> None:
-        path = root / self.file
-        if path.is_file():
-            with path.open() as source:
-                for line, _ in enumerate(source, 1):
-                    if line == self.line:
-                        return
-        raise MissingSourceLine(f"Source owner {path}:{self.line} does not exist.")
+    def require_exists(self, repository: Path, revision: SourceRevision) -> None:
+        if self.line > len(revision.lines(repository, self.file)):
+            raise MissingSourceLine(
+                f"Source owner {self.to_wire()} does not exist at the cited revision."
+            )
 
     @classmethod
-    def class_declaration(cls, declaration: type) -> FileLine:
-        """Derive the class line, not a decorator line or a second class-name roster."""
-        source, start = inspect.getsourcelines(declaration)
-        node = ast.parse(textwrap.dedent("".join(source))).body[0]
-        return cls(inspect.getfile(declaration), start + node.lineno - 1)
+    def class_declaration(
+        cls, declaration: type, repository: Repo, revision: SourceRevision
+    ) -> FileLine:
+        """Resolve a nominal module class in the same Git source its order will cite."""
+        file = repository.module_file(declaration.__module__).as_posix()
+        body = ast.parse('\n'.join(revision.lines(repository.checkout, file)), filename=file).body
+        for name in declaration.__qualname__.split('.'):
+            for node in body:
+                if isinstance(node, ast.ClassDef) and node.name == name:
+                    body = node.body
+                    break
+            else:
+                raise MissingSourceLine(
+                    f'Class {declaration.__qualname__} does not exist in {file} '
+                    'at the cited revision.'
+                )
+        return cls(file, node.lineno)
 
-    def require_class(self, root: Path) -> None:
-        path = root / self.file
-        tree = ast.parse(path.read_text(), filename=str(path))
+    def require_class(self, repository: Path, revision: SourceRevision) -> None:
+        tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
         if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
                    for node in ast.walk(tree)):
-            raise MissingSourceLine(f"scope shape reference {self.to_wire()} must name a class declaration")
+            raise MissingSourceLine(
+                f"scope shape reference {self.to_wire()} must name a class declaration"
+            )
 
     def to_wire(self) -> str:
         return f"{self.file}:{self.line}"

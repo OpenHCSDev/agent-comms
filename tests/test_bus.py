@@ -23,7 +23,14 @@ from agent_comms.errors import (
     MessageNotificationError,
     RelationViolationError,
 )
-from agent_comms.messages import ClaimHistoryKind, ClaimMessage, InfoKind, Message
+from agent_comms.messages import (
+    ClaimHistoryKind,
+    ClaimMessage,
+    InfoKind,
+    MembershipChange,
+    Message,
+    MessageRoleWire,
+)
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
     canonical_publication_key,
@@ -72,9 +79,17 @@ def record_from(declaration, message):
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
-def test_real_message_record_round_trip(tmp_path, declaration):
+@pytest.mark.parametrize(
+    "role",
+    tuple(
+        MessageRoleWire(change=change, notice=notice).role()
+        for change in (MessageRoleWire().change, *MembershipChange)
+        for notice in (False, True)
+    ),
+)
+def test_real_message_record_round_trip(tmp_path, declaration, role):
     bus = Bus(Bus.path_in(tmp_path))
-    message = Message("author", "worker", "hello", InfoKind, seq=1)
+    message = Message("author", "worker", "hello", InfoKind, seq=1, role=role)
     record = record_from(declaration, message)
     stored = bus.append(lambda seq, db: replace(record, seq=seq))
     assert stored.seq > 0

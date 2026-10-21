@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Annotated
 from uuid import uuid4
 
@@ -537,10 +536,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         return request
 
     def require_sendable(self) -> None:
-        """A new order's wording and source references hold against the tree it is sent with."""
+        """A new order's wording and source references hold at its declared revision."""
         self.order.require_wording()
-        self.order.owner.require_exists(Path(self.order.check.directory))
-        self.order.scope.require_references(Path(self.order.check.directory))
+        self.order.require_references()
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:

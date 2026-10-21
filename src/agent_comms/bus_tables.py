@@ -123,13 +123,11 @@ class BusCapability(BusTables):
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
     def rows(self) -> tuple[TypedTable, ...]:
-        """One row per capability table, each cut from this record's own encoding by the
-        table's declared keys. The table reuses the record's fields, so a key the encoding
-        omits for its default decodes to the same default."""
-        encoded = FieldCodec.encode_fields(self)
+        """Project declared Python fields without flattening their wire representations."""
         return tuple(
-            FieldCodec.decode_record(table, {
-                key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
+            FieldCodec.construct(table, {
+                item.name: getattr(self, item.name) for item in fields(table)
+            })
             for table in self.tables())
 
     def projections(self):

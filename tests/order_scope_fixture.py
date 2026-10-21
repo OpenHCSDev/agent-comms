@@ -1,5 +1,4 @@
-"""One declared parent for fixtures exercising checked Todo behavior."""
-from agent_comms.change_report import FileLine
-from agent_comms.todos import FixScope, FixShape, Todo
+"""The fixture's declared Git source owns its checked order parent."""
+from source_revision_fixture import SourceRepository
 
-FIX_SCOPE = FixScope(FixShape(parents=(FileLine.class_declaration(Todo),), members=()))
+FIX_SCOPE = SourceRepository.scope()

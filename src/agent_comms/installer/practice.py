@@ -14,7 +14,6 @@ from pathlib import Path
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.locked_store import RegistryFile
-from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.maintenance_barrier import MaintenanceBarrier
@@ -96,15 +95,14 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     into.mkdir(mode=0o700)
     # The log's own file lock, never WireLog.locked(): that checks the index with the
     # target's code, which refuses a bus whose carries have not run yet. Each group is one
-    # cut: a writer advancing the log between its copy and its checkpoint's would leave
-    # a checkpoint past the end of the copied log.
-    locked_copies = ((_store_lock(log.path), log.cut_paths),
-                     (registry.locked(mode=SharedLock()),
-                      (registry.path, PrivateRegistryGuard.path_in(root))))
+    # cut, its paths read under its lock: a writer advancing the log between its copy and
+    # its checkpoint's would leave a checkpoint past the end of the copied log, and a turn
+    # claimed after ``saved`` was listed would leave the registry naming a missing turn.
+    locked_copies = ((_store_lock(log.path), log), (registry.locked(mode=SharedLock()), registry))
     copied: set[str] = set()
-    for lock, paths in locked_copies:
+    for lock, owner in locked_copies:
         with lock:
-            for path in paths:
+            for path in owner.cut_paths:
                 if path.exists():
                     copied.add(_copy_saved(root, into, str(path.relative_to(root)), databases))
     for name in saved.keys() - witnesses - copied:
