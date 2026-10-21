@@ -1871,11 +1871,11 @@ class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
         signal.signal(signum, signal.SIG_IGN)
         raise PoolWorkerStopped()
 
-    @staticmethod
-    def _initialize(read_fd: int, write_fd: int) -> None:
-        signal.signal(signal.SIGTERM, ForkedProcessPool._stopped)
+    @classmethod
+    def _initialize(cls, read_fd: int, write_fd: int) -> None:
+        signal.signal(signal.SIGTERM, cls._stopped)
         os.close(write_fd)
-        ParentLifeline.watch(read_fd, partial(os.kill, os.getpid(), signal.SIGTERM))
+        cls.watch(read_fd, partial(os.kill, os.getpid(), signal.SIGTERM))
 
     @staticmethod
     def _work[T](work: Callable[[], T]) -> T:
