@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
-from .lifecycle_capability import LifecycleCapability, Unresolved, Active
+from .lifecycle_capability import Active, LifecycleCapability, Unresolved
 
 
 @dataclass(frozen=True)

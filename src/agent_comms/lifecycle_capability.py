@@ -20,7 +20,7 @@ class Settled(LifecycleCapability):
 
 class Terminal(Settled):
     @classmethod
-    def successors(cls) -> tuple[type[LifecycleCapability], ...]:
+    def successors(cls) -> tuple[()]:
         return ()
 
 

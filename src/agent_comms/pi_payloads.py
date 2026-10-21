@@ -6,8 +6,6 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
-from .lifecycle_capability import Successful
-
 import math
 import re
 import types
@@ -45,6 +43,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .goals import GoalDeclaration
+from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
@@ -55,13 +54,13 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnreportedStopReason,
 )
+from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
-from .recorded_time import EventTime, EventMilliseconds, UnrecordedEventTime
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -924,7 +923,9 @@ class AssistantMessage(PiMessage):
         session.output.start_message()
         if session.accepts_output:
             updates.extend(self.usage.charges(session.usage))
-        session.output.final_assistant_stop = bool(reason.items_with(Successful, reason)) and session.started_input
+        session.output.final_assistant_stop = (
+            bool(reason.items_with(Successful, reason)) and session.started_input
+        )
         updates.extend([event async for event in reason.apply(session, self)])
         await session.assistant_ended()
         return tuple(updates)

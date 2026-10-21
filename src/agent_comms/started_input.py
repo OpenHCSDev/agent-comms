@@ -1,10 +1,10 @@
 """Shared start notification behavior on the existing turn input sources."""
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Unresolved
-
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.lifecycle_capability import Unresolved
 
 from .acp_extension import InputStartedUpdate, NoQueueScope
 from .coordinator import Coordination

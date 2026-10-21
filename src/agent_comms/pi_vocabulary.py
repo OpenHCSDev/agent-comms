@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
-from .pi_counts import PiCount, UnreportedCount
 from .lifecycle_capability import Failed, LifecycleCapability, Successful
+from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -71,7 +71,7 @@ class PiStopReason(LifecycleCapability, DeclaredFamily, affix="StopReason"):
         return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
 
     @classmethod
-    def require_failed_terminal(cls):
+    def require_failed_terminal(cls) -> None:
         # A saved tool round cannot establish whether the live owner accepted it.
         if cls.items_with(Successful, cls):
             raise ValueError("Saved assistant message did not end its turn as a failure")

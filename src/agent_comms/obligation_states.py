@@ -122,8 +122,10 @@ class DeferredResponse(Deferred, ResponseState):
             session._connection,
             where="execution_id=? AND exact_target=?",
             parameters=(execution_id, obligation.exact_target),
-            lifecycle=PendingResponse(), revision=obligation.revision + 1,
-            reason_code=NoReasonCode(), updated_at_ms=session.now(obligation.updated_at_ms),
+            lifecycle=PendingResponse(),
+            revision=obligation.revision + 1,
+            reason_code=NoReasonCode(),
+            updated_at_ms=session.now(obligation.updated_at_ms),
         )
 
     @classmethod

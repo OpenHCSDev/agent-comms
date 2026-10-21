@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Complete
-
 import logging
 import sqlite3
 import threading
 from pathlib import Path
+
+from agent_comms.lifecycle_capability import Complete
 
 from .bus_route_counts import BusRouteCounts
 from .coordination_errors import CoordinationError

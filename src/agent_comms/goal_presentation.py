@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
+
+from agent_comms.lifecycle_capability import Active
 
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_states import (

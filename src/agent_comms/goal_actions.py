@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-from .lifecycle_capability import Settled
-
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
 from agent_comms import field_codec
+from agent_comms.goals import (
+    Goal,
+    GoalChangedError,
+    GoalCheckpoint,
+    GoalDeclaration,
+    GoalOrder,
+    NoGoal,
+    ProblemGoalOrder,
+    ReportedTurn,
+    RequestDirective,
+    RequestGoalOrder,
+    UnobservedGoalCheckpoint,
+    UnorderedGoalOrder,
+)
 from agent_comms.input_disposition import InputDispositions
 
 from .change_report import FileLine, NoSourceReference
@@ -30,20 +42,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.goals import (
-    Goal,
-    GoalCheckpoint,
-    GoalChangedError,
-    GoalDeclaration,
-    GoalOrder,
-    NoGoal,
-    ProblemGoalOrder,
-    ReportedTurn,
-    RequestDirective,
-    RequestGoalOrder,
-    UnorderedGoalOrder,
-    UnobservedGoalCheckpoint,
-)
+from .lifecycle_capability import Settled
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
@@ -235,7 +234,6 @@ class ActiveGoalAction(
         return ActiveGoal()
 
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
-        thread = ctx.thread
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
         generation.lifecycle.resume_status(generation, goal, ctx)
 

@@ -5,15 +5,21 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
-    UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
-    EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
+    CompletedProgress,
+    ContextualProgress,
+    EngagedProgress,
+    FailedProgress,
+    IgnoredProgress,
+    InterruptedProgress,
+    PassiveProgress,
+    UnrecordedProgress,
 )
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
@@ -115,15 +121,12 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def binding_expression(cls) -> str:
         return "execution_id IS NULL AND exact_target IS NULL"
 
-    def binds_pending_engagement(self, previous) -> bool:
-        return False
-
     def writable_pending_assignments(self, assignment):
         return ()
 
     def permits_engagement_change(self, after):
         gaining = self.execution_id is None and after.execution_id is not None
-        return not gaining or after.binds_pending_engagement(self)
+        return not gaining or bool(after.items_with(EngagedAssignment, after))
 
     @property
     @abstractmethod
@@ -223,7 +226,7 @@ class SelectedResponseNotification:
         sender_lookup,
         *,
         observation,
-        activity,
+        activity=None,
         updated_at_ms=0,
         triage_inflight=False,
     ):
@@ -374,9 +377,6 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
         return self.decision
 
 
-    def binds_pending_engagement(self, previous) -> bool:
-        return previous.execution_id is None
-
     @classmethod
     def successors(cls):
         return CompletedAssignment, DeferredAssignment, FailedAssignment
@@ -405,7 +405,9 @@ class CompletedAssignment(Complete, Terminal, BoundAssignment):
 
 
 @dataclass(frozen=True)
-class InterruptedAssignment(ChangedNotification, PreengagementTarget, AssignmentDecision, AssignmentState):
+class InterruptedAssignment(
+    ChangedNotification, PreengagementTarget, AssignmentDecision, AssignmentState
+):
     decision: PendingDecision | Engagement
 
     @classmethod
@@ -415,7 +417,9 @@ class InterruptedAssignment(ChangedNotification, PreengagementTarget, Assignment
         )
 
 
-class DeferredAssignment(EngageableAssignment, Deferred, SelectedResponseNotification, InterruptedAssignment):
+class DeferredAssignment(
+    EngageableAssignment, Deferred, SelectedResponseNotification, InterruptedAssignment
+):
     def requires_selected_triage(self) -> bool:
         if self.execution_id is not None:
             return False
@@ -440,7 +444,9 @@ class DeferredAssignment(EngageableAssignment, Deferred, SelectedResponseNotific
 
 
 @dataclass(frozen=True)
-class DeliveredAssignment(ChangedNotification, PreengagementTarget, Terminal, AssignmentDecision, AssignmentState):
+class DeliveredAssignment(
+    ChangedNotification, PreengagementTarget, Terminal, AssignmentDecision, AssignmentState
+):
     """The recipient's running turn took this message as one of its inputs.
 
     No execution answers it: the agent replies with its own tools. Only the

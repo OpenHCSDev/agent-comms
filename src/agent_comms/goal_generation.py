@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
+
 from .declared_family import DeclaredFamily
 from .goal_attempt_phase import (
     FailedAttempt,
@@ -12,17 +14,18 @@ from .goal_attempt_phase import (
 )
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 if TYPE_CHECKING:
+    from .goal_actions import GoalActionContext
     from .goal_attempts import Generation, GoalAttemptStore
+    from .goals import Goal
 
 
 @dataclass(frozen=True)
 class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     ready: ClassVar[bool] = False
 
-    def resume_status(self, generation, goal, ctx) -> None:
+    def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         if not self.allows_resume(ctx.thread.executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
@@ -102,7 +105,7 @@ class ReservedGeneration(GenerationState):
 
 @dataclass(frozen=True)
 class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
-    def resume_status(self, generation, goal, ctx) -> None:
+    def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         from .goal_actions import required_block_reason
         from .goal_states import BlockedGoal
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Unresolved
-
 import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -12,6 +10,8 @@ from functools import cached_property
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from agent_comms.lifecycle_capability import Unresolved
 
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
@@ -30,7 +30,6 @@ from .goal_waits import (
     GoalInputReview,
     GoalWait,
     GoalWaits,
-    NoGoalWait,
     RecordedGoalWait,
     StandbyReview,
 )
