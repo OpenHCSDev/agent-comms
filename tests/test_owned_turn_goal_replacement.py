@@ -175,12 +175,9 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
 
 @pytest.mark.asyncio
 async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path):
-    """A block published while an owner turn prepares is what that turn reserves; the
-    commander's retry order makes the goal active again, and the turn keeps its tool calls.
-
-    Only this window gives a running turn a non-active captured state: authorize requires
-    the active goal, and a routed turn under an inactive goal holds InactiveGoalPermission.
-    """
+    """The retry order's message is queued while the goal is blocked, so its owner input
+    carries no active goal id and captures the blocked state; the order then makes the goal
+    active, and that running turn keeps its tool calls."""
     source = SourceRepository.create(tmp_path / 'source')
     comms = Comms(tmp_path)
     for name in ('lead', 'worker'):
@@ -191,37 +188,28 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     comms.goals.update_goal('lead', SetGoalAction(
         text='Repair the blocked unit', goal_id='request', order=RequestGoalOrder(),
     ))
-    initial = comms.goals.update_goal('worker', CreateProblemGoalAction(
+    comms.goals.update_goal('worker', CreateProblemGoalAction(
         problem='P1', order=order(source), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
         repo=RepositoryName.from_wire('org/repo'), text='Repair the blocked unit',
     ))
+    blocked = comms.goals.update_goal(
+        'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')
+    )
     actor = comms.registry.require('lead').incarnation
     agent = CommsAgent(comms, auto_wake=False)
-    turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'input before the block',
-                     original_owner_input=True, original_goal_id=initial.id)
-    assert turn.authorize()
-    turn.turn_id = Id128Text.mint()
-    async with AsyncExitStack() as resources:
-        turn.registry_owner = agent.turns.acquire_turn(
-            resources, turn.session_id, turn.thread_name, turn.turn_id, turn.task,
-        )
-        batch = InputBatch.capture((), (), turn.task, turn.thread,
-                                   agent.turns.inputs.dispositions.read(()))
-        turn.prepare_prompt(batch)
-        comms.goals.update_goal(
-            'worker', BlockedGoalAction(block_reason='Backend turn ended without a result.')
-        )
-        turn.reserve_input(batch)
-        try:
-            todo = comms.goals.todos.get('P1')
-            retried = comms.goals.update_goal('worker', OrderGoalAction(
-                problem='P1', expected_revision=todo.revision, assigner=actor,
-                commander='lead', request='request', review_at=RecordedEventTime(2000),
-                order=replace(order(source), id='retry'),
-            ))
-            assert retried.state == ActiveGoal()
-            # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
-            turn.original.goal_permission.require_current(comms.registry.require('worker').goal)
-        finally:
-            turn.settle_unbound()
+    # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
+    turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
+                     original_owner_input=True,
+                     original_goal_id=blocked.active().reported_id())
+    async with AsyncExitStack() as resources, AsyncExitStack() as permits:
+        assert await turn.acquire(resources, permits)
+        todo = comms.goals.todos.get('P1')
+        retried = comms.goals.update_goal('worker', OrderGoalAction(
+            problem='P1', expected_revision=todo.revision, assigner=actor,
+            commander='lead', request='request', review_at=RecordedEventTime(2000),
+            order=replace(order(source), id='retry'),
+        ))
+        assert retried.state == ActiveGoal()
+        # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
+        turn.original.goal_permission.require_current(comms.registry.require('worker').goal)
