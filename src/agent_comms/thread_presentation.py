@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -114,8 +114,7 @@ class SessionDisconnected(ThreadPresentationStatus):
 
     def over(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """The ordinary presentation, with its notifications, showing the disconnection."""
-        shown = self.presentation(ordinary.title)
-        return replace(ordinary, marker=shown.marker, summary=shown.summary, status=self)
+        return ordinary.with_paint(self.presentation(ordinary.title))
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +204,11 @@ class ThreadPresentation:
         """The acquired presentation is already suitable for its status row."""
         return self
 
+    def with_paint(self, shown: ThreadPresentation) -> Self:
+        """Change display fields without changing this member or its source evidence."""
+        return replace(self, title=shown.title, marker=shown.marker,
+                       summary=shown.summary, status=shown.status)
+
     def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
         readable[name] = self
 
@@ -265,7 +269,7 @@ class ThreadPresentation:
 
     @property
     def label(self) -> str:
-        return f"{self.marker} {self.title}"
+        return f"{self.marker} {self.title}".strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,13 +279,12 @@ class NoThreadPresentation(ThreadPresentation):
     title: str = ""
     marker: str = ""
     summary: str = ""
-    status: ThreadRetired = ThreadRetired()
 
     def require(self, name: str) -> ThreadPresentation:
         raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
 
     def for_status(self, name: str) -> ThreadPresentation:
-        return self.status.presentation(name)
+        return self.with_paint(ThreadRetired().presentation(name))
 
     def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
         pass
@@ -293,6 +296,3 @@ class NoThreadPresentation(ThreadPresentation):
     def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
         return self
 
-    @property
-    def label(self) -> str:
-        return ""

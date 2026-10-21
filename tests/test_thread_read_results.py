@@ -40,7 +40,9 @@ def test_status_projection_and_busy_retains_the_canonical_row():
     status.observed(observed({'saved': failure}))
     assert 'broken' in status.open('saved').lines[0]
     status.observed(observed({'saved': ThreadPresented(NoThreadPresentation())}))
-    assert status.open('saved').presentation == ThreadStatusModel.retired('saved').presentation
+    shown = status.open('saved').presentation
+    assert isinstance(shown, NoThreadPresentation)
+    assert shown.same_status(ThreadStatusModel.retired('saved').presentation)
 
 
 def test_changed_interest_retains_one_results_mapping_and_starts_empty():
