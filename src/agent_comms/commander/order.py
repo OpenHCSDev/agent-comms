@@ -393,7 +393,7 @@ class Commander(CommanderContext):
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *order.work_instructions()))
-        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(self.comms.registry.require(unit), [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')
         taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
         fired = tuple(listed[pid] for pid in group
@@ -877,7 +877,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
         source = Repo.of(Path.cwd())
-        holder = todo.held().owner_identity
+        holder = ctx.comms.registry.require(todo.held().owner)
         if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
         if not source.holds(todo):

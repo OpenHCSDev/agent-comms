@@ -85,7 +85,7 @@ class CommanderHeartbeat(WatchPass):
             owner: review for owner, review in self.reviews.items() if owner in live
         }
         for thread in commanders:
-            comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry.storage_rule)
+            comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry)
             if thread.incarnation not in self.reviews:
                 # First observation, including connector startup, only establishes a baseline.
                 self.reviews[thread.incarnation] = CommanderReview(
