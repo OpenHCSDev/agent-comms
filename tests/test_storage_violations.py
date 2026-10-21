@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from sys import monitoring
@@ -11,6 +12,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -72,8 +74,12 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
             text=True,
             timeout=15,
         )
-    comms = Comms(tmp_path / "wire")
-    comms.registry.storage_rule = StorageRule(checkout_base=base)
+    root = tmp_path / "wire"
+    root.mkdir(mode=0o700)
+    (root / "storage.json").write_text(
+        json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
+    )
+    comms = Comms(root)
     lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
     worker = comms.registry.declare(
         comms.registry.new_thread("worker", frozenset(), str(repository))
