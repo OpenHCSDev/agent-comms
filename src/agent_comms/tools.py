@@ -19,7 +19,7 @@ from pydantic import JsonValue
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
-from .channel_targets import ChannelTarget, CommandTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
@@ -112,7 +112,6 @@ from .todos import (
     StrikeReason,
     Todo,
     TodoOperation,
-    VerdictAudience,
 )
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
@@ -1306,10 +1305,15 @@ class SendTool(PublishingTool):
     ] = NoChangeReport()
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        return self.send_message(comms, caller, CommandTarget.named(self.target))
+
+    def send_message(
+        self, comms: Comms, caller: ToolCaller, target: NamedTarget,
+    ) -> MessagePublished:
         try:
             caller.require_directive(comms, self.body)
-            body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            body = target.addressed(self.audience, self.body)
+            result = comms.messaging.send(self.sender, target.name, body, self.type, report=self.report)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,

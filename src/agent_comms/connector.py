@@ -49,7 +49,7 @@ from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import (
     Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
 )
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.owner_requests import NewestOpenRequest, RequestDirective, RequestSelection
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
@@ -92,10 +92,12 @@ class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.dec
         *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
     ] = NewestOpenRequest()
 
-    def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+    def send_message(
+        self, comms: Comms, caller: ToolCaller, target: NamedTarget,
+    ) -> MessagePublished:
         store = comms.goals.todos
-        requests = self.request.for_message(store, CommandTarget.named(self.target), comms.registry)
-        result = super().publish(comms, caller)
+        requests = self.request.for_message(store, target, comms.registry)
+        result = super().send_message(comms, caller, target)
         directive = RequestDirective(result.message.source.seq,
                                      result.message.timestamp + RequestDirective.window)
         for request in requests:

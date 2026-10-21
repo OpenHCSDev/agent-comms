@@ -260,9 +260,9 @@ class CommanderContext(CommanderConfig):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
-        target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        published = self.comms.messaging.send(self.commander, target,
-            audience.addressed(target, body), answers=answers)
+        target = audience.target
+        published = self.comms.messaging.send(self.commander, target.name,
+            target.addressed(audience.threads, body), answers=answers)
         return published.message.message_id
 
     def call(self, tool):

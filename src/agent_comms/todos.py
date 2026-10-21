@@ -36,7 +36,7 @@ from agent_comms.change_report import (
     FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
     SourceReference, SourceRevision,
 )
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, NamedTarget
 from agent_comms.child_process import (
     BoundedRun,
     CheckPrinted,
@@ -2394,8 +2394,10 @@ class VerdictAudience:
         """An order concerns its unit and the commander on its owner request."""
         return cls(tuple(dict.fromkeys((unit, request.commander.name))))
 
-    def addressed(self, target: str, body: str) -> str:
-        return CommandTarget.named(target).addressed(self.threads, body)
+    @property
+    def target(self) -> NamedTarget:
+        name = self.threads[0] if len(self.threads) == 1 else '#comms'
+        return CommandTarget.named(name)
 
 
 @dataclass(frozen=True)
