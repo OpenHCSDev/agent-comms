@@ -10,7 +10,9 @@ from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import BlockedGoalAction, SetGoalAction
+from agent_comms.goal_actions import (
+    BlockedGoalAction, PausedGoalAction, RetryGoalAction, SetGoalAction,
+)
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_presentation import AttemptFailedExecution, RunnableExecution, RunningExecution
 from agent_comms.goal_states import ActiveGoal, BlockedGoal
@@ -65,6 +67,7 @@ async def test_failed_turn_writes_ledger_once_and_reads_failed_execution(executi
         assert isinstance(comms.goals.goal_execution("worker"), RunningExecution)
     execution = comms.goals.goal_execution("worker")
     assert isinstance(execution, AttemptFailedExecution)
+    assert execution.toggle is RetryGoalAction
     assert execution.evidence.turn_id == turn.turn_id
     assert failure_count(comms) == 1
     assert comms.registry.require("worker").goal.state == ActiveGoal()
@@ -82,7 +85,9 @@ async def test_provider_retry_during_live_turn_writes_no_goal_failure(execution_
         assert store.snapshot(goal.id) == before
         assert failure_count(comms) == 0
         assert comms.registry.require("worker").goal == goal
-        assert isinstance(comms.goals.goal_execution("worker"), RunningExecution)
+        execution = comms.goals.goal_execution("worker")
+        assert isinstance(execution, RunningExecution)
+        assert execution.toggle is PausedGoalAction
 
 
 @pytest.mark.asyncio

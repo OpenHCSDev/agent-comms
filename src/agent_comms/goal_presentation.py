@@ -172,7 +172,7 @@ class PausedExecution(WaitingExecution):
 
 
 @dataclass(frozen=True)
-class StandbyExecution(WaitingExecution):
+class StandbyExecution(ActiveExecution, WaitingExecution):
     wait_for: tuple[GoalWaitTarget, ...]
     inactive_wait_for: tuple[GoalWaitTarget, ...]
     label = "Standby"
@@ -184,11 +184,6 @@ class StandbyExecution(WaitingExecution):
         idle = ", ".join(f"@{target.incarnation.name}" for target in self.inactive_wait_for)
         suffix = f"; no active turn: {idle}" if idle else ""
         return f"Standby · waiting for {names}{suffix}"
-
-    @property
-    def toggle(self) -> type[GoalAction]:
-        from .goal_actions import PausedGoalAction
-        return PausedGoalAction
 
     def details_heading(self, heading: str) -> str:
         return f"{heading} · {self.summary}"
