@@ -24,6 +24,7 @@ from agent_comms.service_passes import ServicePassStore
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goals import RequestDirective
+    from agent_comms.messages import Message
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
@@ -109,7 +110,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return cls
 
     @classmethod
-    def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
+    def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[Self, ...]:
         """Read each inherited scan owner once, preserving the requested member scope."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         found = (v for owner in owners for v in owner.violations(comms, commander))
@@ -131,6 +132,26 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
     def broke_after(self, after: float) -> bool:
         return self.began() >= after
+
+
+@dataclass(frozen=True)
+class OwedAnswer(StandingRule, declared_name=None):
+    """A message to the commander owed an answer past its window. Every member gates the
+    commander's answering verbs until an action names it with --answers, so an answer cannot
+    be held: one that must wait is sent now as "waiting on X, owner Y"."""
+
+    message: Message
+
+    @classmethod
+    @abstractmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        """This member's messages an action may answer now, inside their window or past it."""
+
+    @classmethod
+    def answerable(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        """Every message an action may name with --answers, read from each member once."""
+        return tuple(message for member in cls.members_with(OwedAnswer)
+                     for message in member.open_messages(comms, commander))
 
 
 @dataclass(frozen=True)
@@ -299,7 +320,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(DatedStandingRule):
+class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
     request: str
@@ -309,19 +330,25 @@ class DirectiveUnacted(DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(goal.id, directive)
+            cls(directive.original(comms.goals), goal.id, directive)
             for goal in thread.goal.active()
             for directive in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
             )
         )
 
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return tuple(message for goal in comms.registry.require(commander).goal.active()
+                     for message in goal.order.directive_messages(comms.goals))
+
     def began(self) -> float:
         return self.directive.deadline
 
     def line(self) -> str:
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq}:{self.message.message_id}"
+            f" on request {self.request},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
