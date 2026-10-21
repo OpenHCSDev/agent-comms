@@ -87,6 +87,7 @@ def document(path, order):
     return str(path)
 
 
+@pytest.mark.timeout(180)
 def test_fork_orders_refuse_competitors_and_closing_report_releases(fork_bus, tmp_path):
     comms, source, order = fork_bus
     first = document(tmp_path / 'first.json', order)
@@ -133,6 +134,8 @@ def test_fork_orders_refuse_competitors_and_closing_report_releases(fork_bus, tm
         comms.goals.todos.assign('P40', expected_revision=retained.revision,
             owner=worker, assigner=lead.incarnation, generation='competing',
             goal=retained.goal, review_at=retained.review_at, order=order)
+    with comms.goals.todos.snapshot() as db:
+        reservation, = UnitAssignment.select(db, assigner=fork.incarnation)
     closing = tmp_path / 'closing.txt'
     closing.write_text('The assigned work is complete; this fork is closing.')
     result = command(comms, 'order', 'say', '#comms', str(closing), '--fork', 'fork-one')
@@ -142,6 +145,12 @@ def test_fork_orders_refuse_competitors_and_closing_report_releases(fork_bus, tm
         assert not UnitAssignment.select(db, assigner=fork.incarnation)
     with pytest.raises(RelationViolationError, match='stopped or unavailable'):
         comms.goals.todos.take_unit(worker.incarnation, fork.incarnation, 'late-order')
+    # Restore the exact old row: the retained image after registry retirement but
+    # before its SQLite commit. Presence must release it without a clock or flag.
+    with comms.goals.todos.writing() as db:
+        reservation.upsert(db)
+    comms.goals.todos.take_unit(worker.incarnation, lead.incarnation, 'after-retirement')
+    comms.goals.todos.release_unit(worker.incarnation, lead.incarnation, 'after-retirement')
     assert "1 live forks ['fork-two']" in command(comms, 'capacity').stdout
     assert comms.goals.todos.get('P41').holder == 'worker'
     assert comms.goals.todos.get('P40').creator == 'lead'

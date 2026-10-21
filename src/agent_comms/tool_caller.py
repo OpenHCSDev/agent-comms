@@ -172,8 +172,8 @@ class CommanderForkExecution(ExternalThreadExecution):
         return requested
 
     @classmethod
-    def require_assigning(cls, status: ThreadStatus) -> None:
-        status.require_active()
+    def keeps_assignment(cls, status: ThreadStatus) -> bool:
+        return status.active
 
 
 @dataclass(frozen=True)

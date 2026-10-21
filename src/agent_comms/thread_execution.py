@@ -85,8 +85,14 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return requested
 
     @classmethod
+    def keeps_assignment(cls, status: ThreadStatus) -> bool:
+        """Ordinary commands own their synchronous reservation independently of presence."""
+        return True
+
+    @classmethod
     def require_assigning(cls, status: ThreadStatus) -> None:
-        """Ordinary commander commands do not have a fork's closing-report lifetime."""
+        if not cls.keeps_assignment(status):
+            raise RelationViolationError('live owner is stopped or unavailable')
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):

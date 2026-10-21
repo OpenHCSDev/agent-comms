@@ -2388,7 +2388,7 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
-    def require_unit(self, db: sqlite3.Connection) -> None:
+    def require_unit(self, db: sqlite3.Connection, root: Path) -> None:
         """Only assignment operations compete for a unit."""
 
     @abstractmethod
@@ -2409,8 +2409,8 @@ class AssignTodo(TodoOperation):
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
-    def require_unit(self, db: sqlite3.Connection) -> None:
-        UnitAssignment.require(db, self.proposed.owner_identity, self.actor)
+    def require_unit(self, db: sqlite3.Connection, root: Path) -> None:
+        UnitAssignment.require(db, self.proposed.owner_identity, self.actor, root)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -3219,12 +3219,22 @@ class UnitAssignment(TypedTable):
 
     @classmethod
     def require(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
-                assigner: ThreadIncarnation) -> None:
+                assigner: ThreadIncarnation, root: Path) -> None:
         for held in cls.select(db, unit=unit):
-            if held.assigner != assigner:
+            if held.assigner != assigner and held.active(root):
                 raise TodoError(
                     f"{unit.name} is being assigned by {held.assigner.name} "
                     f"on open order {held.order}; finish that fork before assigning it again.")
+
+    def active(self, root: Path) -> bool:
+        """Presence belongs to the registry, even after an interrupted retirement."""
+        from .registration import Registration
+
+        snapshot = Registration(RegistryFile.path_in(root)).snapshot()
+        if not self.assigner.current(snapshot):
+            return False
+        thread = snapshot.require(self.assigner.name)
+        return thread.execution.keeps_assignment(snapshot.status(thread.name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -3266,7 +3276,7 @@ class TodoStore(DurableStore):
 
     def require_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
         with self.snapshot() as db:
-            UnitAssignment.require(db, unit, assigner)
+            UnitAssignment.require(db, unit, assigner, self.root)
 
     def take_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
         from .registration import Registration
@@ -3277,7 +3287,7 @@ class TodoStore(DurableStore):
             if thread.incarnation != assigner:
                 raise TodoError(f"Assigner {assigner.name} changed before reserving {unit.name}.")
             thread.execution.require_assigning(registry.status(thread.name))
-            UnitAssignment.require(db, unit, assigner)
+            UnitAssignment.require(db, unit, assigner, self.root)
             UnitAssignment(unit, assigner, order).upsert(db)
 
     def release_unit(self, unit: ThreadIncarnation, assigner: ThreadIncarnation, order: str) -> None:
@@ -3539,7 +3549,7 @@ class TodoStore(DurableStore):
             todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
             review_at, order, goal)
         with self.writing() as db:
-            UnitAssignment.require(db, assignee, identity)
+            UnitAssignment.require(db, assignee, identity, self.root)
             ProblemNumber.reserve(db, todo_id)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -3549,7 +3559,7 @@ class TodoStore(DurableStore):
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
-            command.require_unit(db)
+            command.require_unit(db, self.root)
             current = self._current(db, todo_id)
             result = command.apply(current)
             if result == current:
