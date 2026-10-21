@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from .diagnostics import FailureReason, terminal_failure_reason
 from .goal_failure_observation import FailedTurnObservation
+from .goal_attempts import StaleAttemptError
+from .turn_goal_account import FailedGoalOrigin
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -41,25 +44,17 @@ class TurnTerminal(ABC):
         raise RuntimeError("Turn has no reported backend result")
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:
-        from .agent_events import Done
-
-        await progress.consume(Done(text="Native turn ended without a result", ok=False))
-        return progress.turn.terminal.require_reported()
+        return await progress.record_failure("Native turn ended without a result")
 
     async def report_failure(self, progress: TurnProgress, error: Exception):
-        from .agent_events import Done
-
         cause = error.__cause__ or error
         detail = f"Native turn failed: {type(cause).__name__}: {cause}"
-        await progress.consume(Done(text=detail, ok=False))
-        return progress.turn.terminal.require_reported().outcome
+        return (await progress.record_failure(detail)).outcome
 
     @abstractmethod
     def settle_launched(self, account, permit, store, captured, current) -> None: ...
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
-        from .turn_goal_account import FailedGoalOrigin
-
         if not permit.has_verified_progress(store):
             permit.fail_origin(store, goal_id)
             for goal in current:
@@ -88,9 +83,6 @@ class FailedGoalTurn(TurnTerminal):
     def failure_reason(self) -> FailureReason: ...
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
-        from contextlib import suppress
-        from .goal_attempts import StaleAttemptError
-
         if permit.has_verified_progress(store):
             return
         observation = self.failure_observation(account, permit, captured)
@@ -120,11 +112,10 @@ class EndedWithoutResult(FailedGoalTurn):
 
 class OperatorStopped(TurnTerminal):
     def settle_launched(self, account, permit, store, captured, current) -> None:
-        for goal in current.active():
-            permit.stop(store)
+        self.settle_origin(account, permit, store, captured.id, current)
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
-        for goal in current.active():
+        if any(current.matching(goal_id).active()):
             permit.stop(store)
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:

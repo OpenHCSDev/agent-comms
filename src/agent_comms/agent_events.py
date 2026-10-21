@@ -21,6 +21,8 @@ from .acp_failure import (
     UnresolvedNativeTurnOutcome,
 )
 from .turn_terminal import FailedGoalTurn
+from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
+from .diagnostics import terminal_failure_reason
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -270,8 +272,6 @@ class Done(AgentEvent, FailedGoalTurn):
 
     @property
     def failure_reason(self) -> str:
-        from .diagnostics import terminal_failure_reason
-
         return terminal_failure_reason(asdict(self))
 
     def failure_observation(self, account, permit, captured):
@@ -284,15 +284,11 @@ class Done(AgentEvent, FailedGoalTurn):
             account.require_output(self.text)
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
-        from .turn_goal_account import VerifiedGoalSettlement
-
         if self.ok:
             current.settle(VerifiedGoalSettlement, store, permit, account.turn)
         super().settle_launched(account, permit, store, captured, current)
 
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
-        from .turn_goal_account import OriginGoalSettlement
-
         if self.ok:
             permit.settle_goal(OriginGoalSettlement, store, current, account.turn)
         super().settle_origin(account, permit, store, goal_id, current)

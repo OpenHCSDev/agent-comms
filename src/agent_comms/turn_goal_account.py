@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from . import agent_events as events
 from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import (
     GoalAttemptError, GoalAttemptStore, GoalTurnPermit, LaunchPermit, NoLaunchPermit,
@@ -20,9 +19,10 @@ from .goal_attempts import (
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
-from .turn_terminal import TurnTerminal
 
 if TYPE_CHECKING:
+    from . import agent_events as events
+    from .turn_terminal import TurnTerminal
     from .comms import Comms
     from .goals import Goal, GoalDeclaration
     from .pi_payloads import PiUsage

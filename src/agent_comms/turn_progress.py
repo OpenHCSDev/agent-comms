@@ -120,6 +120,10 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
+    async def record_failure(self, detail: str) -> events.Done:
+        await self.consume(events.Done(text=detail, ok=False))
+        return self.turn.terminal.require_reported()
+
     async def report_failure(self, error: Exception) -> NativeTurnOutcome:
         """Attempt existing ACP error publication once without hiding the original fault."""
         return await self.turn.terminal.report_failure(self, error)

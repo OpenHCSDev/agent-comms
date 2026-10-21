@@ -36,6 +36,7 @@ from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
     GoalAttemptPhase,
+    ReadyAttempt,
     ReservedAttempt,
     ResolvedAttempt,
     SucceededAttempt,
@@ -575,23 +576,22 @@ class LaunchPermit(GoalTurnPermit):
         """
         if not progress_witness.strip():
             raise ValueError("A nonempty verified progress witness is required.")
-        return self.advance_ready(store, SucceededAttempt(), progress_witness=progress_witness)
+        return self.advance_ready(store, SucceededAttempt(), progress_witness)
 
     def stop(self, store: GoalAttemptStore) -> None:
         """Retire this attempt, not its goal or the right to make a fresh input."""
         if not self.has_verified_progress(store):
-            self.advance_ready(store, FailedAttempt(), resolution="Operator stopped goal turn.")
+            self.advance_ready(store, FailedAttempt(), "Operator stopped goal turn.")
 
     def advance_ready(
-        self, store: GoalAttemptStore, phase: GoalAttemptPhase, *,
-        progress_witness: str | None = None, resolution: str | None = None,
+        self, store: GoalAttemptStore, phase: ReadyAttempt, note: str,
     ) -> Generation:
         """The ledger owns the single next-generation transaction and ready grant."""
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
             attempt = reservation.require_current(conn, ClaimedAttempt())
-            attempt.advance(conn, phase, progress_witness=progress_witness, resolution=resolution)
+            phase.record_ready(attempt, conn, note)
             current = Generation(
                 reservation.goal_id,
                 reservation.generation,
