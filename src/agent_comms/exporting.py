@@ -20,7 +20,7 @@ from .channels import Channel
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .messages import Message
 from .message_reference import MessageReference
 from .registration import Registration
@@ -164,6 +164,35 @@ class DmScope(WireExportScope):
         return ResolvedExportScope(canonical, matches)
 
 
+class ScopeFlag(SubclassUnion, affix="ScopeFlag"):
+    """One export-scope flag of the command line: the scope it names, or not given."""
+
+    @abstractmethod
+    def chosen_or(self, other: WireExportScope) -> WireExportScope: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelScopeFlag(SingleFieldValue, ScopeFlag):
+    channel: str
+
+    def chosen_or(self, other: WireExportScope) -> ChannelScope:
+        return ChannelScope(self.channel)
+
+
+@dataclass(frozen=True, slots=True)
+class DmScopeFlag(SingleFieldValue, ScopeFlag):
+    participants: tuple[str, str]
+
+    def chosen_or(self, other: WireExportScope) -> DmScope:
+        return DmScope(self.participants)
+
+
+@dataclass(frozen=True, slots=True)
+class UnsetScopeFlag(NullMember, ScopeFlag):
+    def chosen_or(self, other: WireExportScope) -> WireExportScope:
+        return other
+
+
 @dataclass
 class ExportSelectionStats:
     """Selection counters shared by the traversal and limit hooks."""
@@ -285,6 +314,35 @@ class RecentLimit(FullLimit):
 
     def time_cutoff(self) -> float:
         return self.value
+
+
+class LimitFlag(SubclassUnion, affix="LimitFlag"):
+    """One export-limit flag of the command line: the limit it names, or not given."""
+
+    @abstractmethod
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> WireExportLimit: ...
+
+
+@dataclass(frozen=True, slots=True)
+class BytesLimitFlag(SingleFieldValue, LimitFlag):
+    value: int
+
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> MaxBytesLimit:
+        return MaxBytesLimit(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class RecentLimitFlag(SingleFieldValue, LimitFlag):
+    seconds: float
+
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> RecentLimit:
+        return RecentLimit(started_at - self.seconds)
+
+
+@dataclass(frozen=True, slots=True)
+class UnsetLimitFlag(NullMember, LimitFlag):
+    def chosen_or(self, other: WireExportLimit, started_at: float) -> WireExportLimit:
+        return other
 
 
 @dataclass(frozen=True, slots=True)

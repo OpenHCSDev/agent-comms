@@ -16,7 +16,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
-from .history import CodexHistory, OnlineHistory
+from .history import CodexHistory, HarnessAddress, OnlineHistory
 from .shared import Binding, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (
     EarlierPublishedPage, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
@@ -99,8 +99,8 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         self.socket = socket
 
     @classmethod
-    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
-        return cls(thread, address or str(cls.SOCKET))
+    def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
+        return cls(thread, address.otherwise(str(cls.SOCKET)))
 
     async def history(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:

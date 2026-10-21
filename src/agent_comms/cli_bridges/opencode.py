@@ -17,7 +17,7 @@ from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
-from .history import OnlineHistory, OpenCodeHistory
+from .history import HarnessAddress, OnlineHistory, OpenCodeHistory
 from .shared import Binding, CliBridge, IncomingFrame, Options, TranscriptBridge, Watch, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate
 from .opencode_protocol import (
@@ -173,10 +173,10 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
         self.directory = directory
 
     @classmethod
-    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
-        if address is None:
-            raise ValueError('Reading a running OpenCode session needs its server address.')
-        return cls(thread, address, directory)
+    def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
+        return cls(
+            thread, address.require('Reading a running OpenCode session needs its server address.'),
+            directory)
 
     def connection(self) -> AsyncIterator[OpenCodeConnection]:
         return OpenCodeConnection.open(self.server, self.directory, self.session)

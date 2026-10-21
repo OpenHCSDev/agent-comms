@@ -40,7 +40,9 @@ from .channels import ANY_CHANNEL, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
-from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .cli_bridges.history import (
+    AnySession, DefaultAddress, ExpectedSession, HarnessAddress, History, OfflineHistory, OnlineHistory,
+)
 from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, Send, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
@@ -56,14 +58,14 @@ from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .exporting import (
-    ChannelScope,
-    DmScope,
     EverythingScope,
     FullLimit,
     JsonlFormat,
-    MaxBytesLimit,
-    RecentLimit,
+    LimitFlag,
+    ScopeFlag,
     SelectableWireExportFormat,
+    UnsetLimitFlag,
+    UnsetScopeFlag,
 )
 from .field_codec import (
     FieldCodec,
@@ -560,16 +562,50 @@ class HeartbeatResult(CliResult):
 class SessionAttachedResult(CliResult):
     attached: str
     session_file: str | None
-    pid: Annotated[int | None, WireOmitDefault()] = None
+    process: Annotated[ProcessState, WireOmitDefault()] = dataclasses.field(
+        default_factory=NoProcess
+    )
 
 
 @dataclass(frozen=True)
-class CheckpointResult(CliResult):
+class CheckpointResult(CliResult, DeclaredFamily, affix="Checkpoint"):
+    """What one checkpoint did with a thread's uncommitted work."""
+
+    family_discriminator = "checkpoint"
     thread: str
-    checkpoint: str
     branch: str
-    reason: Annotated[str | None, WireOmitDefault()] = None
-    commit: Annotated[str | None, WireOmitDefault()] = None
+
+
+@dataclass(frozen=True)
+class CleanCheckpoint(CheckpointResult):
+    """The worktree had nothing uncommitted."""
+
+
+@dataclass(frozen=True)
+class PushedCheckpoint(CheckpointResult):
+    commit: str
+
+
+@dataclass(frozen=True)
+class StoppedCheckpoint(CheckpointResult, declared_name=None):
+    """A checkpoint that stopped before a named push, and why."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class RefusedCheckpoint(StoppedCheckpoint):
+    """The declared worktree is not a git worktree."""
+
+
+@dataclass(frozen=True)
+class FailedCheckpoint(StoppedCheckpoint):
+    """The commit failed."""
+
+
+@dataclass(frozen=True)
+class PushUnknownCheckpoint(StoppedCheckpoint):
+    """The commit exists locally; the push could not be named."""
 
 
 @dataclass(frozen=True)
@@ -917,12 +953,12 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
             },
         ),
     ]
-    session_id: Annotated[
-        str | None,
+    session: Annotated[
+        ExpectedSession,
         Argument(
             flags=("--session-id",), options={"help": "Required for OpenCode database imports"}
         ),
-    ] = None
+    ] = AnySession()
     name: Annotated[
         str,
         Argument(flags=("--name",), options={"help": "New agent-comms thread name"}),
@@ -930,7 +966,7 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
 
     def apply(self, ctx: Comms) -> CliResult:
         return self.imported(ctx, OfflineHistory.of(
-            self.harness, self.source.expanduser().resolve(), self.session_id), self.name)
+            self.harness, self.source.expanduser().resolve(), self.session), self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -948,12 +984,12 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
         ),
     ]
     address: Annotated[
-        str | None,
+        HarnessAddress,
         Argument(
             flags=("--address",),
             options={"help": "Codex app-server socket, or OpenCode server URL"},
         ),
-    ] = None
+    ] = DefaultAddress()
     name: Annotated[
         str,
         Argument(flags=("--name",), options={"help": "New agent-comms thread name"}),
@@ -1361,21 +1397,21 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         ),
     ] = False
     channel: Annotated[
-        str | None,
+        ScopeFlag,
         Argument(
             flags=("--channel",),
             group=NamedArgumentGroup("scope"),
             options={"help": "One target-owned #channel"},
         ),
-    ] = None
+    ] = UnsetScopeFlag()
     dm: Annotated[
-        list[str] | None,
+        ScopeFlag,
         Argument(
             flags=("--dm",),
             group=NamedArgumentGroup("scope"),
             options={"nargs": 2, "metavar": ("FIRST", "SECOND"), "help": "One canonical DM"},
         ),
-    ] = None
+    ] = UnsetScopeFlag()
     full: Annotated[
         bool,
         Argument(
@@ -1385,15 +1421,15 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         ),
     ] = False
     max_bytes: Annotated[
-        int | None,
+        LimitFlag,
         Argument(
             flags=("--max-bytes",),
             group=NamedArgumentGroup("limit"),
-            options={"help": "Hard UTF-8 artifact byte ceiling"},
+            options={"type": int, "help": "Hard UTF-8 artifact byte ceiling"},
         ),
-    ] = None
+    ] = UnsetLimitFlag()
     last: Annotated[
-        float | None,
+        LimitFlag,
         Argument(
             flags=("--last",),
             group=NamedArgumentGroup("limit"),
@@ -1403,7 +1439,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
                 "help": "Recent window, e.g. 24h",
             },
         ),
-    ] = None
+    ] = UnsetLimitFlag()
     overwrite: Annotated[
         bool,
         Argument(
@@ -1413,23 +1449,13 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
 
     def apply(self, ctx: Comms) -> CliResult:
         started_at = time.time()
-        if self.everything:
-            scope = EverythingScope()
-        elif self.channel:
-            scope = ChannelScope(self.channel)
-        else:
-            scope = DmScope(tuple(self.dm))
-        if self.full:
-            export_limit = FullLimit()
-        elif self.max_bytes is not None:
-            export_limit = MaxBytesLimit(self.max_bytes)
-        else:
-            export_limit = RecentLimit(started_at - self.last)
+        # The required argument groups hold exactly one flag each; --everything and --full
+        # are what remains when no other flag of their group names a choice.
         exported = ctx.views.export_wire(
             self.output,
             format=self.format,
-            scope=scope,
-            limit=export_limit,
+            scope=self.channel.chosen_or(self.dm.chosen_or(EverythingScope())),
+            limit=self.max_bytes.chosen_or(self.last.chosen_or(FullLimit(), started_at), started_at),
             overwrite=self.overwrite,
             export_started_at=started_at,
         )
@@ -1620,8 +1646,7 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
             current, self.session_file,
             process=self.process.attachment_process(current.process_identity),
         )
-        return SessionAttachedResult(
-            attached.name, attached.session_file, **attached.process_identity.pid_fields())
+        return SessionAttachedResult(attached.name, attached.session_file, attached.process_identity)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1652,26 +1677,22 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
 
         code, out, _ = git("rev-parse", "--is-inside-work-tree")
         if code != 0 or out.strip() != "true":
-            return CheckpointResult(
-                self.name, "refused", branch,
-                reason="the thread declaration's worktree is not a git worktree")
+            return RefusedCheckpoint(
+                self.name, branch, "the thread declaration's worktree is not a git worktree")
         if not git("status", "--porcelain")[1].strip():
-            return CheckpointResult(self.name, "clean", branch)
+            return CleanCheckpoint(self.name, branch)
         git("add", "-A")
         code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
         if code != 0 and "nothing to commit" in (out + err):
-            return CheckpointResult(self.name, "clean", branch)
+            return CleanCheckpoint(self.name, branch)
         if code != 0:
-            return CheckpointResult(self.name, "failed", branch,
-                                    reason=(err.strip() or out.strip())[:400])
+            return FailedCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
         code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
         if code != 0:
-            return CheckpointResult(self.name, "push-unknown", branch,
-                                    reason=(err.strip() or out.strip())[:400])
-        commit = git("rev-parse", "--short", "HEAD")[1].strip()
-        return CheckpointResult(self.name, "pushed", branch, commit=commit)
+            return PushUnknownCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
+        return PushedCheckpoint(self.name, branch, git("rev-parse", "--short", "HEAD")[1].strip())
 
 
 @dataclass(frozen=True, kw_only=True)

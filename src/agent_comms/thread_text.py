@@ -18,6 +18,10 @@ class TextChoice(ABC):
     @abstractmethod
     def otherwise[Default](self, default: Default) -> str | Default: ...
 
+    @abstractmethod
+    def require(self, missing: str) -> str:
+        """The given text; the absent member refuses with ``missing``."""
+
 
 class GivenText(SingleFieldValue, TextChoice):
     """The given member: its declared ``text`` field is the whole wire value."""
@@ -28,6 +32,9 @@ class GivenText(SingleFieldValue, TextChoice):
     def otherwise[Default](self, default: Default) -> str:
         return self.text
 
+    def require(self, missing: str) -> str:
+        return self.text
+
 
 class AbsentText(NullMember, TextChoice):
     """The absent member: JSON null, and the reader's default."""
@@ -36,6 +43,9 @@ class AbsentText(NullMember, TextChoice):
 
     def otherwise[Default](self, default: Default) -> Default:
         return default
+
+    def require(self, missing: str) -> str:
+        raise ValueError(missing)
 
 
 class ThreadText(SubclassUnion, TextChoice, affix="ThreadText"):

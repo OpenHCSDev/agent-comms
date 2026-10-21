@@ -33,14 +33,13 @@ def test_process_field_rejects_non_identity_shapes(wire):
         FieldCodec.decode(ProcessState, wire)
 
 
-def test_unstarted_process_does_not_signal_or_supply_a_pid():
+def test_unstarted_process_does_not_signal():
     process = NoProcess()
     assert not process.alive()
     assert not process.offline()
     assert process.allows_owner_start()
     assert not process.runs_here()
     process.signal(signal.SIGTERM)
-    assert process.pid_fields() == {}
     process.require_release_by(ProcessIdentity(123, 456))
     with pytest.raises(RelationViolationError):
         process.require("never started")

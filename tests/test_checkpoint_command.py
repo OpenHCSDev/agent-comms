@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import CheckpointCliCommand
-from agent_comms.field_codec import FieldCodec
-from agent_comms.threads import Thread
+from agent_comms.cli_commands import (
+    CheckpointCliCommand, CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint,
+)
 from test_private_bus_checkpoint import _root
 
 
@@ -46,7 +46,7 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
     )
 
     result = CheckpointCliCommand(name="Repo").apply(comms)
-    assert result.checkpoint == "pushed"
+    assert isinstance(result, PushedCheckpoint)
     assert result.branch == "checkpoint/Repo"
     assert _git(tmp_path / "repo.origin.git", "rev-parse", "--short",
                 f"refs/heads/{result.branch}").strip() == result.commit
@@ -55,9 +55,7 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
                              f"{result.branch}:step.py"], capture_output=True, text=True)
     assert pushed.stdout == "print('step 2')\n"
     # The worktree is now clean; a second checkpoint before compaction is a no-op.
-    assert FieldCodec.encode(CheckpointCliCommand(name="Repo").apply(comms)) == {
-        "thread": "Repo", "checkpoint": "clean", "branch": "checkpoint/Repo",
-    }
+    assert CheckpointCliCommand(name="Repo").apply(comms) == CleanCheckpoint("Repo", "checkpoint/Repo")
 
 
 @pytest.mark.parametrize("relative", [False, True])
@@ -82,7 +80,7 @@ def test_production_git_never_discovers_a_checkout_above_the_declaration(
         comms.registry.new_thread('Nested', frozenset({'team'}), str(declared), created_at=17008.0)
     )
     refused = CheckpointCliCommand(name="Nested").apply(comms)
-    assert refused.checkpoint == "refused"
+    assert isinstance(refused, RefusedCheckpoint)
     # The ancestor repo is untouched: no checkpoint commit, no staged scratch.
     assert _git(ancestor, "status", "--porcelain").strip().startswith("?? nested/")
     assert _git(ancestor, "rev-parse", "--short", "HEAD").strip() == base
@@ -100,7 +98,7 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
         comms.registry.new_thread('NoGit', frozenset({'team'}), str(outside), created_at=17005.0)
     )
     refused = CheckpointCliCommand(name="NoGit").apply(comms)
-    assert refused.checkpoint == "refused"
+    assert isinstance(refused, RefusedCheckpoint)
     assert refused.branch == "checkpoint/NoGit"
 
     broken = _repo(tmp_path, "broken", remote=False)
@@ -110,7 +108,7 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
         comms.registry.new_thread('Broken', frozenset({'team'}), str(broken), created_at=17006.0)
     )
     unknown = CheckpointCliCommand(name="Broken").apply(comms)
-    assert unknown.checkpoint == "push-unknown"
+    assert isinstance(unknown, PushUnknownCheckpoint)
     assert unknown.branch == "checkpoint/Broken"
     # The commit exists locally even though the push could not be named.
     assert _git(broken, "rev-parse", "--short", "HEAD").strip()

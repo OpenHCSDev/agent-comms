@@ -14,7 +14,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
 from agent_comms_hooks.session import SessionHook
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
-from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
+from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
@@ -54,7 +54,7 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
     suffixes = frozenset({'.jsonl'})
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
-        if self.session_id not in (None, self.source.stem):
+        if not self.session.holds(self.source.stem):
             raise ValueError('The transcript belongs to a different Claude session.')
         return super().facts(stream, boundary)
 
@@ -80,7 +80,7 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return matches[0]
 
     @classmethod
-    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
+    def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
         return cls(thread)
 
 

@@ -13,7 +13,9 @@ from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord
-from agent_comms.cli_bridges.history import History, OfflineHistory, OnlineHistory
+from agent_comms.cli_bridges.history import (
+    AnySession, DefaultAddress, History, NamedSession, OfflineHistory, OnlineHistory,
+)
 from agent_comms.cli_bridges.opencode import OpenCodeBridge, OpenCodeServer
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
@@ -44,8 +46,8 @@ def codex_lines(path, records, tail=""):
     return lines(path, ({"timestamp": "2026-10-18T00:00:00Z", **record} for record in records), tail)
 
 
-def read(harness, source, limits=ImportLimits(), session_id=None):
-    return ImportSnapshot.read(OfflineHistory.of(harness, source, session_id), limits)
+def read(harness, source, limits=ImportLimits(), session=AnySession()):
+    return ImportSnapshot.read(OfflineHistory.of(harness, source, session), limits)
 
 
 def bodies(snapshot):
@@ -182,10 +184,10 @@ def test_running_claude_session_is_found_by_its_id(tmp_path, monkeypatch):
     source = tmp_path / ".claude/projects/project/live-session.jsonl"
     source.parent.mkdir(parents=True)
     lines(source, [claude_prompt("a", "keep going", origin={"kind": "human"})])
-    history = OnlineHistory.of(ClaudeCodeHarness, "live-session", None, tmp_path)
+    history = OnlineHistory.of(ClaudeCodeHarness, "live-session", DefaultAddress(), tmp_path)
     assert bodies(ImportSnapshot.read(history, ImportLimits())) == ["keep going"]
     with pytest.raises(ValueError):
-        ImportSnapshot.read(OnlineHistory.of(ClaudeCodeHarness, "missing", None, tmp_path), ImportLimits())
+        ImportSnapshot.read(OnlineHistory.of(ClaudeCodeHarness, "missing", DefaultAddress(), tmp_path), ImportLimits())
 
 
 def test_import_subagents_names_each_thread_by_its_id(tmp_path, capsys, comms):
@@ -232,7 +234,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
             "type": "message", "role": "assistant", "content": "Original answer"}}])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(CodexHarness, source, None), name="historical")
+        OfflineHistory.of(CodexHarness, source, AnySession()), name="historical")
     assert source.read_bytes() == original
     refs = acknowledgement.historical_instructions
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
@@ -295,7 +297,7 @@ def test_codex_instructions_come_from_the_selected_history_and_the_request_from_
         {"type": "compacted", "payload": {"message": "Selected summary", "replacement_history": [
             {"type": "message", "role": "developer", "content": "Selected historical wording"}]}},
     ])
-    snapshot = read(CodexHarness, source, session_id="original")
+    snapshot = read(CodexHarness, source, session=NamedSession("original"))
     assert snapshot.latest_request == "Prior question"
     assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
         "Selected historical wording",)
@@ -316,7 +318,7 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
         codex_meta("codex-id", tmp_path), codex_message("user", "Continue editing the paper")])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(CodexHarness, source, None), name="paper4_jair", tags=frozenset({"papers"}))
+        OfflineHistory.of(CodexHarness, source, AnySession()), name="paper4_jair", tags=frozenset({"papers"}))
     thread = comms.registry.require("paper4_jair")
     assert thread.name == thread.display_title == "paper4_jair"
     assert thread.tags == frozenset({"papers"})
@@ -414,14 +416,14 @@ def test_codex_reads_latest_checkpoint_without_replaying_huge_prefix(tmp_path, m
         stream.write((json.dumps(checkpoint) + "\n").encode())
         stream.write((json.dumps(codex_message("assistant", "Post-checkpoint result")) + "\n").encode())
     opened = watch_reads(monkeypatch, source)
-    snapshot = read(CodexHarness, source, session_id="child-current")
+    snapshot = read(CodexHarness, source, session=NamedSession("child-current"))
     assert snapshot.source_id == "child-current"
     assert bodies(snapshot) == ["Retained request", "Retained state", "Post-checkpoint result"]
     assert snapshot.latest_request == "Retained request"
     assert "obsolete prefix" not in str(snapshot.messages)
     assert opened[0].bytes_read < 200_000
     with pytest.raises(ValueError):
-        read(CodexHarness, source, session_id="parent-inherited")
+        read(CodexHarness, source, session=NamedSession("parent-inherited"))
 
 
 def test_codex_fixed_boundary_ignores_concurrent_append(tmp_path, monkeypatch):
@@ -590,7 +592,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     before = source.read_bytes()
     directory = comms.root / "imported_sessions"
     acknowledgement = comms.threads.import_thread(
-        OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
+        OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
     thread = comms.registry.require("imported")
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
@@ -610,7 +612,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     assert "remaining work" in context and "[Historical attachment: screenshot.png]" in context
     assert "Reverted prompt" not in context
     with pytest.raises(ValueError):
-        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
+        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
@@ -620,7 +622,7 @@ def test_import_refuses_redirected_session_directory(tmp_path, comms):
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
     with pytest.raises(ValueError):
-        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
+        comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, AnySession()), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
     assert not comms.registry.snapshot().taken("imported")
@@ -640,7 +642,7 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path):
         db.execute("INSERT INTO part VALUES(?,?,?,?)",
                    ("part", "message", 1, '{"type":"text","text":"Resume this task"}'))
     before = source.read_bytes()
-    snapshot = read(OpenCodeHarness, source, session_id="session")
+    snapshot = read(OpenCodeHarness, source, session=NamedSession("session"))
     assert bodies(snapshot) == ["Resume this task"] and snapshot.title == GivenThreadText("Title")
     assert source.read_bytes() == before
     with pytest.raises(ValueError):
@@ -684,7 +686,7 @@ def test_opencode_server_reads_all_messages_including_the_users():
     assert bodies(snapshot) == ["Live prompt", "Live answer"]
     assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
     with pytest.raises(ValueError):
-        OnlineHistory.of(OpenCodeHarness, "ses_test", None, Path("/work"))
+        OnlineHistory.of(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
 
 
 def test_opencode_server_leaves_out_what_the_user_reverted():
@@ -712,7 +714,7 @@ def test_import_cli_and_invalid_sources(tmp_path, capsys, comms):
                  "--source", str(source), "--name", "copied"]) == 0
     assert json.loads(capsys.readouterr().out)["thread"] == "copied"
     with pytest.raises(ValueError):
-        read(OpenCodeHarness, source, session_id="wrong")
+        read(OpenCodeHarness, source, session=NamedSession("wrong"))
     with pytest.raises(ValueError):
         read(OpenCodeHarness, tmp_path / "export.txt")
     with pytest.raises(ValueError):

@@ -276,7 +276,7 @@ class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
         """The first record names the session; the selected history may start long after it."""
         for offset, raw in self.complete_lines(stream, 0, boundary):
             record = self.decode_line(raw, offset)
-            if self.session_id not in (None, record.session.id):
+            if not self.session.holds(record.session.id):
                 raise ValueError('The rollout belongs to a different Codex session.')
             yield from record.updates(self.start_state(), offset)
             return

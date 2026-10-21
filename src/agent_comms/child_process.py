@@ -124,9 +124,6 @@ class ProcessState(SubclassUnion, affix=""):
     @abstractmethod
     def require_release_by(self, process: ProcessIdentity) -> None: ...
 
-    @abstractmethod
-    def pid_fields(self) -> dict[str, int]: ...
-
 
 @dataclass(frozen=True)
 class NoProcess(NullMember, ProcessState):
@@ -187,9 +184,6 @@ class NoProcess(NullMember, ProcessState):
     def require_release_by(self, process: ProcessIdentity) -> None:
         # Stopping before the first start still produces a valid release.
         pass
-
-    def pid_fields(self) -> dict[str, int]:
-        return {}
 
 
 @dataclass(frozen=True)
@@ -281,9 +275,6 @@ class ProcessIdentity(RecordMember, ProcessState):
     def require_release_by(self, process: ProcessIdentity) -> None:
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
-
-    def pid_fields(self) -> dict[str, int]:
-        return {"pid": self.pid}
 
     def registration_change(
         self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,

@@ -9,7 +9,7 @@ from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 
 
 def transcript(path, count):
@@ -93,7 +93,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('Inspect the renderer'))
+        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
     )
 
     page = comms.transcripts.thread_transcript_page("child")
@@ -127,7 +127,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
         comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('Child task'))
+        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
     )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)
     through = page.after
@@ -175,7 +175,7 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
         "parent", frozenset(), str(tmp_path), session_file=str(path),
         execution=NativeThreadExecution,
     ))
-    RegisterCliCommand(name="child", worktree=str(tmp_path), parent="parent",
+    RegisterCliCommand(name="child", worktree=str(tmp_path), parent=ForkedParent("parent"),
                        execution=NativeThreadExecution).apply(comms)
     checkpoint = comms.transcripts.transcript_checkpoint("child")
     inherited = comms.transcripts.thread_transcript_page("child").after

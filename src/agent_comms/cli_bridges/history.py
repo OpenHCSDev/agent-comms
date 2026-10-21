@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
 
@@ -20,10 +21,11 @@ from pydantic import TypeAdapter
 
 from agent_comms.agent_runtime import ReadsHistory
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import SubclassUnion
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
 
 from agent_comms.runtime_updates import EarlierRequest, HistoryNotice, RuntimeUpdate, SessionFacts
-from agent_comms.thread_text import ThreadText
+from agent_comms.thread_text import AbsentText, GivenText, TextChoice, ThreadText
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
@@ -78,26 +80,60 @@ class ReadAtOnce(ABC):
             yield update
 
 
+class ExpectedSession(SubclassUnion, TextChoice, affix="Session"):
+    """The session a stored history must hold, when the import names one."""
+
+    @abstractmethod
+    def holds(self, session_id: str) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedSession(GivenText, ExpectedSession):
+    text: str
+
+    def holds(self, session_id: str) -> bool:
+        return session_id == self.text
+
+
+@dataclass(frozen=True, slots=True)
+class AnySession(AbsentText, ExpectedSession):
+    def holds(self, session_id: str) -> bool:
+        return True
+
+
+class HarnessAddress(SubclassUnion, TextChoice, affix="Address"):
+    """How a running harness is reached (socket, server URL), when the import names it."""
+
+
+@dataclass(frozen=True, slots=True)
+class GivenAddress(GivenText, HarnessAddress):
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class DefaultAddress(AbsentText, HarnessAddress):
+    """The harness's own default, where it has one."""
+
+
 class OfflineHistory(ReadAtOnce, History):
-    """Reads the files a harness stores; the harness need not be running. `session_id`, when
-    given, is the session the file must hold."""
+    """Reads the files a harness stores; the harness need not be running."""
 
     suffixes: ClassVar[frozenset[str]]
 
-    def __init__(self, source: Path, session_id: str | None = None) -> None:
+    def __init__(self, source: Path, session: ExpectedSession = AnySession()) -> None:
         self.source = source
-        self.session_id = session_id
+        self.session = session
 
     @classmethod
     def reads(cls, source: Path) -> bool:
         return source.suffix in cls.suffixes
 
     @classmethod
-    def of(cls, harness: type[Harness], source: Path, session_id: str | None) -> OfflineHistory:
+    def of(cls, harness: type[Harness], source: Path, session: ExpectedSession) -> OfflineHistory:
         readers = tuple(reader for reader in cls.readers(harness) if reader.reads(source))
         if len(readers) != 1:
             raise ValueError(f'No single {harness.declared_name} reader for {source}')
-        return readers[0](source, session_id)
+        return readers[0](source, session)
 
 
 class OnlineHistory(History):
@@ -105,11 +141,11 @@ class OnlineHistory(History):
 
     @classmethod
     @abstractmethod
-    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
-        """`address` is how this harness is reached (socket, server URL); `directory` the session's."""
+    def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
+        """`directory` is the session's."""
 
     @classmethod
-    def of(cls, harness: type[Harness], thread: str, address: str | None, directory: Path) -> OnlineHistory:
+    def of(cls, harness: type[Harness], thread: str, address: HarnessAddress, directory: Path) -> OnlineHistory:
         reader, = cls.readers(harness)
         return reader.connected(thread, address, directory)
 

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
@@ -43,7 +43,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
     comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent)))
-    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task=GivenThreadText('continue')))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('continue')))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:

@@ -20,6 +20,7 @@ from agent_comms.peer_relevance import (
     Visible,
 )
 from agent_comms.relationships import RelationshipEdit
+from agent_comms.thread_text import ForkedParent
 from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 
@@ -222,7 +223,7 @@ def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_pa
 
 def test_parent_binding_remains_without_bare_parent_inventory(tmp_path):
     comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
-    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent'))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent')))
     context = TurnContext.for_inspection(comms, comms.registry.require("child"))
     segment = next(s for s in context.segments if isinstance(s, CoordinationSegment))
     assert (segment.parent, segment.peers) == ("parent", ())
