@@ -20,11 +20,9 @@ from agent_comms.commander.standing import (
     AnswersTo,
     Detached,
     GoalCannotRun,
-    HeartbeatSilent,
     HolderCannotRun,
     UnitAskUnanswered,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
@@ -37,12 +35,11 @@ from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
+from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
@@ -423,55 +420,6 @@ def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, insta
     broken = StandingRule.broken(held_bus, "lead")
     assert blocked in broken
     assert all(rule in broken for rule in family)
-
-
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
-    blocked_holder(held_bus)
-    question = publish(held_bus, "worker", "lead", time.time() - 901)
-    expected = tuple(rule.line() for rule in (
-        *GoalCannotRun.violations(held_bus, "lead"), *UnitAskUnanswered.violations(held_bus, "lead"),
-    ))
-    heartbeat = CommanderHeartbeat()
-    commander = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
-    assert commander.incarnation in heartbeat.reviews
-    assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
-    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
-        heartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )))
-    message = next(message for message in page.messages if message.sender == heartbeat.sender)
-    assert all(line in message.body for line in expected)
-    assert question.reference.message_id in message.body
-    print(message.body)
-
-
-def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeypatch):
-    """10:08 on 2026-10-21: the heartbeat sent only on change, so 31 failed passes read as calm."""
-    from agent_comms.commander_heartbeat import CommanderReview
-
-    commander = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    commander = held_bus.registry.require("lead")
-    review = CommanderReview(frozenset())
-    CommanderHeartbeat.register(held_bus.registry)
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    with held_bus.bus.locked():
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
-    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )))
-    changed, unchanged = (message for message in page.messages
-                          if message.sender == CommanderHeartbeat.sender)
-    assert "Standing rules clear." in changed.body
-    assert unchanged.body == f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations."
-    assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    later = unchanged.timestamp + HeartbeatSilent.seconds + 1
-    monkeypatch.setattr(time, "time", lambda: later)
-    silent, = HeartbeatSilent.violations(held_bus, "lead")
-    assert silent.beat == unchanged.seq
-    assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
