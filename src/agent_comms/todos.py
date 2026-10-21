@@ -1443,7 +1443,11 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         return False
 
     def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("This problem cannot receive another order.")
+        raise TodoError("This problem cannot receive another order.")
+
+    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
+        """Every reassignment is a transfer unless the order state says otherwise."""
+        self.require_transfer(todo)
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
@@ -1714,7 +1718,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("Only an undelivered order can change owner.")
+        raise TodoError("Only an undelivered order can change owner.")
 
     def require_writable(self) -> None:
         for check in (self.check, *self.deletes.checks):
@@ -1930,6 +1934,11 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
 
+    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
+        """A corrected order to the claimant replaces its claim; another owner is a transfer."""
+        if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
+            self.require_transfer(todo)
+
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return ()
 
@@ -1953,7 +1962,7 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         owner = todo.holder_state.previous_assignment().owner
-        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
+        raise TodoError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -3143,7 +3152,7 @@ class Todo(TypedTable):
         return self.holder_state.proposed_assignment(proposed)
 
     def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
-        self.order.require_transfer(self)
+        self.order.require_reassignment(self, proposed)
         holder = self.holder_state
         holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)
