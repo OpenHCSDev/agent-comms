@@ -56,11 +56,12 @@ class EscalationSender(ServiceSender):
     @classmethod
     def sent(cls, comms: Comms, commander: str, line: str) -> bool:
         snapshot = comms.registry.snapshot()
-        return any(message.body == line for message in comms.bus.log.read_page(SenderMessages(
+        messages = SenderMessages(
             RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
             time.time() - cls.horizon,
             time.time(),
-        )))
+        ).read_opened(comms.bus.bus)
+        return any(message.body == line for message in messages)
 
     @classmethod
     def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:

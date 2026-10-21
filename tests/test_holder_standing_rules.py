@@ -597,19 +597,20 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
-def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus, monkeypatch):
-    """The heartbeat's memory of what it enforced dies with its process; the bus says which
-    bursts already went out, so a rule that reads as new again after a restart is not resent."""
-    from agent_comms.commander.vibe_check import (
-        AnswersOwedDegradation, EscalationSender, Sign, VibeCheck, VibeCheckSender,
-    )
+def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
+    """Deduplication sees answered and unanswered bursts through the same retained bus."""
+    from agent_comms.commander.vibe_check import VibeCheckSender
 
-    monkeypatch.setattr(EscalationSender, "gap", 0.0)
-    first = VibeCheck(Sign(AnswersOwedDegradation, ("1:aaaaaaaaaaaa",), "owed one"))
-    first.enforce(held_bus, "lead")
-    first.enforce(held_bus, "lead")
+    first = "first escalation identity"
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
     sent = VibeCheckSender.unanswered(held_bus, "lead", time.time())
-    assert len(sent) == len(first.indictment())
-    VibeCheck(Sign(AnswersOwedDegradation, ("2:bbbbbbbbbbbb",), "owed two")).enforce(
-        held_bus, "lead")
-    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 2 * len(sent)
+    assert len(sent) == 1
+    publish(held_bus, "lead", VibeCheckSender.sender, time.time(), answers=(sent[0].reference,))
+    assert VibeCheckSender.sent(held_bus, "lead", first)
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
+    assert not VibeCheckSender.unanswered(held_bus, "lead", time.time())
+    second = "second escalation identity"
+    VibeCheckSender.burst_once(held_bus, "lead", (second,), second)
+    assert [message.body for message in VibeCheckSender.unanswered(
+        held_bus, "lead", time.time())] == [second]
