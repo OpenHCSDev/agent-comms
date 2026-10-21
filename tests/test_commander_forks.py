@@ -38,9 +38,6 @@ def fork_bus(tmp_path):
     source.git(source.checkout, 'add', 'declaration.py')
     source.git(source.checkout, 'commit', '-qm', 'Declare shared assignment owner')
     source.git(source.checkout, 'push', 'origin', 'main')
-    source.git(source.checkout, 'remote', 'set-url', 'origin', 'https://github.com/example/source.git')
-    source.git(source.checkout, 'config', f'url.{source.remote}.insteadOf',
-               'https://github.com/example/source.git')
     comms = Comms(tmp_path / 'saved-bus')
     comms.messaging.initialize_private_initial_protocol()
     comms.channels.create_tag('comms')
