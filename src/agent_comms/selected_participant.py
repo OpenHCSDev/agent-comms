@@ -13,6 +13,7 @@ from .agent_events import CompactionEvent, NativePhaseChanged
 from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
+from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
@@ -56,6 +57,8 @@ class SelectedParticipant(MroDispatch):
     model: SelectedModel
     cursor_delivery: CursorDelivery
     goal_permission: TurnGoalPermission = field(init=False, repr=False)
+    # The turn keeps its last context record, so recording never re-reads it.
+    context_prior: ContextPrior = field(default=UNREAD_CONTEXT, init=False, repr=False)
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -135,7 +138,9 @@ class SelectedParticipant(MroDispatch):
     async def observe_context(self, event: TurnContextObserved) -> None:
         self.owner.require_active_turn()
         lease = self.owner.thread.require_turn_lease()
-        await event.context.record(self.comms.contexts, self.owner.thread, lease)
+        self.context_prior = await event.context.record(
+            self.comms.contexts, self.context_prior, self.owner.thread, lease
+        )
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:

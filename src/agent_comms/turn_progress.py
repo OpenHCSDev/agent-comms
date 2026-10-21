@@ -18,6 +18,7 @@ from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updat
 from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
+from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
@@ -71,6 +72,8 @@ class TurnProgress(events.AgentEventConsumer):
         self.reply_parts: list[str] = []
         self.terminal_error: events.Error | None = None
         self.publication_measurements = PublicationMeasurements()
+        # The turn keeps its last context record, so recording never re-reads it.
+        self.context_prior: ContextPrior = UNREAD_CONTEXT
         self.publication = TurnEventPublication(
             comms=comms,
             sessions=sessions,
@@ -105,8 +108,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        manifest = await event.context.record(self.comms.contexts, self.thread, self.turn_lease)
-        self.runtime.agent.annotations.observe(self.session_id, manifest, event.context.values)
+        self.context_prior = await event.context.record(
+            self.comms.contexts, self.context_prior, self.thread, self.turn_lease
+        )
+        self.runtime.agent.annotations.observe(
+            self.session_id, self.context_prior.value, event.context.values
+        )
 
     @property
     def reply_targets(self):
