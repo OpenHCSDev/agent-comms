@@ -1,0 +1,20 @@
+name: Prepare pinned native Pi
+description: Warm the locked MCP cache, then prepare the native tree with offline extension installation.
+inputs:
+  python:
+    description: Installed Core interpreter command or executable path
+    required: false
+    default: python
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22.19.0"
+    - name: Warm locked MCP dependencies
+      shell: bash
+      working-directory: extensions/pi-mcp-client
+      run: npm ci --ignore-scripts --no-audit --no-fund
+    - name: Prepare pinned native Pi
+      shell: bash
+      run: stack/bin/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"
