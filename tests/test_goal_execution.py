@@ -27,7 +27,6 @@ from agent_comms.goal_presentation import (
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_terminal import OwnerStop
-from test_goal_answers import copied_goal_bus
 
 
 @pytest.fixture
