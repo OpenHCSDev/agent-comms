@@ -193,7 +193,7 @@ def test_a_bus_with_a_todo_deadline_and_old_proofs_carries_through_the_whole_cha
         assert NativeContextJournal.schema_differs(db)
 
     for step in CarryChain.at(REPO).steps:
-        step.carry(tmp_path, apply=True)
+        step(tmp_path, tmp_path, tmp_path.parent / 'spill', True).carry()
 
     assert TodoStore(tmp_path).get("todo-1").review_at == created.review_at
     with closing(sqlite3.connect(TodoStore.path_in(tmp_path))) as db:

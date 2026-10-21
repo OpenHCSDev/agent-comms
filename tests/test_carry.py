@@ -35,7 +35,7 @@ def step_source() -> str:
     return (
         "from agent_comms.installer.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
-        "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
+        "    def carry(self):\n        return Carried(0)\n"
     )
 
 

@@ -1,6 +1,7 @@
 """The migration consumes a bus made by the predecessor's real publisher."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -79,7 +80,9 @@ def publish_predecessor_history(directory: Path) -> None:
     )
     ReadLedger.at(comms.root).replace(document)
     destination = directory / "destination"
-    destination.mkdir()
+    shutil.copytree(comms.root, destination)
+    ReadLedger.at(destination).replace(replace(
+        document, bus_identity=RecordedBusIdentity.capture(destination / "bus.jsonl")))
     archived = HistoryArchive(destination / "bus.jsonl").attach(comms.root)
     ReadLedger.at(archived.root).replace(replace(
         document, bus_identity=RecordedBusIdentity.capture(Path(archived.root) / "bus.jsonl")))
@@ -89,15 +92,17 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from cutover.carry_bus_history import (
         BusHistory,
         ClaimHistoryRow,
-        HistoryCatalogSource,
         HistoryLine,
         HistoryMetadata,
         HistoryOffset,
     )
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
-    from agent_comms.errors import RelationViolationError, UnclaimedError
+    from agent_comms.core_stamp import WheelStamp
+    from agent_comms.errors import UnclaimedError
+    from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
+    from agent_comms.installer.carry import Carried
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
     from agent_comms.recorded_bus import RecordedBusIdentity
@@ -111,6 +116,9 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     with tarfile.open(archive) as tree:
         tree.extractall(predecessor, filter="data")
     archive.unlink()
+    commit = subprocess.check_output(
+        ["git", "rev-parse", PREDECESSOR], cwd=checkout, text=True).strip()
+    WheelStamp(commit).write(predecessor / "src" / "agent_comms" / "package_stamp.py")
     generated = tmp_path / "generated"
     result = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), str(generated)],
@@ -120,33 +128,47 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    archived, = (generated / "destination" / "history").iterdir()
-    destination = tmp_path / "carried-destination"
-    destination.mkdir()
-    shutil.copyfile(HistoryArchive.path_in(generated / "destination"),
-                    HistoryArchive.path_in(destination))
-    sources = HistoryCatalogSource.read(destination, generated / "destination")
-    bindings = {}
-    numbers = dict(rows=4, continuous=4, round_tripped=4)
-    for original, root in ((generated / "wire", tmp_path / "carried-wire"),
-                           (archived, destination / "history" / archived.name)):
-        root.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(original, root)
-        source = root / BusHistory.filename
-        source.chmod(0o400)
-        original_bytes = source.read_bytes()
-        metadata = HistoryMetadata.read(root)
-        previous_identity = RecordedBusIdentity.capture(original / BusHistory.filename)
-        before = ReadLedger.at(root).read()
-        assert BusHistory.carry(root, apply=False).detail == numbers
-        assert not Bus.path_in(root).exists()
-        with pytest.raises(RelationViolationError, match="spill_dir"):
-            BusHistory.carry(root, apply=True)
-        assert not Bus.path_in(root).exists()
-        bus = Bus(Bus.path_in(root))
-        result = BusHistory.transfer(source, bus, metadata)
-        assert result.changed == 4
-        assert result.detail == numbers
+    original = generated / "destination"
+    archived, = (original / "history").iterdir()
+    root = tmp_path / "carried"
+    spill = tmp_path / "hdd-spill"
+    spill.mkdir()
+    shutil.copytree(original, root)
+    relatives = (Path(), archived.relative_to(original))
+    originals = {relative: (original / relative / BusHistory.filename).read_bytes()
+                 for relative in relatives}
+    before = {relative: ReadLedger.at(root / relative).read() for relative in relatives}
+    dry = BusHistory(root, original, spill, False)
+    assert dry.carry().detail == dict(rows=8, continuous=8, round_tripped=8)
+    assert all(not Bus.path_in(root / relative).exists() for relative in relatives)
+    assert not tuple(spill.iterdir())
+    request = replace(dry, apply=True)
+    completed = subprocess.run(
+        [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(), "carry",
+         json.dumps(FieldCodec.encode(request))], cwd=checkout,
+        capture_output=True, text=True, timeout=60,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = FieldCodec.decode(Carried, FieldCodec.parse(completed.stdout.splitlines()[-1]))
+    assert result.changed == 8
+    assert {key: result.detail[key] for key in ("rows", "continuous", "round_tripped")} == {
+        "rows": 8, "continuous": 8, "round_tripped": 8,
+    }
+    assert result.detail["read_viewers_before"] == result.detail["read_viewers_after"] == 2
+    assert (result.detail["read_conversations_before"]
+            == result.detail["read_conversations_after"] == 2)
+    assert result.detail["read_transcripts_before"] == result.detail["read_transcripts_after"] == 2
+    staged, = spill.iterdir()
+    for relative in relatives:
+        directory = root / relative
+        source = staged / relative / BusHistory.filename
+        metadata = HistoryMetadata.read(source.parent)
+        assert not (directory / BusHistory.filename).exists()
+        assert not (directory / HistoryMetadata.filename).exists()
+        assert source.stat().st_mode & 0o777 == 0o400
+        assert source.read_bytes() == originals[relative]
+        assert (original / relative / BusHistory.filename).read_bytes() == originals[relative]
+        bus = Bus(Bus.path_in(directory))
         rows = tuple(HistoryLine.rows(source, metadata))
         claim, = (line for line in rows if isinstance(line.row, ClaimHistoryRow))
         if claim.row.seq > metadata.claimed_after_seq:
@@ -165,24 +187,12 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
             assert all(HistoryOffset.select(db, offset=line.offset) == [
                 HistoryOffset(line.offset, line.row.seq)] for line in rows)
         assert BusHistory.transfer(source, bus, metadata).changed == 0
-        rebound = BusHistory.rebind_reads(root, previous_identity)
-        assert rebound.changed == 1
-        assert rebound.detail["read_viewers_before"] == rebound.detail["read_viewers_after"]
-        assert (rebound.detail["read_conversations_before"]
-                == rebound.detail["read_conversations_after"])
-        assert rebound.detail["read_transcripts_before"] == rebound.detail["read_transcripts_after"]
-        assert ReadLedger.at(root).read() == replace(
-            before, bus_identity=RecordedBusIdentity.capture(bus.path))
-        assert BusHistory.rebind_reads(root, previous_identity).changed == 0
-        bindings[previous_identity] = RecordedBusIdentity.capture(bus.path)
-        assert source.read_bytes() == original_bytes
-    assert HistoryCatalogSource.publish(
-        destination, generated / "destination", sources, bindings).changed == 1
-    converted, = HistoryArchive(Bus.path_in(destination)).sources()
+        assert ReadLedger.at(directory).read() == replace(
+            before[relative], bus_identity=RecordedBusIdentity.capture(bus.path))
+        assert BusHistory.rebind_reads(directory, before[relative].bus_identity).changed == 0
+    converted, = HistoryArchive(Bus.path_in(root)).sources()
     converted.validate()
-    assert converted.provenance == sources[0].provenance
-    assert converted.bus_identity == bindings[sources[0].bus_identity]
-    assert converted.root == str(destination / "history" / archived.name)
+    assert converted.root == str(root / archived.relative_to(original))
 
 
 if __name__ == "__main__":

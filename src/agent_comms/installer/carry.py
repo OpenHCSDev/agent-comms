@@ -24,8 +24,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.locked_store import DurableFile
 
 STEPS = Path("tools/cutover")
@@ -41,7 +41,15 @@ class Carried:
     """Files under the bus root this run wrote; every other file stays byte-identical."""
 
 
+@dataclass(frozen=True)
 class Carry(ABC):
+    """One declared migration with the installer's complete, decoded run inputs."""
+
+    root: Annotated[Path, PathText]
+    original_root: Annotated[Path, PathText]
+    spill_dir: Annotated[Path, PathText]
+    apply: bool
+
     declared: ClassVar[dict[str, type[Carry]]] = {}
     """Every step imported so far, by its module name."""
 
@@ -61,14 +69,12 @@ class Carry(ABC):
     def name(cls) -> str:
         return cls.module().stem
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Annotated[Path, PathText], ...]:
-        raise RuntimeError(f'{cls.name()} needs the full agent-comms install operation')
+    def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
+        raise RuntimeError(f'{self.name()} needs the full agent-comms install operation')
 
-    @classmethod
     @abstractmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
+    def carry(self) -> Carried:
+        """Carry this root with its wire lock held; on a dry run, write nothing."""
 
     @staticmethod
     def require_confined(root: Path, path: Path) -> None:
@@ -76,8 +82,7 @@ class Carry(ABC):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
-    @classmethod
-    def before_stop(cls, root: Path, *, apply: bool) -> Carried:
+    def before_stop(self) -> Carried:
         """What the running installation needs before its own stop command can read the bus.
         It records nothing in the ledger."""
         return Carried(0)

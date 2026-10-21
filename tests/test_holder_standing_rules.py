@@ -321,11 +321,14 @@ def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
     original = comms.goals.open_goal_store().path.read_bytes()
     with closing(CoordinationStore.read_snapshot(path)) as db:
         before = tuple(db.execute(f'SELECT * FROM "{RETIRED_TABLE}"'))
-    assert GoalWorkDecisions.carry(held_bus.root, apply=False).changed == 1
-    carried = GoalWorkDecisions.carry(held_bus.root, apply=True)
+    migration = GoalWorkDecisions(
+        held_bus.root, comms.root, held_bus.root.parent / 'spill', False)
+    assert migration.carry().changed == 1
+    migration = replace(migration, apply=True)
+    carried = migration.carry()
     assert carried.changed == 1
     assert carried.rewritten == (str(path.relative_to(held_bus.root)),)
-    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 0
+    assert migration.carry().changed == 0
     GoalAttemptStore(path.parent)  # the installed reader accepts the carried schema
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert tuple(db.execute(f'SELECT * FROM "{GoalWorkDecision.declared_name}"')) == before
@@ -333,7 +336,7 @@ def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
     assert held_bus.goals.open_goal_store().require_generation(
         held_bus.registry.require("worker").goal.require().id,
     ).number == 1
-    assert path in GoalWorkDecisions.backup_files(held_bus.root)
+    assert path in migration.backup_files()
 
 
 def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
@@ -344,8 +347,10 @@ def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
     ledger = CarryLedger(held_bus.root)
     ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
     before = path.read_bytes()
+    migration = GoalWorkDecisions(
+        held_bus.root, held_bus.root, held_bus.root.parent / 'spill', True)
     with pytest.raises(RelationViolationError):
-        ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+        ledger.apply(GoalWorkDecisions.name(), migration.carry)
     assert path.read_bytes() == before
     assert GoalWorkDecisions.name() not in ledger.applied()
 
@@ -357,9 +362,11 @@ def test_install_discovers_and_records_decision_cutover_once(held_bus):
     ledger = CarryLedger(held_bus.root)
     ledger.write(tuple(name for name in ledger.applied() if name != GoalWorkDecisions.name()))
     assert GoalWorkDecisions in chain.pending(ledger.applied())
-    first = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+    migration = GoalWorkDecisions(
+        held_bus.root, held_bus.root, held_bus.root.parent / 'spill', True)
+    first = ledger.apply(GoalWorkDecisions.name(), migration.carry)
     assert first.changed == 1 and ledger.filename in first.rewritten
-    second = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+    second = ledger.apply(GoalWorkDecisions.name(), migration.carry)
     assert second.changed == 0 and second.rewritten == ()
     assert GoalWorkDecisions not in chain.pending(ledger.applied())
 

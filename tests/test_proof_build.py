@@ -394,15 +394,17 @@ def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path
     ledger = CarryLedger(root)
     ledger.write(())
     assert InstallSchedule in chain.pending(ledger.applied())
-    assert InstallSchedule.backup_files(root) == (schedule,)
-    assert InstallSchedule.carry(root, apply=False).changed == 1
+    migration = InstallSchedule(root, root, tmp_path / 'spill', False)
+    assert migration.backup_files() == (schedule,)
+    assert migration.carry().changed == 1
     assert schedule.exists()
 
-    result = ledger.apply(InstallSchedule.name(), lambda: InstallSchedule.carry(root, apply=True))
+    migration = replace(migration, apply=True)
+    result = ledger.apply(InstallSchedule.name(), migration.carry)
 
     assert result.changed == 1
     assert schedule.name in result.rewritten
     assert not schedule.exists()
     assert history.read_bytes() == b"preserved original history"
     assert InstallSchedule not in chain.pending(ledger.applied())
-    assert InstallSchedule.carry(root, apply=True).changed == 0
+    assert migration.carry().changed == 0

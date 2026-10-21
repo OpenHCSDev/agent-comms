@@ -38,17 +38,17 @@ class StoredOrder(TypedRow):
 
 
 class OrderScopes(Carry):
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+    def backup_files(self) -> tuple[Path, ...]:
+        root = self.root
         paths = tuple(path for path in SQLiteFile.files(TodoStore.path_in(root)) if path.exists())
         for path in paths:
-            cls.require_confined(root, path)
+            self.require_confined(root, path)
         return paths
 
-    @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
+    def carry(self) -> Carried:
+        root, apply = self.root, self.apply
         path = TodoStore.path_in(root)
-        cls.require_confined(root, path)
+        self.require_confined(root, path)
         if not path.exists():
             return Carried(0)
         kinds = tuple(member.declared_name for member in ProblemOrder.members_with(CheckedProblemOrder))
