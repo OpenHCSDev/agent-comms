@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from typing import Annotated
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -29,6 +29,7 @@ from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import (
     Compact,
+    ExactResponse,
     PiCommand,
     SetModel,
 )
@@ -144,8 +145,8 @@ class TaskFailed(DurablePiEvent):
         return (Error(self.message),)
 
 
-class HostQuery(PiCommand, declared_name=None):
-    strict_response = True
+class HostQuery(ExactResponse, PiCommand, declared_name=None):
+    pass
 
 
 @dataclass(frozen=True)
@@ -200,8 +201,7 @@ class Entries(HostQuery):
     response_payload = HistoryData
 
 
-class CompactDurable(Compact):
-    strict_response = True
+class CompactDurable(ExactResponse, Compact):
     response_payload = OutcomeData
 
 
