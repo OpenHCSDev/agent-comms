@@ -167,7 +167,12 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
         return ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
-        """Only a commit delivery can fail a check on delivered source."""
+        """A false completion records the failed order check once, for every delivery kind."""
+        now = time.time()
+        spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
+        FailedCheckStrike.make(todo, now,
+            f"reported done with {self.work} but its order check failed: {error}; "
+            f"cost {spent:.1f} minutes").record(goals, todo.id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,11 +200,7 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
             return  # A failed integration check is not evidence that the unit's commit failed.
-        now = time.time()
-        spent = (now - todo.order.checked().at.recorded_at("An order")) / 60
-        FailedCheckStrike.make(todo, now,
-            f"reported done at {self.delivered} but its order check failed: {error}; "
-            f"cost {spent:.1f} minutes").record(goals, todo.id)
+        super().check_failed(goals, todo, error)
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
