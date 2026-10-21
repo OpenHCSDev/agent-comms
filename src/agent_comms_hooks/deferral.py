@@ -21,14 +21,21 @@ from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook, HookRecor
 
 
 class Tagged(HookRecord):
-    """A record Claude Code tags with "type"; each member declares its tag, `None` the rest."""
+    """A record Claude Code tags with "type"; each member declares its tag, and the family's
+    one `Untagged` member answers for every tag nobody declared."""
 
-    tag: ClassVar[str | None]
+    tag: ClassVar[str]
 
     @classmethod
     def of(cls, record: Mapping[str, object]) -> Self:
-        kinds = {kind.tag: kind for kind in cls.__subclasses__()}
-        return kinds.get(record.get("type"), kinds[None]).decode(record)
+        members = cls.__subclasses__()
+        (other,) = (kind for kind in members if issubclass(kind, Untagged))
+        kinds = {kind.tag: kind for kind in members if not issubclass(kind, Untagged)}
+        return kinds.get(record.get("type"), other).decode(record)
+
+
+class Untagged:
+    """The member of a tagged family that stands for every record whose tag it does not read."""
 
 
 class ReplyBlock(Tagged):
@@ -55,8 +62,8 @@ class ToolUseBlock(ReplyBlock):
     acts = True
 
 
-class OtherBlock(ReplyBlock):
-    tag = None
+class OtherBlock(ReplyBlock, Untagged):
+    pass
 
 
 @dataclass(frozen=True)
@@ -97,8 +104,8 @@ class UserRecord(TranscriptRecord):
     ends_reply = True
 
 
-class OtherRecord(TranscriptRecord):
-    tag = None
+class OtherRecord(TranscriptRecord, Untagged):
+    pass
 
 
 class Deferral(ABC):
@@ -148,11 +155,10 @@ class IdleRead(ABC):
 
     @staticmethod
     def read() -> IdleRead:
-        try:
-            run = subprocess.run(IdleRead.command, capture_output=True, text=True,
-                                 timeout=IdleRead.timeout)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            return FailedIdleRead(str(error))
+        """Core's exit status is its answer; a command that cannot start or never answers
+        is a broken install, and the hook fails with it instead of guessing."""
+        run = subprocess.run(IdleRead.command, capture_output=True, text=True,
+                             timeout=IdleRead.timeout)
         if run.returncode:
             return FailedIdleRead(run.stderr.strip()[-300:] or f"exit status {run.returncode}")
         return ReadIdle(tuple(run.stdout.split()))
