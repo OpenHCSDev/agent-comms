@@ -1,4 +1,5 @@
 """Registration shared by service-owned message senders."""
+
 from __future__ import annotations
 
 from typing import ClassVar

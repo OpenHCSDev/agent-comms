@@ -7,10 +7,12 @@ def manifest(core="core", toad="toad", wheel="old-wheel"):
     return RuntimeResolution.model_validate(
         {
             "core_commit": core,
-            "toad_commit": toad,
             "packages": {
                 "agent-comms": {"version": "1", "source": {"url": wheel, "archive_info": {}}},
-                "batrachian-toad": {"version": "2", "source": {"url": wheel, "archive_info": {}}},
+                "batrachian-toad": {
+                    "version": "2",
+                    "source": {"url": "https://example/toad", "vcs_info": {"commit_id": toad}},
+                },
                 "textual": {
                     "version": "3",
                     "source": {

@@ -59,7 +59,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import BuildIdentity, UnrecordedBuildIdentity
 from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import InfoKind, Message

@@ -62,7 +62,8 @@ class InstallRun:
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout.resolve()
         run("git", "-C", checkout, "fetch", "-q", "origin")
-        target = run("git", "-C", checkout, "rev-parse", "--verify", f"{command.to}^{{commit}}").strip()
+        target = run("git", "-C", checkout, "rev-parse", "--verify",
+                     f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))

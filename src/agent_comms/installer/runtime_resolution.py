@@ -7,20 +7,45 @@ import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import urlsplit
 
 from packaging.markers import Marker
 from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, RootModel, TypeAdapter
 
-from agent_comms.launch_runtime import InstalledBuildManifest, LaunchRuntime
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.repository_name import RepositoryName
 
 
-class RuntimePackage(StrEnum):
-    CORE = "agent-comms"
-    TOAD = "batrachian-toad"
+class RuntimePackage(DeclaredFamily, affix="Package"):
+    distribution: ClassVar[str]
+    repository: ClassVar[RepositoryName]
+
+    @classmethod
+    def commit(cls, resolution: RuntimeResolution) -> str:
+        return resolution.packages[cls.distribution].source.revision()
+
+
+class CorePackage(RuntimePackage):
+    distribution = "agent-comms"
+    repository = RepositoryName("OpenHCSDev", "agent-comms")
+
+    @classmethod
+    def commit(cls, resolution: RuntimeResolution) -> str:
+        return resolution.core_commit
+
+
+class ToadPackage(RuntimePackage):
+    distribution = "batrachian-toad"
+    repository = RepositoryName("OpenHCSDev", "toad")
+
+
+class TextualPackage(RuntimePackage):
+    distribution = "textual"
+    repository = RepositoryName("OpenHCSDev", "textual")
 
 
 @dataclass(frozen=True)
@@ -159,7 +184,8 @@ class UnbuiltRuntime:
         return False
 
 
-class RuntimeResolution(InstalledBuildManifest):
+class RuntimeResolution(BaseModel):
+    core_commit: str
     packages: dict[str, PackageRecord]
 
     @classmethod
@@ -197,11 +223,7 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
         packages = TypeAdapter(dict[str, PackageRecord]).validate_json(
             subprocess.check_output([python, "-c", program, core], env=environment)
         )
-        return cls(
-            core_commit=core,
-            toad_commit=packages[RuntimePackage.TOAD].source.revision(),
-            packages=packages,
-        )
+        return cls(core_commit=core, packages=packages)
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name
@@ -213,11 +235,10 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
             canonicalize_name(name): record.pin() for name, record in self.packages.items()
         }
         # Wheel URLs locate build output, not the source revisions recorded by this owner.
-        for name, commit in (
-            (RuntimePackage.CORE, self.core_commit),
-            (RuntimePackage.TOAD, self.toad_commit),
-        ):
-            result[name] = GitPin(self.packages[name].version, commit)
+        for member in RuntimePackage.members_with(RuntimePackage):
+            result[member.distribution] = GitPin(
+                self.packages[member.distribution].version, member.commit(self)
+            )
         return result
 
     def matches(self, lock: Path, python: Path, core: str) -> bool:

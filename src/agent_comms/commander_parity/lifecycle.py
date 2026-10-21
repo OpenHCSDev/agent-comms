@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from pydantic import PrivateAttr
 
+from agent_comms.build_identity import ProofBuildMismatchError, RecordedBuildIdentity
 from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import BoundedRun, ChildResult
@@ -28,18 +29,18 @@ from agent_comms.commander.request import RequestAddVerb
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from agent_comms.launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
+from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.progress_claims import WorkingClaim
+from agent_comms.repo import Repo
 from agent_comms.todos import (
     DeliveredProblemOrder,
+    FileDeliveryEvidence,
     FixScope,
     FixShape,
-    FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
 )
-from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
@@ -364,8 +365,9 @@ class BuildBoundProofCase(LifecycleCase):
     def exercise(cls, run: LifecycleRun) -> tuple[Todo, ...]:
         created = run.create()
         installed = RecordedBuildIdentity.installed()
+        selected = installed.for_repository(Repo.of(Path(created.order.checked().check.directory)))
         older = subprocess.check_output(
-            ("git", "rev-parse", f"{installed.core}^"),
+            ("git", "rev-parse", f"{selected.commit}^"),
             cwd=created.order.checked().check.directory,
             text=True,
         ).strip()
@@ -379,7 +381,10 @@ class BuildBoundProofCase(LifecycleCase):
                 order_id=created.order.checked().id,
                 delivery=OperationDelivery(
                     evidence=FileDeliveryEvidence(str(run.artifact)),
-                    proof_build=replace(installed, core=older),
+                    proof_build=replace(installed, commits=tuple(
+                        replace(record, commit=older) if record == selected else record
+                        for record in installed.commits
+                    )),
                 ),
                 claims=(WorkingClaim(str(run.artifact)),),
             )
@@ -415,12 +420,9 @@ class BuildBoundProofCase(LifecycleCase):
                 "both revisions named",
                 all(
                     revision in output
-                    for revision in (
-                        current_build.core,
-                        current_build.toad,
-                        older_build.core,
-                        older_build.toad,
-                    )
+                    for build in (current_build, older_build)
+                    for record in build.commits
+                    for revision in (record.repository.to_wire(), record.commit)
                 ),
             ),
             ("native delivered proof returned", bool(native)),
