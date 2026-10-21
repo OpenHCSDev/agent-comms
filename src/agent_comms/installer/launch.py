@@ -13,11 +13,11 @@ import sys
 import tempfile
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, TextIO
+from typing import Annotated, ClassVar, Self, TextIO
 
 import agent_comms.installer
 from agent_comms.change_report import FileLine
@@ -56,7 +56,8 @@ class InstallFailure(InstallOutcome, MroDispatch):
 
     @classmethod
     def of(cls, error: BaseException) -> InstallFailure:
-        handler = getattr(cls, next(cls.handler_names_for(type(error))))
+        handler: Callable[[BaseException], InstallFailure] = getattr(
+            cls, next(cls.handler_names_for(type(error))))
         return handler(error)
 
     @handles(UpgradeRefused)
@@ -68,11 +69,11 @@ class InstallFailure(InstallOutcome, MroDispatch):
     @staticmethod
     def crashed(error: BaseException) -> InstallFailure:
         source = Path(__file__).parents[2]
-        frame = next(frame for frame in reversed(traceback.extract_tb(error.__traceback__))
-                     if Path(frame.filename).is_relative_to(source))
+        path, line = next((path, line) for frame, line in
+                          reversed(tuple(traceback.walk_tb(error.__traceback__)))
+                          if (path := Path(frame.f_code.co_filename)).is_relative_to(source))
         return CrashedInstall(type(error).__qualname__, str(error),
-                              FileLine(str(Path(frame.filename).relative_to(source.parent)),
-                                       frame.lineno))
+                              FileLine(str(path.relative_to(source.parent)), line))
 
 
 @dataclass(frozen=True)
@@ -95,22 +96,16 @@ class CrashedInstall(InstallFailure):
 
 
 @dataclass
-class InstallReport(ServiceSender):
-    """One run owns its start and terminal post, including rehearsal and cleanup."""
+class RunReport(ABC):
+    """One run owns its start and terminal post, including cleanup."""
 
-    sender: ClassVar[str] = "installer"
-    root: Path
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
 
-    def post(self, lines: tuple[str, ...]) -> Message:
-        with client_wire(self.root) as comms:
-            self.register(comms.registry)
-            return comms.bus.publisher.publish_ordinary(
-                Message(sender=self.sender, target="#comms", body="\n".join(lines),
-                        type=InfoKind), origin=AgentOrigin())
+    @abstractmethod
+    def post(self, lines: tuple[str, ...]) -> None: ...
 
     @contextmanager
-    def running(self, upgrade: TargetTree) -> Iterator[InstallReport]:
+    def running(self, upgrade: TargetTree) -> Iterator[Self]:
         self.outcome = UnfinishedInstall()
         try:
             with upgrade:
@@ -126,6 +121,28 @@ class InstallReport(ServiceSender):
     def complete(self, upgrade: Upgrade) -> Upgrade:
         self.outcome = FinishedInstall(upgrade)
         return upgrade
+
+
+@dataclass
+class InstallReport(RunReport, ServiceSender):
+    """A live install posts its start and result to #comms."""
+
+    sender: ClassVar[str] = "installer"
+    root: Path
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        with client_wire(self.root) as comms:
+            self.register(comms.registry)
+            comms.bus.publisher.publish_ordinary(
+                Message(sender=self.sender, target="#comms", body="\n".join(lines),
+                        type=InfoKind), origin=AgentOrigin())
+
+
+class RehearsalReport(RunReport):
+    """``--rehearse`` changes nothing on the bus: its result is the run's own output."""
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -172,9 +189,10 @@ class InstallRun:
 
     def run(self) -> Upgrade:
         command = self.command
+        report = RehearsalReport() if command.rehearse else InstallReport(self.root)
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.rehearse, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(self.root))
+                       self.harnesses, report)
 
     def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:

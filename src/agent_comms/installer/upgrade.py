@@ -70,7 +70,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
-    from agent_comms.installer.launch import InstallReport
+    from agent_comms.installer.launch import RunReport
 
 HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -608,7 +608,7 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
+            harnesses: Callable[[], InstallResult], report: RunReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     tree = TargetTree(checkout, scratch, target)
