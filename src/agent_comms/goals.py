@@ -506,6 +506,10 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     @abstractmethod
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
+    def require_edit(self) -> None:
+        """Editing keeps the goal's identity, order and directives, so only text an order
+        derives itself refuses a new wording."""
+
 
 @dataclass(frozen=True)
 class UnorderedGoalOrder(GoalOrder):
@@ -615,6 +619,9 @@ class ProblemGoalOrder(GoalOrder):
 
     def goal_text(self, goal: Goal) -> str:
         return self.text
+
+    def require_edit(self) -> None:
+        raise ValueError("A problem Goal's text is derived from its assigned problems.")
 
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
