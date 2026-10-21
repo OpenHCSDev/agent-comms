@@ -33,6 +33,7 @@ from .working_memory_annotations import WorkingMemoryAnnotations
 if TYPE_CHECKING:
     from .comms import Comms
     from agent_comms.message_bus import WatchPass
+    from agent_comms.service_passes import ServicePassStore
 
 Result = TypeVar("Result")
 
@@ -130,14 +131,23 @@ class Coordination:
     @classmethod
     async def watch_worker[Observed](
         cls, watch: WatchPass[Observed], opened_wire: Callable[[], AbstractContextManager[Comms]],
+        passes: ServicePassStore,
     ) -> None:
-        """Join each entered pass before idling; cancellation also joins borrowed work."""
+        """Join each entered pass before idling; cancellation also joins borrowed work.
+
+        Each outcome is recorded where the commander's standing rules read it, because the
+        connector's log reaches nobody.
+        """
+        name = type(watch).__name__
         while True:
             (outcome,) = await asyncio.gather(
                 cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
             )
             if isinstance(outcome, Exception):
-                logging.error("Service worker pass failed: %s", type(watch).__name__, exc_info=outcome)
+                logging.error("Service worker pass failed: %s", name, exc_info=outcome)
+                await cls.run_worker(partial(passes.failed, name, outcome))
+            else:
+                await cls.run_worker(partial(passes.passed, name))
             await asyncio.sleep(60)
 
     @classmethod
