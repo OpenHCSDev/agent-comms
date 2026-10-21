@@ -109,10 +109,12 @@ class CursorPublication:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
-        from .coordination_session import NativeBoundary
+        from .store_files import SharedLock
 
-        with NativeBoundary(self.comms.bus) as boundary:
-            return boundary.privacy.cursor_scope(boundary.registry, thread_name, session_id)
+        registry = self.comms.registry.store
+        with registry.locked(mode=SharedLock()):
+            privacy = registry.private_guard_unlocked()
+            return privacy.cursor_scope(registry.read_snapshot_unlocked(), thread_name, session_id)
 
     async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,
