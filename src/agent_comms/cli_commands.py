@@ -2100,12 +2100,11 @@ class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand
 
 
 @dataclass(frozen=True, kw_only=True)
-class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
+class TargetArguments(CliCommand):
     project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
         default_factory=os.getcwd
     )
     channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
-    help = "List applicable operations and their declared parameters"
     target: Annotated[
         tuple[str, ...],
         Normalize(list),
@@ -2117,6 +2116,11 @@ class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
             options={"nargs": "+"},
         ),
     ] = dataclasses.field(default_factory=tuple)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TargetActionsCliCommand(TargetArguments, declared_name="target-actions"):
+    help = "List applicable operations and their declared parameters"
 
     def apply(self, ctx: Comms) -> TargetCatalogResult:
         return TargetCatalogResult(CliCommand.target_catalog(
@@ -2125,23 +2129,8 @@ class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TargetActionCliCommand(CliCommand, declared_name="target-action"):
-    channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
+class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
     help = "Execute a declared operation against its current target"
-    project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
-        default_factory=os.getcwd
-    )
-    target: Annotated[
-        tuple[str, ...],
-        Normalize(list),
-        Argument(
-            flags=(
-                "--target",
-                "--targets",
-            ),
-            options={"nargs": "+"},
-        ),
-    ] = dataclasses.field(default_factory=tuple)
     operation: Annotated[str, Argument(flags=("--operation",))]
     arguments: Annotated[
         dict[str, Any],
