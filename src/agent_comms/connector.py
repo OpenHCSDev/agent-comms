@@ -521,7 +521,7 @@ class Connector:
         """A service pass selects its explicit root without borrowing a request route.
 
         Waiting with a client route borrowed would hold up its replacement. The
-        pass inherits bus admission; requests retain client_wire's fast refusal.
+        pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
         yield Comms.blocking_reads(self.root)
 

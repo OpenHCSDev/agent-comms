@@ -133,10 +133,11 @@ class Coordination:
     ) -> None:
         """Join each entered pass before idling; cancellation also joins borrowed work."""
         while True:
-            try:
-                await cls.run_worker(partial(watch.watch_pass, opened_wire))
-            except Exception:
-                logging.exception("Service worker pass failed: %s", type(watch).__name__)
+            (outcome,) = await asyncio.gather(
+                cls.run_worker(partial(watch.watch_pass, opened_wire)), return_exceptions=True,
+            )
+            if isinstance(outcome, Exception):
+                logging.error("Service worker pass failed: %s", type(watch).__name__, exc_info=outcome)
             await asyncio.sleep(60)
 
     @classmethod
