@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.work_branches import WorkBranches
 from agent_comms.storage_room import (
     AllocationRoomWork,
     BuildRoomWork,
@@ -30,7 +31,9 @@ from agent_comms.storage_room import (
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.registration import Registration
     from agent_comms.threads import Thread
+    from agent_comms.todos import Todo, TodoStore
 
 StoragePath = Annotated[Path, PathText]
 
@@ -97,6 +100,32 @@ class StorageRule(RoomAllocation):
     def order_checkout(self, name: str, problem: str) -> Path:
         """Allocation path for a new problem checkout; an existing source may be reused."""
         return self.checkout_base.resolve() / f'{name}--{problem}'
+
+    def work_for_problem(
+        self, problem: Todo, registry: Registration, todos: TodoStore,
+    ) -> tuple[OrderCheckoutWork, ...]:
+        """Find retained work, including a checkout of another problem linked to this order."""
+        related = todos.related_problems(problem)
+        found = []
+        for owner in registry.all_threads().values():
+            paths = tuple(self.order_checkout(owner.name, row.id) for row in related)
+            present = []
+            for path in paths:
+                try:
+                    path.stat()
+                except FileNotFoundError:
+                    continue  # An absent allocation holds no files; other errors propagate.
+                present.append(path)
+            if not present:
+                continue
+            storage = UnitStorage.read(self, owner)
+            for path in present:
+                if path not in (storage.home, *storage.extra_checkouts):
+                    self.deny(f'{path} is not a registered Git checkout of {owner.name}')
+                work = OrderCheckoutWork(path, owner)
+                if work.local_work:
+                    found.append(work)
+        return tuple(found)
 
     def owns_checkout(self, owner: Thread, path: Path) -> bool:
         problem = path.name.removeprefix(f'{owner.name}--')
@@ -228,6 +257,13 @@ class StorageRule(RoomAllocation):
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
             'or recording.'
         )
+
+
+@dataclass(frozen=True)
+class OrderCheckoutWork(WorkBranches):
+    """An owned order checkout uses the existing Git-work reader, not another Git policy."""
+
+    owner: Thread
 
 
 @dataclass(frozen=True)
