@@ -276,7 +276,7 @@ class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
         return tuple(
             name
             for name, thread in comms.registry.all_threads().items()
-            if any(goal.state.lifts_on_compliance for goal in thread.goal.active())
+            if any(goal.state.lifts_on_compliance for goal in thread.goal)
         )
 
 
