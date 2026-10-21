@@ -1,6 +1,7 @@
 ---
 name: fork-orders
 description: "every fork or unit order carries the invariant steps up front: draft PR at the first commit, land through the merge queue, no local ratchets or full suites, delete slop instead of rewriting it, one version of each system"
+audience: fleet
 type: feedback
 ---
 

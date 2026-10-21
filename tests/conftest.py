@@ -141,10 +141,13 @@ def cursor_delivery(source_reads):
 
 @pytest.fixture(scope="session")
 def native_runtime_package():
-    """The artifact of this checkout's own pin, never the installed package's."""
+    """The artifact of this checkout's own pin, prepared as installation prepares it."""
     from agent_comms.native_package import VerifiedNativePackage
+    from agent_comms.unit_instructions import UnitInstructions
 
-    return VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.acquire(pinned_native_package())
+    UnitInstructions.prepare()
+    return package
 
 
 @pytest.fixture(autouse=True)

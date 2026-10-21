@@ -44,6 +44,8 @@ if [[ ! -x "$python" ]]; then
     exit 1
 fi
 manifest="$stack_root/pi-native.sha256"
+# Every launch reads the unit prompt; it is rendered here, never at a unit's first turn.
+native unit_instructions
 build_id=$(sha256sum "$manifest" | cut -c1-16)
 target="$stack_root/.pi-native-$build_id"
 bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
