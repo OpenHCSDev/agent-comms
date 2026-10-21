@@ -1,4 +1,5 @@
 """Recorded context reuses source-bound text and transcript prefixes."""
+from agent_comms.context_store import UNREAD_CONTEXT
 from dataclasses import replace
 import hashlib
 import sys
@@ -44,9 +45,11 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 328, 1)
     second = context(owner, tmp_path, 330, 2)
+    prior = UNREAD_CONTEXT
     for manifest in (first, second, replace(second, turn=replace(second.turn, identity=TurnId('turn-3')),
                                           request_id=ObservedDispatchRequest('request-3'))):
-        comms.contexts.record(manifest)
+        # The writer keeps the request it recorded as the next request's prior.
+        prior = comms.contexts.record_after(prior, manifest)
     page = comms.contexts.page(owner.name, comms.registry)
     assert len(page.resources) == 3
     decoded = [resource.recorded for resource in page.resources]
@@ -69,11 +72,11 @@ def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 3, 1)
-    comms.contexts.record(first)
+    comms.contexts.record_after(UNREAD_CONTEXT, first)
     second = context(owner, tmp_path, 1, 2)
     text = replace(second.segments[0], sha256='b' * 64, captured_text=('Changed system',))
     second = replace(second, segments=(text, *second.segments[1:]))
-    comms.contexts.record(second)
+    comms.contexts.record_after(UNREAD_CONTEXT, second)
     page = comms.contexts.page(owner.name, comms.registry)
     assert page.resources[-1].value.segments[0].captured_text == ('Changed system',)
     assert len(page.resources[-1].value.segments[2].contributors) == 1
@@ -85,9 +88,9 @@ def test_newly_captured_text_is_not_replaced_by_an_empty_predecessor(tmp_path):
     first = context(owner, tmp_path, 1, 1)
     first = replace(first, segments=(replace(first.segments[0], captured_text=()),
                                      *first.segments[1:]))
-    comms.contexts.record(first)
+    comms.contexts.record_after(UNREAD_CONTEXT, first)
     second = context(owner, tmp_path, 1, 2)
-    comms.contexts.record(second)
+    comms.contexts.record_after(UNREAD_CONTEXT, second)
     page = comms.contexts.page(owner.name, comms.registry)
     assert page.resources[-1].value.segments[0].captured_text == second.segments[0].captured_text
 
@@ -96,7 +99,7 @@ def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path)
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     first = context(owner, tmp_path, 328, 1)
-    comms.contexts.record(first)
+    comms.contexts.record_after(UNREAD_CONTEXT, first)
     second = context(owner, tmp_path, 330, 2)
     transcript = second.segments[2]
     contributors = tuple(replace(child, provenance=tuple(
@@ -105,7 +108,7 @@ def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path)
         for child in transcript.contributors)
     second = replace(second, segments=(*second.segments[:2],
                                        replace(transcript, contributors=contributors)))
-    comms.contexts.record(second)
+    comms.contexts.record_after(UNREAD_CONTEXT, second)
     page = comms.contexts.page(owner.name, comms.registry)
     actual = page.resources[-1]
     recorded = actual.recorded
@@ -121,7 +124,7 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
     owner = comms.registry.require('Alice')
     expected = [context(owner, tmp_path, 328 + 2 * turn, turn + 1) for turn in range(40)]
     for manifest in expected:
-        comms.contexts.record(manifest)
+        comms.contexts.record_after(UNREAD_CONTEXT, manifest)
     from agent_comms.context_store import ContextStoreInfo
     with comms.contexts.snapshot() as db:
         source = ContextStoreInfo.one(db, singleton=1).source
@@ -160,13 +163,31 @@ def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     original = context(owner, tmp_path, 2, 1)
-    comms.contexts.record(original)
+    comms.contexts.record_after(UNREAD_CONTEXT, original)
     with comms.contexts.writing() as db:
         ContextStoreInfo.delete(db, where='singleton=1')
     with pytest.raises(RelationViolationError):
         comms.contexts.page('Alice', comms.registry)
     with pytest.raises(RelationViolationError):
-        comms.contexts.record(original)
+        comms.contexts.record_after(UNREAD_CONTEXT, original)
     with comms.contexts.snapshot() as db:
         assert not ContextStoreInfo.exists(db)
         assert ContextRequest.count(db) == 1
+
+
+def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from agent_comms.context_store import ContextPriorSuperseded
+
+    comms, _ = _root(tmp_path)
+    owners = [comms.registry.require(name) for name in ('Alice', 'Bob')]
+    priors = [comms.contexts.prior(owner.incarnation) for owner in owners]
+    with ThreadPoolExecutor(2) as pool:
+        recorded = list(pool.map(lambda pair: comms.contexts.record_after(
+            pair[0], context(pair[1], tmp_path, 3, 1)), zip(priors, owners)))
+    alice = recorded[0]
+    following = comms.contexts.record_after(alice, context(owners[0], tmp_path, 4, 2))
+    assert following.recorded.recording_turn == alice.recorded.recording_turn + 1
+    assert comms.contexts.page('Bob', comms.registry).resources[-1].record_id == recorded[1].record_id
+    with pytest.raises(ContextPriorSuperseded):
+        comms.contexts.record_after(alice, context(owners[0], tmp_path, 5, 3))

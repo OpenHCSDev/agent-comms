@@ -1,6 +1,6 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from dataclasses import dataclass, field
 from functools import partial
 
@@ -21,6 +21,9 @@ from .turn_context import (
     UnobservedDispatchRequest,
 )
 
+if TYPE_CHECKING:
+    from .context_store import CapturedContext
+
 
 @dataclass(frozen=True)
 class NativeContextManifestData(StrictFields, PiResponseData):
@@ -38,18 +41,18 @@ class NativeContextManifestData(StrictFields, PiResponseData):
         return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
             for segment in self.segments), self.counter, request_id=self.request_id)
 
-    async def record(self, contexts, thread, lease) -> ContextManifest:
-        """Publish the original SDK observation under its leased owner turn."""
+    async def record(self, contexts, prior, thread, lease) -> "CapturedContext":
+        """Publish the original SDK observation under its leased owner turn, after the
+        prior this turn holds; the result is the turn's next prior."""
         from .coordinator import Coordination
         from .thread_identity import TurnId
         from .turn_context import RecordedContextTurn
 
         turn = RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
         manifest = self.for_turn(thread.incarnation, turn)
-        await Coordination.run_worker(
-            partial(contexts.record, manifest)
+        return await Coordination.run_worker(
+            partial(contexts.record_after, prior, manifest)
         )
-        return manifest
 
 
 @dataclass(frozen=True)

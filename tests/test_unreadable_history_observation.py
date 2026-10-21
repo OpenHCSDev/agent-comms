@@ -4,6 +4,7 @@ No provider input, retry or live bus write. The fixture is a canonical saved
 manifest whose declaration name is intentionally unavailable in this reader.
 """
 
+from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
 import pickle
 from dataclasses import dataclass
@@ -57,7 +58,7 @@ def saved_row(comms):
     comms.registry.declare(owner)
     comms.messaging.initialize_private_initial_protocol()
     comms.bus.log.path.touch(mode=0o600)
-    comms.contexts.record(manifest(owner))
+    comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:
         request, = ContextRequest.select(db)
         return FieldCodec.encode(request.recorded(db))
