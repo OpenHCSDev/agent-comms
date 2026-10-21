@@ -53,7 +53,6 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .todos import Todo
     from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -551,18 +550,15 @@ class RequestDirective:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
     def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
+        return goals.bus.bus.lookup(self.seq)
 
     def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
         if self.deadline >= now:
             return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
+        with goals.bus.bus.reading() as source:
+            original = source.lookup(self.seq).reference
             replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
+        return not any(reply.sender == owner.name for reply in replies)
 
 
 @dataclass(frozen=True)
