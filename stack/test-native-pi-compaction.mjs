@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Pi's own compaction engine on the prepared package: threshold before a tracked
 // input, overflow recovery of a tracked input, and manual /compact with the
 // thread's task brief. Local SSE fixture only; no network, credentials or paid calls.
@@ -7,10 +8,20 @@ import {mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
-const mode=process.argv[2] ?? 'threshold';
-assert.ok(['threshold','overflow','manual','wip','cap','oversized'].includes(mode));
-const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
+const modes=['threshold','overflow','manual','wip','cap','oversized'];
+const mode=process.argv[2];
+if (mode === undefined) {
+    for (const scenario of modes) {
+        const child=spawnSync(process.execPath,[fileURLToPath(import.meta.url),scenario],{stdio:'inherit'});
+        assert.equal(child.status,0,`compaction scenario failed: ${scenario}`);
+    }
+    process.exit(0);
+}
+assert.ok(modes.includes(mode));
+const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(pkg,'Prepared native package required');
 const requests=[];
 let overflowSent=false;

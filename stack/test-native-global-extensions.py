@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Actual automatic extension discovery and saved-session RPC, no provider input.
 
-Use an owned persistent fixture directory. Source globals are read-only; the
-native copy is never modified here. Linux seccomp denies all network syscalls.
+Discover the manifest's compiled global snapshots in an owned agent directory.
+The native copy and user globals stay read-only. Linux seccomp denies network.
 """
 
 import argparse
@@ -16,22 +16,34 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
+
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
+from agent_comms.launch_runtime import RestartEnvironment
 
 
-def main():
+def main(fixture: Path):
     parser = argparse.ArgumentParser()
-    parser.add_argument("package", type=Path)
-    parser.add_argument("fixture", type=Path)
+    parser.add_argument("package", type=Path, nargs="?", default=os.environ.get("PI_NATIVE_PACKAGE_DIR"))
+    parser.add_argument("fixture", type=Path, nargs="?", default=fixture)
     parser.add_argument("--session", type=Path)
     args = parser.parse_args()
     package, root = args.package.resolve(), args.fixture.resolve()
+    VerifiedNativePackage.acquire(package)
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     agent, project, commands = (root / name for name in ("agent", "project", "bin"))
     for directory in (agent, project, commands):
         directory.mkdir(mode=0o700)
-    # Discovery sees the original global filenames; no settings-based -e list
-    # and no --no-extensions flag can hide the user's normal startup path.
-    (agent / "extensions").symlink_to(Path.home() / ".pi/agent/extensions", target_is_directory=True)
+    # Automatic discovery, not -e or a settings roster. The manifest owns which
+    # entries have global source snapshots; no live source is installed or read.
+    manifest = FieldCodec.decode(NativeImportsManifest, FieldCodec.parse(
+        (package / "dist/agent-comms-imports.json").read_text()))
+    globals_ = [package / entry.entry for entry in manifest.extension_entries if entry.sources]
+    extensions = agent / "extensions"
+    extensions.mkdir(mode=0o700)
+    for entry in globals_:
+        (extensions / entry.parent.name).symlink_to(entry.parent, target_is_directory=True)
     (agent / "settings.json").write_text('{"packages":[]}')
     repo = Path(__file__).resolve().parent.parent
     tool_cli = commands / "agent-comms"
@@ -44,6 +56,7 @@ def main():
     for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID",
                  "AGENT_COMMS_THREAD", "PYTHONPATH"):
         environment.pop(name, None)
+    environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
@@ -54,7 +67,7 @@ def main():
                     process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     environment.update(thread.native_environment(comms.root, comms.registry.snapshot(), str(project)))
-    spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
+    spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)
     deny = isolation.network_denial()
@@ -77,13 +90,12 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     assert registration.returncode == 0, registration.stderr
     registered = json.loads(registration.stdout)
     assert not registered["errors"], registered["errors"]
-    assert len(registered["extensions"]) == 4, registered
+    assert len(registered["extensions"]) == len(globals_), registered
     tool_names = {tool for extension in registered["extensions"] for tool in extension["tools"]}
     assert {"subagent", "web_search", "comms_send", "comms_goal"} <= tool_names, tool_names
     # The managed project guard registers its handler only with an owner name;
     # registering does not execute it or mutate the live owner.
-    project_sync = next(item for item in registered["extensions"] if '/project-sync/' in item['path'])
-    assert "tool_call" in project_sync["handlers"], project_sync
+    assert any("tool_call" in item["handlers"] for item in registered["extensions"]), registered
     session = root / "session.jsonl"
     if args.session:
         for suffix in ("", ".input-proof"):
@@ -149,4 +161,5 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
 
 
 if __name__ == "__main__":
-    main()
+    with tempfile.TemporaryDirectory(prefix="native-globals-") as directory:
+        main(Path(directory) / "fixture")

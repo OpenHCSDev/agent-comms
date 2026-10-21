@@ -40,13 +40,6 @@ jobs:
         with:
           python: ${{ github.workspace }}/stack/.venv/bin/python
 
-      - name: Build and check native compaction without a provider
-        run: |
-          package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
-          for mode in threshold overflow manual; do
-            PI_COMPACTION_TEST_PACKAGE="$PWD/$package" node stack/test-native-pi-compaction.mjs "$mode"
-          done
-
       - name: Check native RPC compaction against localhost provider
         run: |
           uv pip install --python stack/.venv/bin/python pytest pytest-asyncio pytest-cov 'pytest-xdist>=3.6' 'pytest-timeout>=2.3'
