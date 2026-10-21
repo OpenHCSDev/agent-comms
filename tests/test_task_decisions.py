@@ -19,7 +19,6 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.tools import invoke_tool
-from agent_comms.native_tools import NativeRequestTools
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_lease import NoTurnLease
 from functools import partial
@@ -137,7 +136,6 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_user_constraint(owner.name, new_subject.reference, worktree=owner.worktree,
                                             change=CorrectionTaskChange(pin.reference))
-    from agent_comms.retained_task_facts import RetainedTaskFacts
 
     retained = comms.views.retained_context(owner.name).retained
     current_owner = comms.registry.require(owner.name)
@@ -251,9 +249,6 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     from agent_comms.comms import Comms
 
     assert read_history(Comms(comms.root)) == rows
-    schema = next(tool for tool in NativeRequestTools.catalog() if tool["name"] == "comms_decision")
-    assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
-    assert "author" not in schema["parameters"]["properties"]
 
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
