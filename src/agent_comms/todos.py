@@ -1413,12 +1413,9 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     def line(self) -> str:
         return "No order"
 
-    def correctable(self) -> DeliverableProblemOrder:
-        """The order a check correction rewrites; only pending and claimed orders take one."""
-        raise ValueError("Only a pending or claimed order takes a check correction.")
-
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        return self.correctable().with_check(correction)
+        """Only pending and claimed orders take a check correction (DeliverableProblemOrder)."""
+        raise ValueError("Only a pending or claimed order takes a check correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1826,7 +1823,6 @@ class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
         return (todo,)
 
 
-
 @dataclass(frozen=True, kw_only=True)
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
@@ -1862,10 +1858,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
 
-    def correctable(self) -> DeliverableProblemOrder:
-        return self
-
-    def with_check(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
+    def corrected(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
         if correction.previous != self.check:
             raise ValueError("The order's check changed since it was read; read it again.")
         return replace(self, check=correction.check,
@@ -2863,6 +2856,7 @@ class CorrectCheckTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
         _text(self.reason, "Check correction reason", 2000)
         self.check.require_writable()
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)

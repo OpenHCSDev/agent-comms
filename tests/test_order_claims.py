@@ -14,6 +14,8 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimedProblemOrder,
+    CorrectCheckTodo,
+    DoneTodoState,
     DeliveredProblemOrder,
     PendingProblemOrder,
     SendBackVerdict,
@@ -163,3 +165,17 @@ def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_comma
     assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
     assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
         claimed.holder, claimed.review_at, claimed.strike_count)
+
+
+def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    closed = replace(claimed, state=DoneTodoState)
+    correction = CorrectCheckTodo(
+        expected_revision=claimed.revision, actor=ctx.incarnation,
+        previous=claimed.order.check, check=claimed.order.check,
+        reason="the recorded check also counted lines the order never asked to remove",
+    )
+    with pytest.raises(TodoError, match="is done"):
+        correction.apply(closed)
+    assert ctx.comms.goals.todos.get("P1") == claimed
