@@ -1,6 +1,7 @@
 """Restart success includes the connector's actual served read, not only its interpreter."""
 from __future__ import annotations
 
+import asyncio
 import os
 import socket
 import subprocess
@@ -8,15 +9,47 @@ import sys
 from pathlib import Path
 
 import pytest
+from aiohttp import web
 
 from connector_readiness import ConnectorReadiness
 from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.host_services import HostService, ServiceNotServingError
+from agent_comms.host_services import (
+    BoundListener, HostService, ServiceNotServingError, SystemdUserService,
+)
 from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+
+
+def test_readiness_requires_a_real_bound_listener(monkeypatch):
+    address = f"@p404-ready-{os.getpid()}"
+    monkeypatch.setenv(SystemdUserService.notify_variable, address)
+
+    async def serve():
+        runner = web.AppRunner(web.Application())
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        try:
+            with pytest.raises(ServiceNotServingError):
+                BoundListener.of(site)
+            with pytest.raises(TypeError):
+                BoundListener()
+            with pytest.raises(TypeError):
+                SystemdUserService.ready()
+            await site.start()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as supervisor:
+                supervisor.bind("\0" + address[1:])
+                supervisor.settimeout(1)
+                SystemdUserService.ready(BoundListener.of(site))
+                assert supervisor.recv(64) == b"READY=1"
+        finally:
+            await runner.cleanup()
+        with pytest.raises(ServiceNotServingError):
+            BoundListener.of(site)
+
+    asyncio.run(serve())
 
 
 def test_the_connector_is_a_declared_service():

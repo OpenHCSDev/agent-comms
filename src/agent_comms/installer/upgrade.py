@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import Serve
+from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
@@ -255,16 +255,21 @@ class RetiringRehearsal(FreshRehearsal):
 
 @dataclass(frozen=True, kw_only=True)
 class LiveRun(DeclaredFamily, affix="Run"):
-    """What a live install changed, including every old-runtime process outcome."""
+    """What a live install changed, including every bridge and old-runtime process."""
 
     processes: tuple[RuntimeRetirement, ...] = ()
+    bridges: tuple[BridgeResume, ...] = ()
 
     @property
     def successful(self) -> bool:
-        return all(process.successful for process in self.processes)
+        return all(outcome.successful for outcome in (*self.processes, *self.bridges))
 
     def lines(self) -> tuple[str, ...]:
-        return (*self.change_lines(), *(process.line() for process in self.processes))
+        return (
+            *self.change_lines(),
+            *(line for bridge in self.bridges for line in bridge.lines()),
+            *(process.line() for process in self.processes),
+        )
 
     @abstractmethod
     def change_lines(self) -> tuple[str, ...]: ...
@@ -696,14 +701,17 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            for bridge in Serve.running(self.installed.home):
-                for paused in bridge.pause(resources):
-                    resources.callback(paused.resume)
-            result = self.live(rehearsal)
-        # ExitStack resumes every bridge onto the published runtime before discovery.
-        # The installer worker must already run on that runtime; it is not exempted.
+            paused = tuple(bridge.pause(resources)
+                           for bridge in Serve.running(self.installed.home))
+            try:
+                result = self.live(rehearsal)
+            finally:
+                # A failed live pass has restored the outgoing runtime; resume onto it too.
+                resumed = tuple(bridge.resume() for bridge in paused)
+        # Bridges have exec'd before discovery. The installer must also have
+        # transferred to the target runtime; it is not exempted from the sweep.
         processes = asyncio.run(RuntimeProcesses.observe(self.staged.runtime).retire(10))
-        return replace(result, processes=processes)
+        return replace(result, bridges=resumed, processes=processes)
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...
