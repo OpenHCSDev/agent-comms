@@ -70,7 +70,8 @@ class WorkDispatch:
         self.action.request_ref(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
-            StorageProjection(storage, candidate))
+            StorageProjection(storage, candidate)
+        )
         subprocess.run(
             ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
             check=True,
