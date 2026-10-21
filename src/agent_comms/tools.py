@@ -373,14 +373,16 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest(ToolRequest, declared_name=None):
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    ToolRequest[Caller], declared_name=None
+):
     """A publication waits at the bus owner before any caller or message mutation."""
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
+    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
         return asyncio.run(comms.bus.when_open(partial(self.publish, comms, caller)))
 
     @abstractmethod
-    def publish(self, comms: Comms, caller: ToolCaller) -> ToolResult: ...
+    def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
 
 
 class LiveOwnerTool:
@@ -1133,7 +1135,7 @@ class CommsSendTool(PublishingToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest):
+class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller]):
     """One original authorized publication path for authored task declarations."""
     target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
     scope: TaskScopeSelection = tool_field(

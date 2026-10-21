@@ -888,7 +888,7 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 
 class PublishingCliCommand(CliCommand, declared_name=None):
-    """CLI publication uses the same admitted operation as other bus writers."""
+    """Wait for maintenance to clear before running a CLI publication."""
 
     def apply(self, ctx: Comms) -> CliResult:
         return asyncio.run(ctx.bus.when_open(partial(self.publish, ctx)))
