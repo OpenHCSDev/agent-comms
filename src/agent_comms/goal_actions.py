@@ -337,7 +337,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 goal.id,
                 uuid4().hex,
                 goal.revision,
-                ctx.goals.bus.log.latest_sequence(),
+                ctx.goals.bus.bus.revision(),
                 wait_targets,
                 owner=thread.incarnation.require_recorded(),
                 report_turn_id=reporting_lease.stored_turn_id(),
@@ -465,7 +465,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
     def create(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
-            published_seq=ctx.goals.bus.log.latest_sequence(),
+            published_seq=ctx.goals.bus.bus.revision(),
         )
         goal = replace(
             goal,

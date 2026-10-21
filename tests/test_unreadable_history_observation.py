@@ -4,7 +4,6 @@ No provider input, retry or live bus write. The fixture is a canonical saved
 manifest whose declaration name is intentionally unavailable in this reader.
 """
 
-from agent_comms.bus import Bus
 
 from agent_comms.context_store import UNREAD_CONTEXT
 import asyncio
@@ -58,8 +57,6 @@ class ReadRecordedContext(ReadRequest):
 def saved_row(comms):
     owner = comms.registry.new_thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
-    Bus.install(Bus.path_in(comms.root))
-    comms.bus.log.path.touch(mode=0o600)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:
         request, = ContextRequest.select(db)
@@ -213,7 +210,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
     saved_row(comms)
     corrupt_context_kind(comms, "saved", "unavailable_future_segment")
     original = comms.contexts.path.read_bytes()
-    original_bus = comms.bus.log.path.read_bytes()
+    original_bus = comms.bus.bus.path.read_bytes()
     process = ObservationProcess(comms.route)
     try:
         await readable(process)
@@ -264,6 +261,6 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
         assert await waiting == {}
         assert process.process.is_alive() and process.died is None
         assert comms.contexts.path.read_bytes() == original
-        assert comms.bus.log.path.read_bytes() == original_bus
+        assert comms.bus.bus.path.read_bytes() == original_bus
     finally:
         process.close()

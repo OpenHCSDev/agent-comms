@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
+from agent_comms.bus import PublicRecord
 from agent_comms.bus_activity_index import ChannelActivity
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, NoticeRole
@@ -13,23 +13,16 @@ from agent_comms.read_basis import (
 from agent_comms.thread_identity import UserThreadRole
 
 
-@pytest.fixture
-def activity_bus(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
-    with bus.writing():
-        pass
-    return bus
-
-
 def append(bus, message):
     return bus.append(lambda seq, db: PublicRecord.from_message(replace(message, seq=seq)))
 
 
-def test_activity_family_tracks_original_roles_targets_and_member_scope(activity_bus):
-    bus = activity_bus
+def test_activity_family_tracks_original_roles_targets_and_member_scope(bus):
     append(bus, Message("author", "#team", "newest", InfoKind, timestamp=30.0))
-    append(bus, Message("human", "worker", "direct", InfoKind, timestamp=20.0,
-                        sender_role=UserThreadRole, mentions=(ThreadMention("mentioned", 0, 1),)))
+    direct = "@mentioned direct"
+    append(bus, Message("human", "worker", direct, InfoKind, timestamp=20.0,
+                        sender_role=UserThreadRole,
+                        mentions=ThreadMention.find(direct, lambda name: name)))
     append(bus, Message("author", "#team", "older notice", InfoKind, timestamp=10.0,
                         role=NoticeRole()))
     clocks = bus.activity_clocks()
@@ -55,8 +48,7 @@ def test_activity_family_tracks_original_roles_targets_and_member_scope(activity
     assert not tuple(bus.path.parent.glob("bus_*json"))
 
 
-def test_activity_rolls_back_with_its_original_append(activity_bus):
-    bus = activity_bus
+def test_activity_rolls_back_with_its_original_append(bus):
     append(bus, Message("author", "#team", "committed", InfoKind, timestamp=10.0))
     before = bus.activity_clocks()
     with pytest.raises(ValueError, match="rollback"):
