@@ -7,8 +7,9 @@ import pytest
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.notification_progress import SendingProgress
+from agent_comms.route_selection import RouteChanged
 from agent_comms.thread_presentation import (
-    IdleThreadPresentationStatus, NoThreadPresentation, SessionDisconnected,
+    IdleThreadPresentationStatus, NoThreadPresentation, OtherRouteThread, SessionDisconnected,
     StatusPending, ThreadPresentationStatus, WorkingThreadPresentationStatus,
 )
 from agent_comms.ui_model.delivery import InputDelivery
@@ -50,6 +51,14 @@ def test_missing_presentation_owns_source_absence_and_retired_status(comms):
     assert readable == {}
     with pytest.raises(UnregisteredThreadError, match="Thread presentation unavailable: missing"):
         presentations.require("missing")
+
+
+def test_other_route_status_presents_the_route_owners_explanation():
+    row = ThreadStatusModel.other_route("x")
+    assert row.name == "x"
+    assert isinstance(row.status, OtherRouteThread)
+    assert row.lines == row.summary == (RouteChanged.reader_sentence,)
+    assert row.presentation.title == "x"
 
 
 @pytest.mark.parametrize("original", [
