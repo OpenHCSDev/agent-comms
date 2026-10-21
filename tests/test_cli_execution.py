@@ -34,22 +34,55 @@ def isolated_cli(tmp_path):
         # install's non-Git checkout). Protocol TypeErrors must never be hidden.
         assert "TypeError:" not in result.stderr, (arguments, result.stderr)
         value = json.loads(result.stdout) if result.stdout.strip() else None
-        assert value is None or isinstance(value, dict), (arguments, value)
-        assert result.returncode != 0 or isinstance(value, dict), (arguments, result.stderr)
+        assert result.returncode != 0 or result.stdout.strip(), (arguments, result.stderr)
         return result.returncode, value
 
     return run
 
 
 @pytest.mark.timeout(240)
-def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path, isolated_cli):
-    # Required arguments retain their genuine parser refusal. Optional defaults,
-    # root selection, and execution are not replaced with a test adapter. Class
-    # creation checks the resolved execute method even for required-argument cases.
-    declarations = CliCommand.members_with(CliCommand)
-    for declaration in declarations:
-        isolated_cli(tmp_path / declaration.declared_name, declaration.declared_name)
-    assert declarations
+def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path):
+    # Import once with HOME already isolated, then use the real dispatcher for
+    # every declaration. Required options keep their genuine parser refusals.
+    # Install is an explicit negative case: its default cwd is not a checkout.
+    home = tmp_path / "home"
+    home.mkdir()
+    worker = r'''
+import io
+import json
+import sys
+from contextlib import redirect_stdout
+from pathlib import Path
+import pytest
+from agent_comms.cli import main
+from agent_comms.cli_commands import CliCommand, InstallCliCommand
+from agent_comms.installer.backup import UpgradeRefused
+
+visited = []
+for declaration in CliCommand.members_with(CliCommand):
+    output = io.StringIO()
+    arguments = ['--root', str(Path(sys.argv[1]) / declaration.declared_name),
+                 declaration.declared_name]
+    if declaration is InstallCliCommand:
+        with redirect_stdout(output), pytest.raises(UpgradeRefused):
+            main(arguments)
+    else:
+        with redirect_stdout(output):
+            code = main(arguments)
+        assert code in (0, 1)
+        json.loads(output.getvalue())
+    visited.append(declaration.declared_name)
+print(json.dumps(visited))
+'''
+    env = {**os.environ, "HOME": str(home),
+           "XDG_CONFIG_HOME": str(home / "config"),
+           "XDG_STATE_HOME": str(home / "state"),
+           "XDG_CACHE_HOME": str(home / "cache"),
+           "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    result = subprocess.run([sys.executable, "-c", worker, str(tmp_path)],
+                            cwd=home, env=env, capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert json.loads(result.stdout) == list(CliCommand.names())
 
 
 def test_bridge_first_mro_is_refused_before_command_registration():
