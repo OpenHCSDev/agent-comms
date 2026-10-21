@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type, cast
 
 from agent_comms.bus_tables import Addressed, BusCapability
+from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
 
 from .change_report import ChangeReport, FileLine
 from .channel_targets import CommandTarget
@@ -329,7 +330,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Message(Addressed, BusCapability):
     """Declares one inter-thread message.
 
@@ -481,7 +482,7 @@ class Message(Addressed, BusCapability):
     def from_committed_wire(cls, record: Mapping) -> Message:
         """One strict public-envelope boundary for full, indexed and cohort readers."""
         from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import PRIVATE_WIRE_FIELD, _canonical, public_envelope_digest
+        from .bus_publication import PRIVATE_WIRE_FIELD
 
         if not isinstance(record, Mapping):
             raise MalformedRecord("Bus row is not an object.")

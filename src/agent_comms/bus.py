@@ -5,21 +5,18 @@ from __future__ import annotations
 import sqlite3
 import time
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.bus_publication import Delivered
-from agent_comms.bus_tables import Addressed, BusRow, BusTables, KeyedPublication
+from agent_comms.bus_tables import (
+    Addressed, BusCapability, BusRecord, BusRow, BusTables, KeyedPublication,
+)
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.typed_table import SQLiteTableName, StoreWriter
-
-
-class BusRecord(DeclaredFamily, affix="Record"):
-    """Kinds compose the same field declarations as the real Message."""
 
 
 @dataclass(frozen=True)
@@ -67,20 +64,19 @@ class Bus(StoreWriter):
                 prior = KeyedPublication.table.select(db, acknowledgement=record.acknowledgement)
                 if prior:
                     return prior[0].seq
-            cursor = BusRow.insert_values(db, kind=type(record).declared_name, at=time.time())
+            cursor = BusRow.insert_values(db, kind=type(record), at=time.time())
             seq = FieldCodec.decode(int, cursor.lastrowid)
-            header_fields = {item.name for item in fields(BusRow)}
             for table in type(record).tables():
                 table(seq=seq, **{
-                    item.name: getattr(record, item.name) for item in fields(table)
-                    if item.name not in header_fields
+                    item.name: getattr(record, item.name)
+                    for item in BusCapability.declared_fields(table)
                 }).insert(db)
             return seq
 
     @staticmethod
     def _record(db: sqlite3.Connection, header: BusRow) -> BusRecord:
-        member = FieldCodec.decode(type[BusRecord], header.kind)
-        values = {BusRecord.family_discriminator: header.kind}
+        member = header.kind
+        values = {}
         for table in member.tables():
             rows = table.select(db, seq=header.seq)
             if not rows:
@@ -88,7 +84,7 @@ class Bus(StoreWriter):
                     f"Bus row {header.seq} lacks {table.declared_name}")
             values.update(FieldCodec.encode_fields(rows[0]))
         values[FieldCodec.record_key(Message, "seq")] = header.seq
-        return FieldCodec.decode(BusRecord, values)
+        return FieldCodec.decode_record(member, values)
 
     def lookup(self, seq: int) -> BusRecord:
         with CoordinationStore.observing(self.path) as db:

@@ -6,36 +6,12 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from .audience_manifest import FrozenAudience
-from .coordination_tables.publications import canonical_publication_key
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
-from .wake import ControlClassification, resolve_wake_cohort
-from .wake_policy import MessageAudience, WakeDecision
-
-
-@dataclass(frozen=True)
-class KeyedResponseAcknowledgement:
-    wire_root_id: str
-    execution_id: str
-    publication_key: str
-    envelope_digest: str
-
-    def require(self, root_id, message):
-        from .bus_publication import public_envelope_digest
-
-        if self.wire_root_id != root_id:
-            raise ValueError("Response acknowledgement belongs to another wire root.")
-        if self.envelope_digest != public_envelope_digest(message.to_wire()):
-            raise ValueError("Response acknowledgement public envelope digest differs.")
-        if self.publication_key != canonical_publication_key(self.execution_id, message.target):
-            raise ValueError("Response acknowledgement publication key differs from its execution/route.")
-        return self
-
-    def add_unique(self, seen_keys: set[str]) -> None:
-        if self.publication_key in seen_keys:
-            raise MalformedRecord("Duplicate response publication key.")
-        seen_keys.add(self.publication_key)
+from agent_comms.audience_manifest import FrozenAudience
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
+from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
+from agent_comms.wake import ControlClassification, resolve_wake_cohort
+from agent_comms.wake_policy import MessageAudience, WakeDecision
 
 
 @dataclass(frozen=True)

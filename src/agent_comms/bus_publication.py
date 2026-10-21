@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import math
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import field, dataclass
@@ -12,6 +10,9 @@ from typing import TYPE_CHECKING, Final
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus_tables import BusCapability
+from agent_comms.response_acknowledgement import (
+    KeyedResponseAcknowledgement, _PRIVATE_WIRE_PREFIX, _canonical, has_private_wire_fields,
+)
 
 from .delivery_policy import DeliveryPolicy
 from .messages import Message
@@ -22,7 +23,7 @@ from .errors import HumanInitialUnknownError, RelationViolationError
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
-    from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
+    from .delivery_policy import DeliveryManifest
     from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -31,34 +32,8 @@ if TYPE_CHECKING:
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
-_PRIVATE_WIRE_PREFIX: Final = "_agent_comms_private"
 INITIAL_CODEC: Final = "audience-v1"
 _DECISION_DOMAIN: Final = b"agent-comms:cohort-decisions:v1\0"
-
-
-def _canonical(value: object) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode("utf-8")
-
-
-def public_envelope_digest(record: Mapping[str, object]) -> str:
-    """Bind every public wire field without including the private sideband."""
-    timestamp = record.get("ts")
-    if (
-        isinstance(timestamp, bool)
-        or not isinstance(timestamp, (int, float))
-        or not math.isfinite(timestamp)
-    ):
-        raise MalformedRecord("A keyed wire timestamp must be finite.")
-    if has_private_wire_fields(record):
-        raise MalformedRecord("Digest input must be a public envelope.")
-    return hashlib.sha256(_canonical(record)).hexdigest()
-
-
-def has_private_wire_fields(record: Mapping[str, object]) -> bool:
-    """Identify reserved private keys without inspecting their values."""
-    return any(isinstance(key, str) and key.startswith(_PRIVATE_WIRE_PREFIX) for key in record)
 
 
 def reject_private_wire_fields(record: Mapping[str, object]) -> None:
