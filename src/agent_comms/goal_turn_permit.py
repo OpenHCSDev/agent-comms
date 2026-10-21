@@ -60,7 +60,7 @@ class GoalTurnPermit(ABC):
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
 
     @abstractmethod
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+    def charge_for(self, goal_id: str, goals: Goals, response: str,
                    usage: PiUsage) -> bool: ...
 
     @abstractmethod
@@ -73,7 +73,7 @@ class NoLaunchPermit(GoalTurnPermit):
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         return False
 
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+    def charge_for(self, goal_id: str, goals: Goals, response: str,
                    usage: PiUsage) -> bool:
         return False
 

@@ -130,6 +130,9 @@ class Generation(GoalLedgerTable, TypedTable):
         self.lifecycle.require_failure()
         return self.attempt_identity
 
+    def has_ready_grant(self, number: int, digest: str) -> bool:
+        return self.lifecycle.ready and self.number == number and self.ready_digest == digest
+
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
         if self.number < 1:
@@ -280,11 +283,13 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     def read_in(cls, conn: sqlite3.Connection, attempt_id: str) -> LedgerAttempt:
         """The ledger's answer for one attempt ID, decoded once here: its record or its absence."""
         try:
-            record = cls.one(conn, attempt_id=attempt_id)
+            with closing(cls.stream(conn, attempt_id=attempt_id)) as records:
+                return next(
+                    (RecordedAttempt(record) for record in records),
+                    MissingAttempt(f"Goal attempt {attempt_id} has no ledger row."),
+                )
         except MalformedRecord as error:
             raise StorageUncertainError("Invalid persisted goal attempt.") from error
-        return (MissingAttempt(f"Goal attempt {attempt_id} has no ledger row.")
-                if record is None else RecordedAttempt(record))
 
     def advance(
         self,
@@ -467,7 +472,7 @@ class LaunchPermit(GoalTurnPermit):
             "Original launch attempt changed or is unavailable.",
         )).phase.verified_progress
 
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+    def charge_for(self, goal_id: str, goals: Goals, response: str,
                    usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
@@ -820,29 +825,21 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
             lambda conn: write(conn, digest),
             lambda value: (
                 self._is_generation(value)
-                and self._read_ready_digest(value.goal_id, value.number) == digest
+                and self.require_generation(value.goal_id).has_ready_grant(value.number, digest)
             ),
         )
         self._ready_grants[(goal_id, generation)] = grant
         return result
 
-    def _read_ready_digest(self, goal_id: str, generation: int) -> str | None:
-        with closing(self._connect()) as conn:
-            try:
-                row = Generation.one(conn, goal_id=goal_id, number=generation)
-            except (sqlite3.Error, MalformedRecord) as error:
-                raise StorageUncertainError("Cannot read ready authority state.") from error
-        return row.ready_digest if row is not None and row.lifecycle.ready else None
-
     def ready_grant(self, goal_id: str, generation: int) -> str:
         """Delegate only this instance's acknowledged READY authority to a supervisor."""
-        grant = self._ready_grants.get((goal_id, generation))
-        if grant is None or self._read_ready_digest(goal_id, generation) != Generation.grant_digest(
-            grant
-        ):
-            raise UnresolvedAttemptError(
-                "No acknowledged ready grant is available; decide explicitly."
-            )
+        refusal = UnresolvedAttemptError("No acknowledged ready grant is available; decide explicitly.")
+        try:
+            grant = self._ready_grants[(goal_id, generation)]
+        except KeyError as error:
+            raise refusal from error
+        if not self.require_generation(goal_id).has_ready_grant(generation, Generation.grant_digest(grant)):
+            raise refusal
         return grant
 
     def recover_unreserved_ready(self, goal_id: str, expected_generation: int) -> Generation:

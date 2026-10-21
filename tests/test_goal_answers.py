@@ -11,9 +11,11 @@ from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import NoGoal
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
@@ -86,6 +88,21 @@ def test_unsuccessful_terminal_still_blocks_goal_on_copied_bus(copied_goal_bus, 
         account.finish(terminal)
         state = comms.registry.require("worker").goal.require().state
         assert isinstance(state, BlockedGoal)
+
+
+@pytest.mark.parametrize("original_goal", [False, True])
+@pytest.mark.parametrize("clear_goal", [False, True])
+def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal, clear_goal):
+    comms = copied_goal_bus
+    usage = PiUsage.from_wire({"input": 3, "output": 2, "totalTokens": 5})
+    with goal_turn(comms, original_goal) as account:
+        goal = comms.registry.require("worker").goal.require()
+        if clear_goal:
+            comms.goals.update_goal("worker", ClearGoalAction())
+        account.provider_usage(events.ProviderUsage("response", usage))
+        total = ProviderUsageTotal.for_goal(comms.goals.open_goal_store(), goal.id)
+        assert total.responses == (0 if clear_goal else 1)
+        assert account.unattributed_usage == ([("response", usage)] if clear_goal else [])
 
 
 def test_absent_goal_contains_no_actual_goals():
