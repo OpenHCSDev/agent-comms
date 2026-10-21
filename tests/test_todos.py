@@ -382,6 +382,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         with practice_copy(ctx.root, copied_path) as (root, _measurement):
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
+                ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
                 # Create the declared inode before the external probes open it read-only.
                 with copied.bus.locked():
                     pass
