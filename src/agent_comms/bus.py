@@ -269,6 +269,10 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return AnsweredSource.unanswered(db, requesters, responders, since, before, upper, limit)
 
+    def latest_answer(self, requesters: frozenset[str], responders: frozenset[str], *, since: float):
+        with self.observing() as db:
+            return AnsweredSource.latest_answer(db, requesters, responders, since)
+
     def replies(self, references: tuple[MessageReference, ...]):
         with self.observing() as db:
             sequences = {row.seq for original in references

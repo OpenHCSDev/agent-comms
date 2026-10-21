@@ -24,7 +24,7 @@ from agent_comms.runtime_requests import (
 )
 
 
-def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
+def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/a pi")
     monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", '--label "two words"')
     parser = build_parser()
@@ -34,7 +34,16 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
         return CliCommand.member_named(options.command).from_arguments(options)
 
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
-    assert register.tags == frozenset({"x", "y"})
+    assert register.name == "a" and register.tags == frozenset({"x", "y"})
+    assert parse(["inbox", "--thread", "a"]).thread == "a"
+    send_arguments = ["user-send", "--to", "a", "--body", "hello"]
+    monkeypatch.chdir(tmp_path)
+    assert parse(send_arguments).worktree == str(tmp_path)
+    changed = tmp_path / "changed"
+    changed.mkdir()
+    monkeypatch.chdir(changed)
+    assert parse(send_arguments).worktree == str(changed)
+    assert parse([*send_arguments, "--worktree", str(tmp_path)]).worktree == str(tmp_path)
     invoke = parse(["tool", "--tool", "comms_threads"])
     assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])

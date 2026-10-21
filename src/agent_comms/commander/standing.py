@@ -3,31 +3,34 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
-from agent_comms.comms import Comms
-from agent_comms.goal_actions import GoalPrecondition, ReissuedOrderGoalAction
-from agent_comms.goals import Goal
-from agent_comms.goal_states import BlockedState
-from agent_comms.goal_history import GoalHistoryStore
-from agent_comms.goal_generation import GenerationState, RetryableGeneration
-from agent_comms.message_page import MessageReadRequest
-from agent_comms.messages import Message
-from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.bus import BusReader
-from agent_comms.message_bus import WatchPass
 from agent_comms.channel_targets import ThreadTarget
+from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.message_page import PageBounds
-from agent_comms.read_basis import NamedViewer
+from agent_comms.comms import Comms
+from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.goal_presentation import BlockedExecution
+from agent_comms.goals import Goal
+from agent_comms.message_bus import WatchPass
+from agent_comms.message_page import MessageReadRequest, PageBounds
+from agent_comms.messages import Message
+from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_phases import PlanPhase
+from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
-    DatedStandingRule, OwedAnswer, ReasonedStandingRule, StandingRule, UndatedStandingRule,
+    DatedStandingRule,
+    OwedAnswer,
+    ReasonedStandingRule,
+    StandingRule,
+    UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
@@ -36,9 +39,6 @@ from agent_comms.todos import Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.work_branches import WorkBranches
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms.commander.config import CommanderConfig
-from agent_comms.phase_evidence import PlanReading
-from agent_comms.plan_phases import PlanPhase
 
 
 @dataclass(frozen=True)
@@ -129,67 +129,24 @@ class Detached(HolderCannotRun):
 
 
 @dataclass(frozen=True)
-class BlockedHolder(HolderCannotRun, declared_name=None):
-    """An idle holder classified by its goal and original attempt ledger."""
+class GoalCannotRun(UndatedStandingRule):
+    """Report blocked work without rewriting the unit's goal or orders."""
 
-    block_record: Path
-    goal: Goal
-
-    @staticmethod
-    @abstractmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool: ...
+    unit: str
+    orders: tuple[str, ...]
+    execution: BlockedExecution
 
     @classmethod
-    def stalled(cls, comms: Comms, thread: Thread) -> bool:
-        store = comms.goals.open_goal_store()
-        return not thread.executing and any(
-            cls.accepts(goal, store.require_generation(goal.id).lifecycle)
-            for goal in thread.goal)
-
-    @classmethod
-    def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(
-            thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require()
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(
+            cls(owner.name, tuple(todo.id for todo in todos), block)
+            for owner, todos in cls.holders(comms, commander).items()
+            for view in (comms.goals.goal_snapshot(owner.name),)
+            for block in view.execution.unit_blocks()
         )
 
-
-@dataclass(frozen=True)
-class UnresolvedBlock(BlockedHolder):
-    """An attempt with an unknown outcome: Core never retries it, so it is never replayed."""
-
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return not isinstance(generation, RetryableGeneration)
-
     def line(self) -> str:
-        return (f"UNRESOLVED BLOCK {self.unit}: orders {', '.join(self.orders)}; "
-                f"goal {self.goal.id}@{self.goal.revision} has an attempt with an unknown result "
-                "-> inspect it, then fail or finish the attempt")
-
-
-@dataclass(frozen=True)
-class Blocked(BlockedHolder):
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return isinstance(goal.state, BlockedState) and isinstance(generation, RetryableGeneration)
-
-    def enforce(self, comms: Comms, commander: str) -> None:
-        observed = self.goal
-        for problem in self.orders:
-            todo = comms.goals.todos.get(problem)
-            todo.require_assignee(comms.registry.require(self.unit).incarnation, observed.id)
-            action = UnownedWheelSpin.order_for(todo, commander, CoreWatcherIncarnation.watcher())
-            observed = comms.goals.update_goal(self.unit, replace(
-                action, expect=GoalPrecondition(
-                    goal_id=observed.id, expected_state=observed.state,
-                    expected_checkpoint=observed.captured,
-                ),
-            ))
-
-    def line(self) -> str:
-        return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
-                f"block record {self.block_record}, goal {self.goal.id}@{self.goal.revision} "
-                "-> Core reissues the orders")
+        return self.execution.unit_block_line(self.unit, self.orders)
 
 
 @dataclass(frozen=True)
@@ -209,28 +166,18 @@ class RequestStalled(UndatedStandingRule):
                 " -> order its next step or mark it done")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
-    """The first participant's replies that answer a second participant's message, newest
-    first; the page is read newest first, so an answer is seen before what it answers."""
+    """The newest reply to an original from the requested participants."""
 
     scope: RepliesDisplayScope
     since: float
     empty: ClassVar[tuple[Message, ...]] = ()
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        replies: list[Message] = []
-        asked: set[MessageReference] = set()
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    replies.append(message)
-                else:
-                    asked.add(message.reference)
-        return tuple(reply for reply in replies if asked.intersection(reply.answers))
+    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
+        return source.latest_answer(
+            self.scope.second_names, self.scope.first_names, since=self.since,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,15 +323,6 @@ class UnownedWheelSpin(UndatedStandingRule):
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    @staticmethod
-    def order_for(todo: Todo, commander: str, assigner: ThreadIncarnation) -> ReissuedOrderGoalAction:
-        now = time.time()
-        return ReissuedOrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(now), request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
-            traced=todo.order.owner)
-
     def _identity(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.
         return type(self), self.todo.id
@@ -418,7 +356,7 @@ class UnownedWheelSpin(UndatedStandingRule):
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        cls.order_for(todo, commander, assigner), unit)))
+                        ReissuedOrderGoalAction.for_todo(todo, commander, assigner), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,

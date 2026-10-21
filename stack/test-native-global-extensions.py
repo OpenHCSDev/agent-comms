@@ -36,7 +36,7 @@ def main(fixture: Path):
     parser.add_argument("--session", type=Path)
     args = parser.parse_args()
     package, root = args.package.resolve(), args.fixture.resolve()
-    verified = VerifiedNativePackage.acquire(package)
+    verified = VerifiedNativePackage.qualify(package)
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     agent, project, commands = (root / name for name in ("agent", "project", "bin"))
     for directory in (agent, project, commands):

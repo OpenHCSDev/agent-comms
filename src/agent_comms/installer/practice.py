@@ -24,14 +24,12 @@ class PracticeMeasurement:
     bytes: int
     seconds: float
 
-    max_bytes = 3 * 1024**3
-
     @classmethod
     def of(cls, copy: Path, seconds: float, floor: float) -> PracticeMeasurement:
-        """Refuse a copy over its cap or without room for the rehearsal's second copy."""
+        """Refuse a copy without room for the rehearsal's second copy above the disk floor. The
+        free space is what a copy can cost; a fixed byte cap beside it refused a 3.01 GiB bus
+        with 29 GiB free and stopped install 45."""
         size = sum(path.stat().st_size for path in copy.rglob("*") if path.is_file())
-        if size > cls.max_bytes:
-            raise UpgradeRefused(f"Practice copy is {size} bytes, over its {cls.max_bytes} cap")
         if shutil.disk_usage(copy.parent).free < 2 * size + floor:
             raise UpgradeRefused(f"Insufficient free space for rehearsal of {size} copied bytes")
         return cls(size, seconds)

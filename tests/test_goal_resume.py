@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.lifecycle_capability import Active
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -211,51 +212,6 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
     assert Comms(comms.root).registry.require("owner").goal == second
 
 
-def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
-    started = _goal(comms, monkeypatch)
-    snapshot = comms.registry.require("owner").goal
-    assert snapshot is not None
-    newer = Comms(comms.root).goals.update_goal(
-        "owner",
-        ActiveGoalAction(
-            expect=GoalPrecondition(goal_id=started["id"]), progress="verified newer step"
-        ),
-    )
-    assert newer is not None
-    blocked = comms.goals.block_goal_after_failed_turn(
-        "owner",
-        started_goal=snapshot,
-        expected_worktree="/wt",
-        diagnostic="Backend outcome uncertain.",
-    )
-    assert blocked is not None and blocked.state.declared_name == "blocked"
-    assert blocked.revision == newer.revision + 1
-    assert blocked.progress.startswith("verified newer step\n\n")
-    assert Comms(comms.root).registry.require("owner").goal == blocked
-
-
-def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeypatch):
-    started = _goal(comms, monkeypatch)
-    goal = comms.goals.update_goal(
-        "owner",
-        ActiveGoalAction(
-            expect=GoalPrecondition(goal_id=started["id"]), progress="Verified first step"
-        ),
-    )
-    assert goal is not None
-
-    blocked = comms.goals.block_goal_after_failed_turn(
-        "owner",
-        started_goal=goal,
-        expected_worktree="/wt",
-        diagnostic="Backend outcome uncertain.",
-    )
-
-    assert blocked is not None
-    assert blocked.state.declared_name == "blocked"
-    assert blocked.progress == "Verified first step\n\nBackend outcome uncertain."
-
-
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     comms.registry.declare(
         comms.registry.new_thread(name='owner', tags=frozenset(), worktree='/wt', goal=Goal('work', 'goal-id', published_seq=0, revision=(1 << 63) - 1))
@@ -276,11 +232,9 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     store = comms.goals.open_goal_store()
 
     def failed_turn(diagnostic):
-        started = comms.registry.require("owner").goal
-        blocked = comms.goals.block_goal_after_failed_turn(
-            "owner", started_goal=started, expected_worktree="/wt", diagnostic=diagnostic)
-        assert blocked.state.declared_name == "blocked"
-        return blocked
+        generation = store.require_generation(goal_id)
+        store.reserve(goal_id, generation.number).fail(store, diagnostic)
+        assert isinstance(comms.registry.require("owner").goal.state, Active)
 
     failed_turn("Backend outcome uncertain.")
     retried = invoke_tool(comms, "comms_goal",
@@ -296,10 +250,11 @@ def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_
     assert comms.registry.require('owner').goal == commander_retry
 
     failed_turn("Provider failed a third time.")
+    comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
     store.reserve(goal_id, store.require_generation(goal_id).number)
     with pytest.raises(ValueError):
         comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
-    assert comms.registry.require("owner").goal.state.declared_name == "blocked"
+    assert isinstance(comms.registry.require("owner").goal.state, Active)
 
     replaced = comms.goals.update_goal("owner", SetGoalAction(text="a fresh objective"))
     replaced.require_active()

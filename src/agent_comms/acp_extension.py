@@ -35,7 +35,7 @@ from .field_codec import (
     WireName,
     WireOmitDefault,
 )
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, GoalExecution
 from .input_attempt import InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
@@ -128,7 +128,7 @@ class UpdateMetadata:
 class GoalSnapshotReply(DeclaredReply, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
-    execution: Annotated[ThreadGoalExecution, WireName("goalExecution")]
+    execution: Annotated[GoalExecution, WireName("goalExecution")]
     meta: Annotated[UpdateMetadata, WireName("_meta")]
 
 
