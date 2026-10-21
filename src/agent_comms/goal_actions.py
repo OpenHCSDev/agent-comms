@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms import field_codec
@@ -32,7 +33,6 @@ from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
-    BlockedState,
     ChokeholdPause,
     CompletedGoal,
     GoalState,
@@ -488,6 +488,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         self.require_ready(ctx)
         self.reserve(ctx, goal.id)
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.continue_work(store, generation, self.order.id)
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
@@ -541,6 +544,17 @@ class ReissuedOrderGoalAction(OrderGoalAction):
     The order was sendable when accepted; its unit has edited the sources it names
     since, so they are not checked again against the moved tree.
     """
+
+    @classmethod
+    def for_todo(cls, todo: Todo, commander: str, assigner: ThreadIncarnation) -> Self:
+        """The order the Todo already accepted, handed again with a fresh review window."""
+        now = time.time()
+        order = todo.order.reissued(now)
+        return cls(
+            problem=todo.id, expected_revision=todo.revision,
+            order=order, request=todo.request.require(),
+            review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
+            traced=order.owner)
 
     def require_sendable(self) -> None:
         pass
@@ -627,7 +641,5 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
-        if not isinstance(goal.state, BlockedState):
-            raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         store.authorize_current_retry(goal.id, uuid4().hex)

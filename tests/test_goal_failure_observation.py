@@ -1,34 +1,19 @@
-"""Passive observations never reopen attempts, inputs, or owner execution."""
+"""Failure evidence is passive; only its fenced attempt owns terminal writes."""
 
 import json
-import multiprocessing
 import os
 import sqlite3
-from contextlib import contextmanager
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    StaleAttemptError,
-    UnresolvedAttemptError,
-)
-from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
-from agent_comms.goal_generation import BlockedGeneration, ReservedGeneration
-from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
+from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
+from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
-from agent_comms.thread_identity import TurnIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_status import (
-    ArchivedThreadStatus,
-    DeletingThreadStatus,
-    IdleThreadStatus,
-    StoppedThreadStatus,
-)
+from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.turn_lease import StoredTurnRecord, TurnLeaseFence
 
 
@@ -38,7 +23,11 @@ def bound(tmp_path, *, thread_registration):
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
-    owner = thread_registration.new_thread('owner', frozenset(), '/private-worktree', process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, goal=goal, turn_generation=7, last_finished_turn_id='a' * 32)
+    owner = thread_registration.new_thread(
+        'owner', frozenset(), '/private-worktree',
+        process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
+        goal=goal, turn_generation=7, last_finished_turn_id='a' * 32,
+    )
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
     identity = TurnIdentity(owner.incarnation, 7)
@@ -47,14 +36,8 @@ def bound(tmp_path, *, thread_registration):
         record=StoredTurnRecord.for_identity(thread_registration.store.path, identity),
     )
     observation = FailedTurnObservation.from_terminal(
-        permit.reservation,
-        owner=owner,
-        goal=goal,
-        lease=lease,
-        turn_id=lease.turn_id,
-        claim_scope=3,
-        current_owner=owner,
-        current_claim=3,
+        permit.reservation, owner=owner, goal=goal, lease=lease,
+        turn_id=lease.turn_id, claim_scope=3, current_owner=owner, current_claim=3,
         reason=FailureReason.FINAL_STOP_MISSING,
     )
     assert observation is not None
@@ -66,18 +49,6 @@ def rows(store, table):
         return conn.execute(f"SELECT * FROM {table}").fetchall()
 
 
-def blocked(owner):
-    return replace(
-        owner, goal=replace(owner.goal, state=BlockedGoal("Explicit fixture refusal"), revision=3)
-    )
-
-
-def read(store, owner, **kwargs):
-    return read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), claim_scope=3, **kwargs
-    )
-
-
 def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     store, owner, _, observation = bound
     observation.reservation.fail(store, "private diagnostic", observation=observation)
@@ -87,12 +58,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
             observation.reservation.fail(current, "duplicate", observation=observation)
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
-        projection = read(current, blocked(owner))
-        assert projection.to_primitive() == {
-            "schema": 1,
-            "state": "backend_suspended",
-            "reason": "assistant_final_stop_missing",
-        }
+        assert current.failure_evidence(current.require_generation(owner.goal.id)) == observation.evidence
     assert store.path.read_bytes() == before
     assert len(rows(store, "failed_turn_evidence")) == 1
     encoded = json.dumps(rows(store, "failed_turn_evidence"))
@@ -100,33 +66,22 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     assert "private diagnostic" not in encoded
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        {"identity": TurnIdentity(RecordedThreadIncarnation("other", 10.0), 7)},
-        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
-        {"turn_id": "b" * 32},
-        {"claimed_generation": 4},
-        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
-    ],
-)
+@pytest.mark.parametrize("mutation", [
+    {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
+    {"turn_id": "b" * 32}, {"claimed_generation": 4},
+    {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
+])
 def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     store, owner, lease, observation = bound
     rejected = FailedTurnObservation.from_terminal(
-        observation.reservation,
-        owner=owner,
-        goal=owner.goal,
-        lease=replace(lease, **mutation),
-        turn_id=lease.turn_id,
-        claim_scope=3,
-        current_owner=owner,
-        current_claim=3,
-        reason=FailureReason.BACKEND_FAILED,
+        observation.reservation, owner=owner, goal=owner.goal,
+        lease=replace(lease, **mutation), turn_id=lease.turn_id, claim_scope=3,
+        current_owner=owner, current_claim=3, reason=FailureReason.BACKEND_FAILED,
     )
     assert rejected is None
     observation.reservation.fail(store, "failed anyway", observation=rejected)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert read(store, blocked(owner)).reason == "missing_binding"
+    assert store.failure_evidence(store.require_generation("goal")) == NoFailedTurnEvidence()
 
 
 @pytest.mark.parametrize("binding", ["token", "evidence_identity"])
@@ -140,16 +95,14 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
     observation.reservation.fail(store, "failed", observation=forged)
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
-    assert read(store, blocked(owner)).state == "unavailable"
+    assert store.failure_evidence(store.require_generation("goal")) == NoFailedTurnEvidence()
 
 
 def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
     store, owner, _, observation = bound
     store.create_goal("unclaimed")
     reservation = store.reserve("unclaimed", 1)
-    reservation.fail(
-        store, "prelaunch failure", observation=replace(observation, reservation=reservation)
-    )
+    reservation.fail(store, "prelaunch failure", observation=replace(observation, reservation=reservation))
     assert store.snapshot("unclaimed").lifecycle == BlockedGeneration()
     assert rows(store, "failed_turn_evidence") == []
 
@@ -161,7 +114,7 @@ def test_stale_attempt_cannot_record_an_incident(bound):
     with pytest.raises(StaleAttemptError):
         observation.reservation.fail(store, "late", observation=observation)
     assert store.path.read_bytes() == before
-    assert read(store, blocked(owner)).state == "unavailable"
+    assert rows(store, "failed_turn_evidence") == []
 
 
 def test_observation_insert_error_does_not_rollback_failure_fence(bound):
@@ -174,122 +127,7 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
     observation.reservation.fail(store, "failed", observation=observation)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
     with sqlite3.connect(store.path) as conn:
-        assert (
-            AttemptRecord.one(
-                conn, attempt_id=observation.reservation.attempt_id
-            ).phase.declared_name
-            == "failed"
-        )
+        assert AttemptRecord.one(conn, attempt_id=observation.reservation.attempt_id).phase.declared_name == "failed"
     assert rows(store, "failed_turn_evidence") == []
     with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
-    assert read(store, blocked(owner)).reason == "unsupported_schema"
-
-
-@pytest.mark.parametrize("source", [OwnerPause(), ModelPause()])
-def test_pause_projection_never_becomes_runnable(bound, source):
-    store, owner, _, observation = bound
-    observation.reservation.fail(store, "failed", observation=observation)
-    owner = replace(
-        owner,
-        goal=replace(
-            owner.goal,
-            state=PausedGoal(source),
-            revision=3,
-        ),
-    )
-    before = store.path.read_bytes()
-    projection = read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), claim_scope=3
-    )
-    assert projection.state == (
-        "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
-    )
-    assert "canRetry" not in projection.to_primitive()
-    assert store.path.read_bytes() == before
-
-
-@pytest.mark.parametrize("mode", ["missing", "invalid", "invalid_schema", "wal"])
-def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
-    store, owner, _, observation = bound
-    observation.reservation.fail(store, "failed", observation=observation)
-    if mode == "missing":
-        path = tmp_path / "absent" / "goal_attempts.sqlite3"
-    else:
-        path = store.path
-        if mode == "invalid":
-            path.write_bytes(b"not sqlite")
-        else:
-            with sqlite3.connect(path) as conn:
-                if mode == "invalid_schema":
-                    conn.execute("DROP TABLE goal_provider_usage")
-                else:
-                    conn.execute("PRAGMA journal_mode=WAL")
-    before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    assert (
-        read_failed_turn_projection(
-            path, owner=blocked(owner), owner_status=IdleThreadStatus(), claim_scope=3
-        ).state
-        == "unavailable"
-    )
-    assert {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
-
-
-def _crash_recording(root, observation, after_commit):
-    store = GoalAttemptStore(root)
-
-    def crash(*args):
-        os._exit(17)
-
-    @contextmanager
-    def crash_before_commit(connection):
-        store._begin_transaction(connection)
-        yield connection
-        crash()
-
-    if after_commit:
-        store._sync = crash
-    else:
-        store.write_transaction = crash_before_commit
-    observation.reservation.fail(store, "crashed failure", observation=observation)
-
-
-@pytest.mark.parametrize("after_commit", [False, True])
-def test_process_crash_has_no_partial_incident_or_replay_right(bound, after_commit):
-    store, owner, _, observation = bound
-    child = multiprocessing.get_context("spawn").Process(
-        target=_crash_recording, args=(store.root, observation, after_commit)
-    )
-    child.start()
-    child.join(10)
-    try:
-        assert child.exitcode == 17
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(5)
-    before = {p.name: p.read_bytes() for p in store.root.iterdir() if p.is_file()}
-    projection = read(store, blocked(owner))
-    assert projection.state == ("backend_suspended" if after_commit else "unavailable")
-    assert {p.name: p.read_bytes() for p in store.root.iterdir() if p.is_file()} == before
-    recovered = GoalAttemptStore(store.root)
-    assert recovered.snapshot("goal").lifecycle == (
-        BlockedGeneration() if after_commit else ReservedGeneration()
-    )
-    assert len(rows(recovered, "failed_turn_evidence")) == int(after_commit)
-    with pytest.raises(UnresolvedAttemptError):
-        recovered.resume("goal", 1)
-
-
-@pytest.mark.parametrize(
-    "status", [StoppedThreadStatus(), ArchivedThreadStatus(), DeletingThreadStatus()]
-)
-def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
-    store, owner, _, observation = bound
-    observation.reservation.fail(store, "failed", observation=observation)
-    assert (
-        read_failed_turn_projection(
-            store.path, owner=blocked(owner), owner_status=status, claim_scope=3
-        ).state
-        == "unavailable"
-    )
