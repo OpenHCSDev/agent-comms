@@ -517,8 +517,6 @@ class Commander(CommanderContext):
         for pid in group:
             try:
                 with MalformedRecord.refusing(pid):
-                    if replacing:
-                        listed[pid].require_replacement()
                     if pid in listed:
                         listed[pid].holder_state.require_trace(unit, traced)
             except MalformedRecord as error:
