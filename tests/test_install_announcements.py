@@ -43,7 +43,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     found = Upgrade("a" * 40, "b" * 40, comms.root, ("carry_order_scopes",))
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
-        live, InstallResult(NoConfigFile(), {}),
+        live, InstallResult(NoConfigFile(), {}), (),
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))

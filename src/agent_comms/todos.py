@@ -2638,7 +2638,7 @@ class ReviewedHeadVerdict(QuotedVerdict):
 
     def judged_through(self, since: float) -> float:
         """Accepting a head judges the whole diff, so every edit made before it is judged."""
-        return max(since, self.at.recorded_at("A head review"))
+        return self.at.latest_with(since)
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
