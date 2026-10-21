@@ -97,7 +97,9 @@ def show(ctx, pending: list[Edit]) -> None:
         by_thread.setdefault(edit.thread, []).append(edit)
     for name, edits in by_thread.items():
         orders = ctx.held_by(name)
-        intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
+        intent = '\n'.join('\n'.join((todo.order.instructions(todo),
+            *(f'Sent: {message.message_id}' for message in todo.messages[-1:])))
+            for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for edit in edits:
             print(edit.rendered())

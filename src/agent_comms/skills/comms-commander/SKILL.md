@@ -14,7 +14,7 @@ All tools are `agent-comms-commander <tool> ...`, configured by `~/.config/agent
 - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the pinned refactor-audit catalog `src/agent_comms/skills/refactor-audit/references/patterns/` (`README.md` and every rung file; orders cite its IDs). The session hook rereads them at every start and compaction; `rules review` prints every rule with its file:line. A summary or memory note is a paraphrase that drifts and never counts.
 - **Memory files point at this skill; they never restate its rules.**
 
-Arm two Monitors: `agent-comms-claude-bridge watch` (messages to the commander; the `comms` skill covers the first binding) and `agent-comms-commander tool-watch` (every unit tool call, turn digests, hard-rule violations). Core's connector closes merged orders and owns rotation: a live commander holding owner requests gets one inbox heartbeat when its standing-rule violations change, naming the next unit to review. A stopped commander gets none.
+The reshaped Core heartbeat is the board the commander works from. It brings only new decisions, at most five lines, each naming the action that clears it. Read the named unit's code and act on that line; do not arm raw tool-call or message-stream Monitors as a second board. An alarm no action can clear is noise: Unjudged counts unreviewed pushed pull request heads and commits, and the judgment of that head clears it. Core closes merged orders; a stopped commander gets no heartbeat.
 
 ## Why a dictator
 
@@ -65,13 +65,7 @@ Priority: the user's latest request; crashes, lost or replayed input, wrong mess
 
 ## One rotation tick
 
-Pick the next unit. Read its actual state, not its message: worktree, `git log -1`, `git status`, the diff, its last turns in tool-watch. Decide:
-- **Moving:** a fresh commit that deletes or fixes the right thing. Leave it.
-- **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
-- **Stuck:** no tool call for 3 minutes while holding an order. Order it.
-- **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. Send the next concrete step the same tick; strike the second time.
-- **Idle:** give it the top unowned board row.
-- **Adding slop:** send it back with the result it violates.
+Work from Core's derived `UnitState` and the heartbeat's default action, not a second classification from prose or a raw event stream. Inspect the named worktree, diff and newest turns before judgment. If the code adds slop, send it back with the result it violates. Leave useful moving work alone; give an idle unit the next useful unowned row.
 
 One line per unit touched, then the next unit.
 

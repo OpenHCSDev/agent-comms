@@ -101,7 +101,8 @@ from agent_comms.tools import (
     TodoList,
 )
 from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
+from agent_comms.commander.standing import UnownedWheelSpin
+from agent_comms.ui_model.unit_state import UnitState
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -794,8 +795,8 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
 
 
 @dataclass(frozen=True, kw_only=True)
-class DirectiveVerb(CommanderVerb):
-    """An action may answer named directives; unrelated work cannot clear them."""
+class AnsweringVerb(CommanderVerb):
+    """An action answers only original directive or unit message references."""
 
     answers: Annotated[
         tuple[str, ...],
@@ -810,12 +811,16 @@ class DirectiveVerb(CommanderVerb):
         thread = ctx.comms.registry.require(self.who(ctx))
         answerable = (*(message for goal in thread.goal.active()
                         for message in goal.order.directive_messages(ctx.comms.goals)),
-                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
+                      *UnitState.asks(ctx.comms, thread.name, time.time()))
         originals = tuple(message for message in answerable if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
             sys.exit('REFUSED: --answers must name original directives on this request '
                      'or unanswered unit messages to this commander.')
         return tuple(message.reference for message in originals)
+
+
+class DirectiveVerb(AnsweringVerb):
+    """New commander work cannot grow past a broken order-refusing rule."""
 
     def gate(self, ctx: Commander) -> None:
         answers = self.answer_references(ctx)
@@ -875,7 +880,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(OrderVerb, DirectiveVerb):
+class StrikeVerb(OrderVerb, AnsweringVerb):
     help = "a send-back or a false claim"
     unit: Annotated[str, Argument(flags=("unit",))]
     pid: Annotated[str, Argument(flags=("pid",), options={"help": "the struck problem"})]
@@ -1205,7 +1210,7 @@ class CloseVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb):
+class HuntVerb(OrderVerb, DirectiveVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: Annotated[
         str, Argument(flags=("where",), options={"metavar": "FILE:LINE"})

@@ -193,52 +193,6 @@ class ReviewTimerUp(HeldOrderDue):
                 f"order {self.order} -> read its diff and judge it")
 
 
-class FirstCallMissing(HeldOrderDue):
-    @classmethod
-    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
-        now = time.time()
-        for todo in cls.pending_todos(comms, commander):
-            order = todo.order.checked()
-            if not order.first_call_deadline.before(now):
-                continue
-            thread = comms.registry.require(todo.held().owner)
-            last = thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call()
-            if not last.since(order.at.recorded_at("An order")):
-                yield todo, order.first_call_deadline
-
-    def line(self) -> str:
-        return (f"FIRST CALL MISSING {self.problem} {self.holder}, due {self.since.clock()}, "
-                f"order {self.order} -> push the work or reassign it")
-
-
-@dataclass(frozen=True)
-class OwnerIdle(DatedStandingRule):
-    seconds: ClassVar[int] = 1200
-    holder: str
-    since: float
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        now = time.time()
-        threads = (comms.registry.require(holder)
-                   for holder in sorted({todo.held().owner
-                                         for todo in cls.pending_todos(comms, commander)}))
-        calls = (
-            (thread.name,
-             thread.runtime.history_source(comms.root, thread.incarnation).last_tool_call())
-            for thread in threads
-        )
-        return tuple(cls(holder, last.recorded_at("A tool call") + cls.seconds)
-                     for holder, last in calls if last.before(now - cls.seconds))
-
-    def began(self) -> float:
-        return self.since
-
-    def line(self) -> str:
-        return (f"OWNER IDLE {self.holder}, since {RecordedEventTime(self.since).clock()}"
-                " -> push or reassign the work")
-
-
 @dataclass(frozen=True)
 class HuntDue(ReasonedStandingRule, DatedStandingRule):
     since: float

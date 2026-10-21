@@ -2517,6 +2517,10 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     def implied_strikes(self) -> tuple[StrikeTodo, ...]:
         return ()
 
+    def reviewed_heads(self) -> tuple[str, ...]:
+        """Only a judgment of a commit clears review of that immutable head."""
+        return ()
+
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
 
@@ -2584,6 +2588,9 @@ class ReviewedHeadVerdict(QuotedVerdict):
     def __post_init__(self) -> None:
         super().__post_init__()
         GitCommitText.decode(self.head)
+
+    def reviewed_heads(self) -> tuple[str, ...]:
+        return (self.head,)
 
     @property
     def line(self) -> str:
@@ -2946,6 +2953,14 @@ class Todo(TypedTable):
     @property
     def held_order_ids(self) -> tuple[str, ...]:
         return tuple(order.id for order in self.order_history)
+
+    def unreviewed_heads(self, registry: Registration, pulls: PullRequests) -> frozenset[str]:
+        """Published code awaiting a commit judgment, not the edits that produced it."""
+        source = ProgressSource.of(self, registry, pulls)
+        published = {request.head for request in source.requests(UnmergedListedPullRequest)}
+        published.update(point.sha for point in source.published())
+        reviewed = {head for verdict in self.verdicts for head in verdict.reviewed_heads()}
+        return frozenset(published - reviewed)
 
     @property
     def reference_pattern(self) -> str:
@@ -3361,6 +3376,14 @@ class TodoStore(DurableStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth))
+
+    def unreviewed_heads(self, commander: ThreadIncarnation,
+                         registry: Registration) -> frozenset[tuple[RepositoryName, str]]:
+        """One pushed head linked to several open problems is still one review."""
+        held = tuple(todo for todo in self.held_for_commander(commander) if todo.pending)
+        pulls = PullRequests(held)
+        return frozenset((todo.repo, head) for todo in held
+                         for head in todo.unreviewed_heads(registry, pulls))
 
     def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
         return self._open(
