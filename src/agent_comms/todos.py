@@ -24,7 +24,7 @@ from importlib.resources import files
 from math import ceil
 from pathlib import Path
 from statistics import median
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 from uuid import uuid4
 
 
@@ -115,9 +115,6 @@ class FileDeliveryEvidence(DeliveryEvidence):
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
-    def require_fix(self) -> CheckedDelivery:
-        raise ValueError("scope fix requires checked implementation work, not a triage report")
-
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -132,9 +129,6 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
         FailedCheckStrike.make(todo, now,
             f"reported done with {self.work} but its order check failed: {error}; "
             f"cost {spent:.1f} minutes").record(goals, todo.id)
-
-    def require_report(self) -> ReportDelivery:
-        raise ValueError("scope triage accepts only a report delivery, not a commit or operation")
 
     @abstractmethod
     async def verified(
@@ -170,9 +164,6 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
         default_factory=UnrecordedBuildIdentity
     )
-
-    def require_fix(self) -> CheckedDelivery:
-        return self
 
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
@@ -400,9 +391,6 @@ class ReportDelivery(OrderDelivery):
     @property
     def work(self) -> str:
         return self.report
-
-    def require_report(self) -> ReportDelivery:
-        return self
 
     async def verified(
         self, todo: Todo, registry: Registration,
@@ -1614,8 +1602,16 @@ class FixShape:
 
 
 @dataclass(frozen=True)
-class OrderScope(DeclaredFamily, affix="Scope"):
-    """What the commander authorizes, including what counts as delivery."""
+class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
+    """What the commander authorizes, including the delivery type at its boundary."""
+
+    delivery_class: ClassVar[type[OrderDelivery]]
+
+    def decode_delivery(self, value: object) -> Delivery:
+        try:
+            return FieldCodec.decode(cast(type[Delivery], self.delivery_class), value)
+        except MalformedRecord as error:
+            raise MalformedRecord(f"delivery: {error}") from error
 
     def require_references(self, root: Path) -> None:
         """Triage has no implementation declarations to validate."""
@@ -1624,40 +1620,38 @@ class OrderScope(DeclaredFamily, affix="Scope"):
     def instructions(self, problem: str) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def require_delivery(self, delivery: OrderDelivery) -> None: ...
-
-    @abstractmethod
     def verified_claims(
-        self, delivery: OrderDelivery, claims: tuple[ProgressClaim, ...],
+        self, delivery: Delivery, claims: tuple[ProgressClaim, ...],
         comms: Comms, checkout: Path,
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
-    def completed(self, todo: Todo, delivery: OrderDelivery) -> Todo: ...
+    def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
 
 
-class TriageScope(OrderScope):
+class TriageScope(OrderScope[ReportDelivery]):
+    delivery_class = ReportDelivery
+
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
 
-    def require_delivery(self, delivery: OrderDelivery) -> None:
-        delivery.require_report()
-
-    def verified_claims(self, delivery, claims, comms, checkout):
-        self.require_delivery(delivery)
+    def verified_claims(
+        self, delivery: ReportDelivery, claims: tuple[ProgressClaim, ...],
+        comms: Comms, checkout: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]:
         if claims:
             raise ValueError("scope triage returns a report, not merged, installed or working claims")
         return {}
 
-    def completed(self, todo: Todo, delivery: OrderDelivery) -> Todo:
-        report = delivery.require_report()
-        order = todo.order.checked().copy_as(ReportedProblemOrder, delivery=report)
+    def completed(self, todo: Todo, delivery: ReportDelivery) -> Todo:
+        order = todo.order.checked().copy_as(ReportedProblemOrder, delivery=delivery)
         return DoneTodoState.closed(todo, order)
 
 
 @dataclass(frozen=True)
-class FixScope(OrderScope):
+class FixScope(OrderScope[CheckedDelivery]):
+    delivery_class = CheckedDelivery
     shape: FixShape
 
     def require_references(self, root: Path) -> None:
@@ -1669,16 +1663,14 @@ class FixScope(OrderScope):
                 f"Open the PR with agent-comms-commander order pr {problem} "
                 "--title '<title>' --body-file <file>; Core records its link on this order.")
 
-    def require_delivery(self, delivery: OrderDelivery) -> None:
-        delivery.require_fix()
-
-    def verified_claims(self, delivery, claims, comms, checkout):
-        self.require_delivery(delivery)
+    def verified_claims(
+        self, delivery: CheckedDelivery, claims: tuple[ProgressClaim, ...],
+        comms: Comms, checkout: Path,
+    ) -> dict[ProgressClaim, tuple[str, ...]]:
         ProgressClaim.require_claimed(claims, "delivered")
-        return ProgressClaim.require_all(delivery.require_fix().required_claims(claims), comms, checkout)
+        return ProgressClaim.require_all(delivery.required_claims(claims), comms, checkout)
 
-    def completed(self, todo: Todo, delivery: OrderDelivery) -> Todo:
-        self.require_delivery(delivery)
+    def completed(self, todo: Todo, delivery: CheckedDelivery) -> Todo:
         return replace(todo, order=todo.order.delivered(delivery), revision=todo.revision + 1)
 
 
@@ -1828,7 +1820,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             *self.work_instructions()))
 
     def delivered(self, delivery):
-        self.scope.require_delivery(delivery)
+        delivery = self.scope.decode_delivery(delivery)
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
@@ -2825,8 +2817,8 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        current.order.checked().scope.require_delivery(self.delivery)
-        verified = self.delivery.verified(current, goals.registry, self.verified_claims)
+        delivery = current.order.checked().scope.decode_delivery(self.delivery)
+        verified = delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)
         except OrderCheckFailedError as error:
@@ -2839,8 +2831,10 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        self.delivery.at.require_delivery()
-        return current.order.checked().scope.completed(current, self.delivery)
+        scope = current.order.checked().scope
+        delivery = scope.decode_delivery(self.delivery)
+        delivery.at.require_delivery()
+        return scope.completed(current, delivery)
 
 
 @dataclass(frozen=True)

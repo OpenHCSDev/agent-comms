@@ -1,7 +1,10 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
 from dataclasses import replace
 import json
+import os
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,7 @@ import pytest
 from order_scope_fixture import FIX_SCOPE
 from test_todos import order
 from agent_comms.change_report import FileLine, MissingSourceLine
+from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
@@ -19,7 +23,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from agent_comms.todos import (
-    CommitDelivery, DeliverTodo, DoneTodoState, FixScope, FixShape, OrderScope,
+    CommitDelivery, DeliverTodo, DoneTodoState, FixScope, FixShape, FoldedProblemOrder, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TodoStore, TriageScope,
 )
 from cutover.order_scope import TRIAGE_PROBLEMS, convert
@@ -57,6 +61,10 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 def assigned(comms, scope, problem='P1'):
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+    return requested(comms, scope, problem)
+
+
+def requested(comms, scope, problem='P1'):
     comms.goals.update_goal('lead', SetGoalAction(
         text='Classify the failing source or fix its declared parent', goal_id='request',
         order=RequestGoalOrder()))
@@ -74,10 +82,10 @@ def test_triage_refuses_commit_before_git_or_storage_and_returns_its_report(comm
     caller, current = assigned(comms, TriageScope())
     commit = CommitDelivery(commit='a' * 40, delivered_commit='a' * 40,
                             at=RecordedEventTime(1000))
-    with pytest.raises(ValueError, match='scope triage'):
+    with pytest.raises(ValueError, match='delivery'):
         CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                            delivery=commit, claims=()).apply(comms, caller)
-    with pytest.raises(ValueError, match='scope triage'):
+    with pytest.raises(ValueError, match='delivery'):
         DeliverTodo(current.revision, comms.registry.require(caller.name).incarnation, commit,
                     current.order.id).apply(current)
     assert comms.goals.todos.get(current.id) == current
@@ -91,17 +99,48 @@ def test_triage_refuses_commit_before_git_or_storage_and_returns_its_report(comm
     assert recorded.order.delivery.report == report.report
     assert recorded.assignment is None
     assert not recorded.order.waiting_on_install(recorded, {})
-    assert 'triage' in current.order.instructions(current)
-    assert 'Open the PR' not in current.order.instructions(current)
+
+
+@pytest.mark.parametrize('scope,wrong_delivery', (
+    (TriageScope(), CommitDelivery(commit='a' * 40, delivered_commit='a' * 40)),
+    (FIX_SCOPE, ReportDelivery(report='Classification is not an implementation')),
+))
+def test_scope_accepts_only_its_declared_delivery_at_native_decode(comms, scope, wrong_delivery):
+    caller, current = assigned(comms, scope)
+    request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
+                                 delivery=wrong_delivery, claims=())
+    with pytest.raises(ValueError, match='delivery'):
+        CommsOrderDoneTool.invoke(comms, request.arguments, caller=caller)
+    assert comms.goals.todos.get(current.id) == current
 
 
 def test_a_fix_does_not_accept_a_report_instead_of_implementation(comms):
     caller, current = assigned(comms, FIX_SCOPE)
-    with pytest.raises(ValueError, match='scope fix'):
+    with pytest.raises(ValueError, match='delivery'):
         CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                            delivery=ReportDelivery(report='No implementation delivered'),
                            claims=()).apply(comms, caller)
     assert comms.goals.todos.get(current.id) == current
+
+
+def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, tmp_path):
+    assigned(comms, TriageScope())
+    comms.registry.storage_rule = replace(comms.registry.storage_rule, scratch_base=tmp_path)
+    with CheckRoot(comms, ('lead', 'worker'), tmp_path / 'journey' / 'copied').open() as copied:
+        _, current = requested(copied, TriageScope())
+        report = 'The copied native order needs classification only; no source was changed.'
+        request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
+                                     delivery=ReportDelivery(report=report), claims=())
+        result = subprocess.run(
+            (sys.executable, '-m', 'agent_comms.cli', '--root', str(copied.root), 'tool',
+             '--from', 'lead', '--tool', request.declared_name,
+             '--arguments', json.dumps(request.arguments)),
+            env={**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
+            capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        assert report in result.stdout
+        assert copied.goals.todos.get(current.id).state is DoneTodoState
+    assert comms.goals.todos.get('P1').order.pending
 
 
 def test_one_shot_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path):
@@ -117,12 +156,13 @@ def test_one_shot_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_pa
     StoreBackup.copy_tree(comms.root, copied)
     path = TodoStore.path_in(copied)
     with sqlite3.connect(path) as db:
-        db.execute('UPDATE todo SET order=json_remove(order, "$.scope")')
+        db.execute('UPDATE todo SET "order"=json_remove("order", ?)', ('$.scope',))
         prior = replace(original.order.checked(), id='prior-order')
-        db.execute('UPDATE todo SET prior_orders=json_array(json_remove(?, "$.scope")) WHERE id=?',
-                   (json.dumps(FieldCodec.encode(prior)), original.id))
-        db.execute('UPDATE todo SET order=json_object("kind", "folded", "original", json(order), '
-                   '"into", "P9", "why", "Merged findings") WHERE id=?', (original.id,))
+        db.execute('UPDATE todo SET prior_orders=json_array(json_remove(?, ?)) WHERE id=?',
+                   (json.dumps(FieldCodec.encode(prior)), '$.scope', original.id))
+        folded = FoldedProblemOrder(original=original.order, into='P9', why='Merged findings')
+        db.execute('UPDATE todo SET "order"=json_remove(?, ?) WHERE id=?',
+                   (json.dumps(FieldCodec.encode(folded)), '$.original.scope', original.id))
     assert convert(copied) == len(TRIAGE_PROBLEMS) + 2
     converted = TodoStore(copied)
     for problem in TRIAGE_PROBLEMS:

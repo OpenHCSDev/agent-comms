@@ -17,6 +17,7 @@ from pathlib import Path
 from agent_comms.change_report import FileLine
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.todos import CheckedProblemOrder, FixScope, FixShape, ProblemOrder, Todo, TodoStore, TriageScope
 from agent_comms.typed_table import Column, JsonStorage, TextStorage, TypedRow
 
@@ -43,31 +44,26 @@ def convert(root: Path) -> int:
     placeholders = ",".join("?" for _ in kinds)
     table = Todo.declared_name
     changed = 0
-    with closing(CoordinationStore.writer(path)) as db:
-        db.execute("BEGIN IMMEDIATE")
-        try:
-            for declared in Todo._fields():
-                if not issubclass(declared.storage, JsonStorage):
-                    continue
-                column = Todo._column_list((declared.name,))
-                orders = StoredOrder.read(db.execute(
-                    f'SELECT todo.id AS problem, entry.path AS path, '
-                    f'json_extract(todo.{column}, entry.path || ".owner") AS owner '
-                    f'FROM "{table}" AS todo, json_tree(todo.{column}) AS entry '
-                    f'WHERE entry.key="kind" AND entry.value IN ({placeholders}) '
-                    f'AND json_type(todo.{column}, entry.path || ".scope") IS NULL', kinds))
-                for order in orders:
-                    db.execute(
-                        f'UPDATE "{table}" SET {column}=json_set({column}, ?, json(?)) WHERE id=?',
-                        (order.path + ".scope", order.scope_json(), order.problem))
-                    changed += 1
-            # Decode every resulting canonical row before committing any conversion.
-            for _ in Todo.stream(db):
-                pass
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
+    identity = Todo._column_list(("id",))
+    with closing(CoordinationStore.writer(path)) as db, SQLiteFile.write_transaction(db):
+        for declared in Todo._fields():
+            if not issubclass(declared.storage, JsonStorage):
+                continue
+            column = Todo._column_list((declared.name,))
+            orders = StoredOrder.read(db.execute(
+                f'SELECT todo.{identity} AS problem, entry.path AS path, '
+                f"json_extract(todo.{column}, entry.path || '.owner') AS owner "
+                f'FROM "{table}" AS todo, json_tree(todo.{column}) AS entry '
+                f"WHERE entry.key='kind' AND entry.value IN ({placeholders}) "
+                f"AND json_type(todo.{column}, entry.path || '.scope') IS NULL", kinds))
+            for order in orders:
+                db.execute(
+                    f'UPDATE "{table}" SET {column}=json_set({column}, ?, json(?)) WHERE {identity}=?',
+                    (order.path + ".scope", order.scope_json(), order.problem))
+                changed += 1
+        # Decode every resulting canonical row before committing any conversion.
+        for _ in Todo.stream(db):
+            pass
     return changed
 
 

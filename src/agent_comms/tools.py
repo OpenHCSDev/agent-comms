@@ -441,12 +441,18 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         if cls.family_discriminator in arguments:
             raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
-            request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
+            request = FieldCodec.decode_record(
+                cls, dict(arguments), field_types=cls.context_types(comms, arguments))
         except MalformedRecord as error:
             raise ToolArgumentsRefusedError(
                 f"Invalid {cls.declared_name} arguments: {error}"
             ) from error
         return FieldCodec.encode(caller.invoke(request, comms).to_wire())
+
+    @classmethod
+    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+        """Ordinary tools need no contextual narrowing of their declared field types."""
+        return {}
 
     @abstractmethod
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -1047,11 +1053,18 @@ class CommsOrderDoneTool(CommsTodoTool):
         ),
     ]
 
+    @classmethod
+    def context_types(cls, comms: Comms, arguments: Mapping[str, object]) -> Mapping[str, type[object]]:
+        problem = FieldCodec.field_plan(cls, "problem").read(arguments)
+        return {"delivery": comms.goals.todos.get(problem).order.checked().scope.delivery_class}
+
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
         order = todo.order.checked()
+        order.require_delivery(self.order_id)
+        delivery = order.scope.decode_delivery(self.delivery)
         verified = order.scope.verified_claims(
-            self.delivery, self.claims, comms, Path(order.check.directory))
-        return DeliverTodo(todo.revision, actor, self.delivery, self.order_id,
+            delivery, self.claims, comms, Path(order.check.directory))
+        return DeliverTodo(todo.revision, actor, delivery, self.order_id,
                            verified_claims=verified)
 
 

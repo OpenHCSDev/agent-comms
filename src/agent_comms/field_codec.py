@@ -1261,9 +1261,18 @@ class FieldCodec(Sealed):
         return cast(T, compile_decoder(target).decode_bound(data, context))
 
     @classmethod
-    def decode_record(cls, target: type[T], data: object) -> T:
-        """Decode declared fields without reentering the record's wire representation."""
-        return cast(T, _RecordDecoder(target).decode(data))
+    def decode_record(
+        cls, target: type[T], data: object, *,
+        field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+    ) -> T:
+        """Decode declared fields, with nominal narrowing supplied by their contextual owner."""
+        decoder = _RecordDecoder(target)
+        for name, narrowed in field_types.items():
+            annotation, _ = cls._representation(cls.field_plan(target, name).annotation)
+            if not issubclass(narrowed, annotation):
+                raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
+        return cast(T, decoder.decode_selected(
+            data, {}, fields=decoder.field_names, field_types=field_types))
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
@@ -2132,6 +2141,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
+        if isinstance(data, DeclaredFamily):
+            if not isinstance(data, self.target):
+                raise MalformedRecord(f"Expected {self.target.__name__}, received {type(data).__name__}")
+            return data
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
 
@@ -2193,7 +2206,8 @@ class _RecordDecoder(ValueDecoder[Any]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
+    def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={},
+                        field_types=types.MappingProxyType({})):
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
         problems = self.problems(data)
@@ -2204,8 +2218,11 @@ class _RecordDecoder(ValueDecoder[Any]):
                 continue
             key = (target, entry.name)
             try:
-                values.update(entry.decoded_selected(data, selections[key], selections)
-                              if key in selections else entry.decoded_bound(data, context))
+                if entry.name in field_types:
+                    values.update(entry.decoded_using(data, compile_decoder(field_types[entry.name]).decode))
+                else:
+                    values.update(entry.decoded_selected(data, selections[key], selections)
+                                  if key in selections else entry.decoded_bound(data, context))
             except MalformedRecord as error:
                 problems.update(error.located(entry.key, f"supply {entry.annotation}"))
         if problems:
