@@ -74,15 +74,15 @@ class RuleComparison(ParityComparison):
 
 @dataclass(frozen=True)
 class StorageComparison(ParityComparison):
-    quota: ParityComparison
+    units: ParityComparison
     disk: ParityComparison
 
     @property
     def passed(self) -> bool:
-        return self.quota.passed and self.disk.passed
+        return self.units.passed and self.disk.passed
 
     def describe(self) -> str:
-        return f"quota: {self.quota.describe()}; disk: {self.disk.describe()}"
+        return f"units: {self.units.describe()}; disk: {self.disk.describe()}"
 
     @classmethod
     def read(cls) -> StorageComparison:
