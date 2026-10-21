@@ -1110,7 +1110,7 @@ class CoordinationSegment(InstructionSegment):
             (OwnerProvenance(owner.incarnation, revision), response_instruction.source),
             response_instruction=response_instruction,
             owner=owner.incarnation,
-            parent=owner.parent,
+            parent=owner.parent.otherwise(None),
             project=owner.worktree,
             peers=peers,
         )

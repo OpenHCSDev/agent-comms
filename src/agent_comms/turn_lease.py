@@ -128,7 +128,7 @@ class TurnGeneration(SubclassUnion, affix="Generation"):
     def matches(self, generation: int) -> bool: ...
 
     @abstractmethod
-    def admits(self, generation: int) -> bool:
+    def owns_generation(self, generation: int) -> bool:
         """The owner at this generation may hold the turn."""
 
     @abstractmethod
@@ -154,7 +154,7 @@ class RecordedGeneration(SingleFieldValue, TurnGeneration):
     def matches(self, generation: int) -> bool:
         return self.value == generation
 
-    def admits(self, generation: int) -> bool:
+    def owns_generation(self, generation: int) -> bool:
         return self.value > 0 and self.value == generation
 
     def adopted_by(self, claimed: int) -> RecordedGeneration:
@@ -179,7 +179,7 @@ class UnrecordedGeneration(NullMember, TurnGeneration):
     def matches(self, generation: int) -> bool:
         return False
 
-    def admits(self, generation: int) -> bool:
+    def owns_generation(self, generation: int) -> bool:
         return True
 
     def adopted_by(self, claimed: int) -> RecordedGeneration:
@@ -223,7 +223,7 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def validate_owner(self, process: ProcessState, generation: int) -> None:
         if not process.owns_turn(self):
             raise RelationViolationError("A turn must belong to the registered executor.")
-        if not self.turn_generation.admits(generation):
+        if not self.turn_generation.owns_generation(generation):
             raise RelationViolationError("Active turn generation differs from its owner.")
 
     def require_idle(self) -> None:

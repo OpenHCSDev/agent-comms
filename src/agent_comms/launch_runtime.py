@@ -30,7 +30,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .launch_root import LaunchRoot
-from .thread_text import AbsentText, GivenText, NoThreadText, TextChoice, ThreadText
+from .thread_text import AbsentText, GivenText, NoParent, NoThreadText, TextChoice, ThreadParent, ThreadText
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -367,8 +367,8 @@ class ThreadLaunch(EnvironmentRecord):
         WireName("AGENT_COMMS_TAGS"),
     ] = frozenset()
     parent: Annotated[
-        EnvironmentValue, WireOmitDefault(), WireName("PI_PARENT_ID")
-    ] = UnsetVariable()
+        ThreadParent, WireOmitDefault(), WireName("PI_PARENT_ID")
+    ] = NoParent()
     task: Annotated[
         ThreadText, WireOmitDefault(), WireName("PI_TASK")
     ] = NoThreadText()
@@ -391,7 +391,7 @@ class ThreadLaunch(EnvironmentRecord):
             thread.name,
             thread.worktree,
             frozenset(thread.tags),
-            UnsetVariable() if thread.parent is None else SetVariable(thread.parent),
+            thread.parent,
             thread.task,
         )
 

@@ -9,16 +9,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 from ..comms import Comms
 from ..errors import RelationViolationError
-from ..field_codec import boundary_decoder
-from ..install_choices import CommanderConfigFile, NoConfigFile, RepoChoice, WrittenConfigFile
+from ..field_codec import (
+    BoundedText, FieldCodec, NullMember, SingleFieldValue, SubclassUnion, boundary_decoder,
+)
+from ..installer.backup import UpgradeRefused
 from ..native_arguments import NativeArguments
 from ..repo import Repo
+from ..thread_text import AbsentText, GivenText, TextChoice
 from ..threads import Thread
 
 
@@ -170,3 +173,97 @@ class NoCommanderRecord(CommanderRecord):
 
     def write(self, home: Path) -> NoConfigFile:
         return NoConfigFile()
+
+
+class CommanderChoice(SubclassUnion, TextChoice, affix="Commander"):
+    """The thread an install names as this bus's commander, or none: the bus's record stands."""
+
+    @abstractmethod
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedCommander(GivenText, CommanderChoice):
+    text: Annotated[str, BoundedText]
+
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord:
+        return recorded.commanded_by(self.text, repos, root, home)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptCommander(AbsentText, CommanderChoice):
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord:
+        return recorded.rehomed(repos, root, home)
+
+
+class RepoChoice(SubclassUnion, affix="Repos"):
+    """The repositories the commander works on: the checkouts given, or the recorded ones."""
+
+    @abstractmethod
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        """The first record of a bus that had none: a commander needs repositories to command."""
+
+    @abstractmethod
+    def without_commander(self) -> None:
+        """Refuse repositories given to a bus that records no commander to hold them."""
+
+
+@dataclass(frozen=True, slots=True)
+class GivenRepos(RepoChoice):
+    """Checkouts spelled as comma-separated paths on the command line."""
+
+    checkouts: tuple[Path, ...]
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        text = FieldCodec.decode(str, data)
+        return cls(tuple(Path(part.strip()) for part in text.split(",") if part.strip()))
+
+    def to_wire(self) -> str:
+        return ",".join(map(str, self.checkouts))
+
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
+        return tuple(Repo.of(checkout) for checkout in self.checkouts)
+
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(CommanderConfig.on_machine(commander, self.applied(()), root, home))
+
+    def without_commander(self) -> None:
+        raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
+                             "commander, so name one with --commander")
+
+
+@dataclass(frozen=True, slots=True)
+class KeptRepos(NullMember, RepoChoice):
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
+        return recorded
+
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        raise UpgradeRefused(f"--commander {commander} starts this bus's commander record, "
+                             "which needs the repositories it commands: pass --repos")
+
+    def without_commander(self) -> None:
+        pass
+
+
+class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
+    """What an install left for commander tools: the config it wrote, or none."""
+
+
+@dataclass(frozen=True, slots=True)
+class WrittenConfigFile(SingleFieldValue, CommanderConfigFile):
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class NoConfigFile(NullMember, CommanderConfigFile):
+    pass

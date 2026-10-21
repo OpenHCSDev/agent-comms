@@ -98,7 +98,7 @@ from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevelField
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
@@ -115,11 +115,11 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_text import NoThreadText, ThreadText
-from .install_choices import (
-    CommanderChoice, CommanderConfigFile, InstallerChoice, KeptCommander, KeptRepos, RepoChoice,
-    UnnamedInstaller,
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .commander.config import (
+    CommanderChoice, CommanderConfigFile, CommanderRecord, KeptCommander, KeptRepos, RepoChoice,
 )
+from .install_choices import InstallerChoice, UnnamedInstaller
 from .thread_model import ThreadModel
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
@@ -1486,9 +1486,7 @@ class RegisterCliCommand(CliCommand):
         Normalize(_tags),
         Argument(flags=("--tags",)),
     ] = dataclasses.field(default_factory=frozenset)
-    parent: Annotated[str | None, Argument(flags=("--parent",))] = (
-        None
-    )
+    parent: Annotated[ThreadParent, Argument(flags=("--parent",))] = NoParent()
     task: Annotated[ThreadText, Argument(flags=("--task",))] = NoThreadText()
     process: Annotated[
         ProcessState,
@@ -1585,8 +1583,6 @@ class InstallCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         """The install child's last step, on the bus it carried or created."""
-        from .commander.config import CommanderRecord
-
         home = Path.home()
         project = self.project.resolve()
         record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)

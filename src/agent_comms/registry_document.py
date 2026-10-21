@@ -51,6 +51,7 @@ from .thread_status import (
     StoppedThreadStatus,
     ThreadStatus,
 )
+from .thread_text import ForkedParent, NoParent
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
@@ -512,8 +513,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.set_status(new_name, status)
         self.last_seen[new_name] = last_seen
         for child_name, child in tuple(self.threads.items()):
-            if child.parent == canonical:
-                self.threads[child_name] = replace(child, parent=new_name)
+            if child.parent.named(canonical):
+                self.threads[child_name] = replace(child, parent=ForkedParent(new_name))
         for alias, target in tuple(self.aliases.items()):
             if target == canonical:
                 self.aliases[alias] = new_name
@@ -600,10 +601,10 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         """Remove a declaration and atomically detach its surviving children."""
         name = self.require(name).name
         detached = tuple(
-            sorted(child.name for child in self.threads.values() if child.parent == name)
+            sorted(child.name for child in self.threads.values() if child.parent.named(name))
         )
         for child_name in detached:
-            self.threads[child_name] = replace(self.threads[child_name], parent=None)
+            self.threads[child_name] = replace(self.threads[child_name], parent=NoParent())
         if self.status(name).active:
             self.owners.advance(name)
         self.advance_claim(name)

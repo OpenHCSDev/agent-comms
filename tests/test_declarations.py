@@ -26,7 +26,7 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import current_thread
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
 
 
@@ -115,12 +115,12 @@ class TestThreadDeclaration:
 
     def test_rejects_self_parent(self, *, thread_registration):
         with pytest.raises(RelationViolationError):
-            thread_registration.new_thread(name='a', tags=frozenset(), worktree='/wt', parent='a')
+            thread_registration.new_thread(name='a', tags=frozenset(), worktree='/wt', parent=ForkedParent('a'))
 
     def test_fork_provenance(self, *, thread_registration):
-        fork = thread_registration.new_thread(name='b', tags=frozenset(), worktree='/wt', parent='a')
+        fork = thread_registration.new_thread(name='b', tags=frozenset(), worktree='/wt', parent=ForkedParent('a'))
         assert fork.is_fork is True
-        assert fork.parent == "a"
+        assert fork.parent == ForkedParent("a")
 
     def test_frozen(self, *, thread_registration):
         thread = thread_registration.new_thread(name='a', tags=frozenset(), worktree='/wt')
@@ -238,7 +238,7 @@ class TestRegistration:
             registry.new_thread(name='agent-comms-ux', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('Finish the goal', 'goal-1', published_seq=0))
         )
         registry.register(
-            registry.new_thread(name='child', tags=frozenset(), worktree='/wt', parent='agent-comms-ux')
+            registry.new_thread(name='child', tags=frozenset(), worktree='/wt', parent=ForkedParent('agent-comms-ux'))
         )
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
@@ -253,7 +253,7 @@ class TestRegistration:
         assert reopened.require("pr17").name == "agent-comms-ux"
         assert reopened.require("agent-comms-ux").created_at == original.created_at
         assert reopened.require("agent-comms-ux").goal == original.goal
-        assert reopened.require("child").parent == "agent-comms-ux"
+        assert reopened.require("child").parent == ForkedParent("agent-comms-ux")
         assert snapshot.claim_generation("agent-comms-ux") == claim_scope
         assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
@@ -493,12 +493,12 @@ class TestRegistration:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            registry.new_thread(name='a', tags=frozenset({'x', 'y'}), worktree='/wt', parent='p', task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
+            registry.new_thread(name='a', tags=frozenset({'x', 'y'}), worktree='/wt', parent=ForkedParent('p'), task=GivenThreadText('t'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         registry.unregister("a")
         reloaded = Registration(path)
         thread = reloaded.require("a")
-        assert thread.parent == "p" and thread.task == GivenThreadText("t") and thread.process_identity == ProcessIdentity.capture(os.getpid())
+        assert thread.parent == ForkedParent("p") and thread.task == GivenThreadText("t") and thread.process_identity == ProcessIdentity.capture(os.getpid())
         assert thread.tags == frozenset({"x", "y"})
         assert reloaded.status("a") == StoppedThreadStatus()
 
@@ -542,11 +542,11 @@ class TestCurrentThread:
     ):
         registry = Comms(tmp_path).registry
         launched = registry.new_thread(
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent="lead", task=GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent=ForkedParent("lead"), task=GivenThreadText("Ship it")
         )
         for name, value in launched.launch().apply(dict(os.environ)).items():
             monkeypatch.setenv(name, value)
         thread = current_thread(registry)
         assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
-            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), "lead", GivenThreadText("Ship it")
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), ForkedParent("lead"), GivenThreadText("Ship it")
         )

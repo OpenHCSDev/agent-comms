@@ -115,7 +115,7 @@ class PiOmitted(NullMember):
     def text_or[D](self, default: D) -> D:
         return default
 
-    def require(self) -> Any:
+    def require(self) -> typing.NoReturn:
         raise MalformedRecord("Pi left out a field this record requires")
 
     @classmethod

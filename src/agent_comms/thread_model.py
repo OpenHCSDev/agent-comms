@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import BoundedText, SubclassUnion, boundary_decoder
-from agent_comms.native_arguments import NativeArguments, SelectedModel
+from agent_comms.field_codec import SubclassUnion, boundary_decoder
+from agent_comms.native_arguments import ModelArgument, NativeArguments, ProviderArgument, SelectedModel
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
@@ -22,6 +23,16 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
     def reported(name: str | None) -> ThreadModel:
         """The model an external producer reports by name, or none."""
         return ThreadModel.from_wire(name)
+
+    @staticmethod
+    @boundary_decoder
+    def selected_by(arguments: NativeArguments) -> ThreadModel:
+        """The model a launch's native arguments select, or none."""
+        selected = arguments.value(ModelArgument)
+        provider = arguments.value(ProviderArgument)
+        if selected is None or provider is None:
+            return ThreadModel.reported(selected)
+        return DeclaredModel(SelectedModel(provider, selected.removeprefix(provider + "/")).qualified)
 
     @staticmethod
     @boundary_decoder
@@ -47,7 +58,11 @@ class ThreadModel(SubclassUnion, TextChoice, affix="Model"):
 
 @dataclass(frozen=True, slots=True)
 class DeclaredModel(GivenText, ThreadModel):
-    text: Annotated[str, BoundedText]
+    text: str
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("Thread model cannot be empty.")
 
     def native(self, arguments: NativeArguments) -> NativeArguments:
         return arguments.with_model(self.text)
@@ -75,6 +90,4 @@ class UndeclaredModel(AbsentText, ThreadModel):
         return command()
 
     def require_reported(self) -> DeclaredModel:
-        from agent_comms.native_pi import NativePiUnavailable
-
         raise NativePiUnavailable("Native configuration did not report a model")

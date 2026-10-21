@@ -33,6 +33,7 @@ class InstalledApp(ToadApp):
 
 from retained_history_cutover_pilot import reference_actual_history
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_text import ForkedParent, NoParent
 
 def prepare_physical_fixture():
     """Prepare the same original immutable archive for the existing native recorder."""
@@ -67,7 +68,7 @@ async def main():
                           XDG_STATE_HOME=str(root/'state'),XDG_DATA_HOME=str(root/'data'))
         comms=wire(root/'wire')
         comms.messaging.initialize_private_initial_protocol()
-        for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
+        for name, parent in [('openhcs-architecture-memory',NoParent()),('openhcs-pr159-viewer-bind-owner',ForkedParent('openhcs-architecture-memory'))]:
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'openhcs', 'comms'}), str(root), parent=parent))
         originals=reference_actual_history(comms.root,live)
         sources=comms.bus.history.sources()

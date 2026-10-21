@@ -38,6 +38,7 @@ from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
+from .thread_model import ThreadModel
 from .threads import Thread
 from .thread_identity import AcpThreadRole
 from .thread_text import NoThreadText, ThreadText
@@ -152,7 +153,7 @@ class SessionLifecycle:
             Path(cwd).name,
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.agent_args.model,
+            model=ThreadModel.selected_by(self.agent_args),
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
             role=AcpThreadRole,

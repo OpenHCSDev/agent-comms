@@ -54,7 +54,7 @@ from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import AgentThreadRole, ThreadRole
-from .thread_text import GivenThreadText, NoThreadText, ThreadText
+from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
@@ -176,7 +176,7 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
-        return replace(self.declaration(self.project, registry), parent=parent.name,
+        return replace(self.declaration(self.project, registry), parent=ForkedParent(parent.name),
                        tags=self.tags.for_child(parent.tags),
                        backend=parent.backend, session_file=runtime.read_key)
 

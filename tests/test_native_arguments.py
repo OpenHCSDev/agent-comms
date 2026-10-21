@@ -16,7 +16,7 @@ from agent_comms.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from agent_comms.thread_model import DeclaredModel, UndeclaredModel
+from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 
 @pytest.mark.parametrize("selection", [None, "", "model"])
@@ -49,11 +49,11 @@ def test_selected_model_owns_qualification_and_native_arguments():
 def test_unconfigured_launch_has_no_provider_or_model_policy():
     arguments = InheritedArguments().configured({})
     assert arguments.argv == ()
-    assert arguments.model == UndeclaredModel()
+    assert ThreadModel.selected_by(arguments) == UndeclaredModel()
     assert arguments.thinking is NoThinkingOverride
-    assert InheritedArguments().configured({
+    assert ThreadModel.selected_by(InheritedArguments().configured({
         NativeArguments.arguments_key: "--provider user --model selected",
-    }).model == DeclaredModel("user/selected")
+    })) == DeclaredModel("user/selected")
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -70,10 +70,10 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
             "extension.mjs",
         )
     )
-    assert arguments.model == DeclaredModel("original/old/model")
+    assert ThreadModel.selected_by(arguments) == DeclaredModel("original/old/model")
     assert arguments.thinking is HighThinkingLevel
     selected = arguments.with_model("response-local/fixture").with_thinking(OffThinkingLevel)
-    assert selected.model == DeclaredModel("response-local/fixture") and selected.thinking is OffThinkingLevel
+    assert ThreadModel.selected_by(selected) == DeclaredModel("response-local/fixture") and selected.thinking is OffThinkingLevel
     assert selected.rpc() == (
         "--offline",
         "--extension",
@@ -88,8 +88,8 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
         "rpc",
     )
     assert selected.with_thinking(NoThinkingOverride).thinking is NoThinkingOverride
-    assert arguments.model == DeclaredModel("original/old/model")
-    assert NativeArguments.parse(("--model", "local/fixture")).model == DeclaredModel("local/fixture")
+    assert ThreadModel.selected_by(arguments) == DeclaredModel("original/old/model")
+    assert ThreadModel.selected_by(NativeArguments.parse(("--model", "local/fixture"))) == DeclaredModel("local/fixture")
 
 
 @pytest.mark.parametrize("argv", [("--thinking", "unknown"), ("--thinking=unknown",)])

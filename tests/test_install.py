@@ -11,12 +11,13 @@ import pytest
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.config import (
+    CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
+)
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.practice import practice_copy
-from agent_comms.install_choices import GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.wire_log import WireLog
 

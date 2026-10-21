@@ -608,12 +608,13 @@ class Transcripts:
 
     @staticmethod
     def _fork_start_events(thread: Thread) -> tuple[TranscriptEvent, ...]:
-        if not thread.parent:
-            return ()
-        return (
-            ForkOriginTranscript(f"Forked from @{thread.parent}. This thread started with:",
-                                 timestamp=thread.created_at),
-            *(ForkTaskTranscript(task, timestamp=thread.created_at) for task in thread.task.texts()),
+        return tuple(
+            event for parent in thread.parent.names() for event in (
+                ForkOriginTranscript(f"Forked from @{parent}. This thread started with:",
+                                     timestamp=thread.created_at),
+                *(ForkTaskTranscript(task, timestamp=thread.created_at)
+                  for task in thread.task.texts()),
+            )
         )
 
     def thread_transcript_page(

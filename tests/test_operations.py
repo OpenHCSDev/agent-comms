@@ -27,7 +27,7 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
 
 
@@ -232,7 +232,7 @@ class TestThreadOps:
         rows = {row.thread.name: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
         assert rows["fixer"].status.declared_name == "running"
-        assert rows["fixer"].thread.parent == "PR111"
+        assert rows["fixer"].thread.parent == ForkedParent("PR111")
         assert rows["fixer"].pending.value == 0
 
     def test_list_active_only(self, wired):
@@ -276,7 +276,7 @@ class TestThreadOps:
         )
 
         assert attached.tags == frozenset({"auth"})
-        assert attached.parent == "PR111"
+        assert attached.parent == ForkedParent("PR111")
         assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
         assert attached.session_file == str(session_file.resolve())
@@ -335,7 +335,7 @@ class TestThreadOps:
         assert result.changed
         assert wired.registry.require("PR111").name == "planner"
         assert wired.registry.require("planner").tags == frozenset({"base"})
-        assert wired.registry.require("fixer").parent == "planner"
+        assert wired.registry.require("fixer").parent == ForkedParent("planner")
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
         assert wired.ledger.read().entries["owner"] == "planner"
@@ -370,7 +370,7 @@ class TestThreadOps:
         assert wired.threads.rename_self("pr17", caller=ThreadCaller("PR111")).current == "pr17"
         assert wired.threads.rename_self("PR111", caller=ThreadCaller("PR111")).current == "PR111"
         assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
-        assert wired.registry.require("fixer").parent == "PR111"
+        assert wired.registry.require("fixer").parent == ForkedParent("PR111")
 
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError):

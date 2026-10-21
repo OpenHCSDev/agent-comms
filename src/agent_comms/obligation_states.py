@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IntegrityViolationError, IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
-
-if TYPE_CHECKING:
-    from .message_reference import MessageReference
+from .message_reference import MessageReference
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +62,6 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
         raise IdentityConflict("no frozen publishing intent for current owner")
 
     def require_nonpublication(self) -> None:
-        from .coordination_errors import IdentityConflict
-
         if not self.retryable:
             raise IdentityConflict("wire completion requires nonpublication obligation")
 
@@ -146,8 +142,6 @@ class PublishedResponse(ResponseState):
         return self.seq
 
     def published_reference(self) -> MessageReference:
-        from .message_reference import MessageReference
-
         return MessageReference(self.seq, self.message_id)
 
     def validate_acknowledgement(self, acknowledgement) -> None:

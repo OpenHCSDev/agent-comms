@@ -117,7 +117,7 @@ class CheckRoot:
             declarations[name] = replace(
                 original.without_turn(),
                 worktree=str(project),
-                parent=original.parent if original.parent in selected else None,
+                parent=original.parent.kept_in(selected),
                 task=NoThreadText(),
                 goal=NoGoal(),
                 process_identity=NoProcess(),

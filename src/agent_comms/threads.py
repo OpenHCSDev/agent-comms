@@ -17,7 +17,7 @@ from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .errors import RelationViolationError
 from .field_codec import (
-    Argument, BoundedText, Description, FieldCodec, NullMember, RegistrationPolicy,
+    Argument, Description, FieldCodec, NullMember, RegistrationPolicy,
     SingleFieldValue, SubclassUnion, WireOmitDefault, WireRequired,
 )
 from .goals import (
@@ -45,7 +45,7 @@ from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_text import NoThreadText, ThreadText
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
@@ -149,13 +149,15 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         kw_only=False
     )
     worktree: str = field(kw_only=False)
-    parent: str | None = None
+    parent: ThreadParent = field(default_factory=NoParent)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
     session_file: Annotated[str | None, RegistrationPolicy(InheritMissing)] = (
         field(default=None, kw_only=True)
     )
-    model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = UndeclaredModel()
+    model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=UndeclaredModel
+    )
     thinking_level: Annotated[
         ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
@@ -210,8 +212,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if self.name in visited:
             return
         visited.add(self.name)
-        if self.parent is not None:
-            parent = registry.require(self.parent)
+        for name in self.parent.names():
+            parent = registry.require(name)
             for location, _ in parent.runtime.history_locations(parent, registry, visited):
                 yield location, True
 
@@ -314,7 +316,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             or self.turn_generation == 0
         ):
             raise ValueError("Finished turn requires a prior turn generation and ID.")
-        if self.parent == self.name:
+        if self.parent.named(self.name):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
@@ -490,7 +492,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def is_fork(self) -> bool:
-        return self.parent is not None
+        return self.parent.forked
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         """Read the original start only when this decision needs it."""
@@ -514,8 +516,7 @@ def current_thread(registry) -> Thread:
         name=launch.name,
         tags=launch.tags,
         worktree=launch.worktree,
-        # Thread still declares a missing parent as None.
-        parent=launch.parent.otherwise(None),
+        parent=launch.parent,
         task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )

@@ -138,7 +138,7 @@ from agent_comms.field_codec import FieldCodec
 import time
 time.time = lambda: 1000.0
 root=Path(sys.argv[1]);root.mkdir()
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 r=Registration(root/'registry.json')
 steps=[]
 def capture():
@@ -150,7 +150,7 @@ def capture():
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
 r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(r.new_thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
+r.register(r.new_thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
 r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()

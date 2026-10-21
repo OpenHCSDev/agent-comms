@@ -1,9 +1,11 @@
-"""Text that is given or absent, and the thread's own title and assignment family."""
+"""Text that is given or absent, and the thread's own title, assignment and parent families."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 from dataclasses import dataclass
+from typing import ClassVar
 
 from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion, boundary_decoder
 
@@ -73,3 +75,44 @@ class NoThreadText(AbsentText, ThreadText):
 
     def texts(self) -> tuple[str, ...]:
         return ()
+
+
+class ThreadParent(SubclassUnion, TextChoice, affix="Parent"):
+    """The thread this one was forked from, or none."""
+
+    forked: ClassVar[bool]
+
+    @abstractmethod
+    def names(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def kept_in(self, names: Collection[str]) -> ThreadParent:
+        """This parent while it is one of the names; otherwise no parent."""
+
+    def named(self, name: str) -> bool:
+        return name in self.names()
+
+
+@dataclass(frozen=True, slots=True)
+class ForkedParent(GivenText, ThreadParent):
+    text: str
+    forked = True
+
+    def names(self) -> tuple[str, ...]:
+        return (self.text,)
+
+    def kept_in(self, names: Collection[str]) -> ThreadParent:
+        return self if self.text in names else NoParent()
+
+
+@dataclass(frozen=True, slots=True)
+class NoParent(AbsentText, ThreadParent):
+    """A thread that was registered or created, not forked."""
+
+    forked = False
+
+    def names(self) -> tuple[str, ...]:
+        return ()
+
+    def kept_in(self, names: Collection[str]) -> NoParent:
+        return self

@@ -1,7 +1,7 @@
-"""What one install is told about its bus: the commander, its repositories and who runs it.
+"""Who runs one install: a named unit, whose next install it plans, or nobody.
 
-Each is given on the command line or left out; a left-out choice keeps what the bus already
-records, so no install writes this machine's names into another machine's bus.
+A left-out installer records nothing, so no install writes this machine's names into
+another machine's bus.
 """
 
 from __future__ import annotations
@@ -9,105 +9,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated
 
-from agent_comms.field_codec import (
-    BoundedText, FieldCodec, NullMember, SingleFieldValue, SubclassUnion,
-)
+from agent_comms.field_codec import BoundedText, SubclassUnion
+from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
-
-if TYPE_CHECKING:
-    from agent_comms.commander.config import CommanderRecord, RecordedCommander
-    from agent_comms.repo import Repo
-    from agent_comms.storage_rules import StorageRule
-
-
-class CommanderChoice(SubclassUnion, TextChoice, affix="Commander"):
-    """The thread an install names as this bus's commander, or none: the bus's record stands."""
-
-    @abstractmethod
-    def configured(
-        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
-    ) -> CommanderRecord: ...
-
-
-@dataclass(frozen=True, slots=True)
-class NamedCommander(GivenText, CommanderChoice):
-    text: Annotated[str, BoundedText]
-
-    def configured(
-        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
-    ) -> CommanderRecord:
-        return recorded.commanded_by(self.text, repos, root, home)
-
-
-@dataclass(frozen=True, slots=True)
-class KeptCommander(AbsentText, CommanderChoice):
-    def configured(
-        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
-    ) -> CommanderRecord:
-        return recorded.rehomed(repos, root, home)
-
-
-class RepoChoice(SubclassUnion, affix="Repos"):
-    """The repositories the commander works on: the checkouts given, or the recorded ones."""
-
-    @abstractmethod
-    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
-
-    @abstractmethod
-    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
-        """The first record of a bus that had none: a commander needs repositories to command."""
-
-    @abstractmethod
-    def without_commander(self) -> None:
-        """Refuse repositories given to a bus that records no commander to hold them."""
-
-
-@dataclass(frozen=True, slots=True)
-class GivenRepos(RepoChoice):
-    """Checkouts spelled as comma-separated paths on the command line."""
-
-    checkouts: tuple[Path, ...]
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        text = FieldCodec.decode(str, data)
-        return cls(tuple(Path(part.strip()) for part in text.split(",") if part.strip()))
-
-    def to_wire(self) -> str:
-        return ",".join(map(str, self.checkouts))
-
-    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
-        from agent_comms.repo import Repo
-
-        return tuple(Repo.of(checkout) for checkout in self.checkouts)
-
-    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
-        from agent_comms.commander.config import CommanderConfig, RecordedCommander
-
-        return RecordedCommander(CommanderConfig.on_machine(commander, self.applied(()), root, home))
-
-    def without_commander(self) -> None:
-        from agent_comms.installer.backup import UpgradeRefused
-
-        raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
-                             "commander, so name one with --commander")
-
-
-@dataclass(frozen=True, slots=True)
-class KeptRepos(NullMember, RepoChoice):
-    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
-        return recorded
-
-    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
-        from agent_comms.installer.backup import UpgradeRefused
-
-        raise UpgradeRefused(f"--commander {commander} starts this bus's commander record, "
-                             "which needs the repositories it commands: pass --repos")
-
-    def without_commander(self) -> None:
-        pass
+from agent_comms.todos import PlannedInstallDeadline
 
 
 class InstallerChoice(SubclassUnion, TextChoice, affix="Installer"):
@@ -130,8 +37,6 @@ class NamedInstaller(GivenText, InstallerChoice):
         return rule.initial_roots(self.text).scratch
 
     def plan_next(self, root: Path, now: float) -> None:
-        from agent_comms.todos import PlannedInstallDeadline
-
         PlannedInstallDeadline.after(self.text, now).plan(root)
 
 
@@ -144,17 +49,3 @@ class UnnamedInstaller(AbsentText, InstallerChoice):
 
     def plan_next(self, root: Path, now: float) -> None:
         pass
-
-
-class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
-    """What an install left for commander tools: the config it wrote, or none."""
-
-
-@dataclass(frozen=True, slots=True)
-class WrittenConfigFile(SingleFieldValue, CommanderConfigFile):
-    path: str
-
-
-@dataclass(frozen=True, slots=True)
-class NoConfigFile(NullMember, CommanderConfigFile):
-    pass
