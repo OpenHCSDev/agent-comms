@@ -20,9 +20,11 @@ from agent_comms.tools import (
 )
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
+from source_revision_fixture import SourceRepository
 
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
+    source = SourceRepository.create(tmp_path / 'source')
     comms.messaging.initialize_private_initial_protocol()
     for name in ("lead", "worker"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
@@ -30,7 +32,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         text="Repair the worker", goal_id="request", order=RequestGoalOrder()))
     caller = ThreadCaller("lead")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
-        problem="P1", order=replace(order(tmp_path), edits=("Repair the existing record owner",)),
+        problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request="request", review_at=RecordedEventTime(1000),
         commander="lead", repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
@@ -50,7 +52,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
         request="request", review_at=RecordedEventTime(2000),
-        order=replace(order(tmp_path), id="resent-order"))), comms)
+        order=replace(order(source), id="resent-order"))), comms)
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
     copied = Comms(copied_root)
