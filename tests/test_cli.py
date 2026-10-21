@@ -426,8 +426,9 @@ class TestSelectedTargetActions:
             confirmed=True).apply(comms)
         assert not result.successful
         assert tuple(outcome.target for outcome in result.outcomes) == selected
-        assert result.outcomes[0].successful
-        assert not any(outcome.successful for outcome in result.outcomes[1:])
+        assert result.completed_count == 1
+        assert result.outcomes[0].success_count() == 1
+        assert sum(outcome.success_count() for outcome in result.outcomes[1:]) == 0
         with pytest.raises(ValueError, match="Initial direct target must be visible"):
             comms.registry.status('alpha').require_visible()
         assert comms.registry.status('beta').active
@@ -581,9 +582,9 @@ class TestSelectedTargetActions:
         comms.channels.update_tags("alpha", remove=frozenset({"team"}))
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(action.targets), {}, channel=action.channels).apply(comms)
         assert not result.successful and len(result.outcomes) == 2
-        assert not result.outcomes[0].successful
+        assert result.outcomes[0].success_count() == 0
         assert "#team" in result.outcomes[0].error
-        assert result.outcomes[1].successful
+        assert result.outcomes[1].success_count() == 1
         document = comms.channels.catalog.read()
         assert not document.pinned_threads("#team")
         assert document.pinned_threads("#other") == {"alpha"}
@@ -628,7 +629,7 @@ class TestSelectedTargetActions:
         assert {action.declaration.declared_name for action in actions} >= {"archive", "read-target"}
         result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets(("missing", "alpha")), {}).apply(comms)
         assert not result.successful
-        assert result.outcomes[0].target == "missing" and not result.outcomes[0].successful
+        assert result.outcomes[0].target == "missing" and result.outcomes[0].success_count() == 0
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError):
             TargetEdit(ForkCliCommand, ForkCliCommand.selected_targets(("alpha", "beta")), {}).apply(comms)

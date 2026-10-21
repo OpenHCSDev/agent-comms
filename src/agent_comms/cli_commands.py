@@ -96,6 +96,7 @@ from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .lifecycle_capability import LifecycleCapability, Successful
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
@@ -238,9 +239,8 @@ class TargetAction:
                 'bound_count': len(self.bound)}
 
 
-class TargetOutcome:
+class TargetOutcome(LifecycleCapability):
     """One attempted selection member; failure never claims absence of effects."""
-    successful: ClassVar[bool] = False
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
@@ -250,11 +250,10 @@ class TargetOutcome:
 
 
 @dataclass(frozen=True)
-class TargetCompleted(TargetOutcome):
+class TargetCompleted(Successful, TargetOutcome):
     target: str
     command: CliCommand
     result: Annotated[CliResult, WireForm]
-    successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
@@ -275,8 +274,12 @@ class TargetBatchResult(CliResult):
     outcomes: tuple[TargetCompleted | TargetFailed, ...]
 
     @property
+    def completed_count(self) -> int:
+        return sum(outcome.success_count() for outcome in self.outcomes)
+
+    @property
     def successful(self) -> bool:
-        return all(outcome.successful for outcome in self.outcomes)
+        return self.completed_count == len(self.outcomes)
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(name for outcome in self.outcomes
@@ -307,6 +310,10 @@ class TargetSelection(ABC):
             names = tuple(dict.fromkeys(CommandTarget.named(item) for item in raw))
             return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
         return OneTarget((CommandTarget.named(raw),))
+
+    def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
+        """Derive menu membership from cardinality and declared capability."""
+        return family.members_with(MultipleTargets if len(self.targets) > 1 else family)
 
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
@@ -339,8 +346,7 @@ class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
     def run(self, declaration, comms, arguments, *, confirmed, channel: ChannelSelection, project, snapshot, catalog):
-        if not declaration.multiple_targets:
-            raise ValueError('This action requires a single target')
+        declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
                         if declaration.catalog_declaration() is declaration else (declaration,))
@@ -715,6 +721,18 @@ class CliExecution(Command):
                             f"CliExecution.execute{signature(CliExecution.execute)}")
 
 
+class MultipleTargets:
+    """Commands accepting a batch own its decoding and execution permission."""
+
+    @classmethod
+    def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
+        return TargetSelection.decode(raw, multiple=True)
+
+    @classmethod
+    def require_batch(cls) -> None:
+        pass
+
+
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
     DeclaredFamily,
@@ -723,8 +741,6 @@ class CliCommand(
     affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):
-    multiple_targets: ClassVar[bool] = False
-
     @classmethod
     def catalog_declaration(cls) -> type[CliCommand]:
         """Concrete thread/channel variants declare their shared menu operation."""
@@ -733,7 +749,11 @@ class CliCommand(
     @classmethod
     def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
         """Decode a CLI or menu target input once, before command execution."""
-        return TargetSelection.decode(raw, multiple=cls.multiple_targets)
+        return TargetSelection.decode(raw, multiple=False)
+
+    @classmethod
+    def require_batch(cls) -> None:
+        raise ValueError('This action requires a single target')
 
     @classmethod
     def channel_fields(cls) -> tuple[FieldPlan, ...]:
@@ -785,9 +805,7 @@ class CliCommand(
                    if channel.needs_catalog or any(item.needs_channel_state for item in selected) else None)
         resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
-        for member in cls.members_with(cls):
-            if len(selected) > 1 and not member.multiple_targets:
-                continue
+        for member in target.command_members(cls):
             selected_channels = channel if member.channel_fields() else NoChannel()
             for name, resolved in resolved_targets:
                 for context in name.contexts(member, selected_channels):
@@ -1756,8 +1774,7 @@ class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadLifecycleCliCommand(ThreadBoundCliCommand):
-    multiple_targets = True
+class ThreadLifecycleCliCommand(MultipleTargets, ThreadBoundCliCommand):
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
@@ -1844,9 +1861,8 @@ class ReleaseCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
+class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, ThreadBoundCliCommand):
     help = "Archive a stopped thread"
-    multiple_targets = True
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
@@ -2212,9 +2228,8 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name="rename-tag"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteTagCliCommand(ExactTagCliCommand, declared_name="delete-tag"):
+class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="delete-tag"):
     help = "Remove tag, archive tagged threads, or delete tagged threads"
-    multiple_targets = True
     disposition: Annotated[
         TagDisposition,
         Editor(ChoiceTargetField),
@@ -2245,9 +2260,8 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name="delete-tag"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveChannelCliCommand(CliCommand, declared_name="archive-channel"):
+class ArchiveChannelCliCommand(MultipleTargets, CliCommand, declared_name="archive-channel"):
     help = "Archive channel"
-    multiple_targets = True
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
@@ -2303,9 +2317,8 @@ class DeleteViewCliCommand(CliCommand, declared_name="delete-view"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinChannelCliCommand(CliCommand, declared_name="pin-channel"):
+class PinChannelCliCommand(MultipleTargets, CliCommand, declared_name="pin-channel"):
     help = "Set channel pin"
-    multiple_targets = True
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
@@ -2355,9 +2368,8 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadTargetCliCommand(CliCommand, declared_name="read-target"):
+class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-target"):
     help = "Mark view read"
-    multiple_targets = True
     target: Annotated[
         str, TargetBound(), Argument(flags=("--target",))
     ]
@@ -2382,9 +2394,8 @@ class ReadTargetCliCommand(CliCommand, declared_name="read-target"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinThreadCliCommand(CliCommand, declared_name="pin-thread"):
+class PinThreadCliCommand(MultipleTargets, CliCommand, declared_name="pin-thread"):
     help = "Toggle thread pin in channel"
-    multiple_targets = True
     name: Annotated[
         str, TargetBound(), Argument(flags=("--name",))
     ]
