@@ -32,6 +32,7 @@ from agent_comms.todos import (
     Todo,
 )
 from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.work_branches import WorkBranches
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,9 @@ def proof_build_checkout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> ProofBuildCheckout:
     """Own the commit graph and installed manifest, never the developer's install."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
     checkout = tmp_path / "checkout"
     subprocess.run(("git", "init", str(checkout)), check=True, capture_output=True)
     commits: list[str] = []
@@ -64,6 +68,12 @@ def proof_build_checkout(
             subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=checkout, text=True).strip()
         )
     builds = ProofBuildCheckout(checkout, *commits)
+    subprocess.run(
+        ("git", "update-ref", f"refs/remotes/origin/{WorkBranches.main}", builds.newer),
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+    )
     runtime = tmp_path / "runtime"
     (runtime / "bin").mkdir(parents=True)
     (runtime / "bin/python").symlink_to(sys.executable)
@@ -72,11 +82,9 @@ def proof_build_checkout(
             core_commit=builds.installed, toad_commit=builds.installed
         ).model_dump_json()
     )
-    home = tmp_path / "home"
     current = home / ".local/share/agent-comms/current"
     current.parent.mkdir(parents=True)
     current.symlink_to(runtime, target_is_directory=True)
-    monkeypatch.setenv("HOME", str(home))
     return builds
 
 
