@@ -23,6 +23,8 @@ from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile, SQLiteFile
+from agent_comms.owner_requests import RequestAtRevision
+from agent_comms.field_codec import WireOmitDefault
 from .typed_table import Column, DurableTables, Index, JsonStorage, TypedTable
 
 
@@ -30,8 +32,16 @@ class GoalHistoryError(RuntimeError):
     """Goal history could not be durably written or reconciled."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class RequestHistory:
+    """Moved request data stays linked to its original history observation."""
+
+    request_before: Annotated[RequestAtRevision | None, Column(storage=JsonStorage), WireOmitDefault()] = None
+    request_after: Annotated[RequestAtRevision | None, Column(storage=JsonStorage), WireOmitDefault()] = None
+
+
 @dataclass(frozen=True)
-class RecordedGoalRevision:
+class RecordedGoalRevision(RequestHistory):
     """A history entry's public fields; its owner key and journal state stay in the store."""
     sequence: int
     kind: Literal["transition", "baseline", "observed_gap"]
@@ -41,7 +51,7 @@ class RecordedGoalRevision:
 
 
 @dataclass(frozen=True)
-class GoalHistoryEntry(TypedTable, DurableTables):
+class GoalHistoryEntry(RequestHistory, TypedTable, DurableTables):
     # The durable kind field is a journal fact, not the TypedTable family tag.
     schema_error = GoalHistoryError
 
@@ -64,7 +74,9 @@ class GoalHistoryEntry(TypedTable, DurableTables):
 
     def recorded(self) -> RecordedGoalRevision:
         return RecordedGoalRevision(
-            self.sequence, self.kind, self.observed_at, self.before, self.after)
+            self.sequence, self.kind, self.observed_at, self.before, self.after,
+            request_before=self.request_before, request_after=self.request_after,
+        )
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode_record(self.recorded())

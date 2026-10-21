@@ -1065,7 +1065,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
             )
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            MessageReference(original.seq, original.message_id), store=comms.goals.todos,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim

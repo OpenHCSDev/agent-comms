@@ -101,7 +101,7 @@ class OpenRequestState(RequestState):
     def complete(
         self, request: OwnerRequestId, orders: Sequence[Todo], reason: str,
     ) -> CompletedRequestState:
-        if any(order.pending for order in orders):
+        if orders:
             raise ValueError(f"Request {request.value} still has pending orders.")
         return CompletedRequestState(reason)
 
@@ -113,6 +113,24 @@ class CompletedRequestState(RequestState):
     def __post_init__(self) -> None:
         if not self.reason.strip():
             raise ValueError("Completing an owner request requires a reason.")
+
+
+@dataclass(frozen=True)
+class RequestAtRevision:
+    """A historical directive prefix, not another writable request state."""
+
+    id: OwnerRequestId
+    directive_count: int
+
+    def __post_init__(self) -> None:
+        if self.directive_count < 0:
+            raise ValueError("A directive prefix cannot have negative length.")
+
+    def directives(self, store: TodoStore) -> tuple[RequestDirective, ...]:
+        request = store.owner_request(self.id)
+        if self.directive_count > len(request.directives):
+            raise RelationViolationError("Request history exceeds its recorded directives.")
+        return request.directives[:self.directive_count]
 
 
 @dataclass(frozen=True)

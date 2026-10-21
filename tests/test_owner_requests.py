@@ -10,13 +10,14 @@ from agent_comms.connector import CALLER, ConnectorSendTool
 from agent_comms.errors import ToolRefusedError
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.messages import MessageReference
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.todos import PendingProblemOrder, TodoStore, TriageScope, WithdrawTodo
+from agent_comms.todos import OrderClaim, PendingProblemOrder, TodoStore, TriageScope, WithdrawTodo
 from agent_comms.tools import CommsSendTool
 
 
@@ -32,6 +33,9 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     second = store.add_request(commander.incarnation, "virtual bus")
     assert NewestOpenRequest().for_order(store, commander.incarnation) == second.id
     assert first.id.for_order(store, commander.incarnation) == first.id
+    assert [request.id for request in store.open_requests(
+        commander.incarnation.renamed("commander-renamed"),
+    )] == [second.id, first.id]
 
     order = PendingProblemOrder(
         owner=FileLine.class_declaration(TodoStore, repository, MainRevision()),
@@ -68,6 +72,15 @@ def test_independent_requests_orders_and_directives(comms: Comms) -> None:
     assert len(first.directives) == len(second.directives) == 1
     assert first.directives[0].original(comms.goals).seq == named
     assert second.directives[0].original(comms.goals).seq == newest
+    prefix = first.at_revision(first.directives)
+    assert prefix.directives(store) == first.directives
+    original = first.directives[0].original(comms.goals)
+    claim = OrderClaim.for_order(
+        todo, worker.incarnation, 1, "a" * 40, "The request owner was inspected.",
+        MessageReference(original.seq, original.message_id), store=store,
+    )
+    assert claim.message.target == first.commander.name
+    assert claim.message.answers == (original.reference,)
 
     CommsSendTool(
         sender="worker", target="commander", body="The source records are available.",

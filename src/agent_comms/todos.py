@@ -75,6 +75,7 @@ from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySo
 from agent_comms.owner_requests import (
     OpenRequestState,
     OwnerRequestId,
+    RequestAtRevision,
     RequestDirective,
     RequestLink,
     RequestState,
@@ -99,6 +100,7 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
+    Generated,
     Index,
     TextStorage,
     TypedTable,
@@ -1913,11 +1915,12 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
-        report: str, answer: MessageReference,
+        report: str, answer: MessageReference, *, store: TodoStore,
     ) -> OrderClaim:
+        request = store.owner_request(todo.request.require())
         return cls(
             PullRequestLink(todo.repo, number), head,
-            Message(actor.name, todo.creator, report, InfoKind, answers=(answer,)),
+            Message(actor.name, request.commander.name, report, InfoKind, answers=(answer,)),
         )
 
 
@@ -2903,10 +2906,13 @@ class ChangeTodoState(TodoOperation):
 class OwnerRequest(TypedTable):
     """One owner's request, independent of any current turn goal."""
 
-    indexes = (Index(("commander", "state", "created_at")),)
+    indexes = (Index(("commander_created_at", "state", "created_at")),)
 
     id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
     commander: RecordedThreadIncarnation
+    commander_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({commander}, '$.created_at')"),
+    )
     text: str
     state: RequestState = OpenRequestState()
     directives: tuple[RequestDirective, ...] = ()
@@ -2927,6 +2933,11 @@ class OwnerRequest(TypedTable):
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
         self.require_commander(commander)
         return self.state.require_open(self.id)
+
+    def at_revision(self, directives: tuple[RequestDirective, ...]) -> RequestAtRevision:
+        if self.directives[:len(directives)] != directives:
+            raise TodoError(f"Request {self.id.value} history is not a recorded directive prefix.")
+        return RequestAtRevision(self.id, len(directives))
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
         return tuple(directive.original(goals) for directive in self.directives)
@@ -3233,7 +3244,8 @@ class TodoStore(DurableStore):
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
             return tuple(OwnerRequest.select(
-                db, commander=commander.require_recorded(), state=OpenRequestState(),
+                db, where="commander_created_at=?",
+                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
                 order_by=("created_at", "id"), descending=True, limit=limit,
             ))
 
