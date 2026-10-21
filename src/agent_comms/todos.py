@@ -2753,6 +2753,11 @@ class Todo(TypedTable):
         rounds = (now - first) // self.review_window
         return (RecordedEventTime(first + rounds * self.review_window),)
 
+    @property
+    def handed_out_on_release(self) -> bool:
+        """Whoever released this row last says whether an idle unit gets it unasked."""
+        return any(release.actor.hands_out_released_work for release in self.released[-1:])
+
     def reissued_review(self, at: float) -> EventTime:
         """A reissued order keeps its measured window from its reissue time."""
         return RecordedEventTime(at + self.review_window)
@@ -3040,9 +3045,8 @@ class TodoStore(TypedStore, DurableTables):
     def reassignable(self) -> tuple[Todo, ...]:
         """Work Core released after its objective strikes; never a commander's released backlog.
         No clock releases work: a held order stays held until its commander moves it."""
-        return tuple(todo for todo in self._open("1", (), OpenTodoState)
-                     if todo.pending and not todo.holder and todo.released
-                     and todo.released[-1].actor == CoreWatcherIncarnation.watcher())
+        return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
+                     if todo.pending and todo.handed_out_on_release)
 
     def reconcile_merges(self, commander: ThreadIncarnation, storage: StorageRule) -> None:
         """Read before locking; close only orders whose observed revision still holds."""

@@ -38,6 +38,8 @@ T = TypeVar("T")
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
+    hands_out_released_work: ClassVar[bool] = False
+    """Whether work this actor released goes to an idle unit without a commander turn."""
     name: str
 
     @property
@@ -224,6 +226,12 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
     them to idle units, and is never a thread. No clock makes it strike or release anything."""
 
     WIRE_BIRTH: ClassVar[float] = -2.0
+    hands_out_released_work: ClassVar[bool] = True
+
+    def __post_init__(self) -> None:
+        # The class owns the watcher's name; a stored spelling is never its identity.
+        object.__setattr__(self, "name", declared_words(type(self).__name__.removesuffix("Incarnation")))
+        super().__post_init__()
 
     def require_may_change(self, todo: Todo) -> None:
         """The Core watcher may advance released orders without a commander turn."""

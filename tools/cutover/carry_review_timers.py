@@ -3,53 +3,76 @@
 The deadline column becomes ``review_at`` with the same instant: the first review is when the
 order used to be due. The clock strikes are deleted from Core, so a recorded stall, missed
 deadline or missed first call becomes the plain strike it was recorded as, with its reason,
-time, actor and evidence intact; a void of one still names the same strike. Core's watcher is
-named for what it does now, ``core_watcher``. Delete once every bus has run it.
+time, actor and evidence intact; a void of one still names the same strike. Core's watcher
+decodes under the name its class declares, so its old spelling is rewritten by the same pass.
+Delete once every bus has run it.
 """
 
 from __future__ import annotations
 
-import json
 from contextlib import closing
+from dataclasses import dataclass, fields, replace
+from functools import singledispatch
 from pathlib import Path
+from types import NoneType
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import StrikeTodo, Todo, TodoStore
-
-# The strike kinds Core no longer declares; only their stored names remain.
-CLOCK_STRIKES = frozenset({"stall_strike", "missed_deadline_strike", "missed_first_call_strike"})
-RETIRED_WATCHER = "stall_watcher"
+from agent_comms.todos import Assignment, StrikeTodo, Todo, TodoStore
 
 
-def carried(value: object) -> object:
-    """``value`` with every clock strike made a plain strike and the watcher renamed."""
-    if isinstance(value, list):
-        return [carried(item) for item in value]
-    if not isinstance(value, dict):
-        return value
-    entries = {key: carried(item) for key, item in value.items()}
-    if entries.get("kind") in CLOCK_STRIKES:
-        entries.pop("order_id", None)
-        entries["kind"] = StrikeTodo.declared_name
-    watcher = CoreWatcherIncarnation.watcher()
-    # A thread incarnation is stored whole as name and created_at, and flattened into an
-    # assignment as parent and parent_created.
-    for name, birth in (("name", "created_at"), ("parent", "parent_created")):
-        if entries.get(name) == RETIRED_WATCHER and entries.get(birth) == watcher.WIRE_BIRTH:
-            entries[name] = watcher.name
-    return entries
+# These old declarations exist only at this one-time format boundary: the strike kinds Core
+# no longer declares, so their stored rows decode before they are carried.
+@dataclass(frozen=True, kw_only=True)
+class ClockStrike(StrikeTodo, declared_name=None):
+    """A strike Core used to record from a clock; it is carried as the plain strike it was."""
 
 
-def converted(columns: list[str], row: tuple) -> tuple[object, ...]:
-    """The stored row in the declared column order, each value carried in its wire form."""
-    stored = dict(zip(columns, row))
-    stored["review_at"] = stored.pop("deadline")
-    return tuple(
-        None if stored[item.wire_name] is None
-        else item.storage.to_sql(carried(item.storage.from_sql(stored[item.wire_name])))
-        for item in Todo._fields())
+@dataclass(frozen=True, kw_only=True)
+class StallStrike(ClockStrike):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class MissedDeadlineStrike(ClockStrike):
+    order_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class MissedFirstCallStrike(ClockStrike):
+    order_id: str
+
+
+@singledispatch
+def assigned(assignment: Assignment) -> Assignment:
+    """An assignment flattens its parent to a name; the parent's decoded identity names it."""
+    return replace(assignment, parent=assignment.parent_identity.name)
+
+
+@assigned.register
+def _(unassigned: NoneType) -> None:
+    """A row nobody holds carries no assignment."""
+
+
+@singledispatch
+def carried(strike: StrikeTodo) -> StrikeTodo:
+    """Every strike Core still declares keeps its kind."""
+    return replace(strike, previous=assigned(strike.previous))
+
+
+@carried.register
+def _(strike: ClockStrike) -> StrikeTodo:
+    return carried(StrikeTodo(**{item.name: getattr(strike, item.name)
+                                 for item in fields(StrikeTodo)}))
+
+
+def carried_todo(todo: Todo) -> Todo:
+    return replace(
+        todo, assignment=assigned(todo.assignment),
+        strikes=tuple(map(carried, todo.strikes)),
+        voided=tuple(replace(void, strike=carried(void.strike)) for void in todo.voided),
+        released=tuple(replace(release, previous=assigned(release.previous))
+                       for release in todo.released))
 
 
 def carry(root: Path, *, apply: bool) -> int:
@@ -59,25 +82,23 @@ def carry(root: Path, *, apply: bool) -> int:
     with closing(CoordinationStore.writer(path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
-            cursor = db.execute(f'SELECT * FROM "{Todo.declared_name}"')
-            columns = [column[0] for column in cursor.description]
-            if "deadline" not in columns:
+            (dated,) = db.execute(
+                "SELECT count(*) FROM pragma_table_info(?) WHERE name = 'deadline'",
+                (Todo.declared_name,)).fetchone()
+            if not dated:
                 db.rollback()
                 return 0
-            records = [converted(columns, row) for row in cursor.fetchall()]
+            db.execute(f'ALTER TABLE "{Todo.declared_name}" RENAME COLUMN deadline TO review_at')
+            todos = tuple(map(carried_todo, Todo.stream(db)))
             Todo.drop(db)
             Todo.create(db)
-            names = tuple(item.name for item in Todo._fields())
-            db.executemany(
-                f'INSERT INTO "{Todo.declared_name}" ({Todo._column_list(names)}) '
-                f'VALUES ({", ".join("?" for _ in names)})', records)
-            if (decoded := sum(1 for _row in Todo.stream(db))) != len(records):
-                raise ValueError(f"{len(records)} todo rows carried, {decoded} decoded")
+            for todo in todos:
+                todo.upsert(db)
             if apply:
                 db.commit()
             else:
                 db.rollback()
-            return len(records)
+            return len(todos)
         except BaseException:
             db.rollback()
             raise
