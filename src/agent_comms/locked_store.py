@@ -326,9 +326,10 @@ class PublishedSQLiteFile(SQLiteFile):
     @classmethod
     def publish_change(cls, path: Path) -> None:
         """Announce a completed mutation or replacement of this owner's store."""
+        marker, = cls._source_paths(path)
         try:
-            cls._source_paths(path)[0].write_bytes(b"")
-        except Exception as error:
+            marker.write_bytes(b"")
+        except OSError as error:
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
