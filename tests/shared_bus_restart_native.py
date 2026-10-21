@@ -5,8 +5,8 @@ claim_scope, native process, source proof and response publication remain real.
 """
 
 from bus_record_fixture import prepare_native_comms
-from agent_comms.coordination_session import NativeBoundary
 from agent_comms.lifecycle_capability import Complete
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
@@ -33,7 +33,6 @@ from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -467,7 +466,6 @@ async def configured_mixed_routes(arguments):
     """
     from agent_comms.comms import wire
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage

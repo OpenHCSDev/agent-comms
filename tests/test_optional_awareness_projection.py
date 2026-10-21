@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bus_record_fixture import prepare_native_comms
-from agent_comms.lifecycle_capability import Complete, Executing
+from agent_comms.lifecycle_capability import Executing
 
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
@@ -139,12 +139,12 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         store.close()
 
 
-def test_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) -> None:
+def test_committed_candidates_and_replaced_owner(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).items_with(Complete, True)
+        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).context()["selected"]
 
         second = publish_initial(comms, "sender", "member000", "not yet sealed")
         # The committed prefix can outrun the caller's minimum source watermark.
@@ -305,7 +305,11 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
-        current, current_claim = _accepted(comms, store, root_id, "gamma", "new selected")
+        current_message = publish_initial(comms, "sender", "gamma", "new selected")
+        current = comms.bus.bus.delivery(current_message.seq)
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
+        assert len(acknowledgement.assignments) == 1
+        current_claim = acknowledgement.assignments[0]
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, current_claim, owner

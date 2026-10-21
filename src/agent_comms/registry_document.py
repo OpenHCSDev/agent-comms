@@ -769,6 +769,11 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 observed[name] = DeletedThread(canonical)
         return observed
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        return self.require(actor).role.unread_since(since, recorded_delivery)
+
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 

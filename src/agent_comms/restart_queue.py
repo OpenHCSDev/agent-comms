@@ -20,10 +20,8 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 
-from .bus import Bus
 from .child_process import OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
-from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -271,7 +269,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     with queue.locked():
         for previous in queue.active_for(owner.incarnation.require_recorded()):
             result = previous.state.enqueue(previous, selection, target)
-            if result.state.active:
+            if result.state.items_with(Active, result):
                 break
             queue.save(result)
         else:
@@ -389,7 +387,8 @@ async def run(comms: Comms) -> None:
         def release_if_empty():
             # Enqueue and release share this lock, so no request is orphaned.
             with queue.locked():
-                pending = tuple(record for record in queue.active_records() if record.state.pending)
+                pending = tuple(pending for record in queue.active_records()
+                                for pending in record.state.items_with(Pending, record))
                 if any(record.target.is_current_watcher for record in pending):
                     return False
                 fcntl.flock(lock, fcntl.LOCK_UN)

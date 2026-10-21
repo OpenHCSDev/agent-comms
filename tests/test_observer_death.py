@@ -26,7 +26,7 @@ async def readable(process: ObservationProcess) -> None:
         loop.remove_reader(process.fileno())
 
 
-async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms):
+async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms, durable_home):
     process = ObservationProcess(comms.route)
     try:
         await readable(process)
@@ -52,7 +52,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
         process.close()
 
 
-async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms):
+async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms, durable_home):
     Bus.install(Bus.path_in(comms.root))
     with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
@@ -62,7 +62,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
 
 
-async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path):
+async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path, durable_home):
     not_a_wire = tmp_path / "not-a-wire"
     not_a_wire.write_text("")
     process = ObservationProcess(LocalRoute(not_a_wire))

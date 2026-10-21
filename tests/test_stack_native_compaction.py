@@ -24,7 +24,6 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_actions import NoSelectedTools

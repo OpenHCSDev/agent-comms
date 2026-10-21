@@ -34,7 +34,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -96,7 +96,7 @@ class InheritedTags(NullMember, TagChoice):
 
 
 @dataclass(frozen=True, slots=True)
-class ChangedTags(TagChoice):
+class ChangedTags(RecordMember, TagChoice):
     add: frozenset[str]
     remove: frozenset[str]
 

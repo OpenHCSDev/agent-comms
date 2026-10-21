@@ -188,6 +188,12 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         carries but its captured registry lacks was deleted before capture."""
         return name not in self.threads
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        """An archived namespace supplies display history, never native input grants."""
+        return since
+
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
