@@ -61,7 +61,7 @@ class HumanSendError(RelationViolationError):
     """A human send Core did not complete; delivery_failure decodes each member for the sender."""
 
 
-class HumanSendRefusedError(HumanSendError, ToolRefusedError):
+class HumanSendRefusedError(ToolRefusedError, HumanSendError):
     """The send transaction rolled back; the human's message was not sent."""
 
 
