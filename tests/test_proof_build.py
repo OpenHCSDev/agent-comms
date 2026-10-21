@@ -15,10 +15,12 @@ from agent_comms.build_identity import (
 )
 from agent_comms.change_report import FileLine
 from agent_comms.check_root import CheckRoot
+from agent_comms.commander.config import CommanderConfig
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
     CommitRecord,
@@ -32,10 +34,12 @@ from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.standing_rules import StandingRule
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import (
     CommitDelivery,
     FileDeliveryEvidence,
+    InstallDue,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
@@ -44,6 +48,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from agent_comms.work_branches import WorkBranches
 from order_scope_fixture import FIX_SCOPE
+from cutover.carry_install_schedule import InstallSchedule
 
 
 @dataclass(frozen=True)
@@ -287,3 +292,65 @@ def test_build_containment_does_not_turn_git_failure_into_absence_or_success(pro
     graph = proof_build_checkouts[0]
     with pytest.raises(subprocess.CalledProcessError):
         RecordedBuildIdentity.installed().contains("0" * 40, graph.repository.checkout)
+
+
+@pytest.mark.parametrize("advance_main", (False, True), ids=("installed-main", "newer-main"))
+def test_install_due_compares_fetched_main_to_installed_build(
+    tmp_path, proof_build_checkouts, advance_main,
+):
+    graph = next(graph for graph in proof_build_checkouts
+                 if graph.repository.github == CorePackage.repository)
+    checkout = graph.repository.checkout
+    # A real local origin retains the repository identity Repo.of derives from its URL.
+    origin = tmp_path / graph.repository.github.owner / f"{graph.repository.github.name}.git"
+    origin.parent.mkdir()
+    subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
+    Repo.git(checkout, "remote", "set-url", "origin", str(origin))
+    Repo.git(checkout, "push", "origin", f"{graph.installed}:refs/heads/main")
+    if advance_main:
+        Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
+    # Deliberately stale: the rule must fetch rather than trust the existing remote ref.
+    Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
+    before = Repo.git(checkout, "rev-parse", "HEAD")
+    bus = Comms(tmp_path / "bus")
+    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
+    CommanderConfig.root_path(bus.root).write_text(config.model_dump_json())
+
+    due = InstallDue.violations(bus, "lead")
+
+    assert Repo.git(checkout, "rev-parse", "HEAD") == before
+    assert Repo.git(checkout, "rev-parse", "origin/main").strip() == (
+        graph.newer if advance_main else graph.installed)
+    assert len(due) == int(advance_main)
+    changes = StandingRule.heartbeat_changes((), due)
+    assert len(changes) == int(advance_main)
+    for alarm in due:
+        assert graph.repository.github.to_wire() in alarm.why
+        assert graph.newer in alarm.why
+        assert graph.installed in alarm.why
+        assert alarm.line() in changes[0]
+
+
+def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path):
+    root = tmp_path / "bus"
+    root.mkdir()
+    schedule = root / "install-deadline.json"
+    schedule.write_text('{"at": 0, "installer": "retired"}')
+    history = root / "saved-session"
+    history.write_bytes(b"preserved original history")
+    chain = CarryChain.at(Path(__file__).resolve().parents[1])
+    ledger = CarryLedger(root)
+    ledger.write(())
+    assert InstallSchedule in chain.pending(ledger.applied())
+    assert InstallSchedule.backup_files(root) == (schedule,)
+    assert InstallSchedule.carry(root, apply=False).changed == 1
+    assert schedule.exists()
+
+    result = ledger.apply(InstallSchedule.name(), lambda: InstallSchedule.carry(root, apply=True))
+
+    assert result.changed == 1
+    assert schedule.name in result.rewritten
+    assert not schedule.exists()
+    assert history.read_bytes() == b"preserved original history"
+    assert InstallSchedule not in chain.pending(ledger.applied())
+    assert InstallSchedule.carry(root, apply=True).changed == 0
