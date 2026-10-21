@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import hashlib
 import re
+import sqlite3
 import time
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
@@ -13,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability
+from agent_comms.bus_tables import Addressed, BusCapability, HeldResources
 from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
@@ -44,10 +45,8 @@ from .ui_model.message_category import InboundCategory, MessageCategory, OtherCa
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import ClaimCommits
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
-    from .typed_table import TypedTable
 
 
 class MessageKind(DeclaredFamily, affix="Kind"):
@@ -440,14 +439,10 @@ class Message(Addressed, BusCapability):
         return self
 
     def checkpoint_rows(self, previous_sequence: int):
-        """The envelope declares both publication and optional claim facts."""
-        from .private_bus_checkpoint import ClaimCommits, PublicMessages
+        """The checkpoint indexes public identity only; Bus owns resource claims."""
+        from .private_bus_checkpoint import PublicMessages
 
         yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-        yield from self.claim_rows(ClaimCommits)
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return ()
 
     def require_claim_transition(self) -> ClaimTransition:
         raise RelationViolationError("Original wire message has no claim transition")
@@ -568,6 +563,11 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
 
+    @property
+    def publication_snapshot(self) -> Message:
+        """A bus record adds delivery capabilities to the declared Message content."""
+        return Message.from_message(self).publication_snapshot
+
 
 @dataclass(frozen=True, kw_only=True)
 class Claimed(BusCapability):
@@ -577,6 +577,15 @@ class Claimed(BusCapability):
 
     def require_claim_transition(self) -> ClaimTransition:
         return self.claim_transition
+
+    def replay_claim(self, db: sqlite3.Connection) -> None:
+        """Append and the shared derived rebuild replay this same original transition."""
+        projected = HeldResources.project(db, self.claim_transition)
+        HeldResources.apply(db, self.claim_transition, projected)
+
+    def project_into(self, db: sqlite3.Connection) -> None:
+        super().project_into(db)
+        self.replay_claim(db)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -601,9 +610,6 @@ class ClaimMessage(Claimed, Message):
             **{item.name: getattr(self, item.name) for item in fields(Message)},
             "type": ClaimHistoryKind,
         })
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return (table(self.claim_transition),)
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact

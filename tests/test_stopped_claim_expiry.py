@@ -29,7 +29,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
                 operation_id=operation, turn_id=f"turn-{name}", input_id=f"input-{name}",
             )
             return comms.bus.publisher._publish_claim_transition_unlocked(
-                boundary.bus_lock, boundary.registry, ClaimNoticeKind.claimed(owner),
+                boundary.registry, ClaimNoticeKind.claimed(owner),
                 partial(WakeClaims, incarnation=str(owner.created_at), claims=resources,
                         generation=operation, claim_scope=scope), activity=boundary.activity,
             )
@@ -37,10 +37,10 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
     old_paths = tuple(str(tmp_path / name) for name in ("untouched.py", "other.py"))
     new_path = str(tmp_path / "next.py")
     acquire("old", old_paths, "a" * 32)
-    assert set(comms.bus.log.claim_projection()) == set(old_paths)
+    assert set(comms.bus.bus.claim_projection()) == set(old_paths)
     old = comms.registry.require("old")
     comms.registry.register(replace(old, process_identity=NoProcess()), StoppedThreadStatus())
     # The next transition touches neither old resource; both still have to disappear.
     committed = acquire("next", (new_path,), "b" * 32)
     assert set(committed.expired) == set(old_paths)
-    assert set(Comms(comms.root).bus.log.claim_projection()) == {new_path}
+    assert set(Comms(comms.root).bus.bus.claim_projection()) == {new_path}

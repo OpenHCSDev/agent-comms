@@ -42,8 +42,8 @@ def test_recovery_does_not_release_a_claim_from_a_dead_owner():
         before = (comms.root / "bus.jsonl").read_bytes()
         settle_failed(store)
         assert (comms.root / "bus.jsonl").read_bytes() == before
-        assert comms.bus.log.claim_projection()[str(resource)] == claim
-        assert not comms.bus.log.claim_projection().live_in(comms.registry.snapshot())
+        assert comms.bus.bus.claim_projection()[str(resource)] == claim
+        assert not comms.bus.bus.claim_projection().live_in(comms.registry.snapshot())
         assert store.snapshots.get("execution").attempt.lifecycle.terminal
 
 
@@ -68,7 +68,7 @@ def test_historical_terminal_release_skips_dead_incarnation_and_keeps_new_owner(
         with store.session.settlement() as boundary:
             store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
         assert (comms.root / "bus.jsonl").read_bytes() == before
-        assert dict(comms.bus.log.claim_projection()) == {str(later_file): later}
+        assert dict(comms.bus.bus.claim_projection()) == {str(later_file): later}
         assert not [m for m in claim_originals(comms) if m.claim_transition.releases]
 
 
@@ -82,7 +82,7 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
         with store.session.settlement() as boundary:
             store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
         assert (comms.root / "bus.jsonl").read_bytes() == before
-        assert dict(comms.bus.log.claim_projection()) == {str(resource): later}
+        assert dict(comms.bus.bus.claim_projection()) == {str(resource): later}
 
 
 

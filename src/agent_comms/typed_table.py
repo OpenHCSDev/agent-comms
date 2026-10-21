@@ -1034,9 +1034,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             (cls.declared_name,)))[0]
 
     @classmethod
-    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> bool:
+        condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {condition})",
             parameters))[0]
 
     @classmethod
@@ -1125,8 +1126,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreNotificationError(OSError):
-    """The transaction committed, but its change signal could not be written."""
+class StoreCommittedError(OSError):
+    """COMMIT succeeded; change signalling or connection retirement failed."""
 
 
 class StoreWriter(SQLiteFile, FileStore):
@@ -1170,8 +1171,8 @@ class StoreWriter(SQLiteFile, FileStore):
         if connection.total_changes != before:
             try:
                 self._source_paths(self.store.path)[0].write_bytes(b'')
-            except OSError as error:
-                raise StoreNotificationError(
+            except Exception as error:
+                raise StoreCommittedError(
                     f"Committed {self.store.path}, but change notification failed: {error}"
                 ) from error
 
@@ -1250,10 +1251,25 @@ class WalStore(StoreWriter):
                 check_same_thread=check_same_thread))) as connection:
             yield connection
 
+    def _retire_committed(self, lifetime: ExitStack) -> None:
+        try:
+            lifetime.close()
+        except Exception as error:
+            raise StoreCommittedError(
+                f"Committed {self.path}, but connection retirement failed: {error}"
+            ) from error
+
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
-        with self.writer_connection() as connection, self.transaction(connection):
-            yield connection
+        with ExitStack() as lifetime:
+            connection = lifetime.enter_context(self.writer_connection())
+            try:
+                with self.transaction(connection):
+                    yield connection
+            except StoreCommittedError:
+                self._retire_committed(lifetime)
+                raise
+            self._retire_committed(lifetime)
 
 
 class TypedStore(WalStore, TableSchema):
