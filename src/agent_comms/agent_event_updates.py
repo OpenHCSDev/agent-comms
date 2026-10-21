@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
@@ -21,32 +21,37 @@ from .acp_extension import (
     CompactionChangedUpdate,
     McpClientAcknowledgementUpdate,
     PromptCancelledUpdate,
+    TextRouteUpdate,
     encode_updates,
 )
 from .context_reading import ContextUsage, UnmeasuredContext
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
+from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
-    from .acp import CommsAgent
+    from acp.agent.connection import AgentSideConnection
+
     from .routing import MessageRoute
+    from .runtime import RuntimeServer, SocketClient
+    from .turn_effects import TurnEffects
 
 
+@dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
-    def __init__(
-        self,
-        agent: CommsAgent,
-        session_id: str,
-        client: Any,
-        turn_id: str | None = None,
-        route: MessageRoute | None = None,
-    ) -> None:
-        self.agent = agent
-        self.session_id = session_id
-        self.client = client
-        self.turn_id = turn_id
-        self.route = route
+    agent: TurnEffects
+    session_id: str
+    client: AgentSideConnection | RuntimeServer | SocketClient
+
+    @handles(TranscriptUpdate)
+    async def transcript(self, event: TranscriptUpdate) -> None:
+        await event.publish(self.session_id, self.client)
+
+    def text_update(self, text: str) -> AgentMessageChunk:
+        return AgentMessageChunk(
+            session_update="agent_message_chunk", content=TextContentBlock(type="text", text=text),
+        )
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:
@@ -55,7 +60,9 @@ class AcpEventConsumer(MroDispatch):
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:
         if event.text:
-            await self.agent._emit_text(self.session_id, event.text, self.client, self.route)
+            await self.client.session_update(
+                session_id=self.session_id, update=self.text_update(event.text)
+            )
 
     @handles(events.ToolStart)
     async def on_tool_start(self, event: events.ToolStart) -> None:
@@ -121,22 +128,6 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.McpLiveStatus)
-    async def on_mcp_live_status(self, event: events.McpLiveStatus) -> None:
-        session_id = self.session_id
-        client = self.client
-        turn_id = self.turn_id
-        if not turn_id or not await Coordination.run_worker(partial(self.agent.turns.owns_turn, session_id, turn_id)):
-            return
-        await client.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(McpClientAcknowledgementUpdate(turn_id, event.acknowledgement)),
-            ),
-        )
-
     @handles(events.ContextInfo)
     async def on_context_info(self, event: events.ContextInfo) -> None:
         await self.dispatch(event.context_size.reading(event.context_used))
@@ -181,3 +172,40 @@ class AcpEventConsumer(MroDispatch):
                 field_meta=encode_updates(PromptCancelledUpdate(event.input_state)),
             ),
         )
+
+
+@dataclass(eq=False, repr=False)
+class TurnEventConsumer(AcpEventConsumer):
+    turn_id: str
+
+    @handles(events.McpLiveStatus)
+    async def on_mcp_live_status(self, event: events.McpLiveStatus) -> None:
+        if not await Coordination.run_worker(
+            partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)
+        ):
+            return
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(
+                    McpClientAcknowledgementUpdate(self.turn_id, event.acknowledgement)
+                ),
+            ),
+        )
+
+
+@dataclass(eq=False, repr=False)
+class Routed(AcpEventConsumer):
+    route: MessageRoute
+
+    def text_update(self, text: str) -> AgentMessageChunk:
+        update = super().text_update(text)
+        update.field_meta = encode_updates(TextRouteUpdate(self.route))
+        return update
+
+
+@dataclass(eq=False, repr=False)
+class RoutedTurnEventConsumer(Routed, TurnEventConsumer):
+    """A turn-scoped publication whose text also answers a bus route."""
