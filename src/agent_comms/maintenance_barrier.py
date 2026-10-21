@@ -107,10 +107,6 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
         return target
 
     @classmethod
-    def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
-        return state.target.allows_runtime(runtime)
-
-    @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
         return not state.operator.alive()
 
@@ -168,10 +164,6 @@ class ReadyPhase(MaintenancePhase):
     @classmethod
     def target_after(cls, target: MaintenanceTarget) -> MaintenanceTarget:
         return NoMaintenanceTarget()
-
-    @classmethod
-    def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
-        return False
 
     @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
@@ -263,7 +255,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     )
 
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
-        return self.phase.allows_runtime(self, runtime)
+        return self.target.allows_runtime(runtime)
 
     def __post_init__(self):
         super().__post_init__()
@@ -297,8 +289,11 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
     def in_phase(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         """Ordinary and dead-holder transitions share the phase's target lifetime."""
-        return replace(self, generation=self.generation + 1, nonce=nonce, phase=phase,
-                       target=phase.target_after(self.target))
+        return self.advanced(nonce, phase=phase, target=phase.target_after(self.target))
+
+    def advanced(self, nonce: str, **changes: object) -> MaintenanceState:
+        """Every rewrite of a hold takes the next generation and a fresh nonce."""
+        return replace(self, generation=self.generation + 1, nonce=nonce, **changes)
 
     def require_open_to(self, holder: str) -> None:
         if holder != self.nonce:
@@ -443,8 +438,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         """Transfer a drained hold after its outgoing readers have stopped."""
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             self.require_draining_unlocked(expected)
-            hold = replace(expected, generation=expected.generation + 1,
-                           nonce=Id128Text.mint(), target=TargetRuntime(runtime.interpreter))
+            hold = expected.advanced(Id128Text.mint(), target=TargetRuntime(runtime.interpreter))
             self._write_unlocked(hold)
             return hold
 

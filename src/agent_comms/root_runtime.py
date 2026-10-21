@@ -55,7 +55,11 @@ class RootRuntimeStore(LockedStore[RootRuntime], DurableFile):
         try:
             return self.read()
         except FileNotFoundError:
-            with self.locked():
-                if not self.path.exists():
-                    self._publish_unlocked(RootRuntime(creator.prefix))
-                return self._read_unlocked()
+            return self.adopt(creator)
+
+    def adopt(self, runtime: LaunchRuntime) -> RootRuntime:
+        """A root without a runtime record belongs to ``runtime``; a recorded owner stays."""
+        with self.locked():
+            if not self.path.exists():
+                self._publish_unlocked(RootRuntime(runtime.prefix))
+            return self._read_unlocked()

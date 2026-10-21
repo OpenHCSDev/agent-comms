@@ -130,7 +130,7 @@ from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .commander.config import (
     CommanderChoice, CommanderConfigFile, CommanderRecord, KeptCommander, KeptRepos, RepoChoice,
 )
-from .install_choices import InstallerChoice, UnnamedInstaller
+from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .thread_model import ThreadModel
 from .thread_management import (
     ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
@@ -1612,10 +1612,18 @@ class InstallCliCommand(CliCommand):
             options={"help": "The unit running this install; the next install's plan names it"},
         ),
     ] = UnnamedInstaller()
-    rehearse: Annotated[
-        bool,
-        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
-    ] = False
+    mode: Annotated[
+        RunMode,
+        Normalize(dict),
+        Argument(
+            flags=("--rehearse",),
+            options={
+                "help": "Carry and read a copy of the bus; change nothing",
+                "action": "store_const",
+                "const": FieldCodec.encode(RehearsalMode()),
+            },
+        ),
+    ] = dataclasses.field(default_factory=LiveMode)
     retire: Annotated[
         bool,
         Argument(

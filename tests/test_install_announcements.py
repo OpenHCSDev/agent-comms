@@ -13,17 +13,18 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.comms import Comms
 from agent_comms.errors import UnknownChannelError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.install_choices import UnnamedInstaller
+from agent_comms.install_choices import LiveMode, UnnamedInstaller
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
-from agent_comms.installer.launch import CrashedInstall, InstallReport, RefusedInstall
 from agent_comms.installer.practice import practice_copy
 from agent_comms.installer.upgrade import (
-    BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade,
-    InstallRolledBack, RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
-    StepRun, TargetTree, UnchangedRun, Upgrade, upgrade,
+    BusReadBack, CarriedRun, CommsChannel, CrashedInstall, CreatedRun, FreshInstall,
+    FreshRehearsal, InstalledUpgrade, InstallRolledBack, RefusedInstall, RefusedOwner,
+    RehearsalFiles, RetiredRun, RunReport, StartedOwner, StepRun, TargetTree, UnchangedRun,
+    Upgrade, upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -37,7 +38,7 @@ def reported_install(private_comms, tmp_path):
     comms = declare_test_bus(private_comms, channels=("comms",))
     scratch = tmp_path / "install-scratch"
     scratch.mkdir()
-    return comms, InstallReport(comms.root), TargetTree(REPOSITORY, scratch, "b" * 40)
+    return comms, RunReport(CommsChannel(comms.root)), TargetTree(REPOSITORY, scratch, "b" * 40)
 
 
 def messages(comms):
@@ -189,8 +190,8 @@ def test_upgrade_preflight_failure_is_inside_the_reporting_lifetime(reported_ins
     checkout.mkdir()
     scratch = tree.scratch
     with pytest.raises(UpgradeRefused) as caught:
-        upgrade(checkout, comms.root, tree.revision, UnnamedInstaller(), True, False,
-                tmp_path, scratch, lambda: InstallResult(NoConfigFile(), {}), report)
+        upgrade(checkout, comms.root, tree.revision, UnnamedInstaller(), LiveMode(), False,
+                tmp_path, scratch, lambda: InstallResult(NoConfigFile(), {}))
     started, failed = messages(comms)
     assert started.body.startswith("Install starting\n")
     assert all(line in failed.body for line in caught.value.lines())
@@ -205,12 +206,13 @@ def test_a_missing_result_is_a_reported_crash_not_a_silent_success(reported_inst
     started, failed = messages(comms)
     assert started.body.startswith("Install starting\n")
     assert "Install failed: RuntimeError: Install exited without returning its result" in failed.body
-    assert "Source: src/agent_comms/installer/launch.py:" in failed.body
+    assert "Source: src/agent_comms/installer/upgrade.py:" in failed.body
 
 
 def test_publication_failure_raises_after_registering_the_sender(private_comms, tmp_path):
     CommanderHeartbeat.register(private_comms.registry)
-    report = InstallReport(private_comms.root)
+    channel = CommsChannel(private_comms.root)
+    report = RunReport(channel)
     scratch = tmp_path / "install-scratch"
     scratch.mkdir()
     with pytest.raises(UnknownChannelError):
@@ -218,7 +220,7 @@ def test_publication_failure_raises_after_registering_the_sender(private_comms, 
             pytest.fail("A refused start must not run the install body")
     assert not scratch.exists()
     original = private_comms.registry.require("installer")
-    report.register(private_comms.registry)
+    channel.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
     assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
 
@@ -241,3 +243,34 @@ def test_cleanup_failure_replaces_a_finished_result_before_the_terminal_post(
     assert started.body.startswith("Install starting\n")
     assert failed.body.startswith("Install failed: FileNotFoundError:")
     assert "Source: src/agent_comms/repo.py:" in failed.body
+
+
+def test_a_fresh_root_posts_nothing_before_its_bus_and_its_result_after(tmp_path):
+    """Nothing is at a fresh root, so the start has nowhere to go; the install creates the
+    bus and its #comms, and the result lands there."""
+    root = tmp_path / "fresh-bus"
+    scratch = tmp_path / "install-scratch"
+    scratch.mkdir()
+    report = RunReport(FreshInstall.destination(root))
+    with report.running(TargetTree(REPOSITORY, scratch, "b" * 40)):
+        assert not root.exists()
+        root.mkdir(mode=0o700)
+        Comms(root).messaging.initialize_private_initial_protocol()
+        report.opened(CommsChannel.created(root))
+        report.complete(Upgrade("a" * 40, "b" * 40, root, ()))
+    (finished,) = messages(Comms(root))
+    assert finished.sender == "installer"
+    assert finished.body.startswith("Install finished\n")
+
+
+def test_a_fresh_install_that_fails_before_its_bus_raises_its_own_error(tmp_path):
+    root = tmp_path / "fresh-bus"
+    scratch = tmp_path / "install-scratch"
+    scratch.mkdir()
+    error = UpgradeRefused("the target tree has no stack")
+    with pytest.raises(UpgradeRefused) as caught:
+        with RunReport(FreshInstall.destination(root)).running(
+                TargetTree(REPOSITORY, scratch, "b" * 40)):
+            raise error
+    assert caught.value is error
+    assert not root.exists()

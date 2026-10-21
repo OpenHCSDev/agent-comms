@@ -28,24 +28,27 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.change_report import FileLine
+from agent_comms.comms import Comms, client_wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.install_choices import InstallerChoice, ReportDestination, RunMode, Unposted
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -61,16 +64,17 @@ from agent_comms.installer.practice import PracticeMeasurement, practice_copy, p
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.messages import InfoKind, Message
+from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses, RuntimeProcessOutcome
+from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 
-if TYPE_CHECKING:
-    from agent_comms.installer.launch import RunReport
 
 HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -327,7 +331,7 @@ class Upgrade(DeclaredFamily, affix="Upgrade"):
 
 
 @dataclass(frozen=True)
-class RehearsedUpgrade(Upgrade):
+class RehearsedUpgrade(Upgrade, Extendable):
     rehearsal: Rehearsal
 
 
@@ -339,6 +343,119 @@ class InstalledUpgrade(RehearsedUpgrade):
 
     def lines(self) -> tuple[str, ...]:
         return (*super().lines(), *self.live.lines())
+
+
+class InstallOutcome(ABC):
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
+
+class UnfinishedInstall(InstallOutcome):
+    def lines(self) -> tuple[str, ...]:
+        raise RuntimeError("Install exited without returning its result")
+
+
+@dataclass(frozen=True)
+class FinishedInstall(InstallOutcome):
+    upgrade: Upgrade
+
+    def lines(self) -> tuple[str, ...]:
+        return ("Install finished", *self.upgrade.lines())
+
+
+class InstallFailure(InstallOutcome, MroDispatch):
+    """Decode a raised exception once; its member owns the result's presentation."""
+
+    @classmethod
+    def of(cls, error: BaseException) -> InstallFailure:
+        handler: Callable[[BaseException], InstallFailure] = cls.handler_for(type(error))
+        return handler(error)
+
+    @handles(UpgradeRefused)
+    @staticmethod
+    def refused(error: UpgradeRefused) -> InstallFailure:
+        return RefusedInstall(error)
+
+    @handles(BaseException)
+    @staticmethod
+    def crashed(error: BaseException) -> InstallFailure:
+        source = Path(__file__).parents[2]
+        path, line = next((path, line) for frame, line in
+                          reversed(tuple(traceback.walk_tb(error.__traceback__)))
+                          if (path := Path(frame.f_code.co_filename)).is_relative_to(source))
+        return CrashedInstall(type(error).__qualname__, str(error),
+                              FileLine(str(path.relative_to(source.parent)), line))
+
+
+@dataclass(frozen=True)
+class RefusedInstall(InstallFailure):
+    error: UpgradeRefused
+
+    def lines(self) -> tuple[str, ...]:
+        return self.error.lines()
+
+
+@dataclass(frozen=True)
+class CrashedInstall(InstallFailure):
+    exception_type: str
+    message: str
+    source: FileLine
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Install failed: {self.exception_type}: {self.message}",
+                f"Source: {self.source.to_wire()}")
+
+
+@dataclass
+class RunReport:
+    """One run owns its start and terminal post, including cleanup. Its destination is
+    where the run posts now; a fresh install opens one once it has created the bus."""
+
+    destination: ReportDestination
+    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
+
+    @contextmanager
+    def running(self, upgrade: TargetTree) -> Iterator[Self]:
+        self.outcome = UnfinishedInstall()
+        try:
+            with upgrade:
+                self.destination.post(("Install starting", f"Target: {upgrade.revision[:12]}"))
+                yield self
+            self.outcome.lines()  # A missing result becomes a reported failure too.
+        except BaseException as error:
+            self.outcome = InstallFailure.of(error)
+            raise
+        finally:
+            self.destination.post(self.outcome.lines())
+
+    def opened(self, destination: ReportDestination) -> None:
+        self.destination = destination
+
+    def complete[Result: Upgrade](self, upgrade: Result) -> Result:
+        self.outcome = FinishedInstall(upgrade)
+        return upgrade
+
+
+@dataclass
+class CommsChannel(ReportDestination, ServiceSender):
+    """A bus that exists: the installer posts to its #comms."""
+
+    sender: ClassVar[str] = "installer"
+    channel: ClassVar[str] = "comms"
+    root: Path
+
+    @classmethod
+    def created(cls, root: Path) -> Self:
+        """The channel on a bus this install just created."""
+        Comms(root).channels.create_tag(cls.channel)
+        return cls(root)
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        with client_wire(self.root) as comms:
+            self.register(comms.registry)
+            comms.bus.publisher.publish_ordinary(
+                Message(sender=self.sender, target=f"#{self.channel}", body="\n".join(lines),
+                        type=InfoKind), origin=AgentOrigin())
 
 
 @dataclass(frozen=True)
@@ -417,12 +534,14 @@ class Stack:
             "VerifiedNativePackage.acquire(pinned_native_package()); UnitInstructions.prepare()",
             cwd=self.checkout, env=self.environment())
 
-    def publish(self) -> None:
-        """The selected interpreter owns console metadata and harness declarations."""
+    def publish(self, root: Path) -> None:
+        """The selected interpreter owns console metadata and harness declarations, and
+        ``root`` belongs to this stack's runtime from now on."""
         run(
             self.python, "-m", publication.__name__,
             cwd=self.checkout, env=self.environment(),
         )
+        RootRuntime.publish(root, self.runtime)
 
     def environment(self, *paths: Path) -> dict:
         """Use the artifact's packages; carry steps also select the target tree's source."""
@@ -606,12 +725,15 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
     return CarriedPass(steps, files, reader.verify(root))
 
 
-def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
+def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult], report: RunReport) -> Upgrade:
+            harnesses: Callable[[], InstallResult]) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     tree = TargetTree(checkout, scratch, target)
+    member = Install.member(root, retire)
+    report = RunReport(mode.destination(member.destination(root)))
+    bridges = SessionBridgeResumes()
     with report.running(tree):
         current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
@@ -620,7 +742,6 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
         chain = CarryChain.at(tree.path)
-        member = Install.member(root, retire)
         try:
             pending = member.pending_steps(root, chain)
         except ValueError as error:
@@ -631,15 +752,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path)
         install = member.of(checkout, root, current, target, chain, pending, installed, staged,
-                            tree, installer, spill_dir)
-        rehearsal = install.rehearsal()
-        names = tuple(step.name() for step in pending)
-        if rehearse_only:
-            return report.complete(RehearsedUpgrade(current, target, root, names, rehearsal))
-        bridges = SessionBridgeResumes()
-        result = InstalledUpgrade(current, target, root, names, rehearsal,
-                                  install.install(rehearsal, bridges), harnesses())
-        report.complete(result)
+                            tree, installer, spill_dir, report)
+        rehearsed = RehearsedUpgrade(current, target, root,
+                                     tuple(step.name() for step in pending), install.rehearsal())
+        result = report.complete(mode.finish(install, rehearsed, bridges, harnesses))
     # The finished result is posted with every bridge outcome before a failed resume fails the run.
     bridges.require_resumed()
     return result
@@ -661,6 +777,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
+    report: RunReport
 
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
@@ -672,22 +789,34 @@ class Install[Rehearsed: Rehearsal](ABC):
         return Install
 
     @classmethod
+    def destination(cls, root: Path) -> ReportDestination:
+        """Where a live run of this kind posts from its start: the bus already at ``root``."""
+        return CommsChannel(root)
+
+    @classmethod
     def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
         return chain.pending(CarryLedger(root).applied())
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: InstallerChoice, spill_dir: Path) -> Install:
+           installer: InstallerChoice, spill_dir: Path, report: RunReport) -> Install:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
         return member(checkout, root, current, target, chain, pending, installed, staged,
-                      tree, installer, spill_dir)
+                      tree, installer, spill_dir, report)
 
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
+
+    def finished(self, rehearsed: RehearsedUpgrade, bridges: SessionBridgeResumes,
+                 harnesses: Callable[[], InstallResult]) -> InstalledUpgrade:
+        """The live pass after its rehearsal, then the harnesses on the bus it left.
+        ``rehearsed`` carries the rehearsal this install's own ``rehearsal`` produced."""
+        live = self.install(rehearsed.rehearsal, bridges)
+        return rehearsed.extended(InstalledUpgrade, live=live, install=harnesses())
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
@@ -732,8 +861,7 @@ class UnchangedInstall(Install[UnchangedRehearsal]):
         return UnchangedRehearsal()
 
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
-        self.installed.publish()
-        RootRuntime.publish(self.root, self.installed.runtime)
+        self.installed.publish(self.root)
         return UnchangedRun()
 
 
@@ -742,15 +870,20 @@ class FreshInstall(Install[FreshRehearsal]):
     The target's source creates the bus already in its format and routes to it."""
 
     @classmethod
+    def destination(cls, root: Path) -> ReportDestination:
+        """No bus to post to yet: ``live`` opens its #comms once it has created the bus."""
+        return Unposted()
+
+    @classmethod
     def pending_steps(cls, root: Path, chain: CarryChain) -> tuple[type[Carry], ...]:
         return ()
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: InstallerChoice, spill_dir: Path) -> Install:
+           installer: InstallerChoice, spill_dir: Path, report: RunReport) -> Install:
         return cls(checkout, root, current, target, chain, pending, installed, staged,
-                   tree, installer, spill_dir)
+                   tree, installer, spill_dir, report)
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()
@@ -761,9 +894,9 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
+        self.report.opened(CommsChannel.created(self.root))
         CarryLedger(self.root).start(self.chain)
-        self.staged.publish()
-        RootRuntime.publish(self.root, self.staged.runtime)
+        self.staged.publish(self.root)
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
         return CreatedRun(services, route)
@@ -797,7 +930,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
-    RootRuntimeStore.at(root).owner(installed.runtime)
+    RootRuntimeStore.at(root).adopt(installed.runtime)
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
@@ -824,8 +957,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
         passed.files.require_rehearsal(rehearsal_files)
-        staged.publish()
-        RootRuntime.publish(root, staged.runtime)
+        staged.publish(root)
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
     except BaseException as error:
@@ -843,9 +975,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
             run("git", "-C", checkout, "reset", "-q", "--keep", current)
             Checkout(checkout).prepare()
         # Republish only when current moved: the outgoing runtime may predate this publisher.
+        # Unmoved, the root still names the runtime it adopted: staged publishes it last.
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
-            installed.publish()
-        RootRuntime.publish(root, installed.runtime)
+            installed.publish(root)
         maintenance.clear(restored_hold)
         started = installed.start(root, running)
         print(f"install: restored after failure ({type(error).__name__}: {error}); "

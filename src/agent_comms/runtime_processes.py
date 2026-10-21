@@ -13,7 +13,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import ApplicationChildInitiator
 
 
-class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcessOutcome"):
+class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
     @abstractmethod
     def line(self) -> str: ...
 
