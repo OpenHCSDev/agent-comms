@@ -41,11 +41,17 @@ def prepare_runtime_home(home: Path) -> None:
     pointer = home / ".local/share/agent-comms/current"
     pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     pointer.unlink(missing_ok=True)
-    pointer.symlink_to((Path.home() / ".local/share/agent-comms/current").resolve(strict=True))
+    installed = Path.home() / ".local/share/agent-comms/current"
+    if installed.exists():
+        pointer.symlink_to(installed.resolve(strict=True))
     uv = home / ".local/state/agent-comms/upgrade-bus/uv"
     uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     uv.unlink(missing_ok=True)
-    uv.symlink_to(Path.home() / ".local/state/agent-comms/upgrade-bus/uv")
+    installed_uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
+    executable = shutil.which("uv", path=str(installed_uv.parent)) or shutil.which("uv")
+    if executable is None:
+        raise UpgradeRefused("Preparing a private runtime home requires uv")
+    uv.symlink_to(executable)
     cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
                                 text=True, check=True).stdout.strip())
     if not (home / ".npm").exists() and cache.is_dir():
