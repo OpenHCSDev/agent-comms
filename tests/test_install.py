@@ -16,10 +16,9 @@ from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import declared_databases, practice_copy
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.wire_log import WireLog
 
@@ -80,13 +79,14 @@ def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(pri
     witnesses = {str(path.relative_to(root)) for path in barrier.witness_paths if path.exists()}
     assert witnesses
     saved = bus_files(root)
-    databases = {name for name in saved if CoordinationStore.is_database(root / name)}
+    databases = {str(path.relative_to(root)) for path in declared_databases(root)}
+    assert databases
 
     with practice_copy(root, private_directory / "practice/bus") as (copy, measurement):
         copied = bus_files(copy)
         assert copied.keys() == {name for name in saved.keys() - witnesses
-                                 if not (name.endswith("-wal")
-                                         and name.removesuffix("-wal") in databases)}
+                                 if name.removesuffix("-wal") not in databases
+                                 or not name.endswith("-wal")}
         assert measurement.bytes > 0
         for name in databases:
             query = "SELECT name FROM sqlite_schema ORDER BY name"

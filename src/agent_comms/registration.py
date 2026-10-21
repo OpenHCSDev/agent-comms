@@ -195,7 +195,8 @@ class Registration:
             effect.check(projection)
 
     @staticmethod
-    def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[Concatenate[Registration, P], R]:
+    def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
+        Concatenate[Registration, P], R]:
         def change(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
             with self.store.editing() as edit:
                 result = operation(edit.document, *args, **kwargs)
@@ -292,7 +293,8 @@ class Registration:
             return result
 
     @staticmethod
-    def reading[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[Concatenate[Registration, P], R]:
+    def reading[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[
+        Concatenate[Registration, P], R]:
         def read(self: Registration, /, *args: P.args, **kwargs: P.kwargs) -> R:
             with self.store.reading() as document:
                 return operation(document, *args, **kwargs)
