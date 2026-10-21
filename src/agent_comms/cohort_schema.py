@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
@@ -53,6 +54,9 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
+    manifest_format: ClassVar[str] = "audience-v1"
+    decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
+
     wire_root_id: Annotated[
         str,
         Column(
@@ -81,18 +85,21 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
     sealed: bool = False
     without_rowid = True
 
-    @staticmethod
-    def decision_hash(delivery: Delivered) -> str:
-        from .bus_publication import decisions_digest, decisions_wire
+    @classmethod
+    def decision_hash(cls, delivery: Delivered) -> str:
+        from .audience_manifest import MAX_AUDIENCE_BYTES
+        from .response_acknowledgement import _canonical
 
-        return decisions_digest(decisions_wire(delivery.decisions))
+        encoded = _canonical([decision.to_wire() for decision in delivery.decisions])
+        if len(encoded) > MAX_AUDIENCE_BYTES:
+            raise ValueError("Private decision set exceeds its byte bound.")
+        return hashlib.sha256(cls.decision_domain + encoded).hexdigest()
 
     @classmethod
     def for_delivery(
         cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
     ) -> ClaimBatchAcknowledgements:
         """Native acknowledgement facts derive from the actual delivered value."""
-        from .bus_publication import INITIAL_CODEC
         from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
         return cls(
@@ -105,7 +112,7 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
             decisions_digest=cls.decision_hash(delivery),
             member_count=len(delivery.audience.recipients),
             claim_count=sum(len(decision.claim_decisions()) for decision in delivery.decisions),
-            manifest_codec=INITIAL_CODEC,
+            manifest_codec=cls.manifest_format,
             resolver_version=RESOLVER_VERSION,
             policy_version=POLICY_VERSION,
             accepted_at_ms=accepted_at_ms,
@@ -425,14 +432,12 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """A historical capture is omitted; a changed current owner refuses."""
+        """Prior generations/names are historical; wrong or future identities refuse."""
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if self.owner_generation < expected.generation:
-            return False
-        if self.captured_owner != expected:
+        if self.recipient_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
-        return True
+        return self.captured_owner == expected
 
     @property
     def captured_owner(self) -> OwnerGenerations:
