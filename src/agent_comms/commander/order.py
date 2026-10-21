@@ -320,6 +320,24 @@ class CommanderContext(CommanderConfig):
         thread = self.comms.registry.require(unit)
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
 
+    def board_text(self) -> str:
+        """Render the live Todo view without saving a competing board file."""
+        lines = ['# Fleet board', '',
+                 "Live view of Core's Todo store; no board file is saved.", '',
+                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
+                 '| Strikes | Owner last acted |',
+                 '|---|---|---|---|---|---|---|---|---|---|']
+        listed, read = self.todos(), self.progress()
+        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
+        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
+            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
+                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
+                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
+        history = self.comms.goals.todos.history_for_commander(self.incarnation)
+        lines += ['', '## Withdrawn orders', '',
+                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
+        return '\n'.join(lines) + '\n'
+
 
 class Reassignment(SubclassUnion, affix="Reassignment"):
     """Why a held problem changes owner, or no change of owner."""
@@ -576,24 +594,6 @@ class Commander(CommanderContext):
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
         self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         print(f'{pid} closed')
-
-    def board_text(self) -> str:
-        """Render the live Todo view without saving a competing board file."""
-        lines = ['# Fleet board', '',
-                 "Live view of Core's Todo store; no board file is saved.", '',
-                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
-                 '| Strikes | Owner last acted |',
-                 '|---|---|---|---|---|---|---|---|---|---|']
-        listed, read = self.todos(), self.progress()
-        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
-        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
-            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
-                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
-                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        lines += ['', '## Withdrawn orders', '',
-                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-        return '\n'.join(lines) + '\n'
 
     def on_record(self, line: str, recorded: str, audience: VerdictAudience,
                   answers: tuple[MessageReference, ...] = ()) -> None:
