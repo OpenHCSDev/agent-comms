@@ -11,13 +11,15 @@ import pytest
 
 from agent_comms.native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, NativeEvidenceScope
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_transcript import NativeTranscript
 from test_native_pi import INPUT_ID, _evidence
 
 
 @pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
 @pytest.mark.parametrize("redirect", ["hardlink", "symlink"])
 def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, reader_type, redirect):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     before = session.read_bytes()
     alias = tmp_path / "alias.jsonl"
     if redirect == "hardlink":
@@ -32,7 +34,8 @@ def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, read
 
 @pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
 def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     with reader_type.open(session) as reader:
         if reader_type is PrivateEvidenceRead:
             tuple(reader.rows())
@@ -52,7 +55,8 @@ def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
 
 @pytest.mark.parametrize("rewrite", ["in_place", "replace"])
 def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, rewrite):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     restored_input = "d" * 32
     restored = b"".join(json.dumps(row).encode() + b"\n" for row in (
         {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored", "version": 3},
@@ -87,7 +91,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
 
 @pytest.mark.parametrize("operation", ["append", "alter_prefix"])
 def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operation):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     with PrivateEvidenceRead.open(session) as source:
         rows = source.rows()
         assert next(rows)["type"] == "session"
@@ -109,10 +114,10 @@ def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
     import sqlite3
     from agent_comms.native_pi import NativeContextJournal
 
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
     original = sqlite3.OperationalError("consumer transaction refused")
     with pytest.raises(sqlite3.OperationalError) as caught:
-        with NativeContextJournal.open_evidence(session) as db:
+        with NativeContextJournal.open_evidence(files) as db:
             assert NativeContextJournal.for_input(db, INPUT_ID) is not None
             raise original
     assert caught.value is original
@@ -121,7 +126,8 @@ def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
 
 
 def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
-    session = _evidence(tmp_path)
+    files = _evidence(tmp_path)
+    session = files.session
     original = BlockingIOError("consumer lock was unavailable")
     with PrivateEvidenceRead.open(session) as source:
         rows = source.rows()
@@ -160,8 +166,10 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
     """Cancellation cannot retire borrowed source before its SQL worker closes."""
     from agent_comms.coordinator import Coordination
 
-    session = _evidence(tmp_path)
-    before = session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()
+    files = _evidence(tmp_path)
+    session = files.session
+    _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
+    before = session.read_bytes(), files.input_proof.read_bytes()
     path = tmp_path / 'coordination.sqlite3'
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
         original.install_private_runtime()
@@ -176,11 +184,13 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 worker_connections.append(store.session._connection)
                 with store.session.read():
                     assert store.participants.get('original').owner_thread == 'owner'
-                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+                    NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
+                                                     session_entry_start=input_record.start)
                     entered.set()
                     assert release.wait(2), 'bounded fixture release missing'
                     assert not evidence.source.stream.closed
-                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+                    NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
+                                                     session_entry_start=input_record.start)
 
             pending = asyncio.create_task(Coordination.run_async(path, observe,
                 clock_ms=original.session.now))
@@ -205,6 +215,6 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                     pending.cancel()
                 await asyncio.gather(pending, return_exceptions=True)
     assert evidence.source.stream.closed
-    assert (session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()) == before
+    assert (session.read_bytes(), files.input_proof.read_bytes()) == before
 
 
