@@ -119,3 +119,31 @@ class Bus(StoreWriter, DurableFile):
                 target=target)
             return tuple(self._record(db, header) for row in addressed
                          for header in BusRow.select(db, seq=row.seq))
+
+    def scoped_page(
+        self, predicate: str, parameters: tuple, *, lower: int = 0,
+        upper: int | None = None, descending: bool = False, limit: int = 100,
+    ) -> tuple[Message, ...]:
+        """A captured display scope narrows the addressed table before decoding."""
+        with self.observing() as db:
+            upper = self.revision() + 1 if upper is None else upper
+            order = "DESC" if descending else "ASC"
+            rows = db.execute(
+                f'SELECT seq FROM "{Addressed.table.declared_name}" '
+                f'JOIN "{Message.table.declared_name}" USING(seq) '
+                f'WHERE ({predicate}) AND seq > ? AND seq < ? '
+                f'ORDER BY seq {order} LIMIT ?', (*parameters, lower, upper, limit),
+            )
+            return tuple(self._record(db, BusRow.require(
+                db, seq=FieldCodec.decode(int, row[0]))) for row in rows)
+
+    def latest_conversations(self, predicate: str, parameters: tuple, through: int):
+        """One prefix per addressed conversation, without materializing its history."""
+        with self.observing() as db:
+            return Addressed.table.select(
+                db, where=(f'{{seq}} IN (SELECT MAX(seq) FROM '
+                           f'"{Addressed.table.declared_name}" '
+                           f'JOIN "{Message.table.declared_name}" USING(seq) '
+                           f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
+                parameters=(*parameters, through),
+            )
