@@ -784,13 +784,9 @@ class PresentCheckout(ProgressCheckout):
         return self.commits(pattern, self.origin_refs, *self.default_refs)
 
     def edits(self) -> Iterator[float]:
-        """When each uncommitted change in this checkout was last written; a deletion has none.
-
-        A submodule is pinned package data, never a unit's edit, so its git state is not read."""
-        changed = (*self.git("diff", "--name-only", "-z", "--ignore-submodules=all",
-                             "HEAD").split("\0"),
-                   *self.git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
-        return (path.stat().st_mtime for path in (self.path / name for name in changed if name)
+        """When each uncommitted change in this checkout was last written; a deletion has none."""
+        return (path.stat().st_mtime
+                for path in WorkBranches(self.path).read_checkout().uncommitted()
                 if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
