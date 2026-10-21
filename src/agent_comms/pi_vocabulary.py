@@ -7,15 +7,21 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
+from .declared_family import DeclaredFamily
+from .field_codec import (
+    AcceptsNull,
+    DefaultExternalName,
+    ExternalName,
+    FieldCodec,
+    FieldRepresentation,
+)
 from .pi_counts import PiCount, UnreportedCount
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
-class PiStopReason(DeclaredFamily, affix="StopReason"):
+class PiStopReason(ExternalName, affix="StopReason"):
     failed = False
     successful = False
     tool_round = False
@@ -37,16 +43,6 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         from .coordination_tables.attempts import ReplayFact
 
         return UnknownOutcomeAttempt(), ReplayFact.NONE
-
-    @classmethod
-    def from_external(cls, value):
-        from .field_codec import FieldCodec
-
-        value = FieldCodec.decode(str | None, value)
-        try:
-            return cls.member_named(value)
-        except UnknownFamilyMember:
-            return UnreportedStopReason
 
     @classmethod
     def permits_progress(cls):
@@ -181,22 +177,12 @@ class DeferredStopReason(UnfinishedPiStop, PiStopReason):
     pass
 
 
-class UnreportedStopReason(UnfinishedPiStop, PiStopReason):
+class UnreportedStopReason(DefaultExternalName, UnfinishedPiStop, PiStopReason):
     pass
 
 
-class CompactionReason(DeclaredFamily, affix="CompactionReason"):
+class CompactionReason(ExternalName, affix="CompactionReason"):
     """Why Pi's own engine compacted: Pi's reason names, decoded once at ingress."""
-
-    @classmethod
-    def from_external(cls, value):
-        from .field_codec import FieldCodec
-
-        value = FieldCodec.decode(str | None, value)
-        try:
-            return cls.member_named(value)
-        except UnknownFamilyMember:
-            return UnknownCompactionReason
 
 
 class ManualCompactionReason(CompactionReason):
@@ -211,7 +197,7 @@ class ThresholdCompactionReason(CompactionReason):
     pass
 
 
-class UnknownCompactionReason(CompactionReason):
+class UnknownCompactionReason(DefaultExternalName, CompactionReason):
     pass
 
 
