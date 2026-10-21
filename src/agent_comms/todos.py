@@ -3325,6 +3325,7 @@ class ProblemAllocation(TypedTable):
     """
 
     number: Annotated[int, Column(primary_key=True, auto_increment=True)]
+    renamed_from = ("problem_number",)
 
     @classmethod
     def reserve(cls, db: sqlite3.Connection, text: str) -> ProblemNumber:
