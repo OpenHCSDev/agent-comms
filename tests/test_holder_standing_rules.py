@@ -21,14 +21,14 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, SayVerb
 from agent_comms.commander.standing import (
-    Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin,
+    Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
 from agent_comms.goal_generation import ReadyGeneration
-from agent_comms.goal_states import ActiveGoal
+from agent_comms.goal_states import ActiveGoal, BlockedState
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
@@ -93,6 +93,22 @@ def blocked_holder(comms):
     reservation.fail(store, "The previous attempt has an uncertain result")
     comms.goals.update_goal("worker", BlockedGoalAction(progress="A reason unrelated to matching text"))
     return reservation
+
+
+def test_a_block_over_an_attempt_with_an_unknown_result_is_reported_never_retried(held_bus):
+    goal = held_bus.registry.require("worker").goal.require()
+    store = held_bus.goals.open_goal_store()
+    generation = store.require_generation(goal.id)
+    store.recover_unreserved_ready(goal.id, generation.number)
+    store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
+    held_bus.goals.update_goal("worker", BlockedGoalAction(progress="The attempt result is unknown"))
+    reserved = store.require_generation(goal.id)
+    assert Blocked.violations(held_bus, "lead") == ()
+    violation, = UnresolvedBlock.violations(held_bus, "lead")
+    assert violation.orders == ("P1", "P2")
+    violation.enforce(held_bus, "lead")
+    assert isinstance(held_bus.registry.require("worker").goal.require().state, BlockedState)
+    assert store.require_generation(goal.id) == reserved
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):

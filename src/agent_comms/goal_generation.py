@@ -52,8 +52,13 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
 
 
+class RetryableGeneration:
+    """A generation an explicit retry or a fresh order may proceed from; every other
+    generation's attempt is unresolved until someone inspects it."""
+
+
 @dataclass(frozen=True)
-class ReadyGeneration(GenerationState):
+class ReadyGeneration(GenerationState, RetryableGeneration):
     ready = True
 
     def require_ready(self) -> None:
@@ -95,7 +100,7 @@ class ReservedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(GenerationState):
+class BlockedGeneration(GenerationState, RetryableGeneration):
     failed = True
 
     def require_failure(self) -> None:
