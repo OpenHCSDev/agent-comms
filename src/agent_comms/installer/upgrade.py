@@ -396,7 +396,7 @@ from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.owner_restart import OwnerRestartRequest
 snapshot = Comms(Path(sys.argv[1])).registry.snapshot()
-print(json.dumps([thread.name for thread in OwnerRestartRequest().threads(snapshot)]))
+print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]))
 """, root, cwd=self.checkout, env=self.environment())
         return FieldCodec.decode(list[str], FieldCodec.parse(selected))
 
