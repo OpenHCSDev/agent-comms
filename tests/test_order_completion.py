@@ -1,6 +1,8 @@
 """One copied-bus command family owns check correction, delivery and closure."""
 from dataclasses import replace
 
+import pytest
+
 from agent_comms.commander.order import main
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun
@@ -9,6 +11,7 @@ from agent_comms.todos import (
     DoneTodoState,
     InstalledMergedProblemOrder,
     MergedProblemOrder,
+    OperationDelivery,
     ReportedProblemOrder,
     TriageScope,
 )
@@ -76,6 +79,23 @@ class TestOrderCompletion:
         assert isinstance(closed.order, ReportedProblemOrder)
         assert closed.order.delivery.report == report.read_text()
         assert closed.assignment is None
+
+    def test_operation_done_keeps_its_existing_evidence(self, held_commander):
+        ctx = held_commander
+        evidence = ctx.root / 'operation.txt'
+        evidence.write_text('The copied operation completed through its current check.')
+        main(['done', 'worker', 'P1', '--sha', 'op', '--seen', str(evidence)], ctx)
+        delivered = ctx.comms.goals.todos.get('P1')
+        assert isinstance(delivered.order.delivery, OperationDelivery)
+        assert delivered.order.delivery.evidence.artifact() == str(evidence)
+
+    def test_triage_rejects_an_operation_without_recording(self, held_commander):
+        ctx = held_commander
+        original = self.record(
+            ctx, replace(ctx.comms.goals.todos.get('P1').order, scope=TriageScope()))
+        with pytest.raises(ValueError, match='Triage returns --seen REPORT'):
+            main(['done', 'worker', 'P1', '--sha', 'op'], ctx)
+        assert ctx.comms.goals.todos.get('P1') == original
 
     def test_merged_close_accepts_the_explicit_artifact(
         self, held_commander, proof_build_checkouts,

@@ -61,11 +61,16 @@ from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
     BluntText,
+    CheckedDelivery,
     CleanHunt,
+    CommitDelivery,
+    DeliveryEvidence,
+    DeliverySource,
     DirectiveText,
     LocatedProblemFinding,
     MeasuredReview,
     NoSuccessor,
+    OperationDelivery,
     OrderDelivery,
     OrderedHunt,
     OrderMessage,
@@ -172,6 +177,62 @@ def forwarders_added(diff, sources=()):
              if not (defs(m.group(0)) and defs(m.group(0)).group(1) in kept) and not state_call.search(m.group(0))]
             + [f'def {m.group(2)} -> self.?.{m.group(2)}' for m in FORWARD_BODY.finditer(diff)
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
+
+
+class CommandDeliverySource(DeliverySource, declared_name=None):
+    @classmethod
+    def from_text(cls, text: str) -> CommandDeliverySource:
+        # Reserved arguments derive from declarations; every other token is a Git reference.
+        return ArgumentDeliverySource.member_or_default(text, SingleFieldValue).from_argument(text)
+
+
+class ArgumentDeliverySource(CommandDeliverySource, declared_name=None):
+    @classmethod
+    @abstractmethod
+    def from_argument(cls, text: str) -> Self: ...
+
+
+@dataclass(frozen=True)
+class NoDeliverySource(NullMember, CommandDeliverySource):
+    def require_report(self) -> None:
+        pass
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        raise ValueError("A fix delivery needs --sha COMMIT or --sha op.")
+
+
+@dataclass(frozen=True)
+class OpDeliverySource(ArgumentDeliverySource):
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        return cls()
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        return OperationDelivery(evidence=evidence)
+
+
+@dataclass(frozen=True)
+class CommitDeliverySource(SingleFieldValue, ArgumentDeliverySource):
+    reference: str
+
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        if not text.strip():
+            raise ValueError("A commit delivery needs a nonempty Git reference.")
+        return cls(text)
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        delivered = Repo.git(repo, 'rev-parse', '--verify', f'{self.reference}^{{commit}}').strip()
+        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivered)
+        changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
+        sources = [Repo.git(repo, 'show', f'{delivered}:{path}') for path in changed]
+        if added := forwarders_added(diff, sources):
+            raise ValueError(f'Refused: {delivered} adds forwarders {added[:5]}; '
+                             'slop never counts as delivery. Order the hierarchy fix.')
+        return CommitDelivery(
+            commit=Repo.git(repo, 'rev-parse', '--verify', 'HEAD^{commit}').strip(),
+            delivered_commit=delivered, evidence=evidence,
+        )
 
 
 @dataclass(frozen=True)
@@ -552,14 +613,15 @@ class Commander(CommanderContext):
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Correct the current check against the source preceding this order's delivery."""
         todo = self.comms.goals.todos.get(pid)
+        order = todo.order.checked()
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
         repo = self.repo_directory(check.directory)
         Repo.git(repo, 'fetch', '-q', 'origin', 'main')
-        check.require_acceptance(todo.order.check_base(repo), self.worktrees)
+        check.require_acceptance(order.check_base(repo), self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
-        print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
+        print(f'{pid}: order {order.id} now checks `{check.command}`')
 
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
@@ -642,9 +704,10 @@ class Commander(CommanderContext):
         """Storage is checked here; the delivery owns its evidence and claims."""
         todo = self.comms.goals.todos.get(pid)
         todo.state.require_open(todo)
-        todo.order.checked().require_delivery(todo.order.id)
+        order = todo.order.checked()
+        order.require_delivery(order.id)
         unit = todo.held().owner
-        claims = delivery.done_claims(todo.order.checked())
+        claims = delivery.done_claims(order)
         thread = self.comms.registry.require(unit)
         storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
         for checkout in storage.rule.problem_checkouts(unit, pid):
@@ -656,8 +719,8 @@ class Commander(CommanderContext):
         except SelectedToolDenied as quota:
             sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
         self.call(CommsOrderDoneTool(problem=pid,
-            order_id=todo.order.id, delivery=delivery, claims=claims))
-        print(f'{unit}: order {todo.order.id} delivered as {delivery.work}')
+            order_id=order.id, delivery=delivery, claims=claims))
+        print(f'{unit}: order {order.id} delivered as {delivery.work}')
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
@@ -937,11 +1000,14 @@ class DoneVerb(OrderVerb):
         ),
     ]
     sha: Annotated[
-        str,
+        CommandDeliverySource,
+        Normalize(FieldCodec.encode),
         Argument(
-            flags=("--sha",), options={"help": "for a fix: commit in the recorded checkout, or op"}
+            flags=("--sha",),
+            options={"type": CommandDeliverySource.from_text, "choices": None,
+                     "help": "for a fix: commit in the recorded checkout, or op"},
         ),
-    ] = ""
+    ] = dataclasses.field(default_factory=NoDeliverySource)
     screenshot: Annotated[
         str,
         Argument(
@@ -957,8 +1023,9 @@ class DoneVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
-        delivery = todo.order.checked().scope.delivery(
-            ctx.repo_directory(todo.order.check.directory), self.sha, self.screenshot, self.seen)
+        order = todo.order.checked()
+        delivery = order.scope.delivery(
+            ctx.repo_directory(order.check.directory), self.sha, self.screenshot, self.seen)
         ctx.done(todo.id, delivery)
 
 

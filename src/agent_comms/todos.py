@@ -259,16 +259,7 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
         return Repo.git(repo, "merge-base", self.delivered, WorkBranches.main).strip()
 
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
-        from agent_comms.commander.order import forwarders_added
-
         super().done_claims(order)
-        repo = Path(order.check.directory)
-        diff = Repo.git(repo, "show", "--first-parent", "-m", "--format=", self.delivered)
-        changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
-        sources = [Repo.git(repo, "show", f"{self.delivered}:{path}") for path in changed]
-        if added := forwarders_added(diff, sources):
-            raise ValueError(f"Refused: {self.delivered} adds forwarders {added[:5]}; "
-                             "slop never counts as delivery. Order the hierarchy fix.")
         return (MergedClaim(self.delivered),)
 
     @property
@@ -1587,6 +1578,16 @@ class FixShape:
             location.require_class(root, revision)
 
 
+class DeliverySource(DeclaredFamily, affix="DeliverySource"):
+    """The command's decoded source, before a commit reference is resolved in its repository."""
+
+    @abstractmethod
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
+
+    def require_report(self) -> None:
+        raise ValueError("Triage returns --seen REPORT, not a commit or operation.")
+
+
 @dataclass(frozen=True)
 class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     """What the commander authorizes, including the delivery type at its boundary."""
@@ -1615,16 +1616,19 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
-    def delivery(self, repo: Path, sha: str, screenshot: str, seen: str) -> Delivery: ...
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> Delivery: ...
 
     @abstractmethod
     def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
 
 
 class TriageScope(OrderScope[ReportDelivery]):
-    def delivery(self, repo: Path, sha: str, screenshot: str, seen: str) -> ReportDelivery:
-        if sha or screenshot:
-            raise ValueError("Triage returns --seen REPORT, not a commit or screenshot.")
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> ReportDelivery:
+        source.require_report()
+        if screenshot:
+            raise ValueError("Triage returns --seen REPORT, not a screenshot.")
         return ReportDelivery(report=Path(seen).read_text())
 
     def instructions(self, problem: str) -> tuple[str, ...]:
@@ -1648,18 +1652,11 @@ class TriageScope(OrderScope[ReportDelivery]):
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
 
-    def delivery(self, repo: Path, sha: str, screenshot: str, seen: str) -> CheckedDelivery:
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> CheckedDelivery:
         path = seen or screenshot
         evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
-        if sha == 'op':
-            return OperationDelivery(evidence=evidence)
-        if not sha:
-            raise ValueError("A fix delivery needs --sha COMMIT or --sha op.")
-        return CommitDelivery(
-            commit=Repo.git(repo, 'rev-parse', '--verify', 'HEAD^{commit}').strip(),
-            delivered_commit=Repo.git(repo, 'rev-parse', '--verify', f'{sha}^{{commit}}').strip(),
-            evidence=evidence,
-        )
+        return source.delivery(repo, evidence)
 
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.shape.require_references(root, revision)
