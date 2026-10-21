@@ -7,32 +7,56 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from math import isfinite
-from typing import ClassVar
+from typing import ClassVar, Never
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldRepresentation
+from .field_codec import FieldCodec, FieldRepresentation, NullMember, boundary_decoder
 
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""
 
-    units_per_second: ClassVar[int] = 1
-
     @classmethod
     def decode(cls, value: object) -> RecordedEventTime:
-        return RecordedEventTime(FieldCodec.decode(float, value) / cls.units_per_second)
+        return RecordedEventTime(FieldCodec.decode(float, value))
 
     @classmethod
     def encode(cls, value: object) -> float:
         if not isinstance(value, RecordedEventTime):
             raise TypeError("A Unix-seconds field requires a recorded event time")
-        return value.at * cls.units_per_second
+        return value.at
 
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(float)
 
 
-class RecordedEventMilliseconds(RecordedEventSeconds):
+class NullableEventSeconds(FieldRepresentation):
+    """A source clock may be explicitly unrecorded; units belong to its wire type."""
+
+    accepts_null = True
+    units_per_second: ClassVar[int] = 1
+
+    @classmethod
+    @boundary_decoder
+    def decode(cls, value: object) -> EventTime:
+        timestamp = FieldCodec.decode(float | None, value)
+        return (UnrecordedEventTime() if timestamp is None
+                else RecordedEventTime(timestamp / cls.units_per_second))
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        if not isinstance(value, EventTime):
+            raise TypeError("A source clock requires an event time")
+        return next((timestamp * cls.units_per_second for timestamp in value.timestamps()), None)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.alternatives_schema("anyOf", [
+            FieldCodec.value_schema(float), NullMember.schema(),
+        ])
+
+
+class EventMilliseconds(NullableEventSeconds):
     """Pi message clocks use milliseconds; owned event time remains Unix seconds."""
 
     units_per_second = 1000
@@ -42,18 +66,11 @@ class UnrecordedTimeError(ValueError):
     """An operation requires a source-recorded time, but none was supplied."""
 
 
-class GeneratedTimestamp(FieldRepresentation):
+class GeneratedTimestamp(NullableEventSeconds):
     """Read a generated SQL timestamp as its recorded or unrecorded fact."""
 
-    accepts_null = True
-
     @classmethod
-    def decode(cls, value: object) -> EventTime:
-        timestamp = FieldCodec.decode(float | None, value)
-        return UnrecordedEventTime() if timestamp is None else RecordedEventTime(timestamp)
-
-    @classmethod
-    def encode(cls, value: object) -> object:
+    def encode(cls, value: object) -> Never:
         raise TypeError("A generated timestamp is read from its event, never written")
 
 

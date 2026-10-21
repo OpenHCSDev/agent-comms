@@ -40,15 +40,24 @@ class TranscriptProjection:
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
-    """Shared message projection; each journal declares its own identity and clock."""
+    """Shared source identity and projection; each journal declares its own clock."""
+    id: str | None = None
+    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
 
     @property
-    def annotation_id(self) -> str | None:
-        return None
+    def child_parent(self) -> object:
+        return self.require_entry_id()
+
+    def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
+        return {
+            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "timestamp": timestamp.isoformat(),
+            "message": message.pi_message(int(timestamp.timestamp() * 1000)),
+        }
 
     @property
     def input_boundary(self):
@@ -69,33 +78,16 @@ class RecordedEntry(PiPayload):
                 for event in message.transcript_events(context, timestamp)]
 
     @property
-    @abstractmethod
-    def original_id(self) -> str: ...
+    def original_id(self):
+        if not self.id:
+            raise ValueError("Native publication requires an original entry ID")
+        return str(self.id)
 
 
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
-    id: str | None = None
-    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
     timestamp: Annotated[RecordedTimestamp, TimestampText]
-
-    @property
-    def child_parent(self) -> object:
-        return self.require_entry_id()
-
-    def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
-        return {
-            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
-            "timestamp": timestamp.isoformat(),
-            "message": message.pi_message(int(timestamp.timestamp() * 1000)),
-        }
-
-    @property
-    def original_id(self) -> str:
-        if not self.id:
-            raise ValueError("Native publication requires an original entry ID")
-        return self.id
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Every part of a native record shares its original journal clock."""
@@ -542,10 +534,6 @@ class MessageEntry(NativeEntry):
     is_message = True
 
     @property
-    def annotation_id(self) -> str | None:
-        return self.id
-
-    @property
     def messages(self):
         return (self.message,)
 
@@ -597,12 +585,8 @@ class CompactionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
-    id: int
+    id: int = field()
     messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
-
-    @property
-    def original_id(self) -> str:
-        return str(self.id)
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Durable entries have no clock; their individual model messages do."""

@@ -40,6 +40,7 @@ import { Harness, createRegistry } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
+const start = Number(process.argv[2]);
 const harness = await Harness.open(await openNodeSqliteStorage(process.argv[1]), {
   registry: createRegistry(), models: builtinModels({credentials: new InMemoryCredentialStore()}),
 }, context);
@@ -49,7 +50,7 @@ try {
     for (let index = 0; index < 260; index++) {
       const role = index % 2 ? 'assistant' : 'user';
       await tx.appendEntry(root.id, {kind: `pi.${role}`, data: null,
-        model: [{role, timestamp: 1760000000000 + index,
+        model: [{role, timestamp: start + index,
                  content: [{type: 'text', text: `entry ${index}`}]} ]});
     }
   }, context);
@@ -58,9 +59,10 @@ try {
 
 
 def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home):
+    start = 1760000000000
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
     hosts = Path(__file__).parents[1] / 'src/agent_comms'
-    seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
+    seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path, str(start)],
                             cwd=hosts, capture_output=True, text=True, timeout=20)
     assert seeded.returncode == 0, (
         f'seeding failed; the durable host needs its locked packages: '
@@ -80,7 +82,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                     assert len(records) == 260
                     assert [r.events[0].text for r in records[:4]] == ['entry 259', 'entry 258', 'entry 257', 'entry 256']
                     assert [r.events[0].timestamp for r in records[:4]] == [
-                        (1760000000000 + index) / 1000 for index in range(259, 255, -1)
+                        (start + index) / 1000 for index in range(259, 255, -1)
                     ]
                     forward = tuple(reader.forward(0, cut.offset))
                     assert forward == tuple(reversed(records))

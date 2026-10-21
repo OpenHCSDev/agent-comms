@@ -170,7 +170,7 @@ class NativeRecord(TranscriptRecord):
     @property
     def annotation_id(self) -> str | None:
         entry = self.entry
-        return entry.annotation_id if entry is not None else None
+        return entry.id if entry is not None and entry.is_message else None
 
     @property
     def events(self):
