@@ -1,11 +1,11 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
+import asyncio
 import base64
 import fcntl
 import hashlib
 import os
 import secrets
-import shutil
 import json
 import logging
 import time
@@ -31,6 +31,7 @@ from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorStore, IssuedCode, TrustedBrowser, digest,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
 )
@@ -277,7 +278,7 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(clien
         "worker", "#comms", f"@claude-ai channel post {number}").message
         for number in range(55)]
     copied_root = tmp_path / "copied-wire"
-    shutil.copytree(comms.root, copied_root)
+    await asyncio.to_thread(StoreBackup.copy_tree, comms.root, copied_root)
     copied = Comms(copied_root)
     copied_store = ConnectorStore.at(tmp_path / "copied-auth")
     connector = Connector(copied_store, "http://127.0.0.1:18766", copied_root)
@@ -347,7 +348,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
     original = comms.messaging.send("worker", "claude-ai", "Ready for your message").message
     copied_root = tmp_path / ".agent-comms"
-    shutil.copytree(comms.root, copied_root)
+    await asyncio.to_thread(StoreBackup.copy_tree, comms.root, copied_root)
     monkeypatch.setenv("HOME", str(tmp_path))
     store = ConnectorStore.at(tmp_path / "copy-auth")
     connector = Connector(store, "http://127.0.0.1:18766", copied_root)
