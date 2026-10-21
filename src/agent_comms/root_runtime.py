@@ -9,7 +9,7 @@ from typing import Annotated
 from .errors import RelationViolationError
 from .field_codec import PathText
 from .launch_runtime import LaunchRuntime
-from .locked_store import DurableFile, LockedStore
+from .locked_store import DurableFile, LockedStore, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 
 
@@ -27,7 +27,7 @@ class RootRuntime:
         owner = store.owner(caller)
         if owner.prefix == caller.prefix:
             return
-        if MaintenanceBarrier(root / "registry.json").read().allows_runtime(caller):
+        if MaintenanceBarrier(RegistryFile.path_in(root)).read().allows_runtime(caller):
             return
         raise ForeignRuntimeError(
             f"Root {root} belongs to runtime {owner.prefix}; "
@@ -39,9 +39,14 @@ class RootRuntime:
         RootRuntimeStore.at(root).replace(cls(runtime.prefix))
 
 
+@dataclass(frozen=True)
 class RootRuntimeStore(LockedStore[RootRuntime], DurableFile):
     filename = ".root-runtime.json"
     record_type = RootRuntime
+
+    def __post_init__(self) -> None:
+        # This is the first file on a new root, before publisher preparation.
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     def empty(self) -> RootRuntime:
         raise FileNotFoundError(self.path)

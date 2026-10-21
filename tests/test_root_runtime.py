@@ -4,7 +4,9 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.locked_store import RegistryFile
+from agent_comms.wire_log import WireLog
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, NoMaintenanceTarget
 from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
 
 
@@ -23,8 +25,9 @@ def test_root_runtime_attachment_family(tmp_path):
     assert str(owner.prefix) in str(refused.value)
     assert str(foreign.prefix) in str(refused.value)
 
-    barrier = MaintenanceBarrier(root / "registry.json")
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
     held = barrier.begin(MaintenanceOperator.current(), target=target)
+    assert not NoMaintenanceTarget().allows_runtime(foreign)
     RootRuntime.require_attachable(root, target)
     RootRuntime.require_attachable(root, owner)
     with pytest.raises(ForeignRuntimeError):
@@ -38,11 +41,15 @@ def test_root_runtime_attachment_family(tmp_path):
         RootRuntime.require_attachable(root, owner)
 
 
-def test_comms_refuses_before_opening_foreign_stores(tmp_path):
+def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):
+    created = Comms(tmp_path / "created")
+    assert created.messaging.initialize_private_initial_protocol()
+    assert RootRuntimeStore.at(created.root).read().prefix == LaunchRuntime.running().prefix
+
     root = tmp_path / "bus"
     other = LaunchRuntime(tmp_path / "other/bin/python")
     RootRuntime.publish(root, other)
-    before = set(root.iterdir())
     with pytest.raises(ForeignRuntimeError):
         Comms(root)
-    assert set(root.iterdir()) == before
+    assert not RegistryFile.path_in(root).exists()
+    assert not WireLog.path_in(root).exists()

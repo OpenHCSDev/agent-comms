@@ -22,7 +22,7 @@ from typing import Literal, Self
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .lifecycle import LifecycleState
 from .launch_runtime import LaunchRuntime
 from .locked_store import DurableFile
@@ -72,12 +72,31 @@ class GrantedSends:
         pass
 
 
+class MaintenanceTarget(SubclassUnion):
+    """A hold without a target grants no additional runtime attachment."""
+
+    @abstractmethod
+    def allows_runtime(self, runtime: LaunchRuntime) -> bool: ...
+
+
+@dataclass(frozen=True)
+class NoMaintenanceTarget(NullMember, MaintenanceTarget):
+    def allows_runtime(self, runtime: LaunchRuntime) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
+    def allows_runtime(self, runtime: LaunchRuntime) -> bool:
+        return self.prefix == runtime.prefix
+
+
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     new_sends = running_sends = HeldSends
 
     @classmethod
     def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
-        return state.target.prefix == runtime.prefix
+        return state.target.allows_runtime(runtime)
 
     @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
@@ -223,7 +242,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     operator: MaintenanceOperator
     nonce: str
     phase: type[MaintenancePhase]
-    target: LaunchRuntime = field(default_factory=LaunchRuntime.running)
+    target: MaintenanceTarget = field(default_factory=NoMaintenanceTarget)
 
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.phase.allows_runtime(self, runtime)
@@ -398,7 +417,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
                                     nonce=Id128Text.mint(), phase=DrainingPhase,
-                                    target=target)
+                                    target=TargetRuntime(target.interpreter))
             self._write_unlocked(hold)
             return hold
 
