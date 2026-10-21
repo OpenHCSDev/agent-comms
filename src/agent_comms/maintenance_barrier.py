@@ -441,10 +441,8 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
         """Transfer a drained hold after its outgoing readers have stopped."""
-        expected.require_draining()
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
-            if self.current_unlocked() != expected:
-                raise RelationViolationError('Maintenance generation/operator changed')
+            self.require_draining_unlocked(expected)
             hold = replace(expected, generation=expected.generation + 1,
                            nonce=Id128Text.mint(), target=TargetRuntime(runtime.interpreter))
             self._write_unlocked(hold)
@@ -490,7 +488,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         expected.require_draining()
         if self.current_unlocked() != expected:
             raise RelationViolationError(
-                'Cutover maintenance phase changed before owner retirement'
+                'Maintenance generation/operator changed'
             )
 
     @contextmanager
