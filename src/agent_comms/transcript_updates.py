@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
@@ -19,9 +19,11 @@ from .acp_extension import (
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .runtime import RuntimeServer, SocketClient
 from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
+
+if TYPE_CHECKING:
+    from .runtime import RuntimeServer, SocketClient
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -27,7 +27,9 @@ async def headless_owner(comms, tmp_path, caplog):
                             runtime_enabled=True, auto_wake=False)
     owner.on_connect(None)
     try:
-        thread = await Coordination.run_worker(partial(owner.sessions.declare_thread, str(tmp_path)))
+        thread = await Coordination.run_worker(
+            partial(owner.sessions.declare_thread, str(tmp_path))
+        )
         await owner.sessions.start_owner(str(tmp_path), thread.name)
         yield owner
     finally:
