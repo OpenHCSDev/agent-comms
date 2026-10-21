@@ -136,6 +136,12 @@ def test_wrong_pause_identity_cannot_stop_the_real_session_bridge(
 def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunches(
         tmp_path, bridge_home):
     with session_bridge(tmp_path, bridge_home) as (home, claim, observed, child, log):
+        directory = home / '.local/state/agent-comms'
+        with Binding.open(directory / 'claude-bridge-copy') as db:
+            (binding,) = Binding.select(db)
+        with Binding.open(directory / 'claude-bridge-historical-copy') as db:
+            binding.bind(db)
+        # Historical journals can name the same canonical live claim.
         (bridge,) = Serve.running(home)
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:

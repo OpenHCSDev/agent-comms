@@ -495,7 +495,7 @@ class Serve(Watch):
 
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
-        running = []
+        claims = set()
         for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
             journal = state / BridgeStateTable.filename
             if not journal.is_file():
@@ -505,8 +505,9 @@ class Serve(Watch):
             for binding in bindings:
                 claim = WatchClaim(binding.thread, home)
                 if isinstance(claim.state(), LiveWatch) and claim.socket_path.exists():
-                    running.append(SessionBridge(claim, InspectSession().information(claim)))
-        return tuple(running)
+                    claims.add(claim)
+        return tuple(SessionBridge(claim, InspectSession().information(claim))
+                     for claim in sorted(claims, key=lambda claim: claim.thread))
 
     def retired(self, bridge: LineMonitorBridge) -> None:
         bridge.retirement.finish(self, bridge.watch_record())
@@ -535,6 +536,7 @@ class SessionBridge:
                 self.observed.process.signal(signal.SIGTERM)
             print(f'Session bridge {self.claim.thread}: owner exited; left stopped', file=sys.stderr)
             return ()
+        self.observed.owner.require_ancestor_of(self.observed.process.pid)
         peer = resources.enter_context(PauseSession(
             owner=self.observed.owner, process=self.observed.process).connection(self.claim))
         stream = resources.enter_context(peer.makefile('rb'))
