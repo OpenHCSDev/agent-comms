@@ -41,6 +41,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 
 if TYPE_CHECKING:
+    from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
     from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
     from .input_disposition import InputDocument
@@ -51,7 +52,6 @@ if TYPE_CHECKING:
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
     from .transcript_events import SentTranscript
-    from .agent_event_updates import AcpEventConsumer
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
 

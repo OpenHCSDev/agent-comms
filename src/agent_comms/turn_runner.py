@@ -200,7 +200,9 @@ class TurnRunner:
                     self.comms.messaging.send, thread_name, target, body,
                 ))
                 for notice in sent.notices:
-                    await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(events.Notice(text=notice))
+                    await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(
+                        events.Notice(text=notice)
+                    )
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
             )
@@ -366,7 +368,9 @@ class TurnRunner:
 
     async def publish_turn_state(self, consumer: AcpEventConsumer) -> None:
         """Publish the registry owner's current turn to this explicit recipient."""
-        update = await Coordination.run_worker(partial(self.current_turn_update, consumer.session_id))
+        update = await Coordination.run_worker(
+            partial(self.current_turn_update, consumer.session_id)
+        )
         await consumer.dispatch(update)
 
     async def active_backend_turn(self, session_id: str) -> DrainTurn:
@@ -430,7 +434,9 @@ class TurnRunner:
                         self.turn_tasks.pop(session_id, None)
                     # SelectedParticipant closed the registry lease while unwinding
                     # execution. Publish that canonical end on success and failure.
-                    await self.publish_turn_state(AcpEventConsumer(self.effects, session_id, self.runtime))
+                    await self.publish_turn_state(
+                        AcpEventConsumer(self.effects, session_id, self.runtime)
+                    )
 
     async def run_agent_turn(
         self,

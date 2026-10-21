@@ -315,7 +315,9 @@ class TurnProgress(events.AgentEventConsumer):
             )
             results = []
             for target in notice_targets:
-                prefix = "Request failed" if target in self.turn.reply_targets else "Delivery failed"
+                prefix = (
+                    "Request failed" if target in self.turn.reply_targets else "Delivery failed"
+                )
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,

@@ -34,8 +34,8 @@ if TYPE_CHECKING:
     from acp.agent.connection import AgentSideConnection
 
     from .routing import MessageRoute
-    from .turn_effects import TurnEffects
     from .runtime import RuntimeServer, SocketClient
+    from .turn_effects import TurnEffects
 
 
 @dataclass(eq=False, repr=False)
@@ -60,7 +60,9 @@ class AcpEventConsumer(MroDispatch):
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:
         if event.text:
-            await self.client.session_update(session_id=self.session_id, update=self.text_update(event.text))
+            await self.client.session_update(
+                session_id=self.session_id, update=self.text_update(event.text)
+            )
 
     @handles(events.ToolStart)
     async def on_tool_start(self, event: events.ToolStart) -> None:
@@ -178,14 +180,18 @@ class TurnEventConsumer(AcpEventConsumer):
 
     @handles(events.McpLiveStatus)
     async def on_mcp_live_status(self, event: events.McpLiveStatus) -> None:
-        if not await Coordination.run_worker(partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)):
+        if not await Coordination.run_worker(
+            partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)
+        ):
             return
         await self.client.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(McpClientAcknowledgementUpdate(self.turn_id, event.acknowledgement)),
+                field_meta=encode_updates(
+                    McpClientAcknowledgementUpdate(self.turn_id, event.acknowledgement)
+                ),
             ),
         )
 

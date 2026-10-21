@@ -25,7 +25,6 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
@@ -45,7 +44,6 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordinator import Coordination
 
-from . import agent_events as events
 from .acp_extension import (
     CompactRequest,
     encode_updates,
