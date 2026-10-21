@@ -1211,7 +1211,9 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
 
 
 class GodClassExcess(InventoryMeasure[dict[str, int]]):
-    """Independent class lines beyond 500, including newly introduced classes."""
+    """Independent class lines beyond 500 in Black's layout, including newly introduced classes.
+    Lines are counted after the revision's own Black configuration formats the file, so
+    formatting a class never reads as growth while Unformatted asks for exactly that."""
 
     threshold = 500
 
@@ -1220,6 +1222,19 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         # Complete inventories distinguish a moved declaration from another
         # same-named class in an unchanged module.
         return python_paths(repo, ref, root)
+
+    @classmethod
+    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
+        if not paths:
+            return {}
+        with tempfile.TemporaryDirectory(prefix="debt-ratchet-layout-") as scratch:
+            tree = Path(scratch)
+            Unformatted.extract(repo, ref, tree, paths)
+            if git(repo, "ls-tree", "--name-only", ref, "--", "pyproject.toml"):
+                (tree / "pyproject.toml").write_bytes(git(repo, "show", f"{ref}:pyproject.toml"))
+            subprocess.run((sys.executable, "-m", "black", "-q", *paths), cwd=tree, check=True,
+                           timeout=600)
+            return {path: cls.reading(path, (tree / path).read_bytes()) for path in paths}
 
     @classmethod
     def measured(cls, repo: Path, ref: str, base: str, head: str,
