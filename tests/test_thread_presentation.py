@@ -4,10 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.errors import UnregisteredThreadError
+from agent_comms.errors import RouteChanged, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.notification_progress import SendingProgress
-from agent_comms.route_selection import RouteChanged
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus, NoThreadPresentation, OtherRouteThread, SessionDisconnected,
     StatusPending, ThreadPresentationStatus, WorkingThreadPresentationStatus,

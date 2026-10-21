@@ -17,6 +17,12 @@ class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
+class RouteChanged(ValueError):
+    """The selected Comms route was replaced; reopen against the current one."""
+
+    reader_sentence = "On another Comms route; reopen this view"
+
+
 class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
