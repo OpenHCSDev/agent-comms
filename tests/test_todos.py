@@ -211,7 +211,7 @@ def pr_order(ctx, pid):
     return ctx.comms.goals.todos.create(
         pid, source.github, "Fix the sidebar", creator=lead, owner=lead,
         generation="pr-work", goal=GoalRef(lead.name, 1.0, "pr-work"),
-        deadline=RecordedEventTime(1000),
+        review_at=RecordedEventTime(1000),
         order=replace(order(source.checkout), id=f"order-{pid}"))
 
 
