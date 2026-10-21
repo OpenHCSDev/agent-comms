@@ -7,6 +7,7 @@ until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
 
+import math
 import time
 from abc import abstractmethod
 from collections.abc import Sequence
@@ -64,68 +65,98 @@ class ChokeholdSender(EscalationSender):
     sender = "chokehold"
 
 
+@dataclass(frozen=True)
+class Sign:
+    """One occurrence of a degraded signal. Its key is what makes it new: a message, a stalled
+    phase at its age doubling, a load round. The same occurrence never stops the commander twice;
+    its line is how it reads now."""
+
+    signal: type[Degradation]
+    key: tuple[object, ...]
+    line: str = field(compare=False)
+
+
 class Degradation(DeclaredFamily, affix="Degradation"):
     """One signal that the fleet is getting away from its commander."""
 
     @classmethod
     @abstractmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[str, ...]:
-        """How the signal shows now, one line each; empty while it does not."""
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+        """How the signal shows now, one sign per occurrence; empty while it does not."""
+
+
+class Escalation:
+    """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
+    new vibe check, or the check would feed on its own messages."""
 
 
 class AnswersOwedDegradation(Degradation):
-    """Messages to the commander are waiting past their window."""
+    """Messages to the commander are waiting past their window; each message is one sign."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[str, ...]:
-        return tuple(rule.line() for rule in OwedAnswer.broken(comms, commander))
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+        return tuple(
+            Sign(cls, (rule.cited,), rule.line())
+            for rule in OwedAnswer.broken(comms, commander)
+            if not isinstance(rule, Escalation)
+        )
 
 
 class PlanStalledDegradation(Degradation):
-    """Held plan work that main still lacks."""
+    """Held plan work that main still lacks. A stall of hours does not clear in one round, so a
+    phase stops the commander when it crosses the window and again each time its age doubles."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[str, ...]:
-        return tuple(rule.line() for rule in PlanStalled.violations(comms, commander))
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+        now = time.time()
+        return tuple(
+            Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
+            for rule in PlanStalled.violations(comms, commander)
+        )
+
+    @staticmethod
+    def doublings(held: float) -> int:
+        return int(math.log2(max(held, PlanStalled.window) / PlanStalled.window))
 
 
 class OverloadDegradation(Degradation):
-    """More owed orders, expired timers and unjudged edits than one commander keeps up with."""
+    """More owed orders, expired timers and unjudged edits than one commander keeps up with;
+    load moves every beat, so it stops the commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
+    round_seconds: ClassVar[int] = 30 * 60
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[str, ...]:
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         load = Load.of(comms, commander)
-        return (f"{load}, over {cls.ceiling:.0f}",) if load.total >= cls.ceiling else ()
+        if load.total < cls.ceiling:
+            return ()
+        return (Sign(cls, (int(time.time() // cls.round_seconds),),
+                     f"{load}, over {cls.ceiling:.0f}"),)
 
 
 @dataclass(frozen=True)
 class VibeCheck(UndatedStandingRule):
-    """Degraded signals break it once per combination and per round, so a commander still
-    degraded half an hour later is stopped again."""
+    """Each degraded sign breaks it once: the heartbeat enforces a rule when it newly breaks, so a
+    sign that persists stops the commander once, and a new message, a newly stalled phase or a
+    doubled stall stops it again. Pings are decisions, each once."""
 
-    signals: frozenset[type[Degradation]]
-    round: int
-    lines: tuple[str, ...] = field(compare=False)
-    round_seconds: ClassVar[int] = 30 * 60
+    sign: Sign
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        found = {
-            member: member.found(comms, commander)
+        return tuple(
+            cls(sign)
             for member in Degradation.members_with(Degradation)
-        }
-        showing = {member: lines for member, lines in found.items() if lines}
-        if not showing:
-            return ()
-        return (
-            cls(
-                frozenset(showing),
-                int(time.time() // cls.round_seconds),
-                tuple(line for lines in showing.values() for line in lines),
-            ),
+            for sign in member.found(comms, commander)
         )
+
+    def heartbeat_group(self) -> object:
+        return VibeCheck
+
+    def heartbeat_line(self, current: Sequence[Self]) -> str:
+        names = ", ".join(sorted({check.sign.signal.declared_name for check in current}))
+        return f"VIBE CHECK ({names}) -> answer the {VibeCheckSender.sender} messages now"
 
     def enforce(self, comms: Comms, commander: str) -> None:
         VibeCheckSender.burst(comms, commander, self.indictment())
@@ -133,7 +164,7 @@ class VibeCheck(UndatedStandingRule):
     def indictment(self) -> tuple[str, ...]:
         return (
             "VIBE CHECK. This is about you, right now, not the units.",
-            *self.lines,
+            self.sign.line,
             f"Stop. Reread {CommanderConfig.packaged_indictment()} in full. You are doing what it"
             " describes, this hour.",
             "Answer every vibe-check message with one --answers: which failure in the indictment"
@@ -142,12 +173,11 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def line(self) -> str:
-        names = ", ".join(sorted(signal.declared_name for signal in self.signals))
-        return f"VIBE CHECK ({names}) -> answer the {VibeCheckSender.sender} message now"
+        return self.heartbeat_line((self,))
 
 
 @dataclass(frozen=True)
-class VibeCheckUnanswered(OwedAnswer, UndatedStandingRule):
+class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
 
     seconds: ClassVar[int] = 5 * 60
@@ -236,7 +266,7 @@ class Chokehold(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdUnanswered(OwedAnswer, UndatedStandingRule):
+class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
     @classmethod
@@ -276,7 +306,7 @@ class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
         return tuple(
             name
             for name, thread in comms.registry.all_threads().items()
-            if any(goal.state.lifts_on_compliance for goal in thread.goal.active())
+            if any(goal.state.lifts_on_compliance for goal in thread.goal)
         )
 
 
