@@ -36,10 +36,10 @@ from .goals import (
     NoGoal,
     ProblemGoalOrder,
     ReportedTurn,
-    RequestDirective,
     RequestGoalOrder,
     UnorderedGoalOrder,
 )
+from agent_comms.owner_requests import RequestDirective
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName

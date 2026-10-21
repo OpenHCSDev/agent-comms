@@ -64,6 +64,12 @@ from agent_comms.locked_store import DurableFile, RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.owner_requests import (
+    OpenRequestState,
+    OwnerRequestId,
+    RequestDirective,
+    RequestState,
+)
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.progress_claims import MergedClaim, ProgressClaim
@@ -3118,6 +3124,32 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True, slots=True)
+class OwnerRequest(TypedTable):
+    """One owner's request, independent of any current turn goal."""
+
+    indexes = (Index(("commander", "state", "created_at")),)
+
+    id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
+    commander: RecordedThreadIncarnation
+    text: str
+    state: RequestState = OpenRequestState()
+    directives: tuple[RequestDirective, ...] = ()
+    created_at: float = field(default_factory=time.time)
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise TodoError("An owner request needs its text.")
+
+    @classmethod
+    def new(cls, commander: ThreadIncarnation, text: str) -> Self:
+        return cls(OwnerRequestId.new(), commander.require_recorded(), text)
+
+    def require_commander(self, commander: ThreadIncarnation) -> None:
+        if self.commander != commander.require_recorded():
+            raise TodoError(f"Request {self.id.value} belongs to another commander.")
+
+
+@dataclass(frozen=True, slots=True)
 class TodoStore(DurableStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
@@ -3128,7 +3160,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, OwnerRequest)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3149,6 +3181,36 @@ class TodoStore(DurableStore):
             super().writer_connection(check_same_thread=check_same_thread) as connection,
         ):
             yield connection
+
+    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
+        request = OwnerRequest.new(commander, text)
+        with self.writing() as db:
+            request.insert(db)
+        return request
+
+    def owner_request(self, request: OwnerRequestId) -> OwnerRequest:
+        with self.snapshot() as db:
+            return OwnerRequest.require(db, id=request)
+
+    def open_requests(self, commander: ThreadIncarnation) -> tuple[OwnerRequest, ...]:
+        with self.snapshot() as db:
+            return tuple(OwnerRequest.select(
+                db, commander=commander.require_recorded(), state=OpenRequestState(),
+                order_by=("created_at", "id"), descending=True,
+            ))
+
+    def complete_request(
+        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
+    ) -> OwnerRequest:
+        with self.writing() as db:
+            current = OwnerRequest.require(db, id=request)
+            current.require_commander(commander)
+            state = current.state.require_open(request)
+            completed = replace(current, state=state.complete(
+                request, self.for_request(commander, request.value), reason,
+            ))
+            completed.upsert(db)
+        return completed
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)

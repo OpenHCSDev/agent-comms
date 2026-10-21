@@ -9,7 +9,6 @@ import shlex
 import signal
 import subprocess
 import tempfile
-import time
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -33,6 +32,7 @@ from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
+from agent_comms.owner_requests import RequestDirective
 
 if TYPE_CHECKING:
     from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .todos import Todo
     from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -466,33 +465,6 @@ class UnorderedGoalOrder(GoalOrder):
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
-
-
-@dataclass(frozen=True)
-class RequestDirective:
-    """One original directive; only a reply linked to that message answers it."""
-
-    window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
-    seq: int
-    deadline: float
-
-    @property
-    def due_time(self) -> str:
-        return time.strftime("%H:%M", time.localtime(self.deadline))
-
-    def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
-
-    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
-        if self.deadline >= now:
-            return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
-            replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
 
 
 @dataclass(frozen=True)

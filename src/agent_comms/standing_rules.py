@@ -22,7 +22,7 @@ from agent_comms.repo import Repo
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.goals import RequestDirective
+    from agent_comms.owner_requests import RequestDirective
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import Todo
 
