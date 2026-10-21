@@ -11,11 +11,16 @@ import os
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
+import traceback
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
+from agent_comms.change_report import FileLine
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.bus_publication import AgentOrigin
@@ -23,16 +28,79 @@ from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
 from agent_comms.messages import InfoKind, Message
+from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
 
 
+class InstallOutcome(ABC):
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
+
+class UnfinishedInstall(InstallOutcome):
+    def lines(self) -> tuple[str, ...]:
+        raise RuntimeError("Install exited without returning its result")
+
+
 @dataclass(frozen=True)
+class FinishedInstall(InstallOutcome):
+    upgrade: Upgrade
+
+    def lines(self) -> tuple[str, ...]:
+        return ("Install finished", *self.upgrade.lines())
+
+
+class InstallFailure(InstallOutcome, MroDispatch):
+    """Decode a raised exception once; its member owns the result's presentation."""
+
+    @classmethod
+    def of(cls, error: BaseException) -> InstallFailure:
+        handler = getattr(cls, next(cls.handler_names_for(type(error))))
+        return handler(error)
+
+    @handles(UpgradeRefused)
+    @staticmethod
+    def refused(error: UpgradeRefused) -> InstallFailure:
+        return RefusedInstall(error)
+
+    @handles(BaseException)
+    @staticmethod
+    def crashed(error: BaseException) -> InstallFailure:
+        source = Path(__file__).parents[2]
+        frame = next(frame for frame in reversed(traceback.extract_tb(error.__traceback__))
+                     if Path(frame.filename).is_relative_to(source))
+        return CrashedInstall(type(error).__qualname__, str(error),
+                              FileLine(str(Path(frame.filename).relative_to(source.parent)),
+                                       frame.lineno))
+
+
+@dataclass(frozen=True)
+class RefusedInstall(InstallFailure):
+    error: UpgradeRefused
+
+    def lines(self) -> tuple[str, ...]:
+        return self.error.lines()
+
+
+@dataclass(frozen=True)
+class CrashedInstall(InstallFailure):
+    exception_type: str
+    message: str
+    source: FileLine
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Install failed: {self.exception_type}: {self.message}",
+                f"Source: {self.source.to_wire()}")
+
+
+@dataclass
 class InstallReport(ServiceSender):
-    """Publish the install's own typed result, never an interpretation of its logs."""
+    """One run owns its start and terminal post, including rehearsal and cleanup."""
 
     sender: ClassVar[str] = "installer"
     root: Path
+    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
 
     def post(self, lines: tuple[str, ...]) -> Message:
         with client_wire(self.root) as comms:
@@ -41,14 +109,23 @@ class InstallReport(ServiceSender):
                 Message(sender=self.sender, target="#comms", body="\n".join(lines),
                         type=InfoKind), origin=AgentOrigin())
 
-    def starting(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install starting", *upgrade.lines()))
+    @contextmanager
+    def running(self, upgrade: TargetTree) -> Iterator[InstallReport]:
+        self.outcome = UnfinishedInstall()
+        try:
+            with upgrade:
+                self.post(("Install starting", f"Target: {upgrade.revision[:12]}"))
+                yield self
+            self.outcome.lines()  # A missing result becomes a reported failure too.
+        except BaseException as error:
+            self.outcome = InstallFailure.of(error)
+            raise
+        finally:
+            self.post(self.outcome.lines())
 
-    def finished(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install finished", *upgrade.lines()))
-
-    def failed(self, error: UpgradeRefused) -> Message:
-        return self.post(error.lines())
+    def complete(self, upgrade: Upgrade) -> Upgrade:
+        self.outcome = FinishedInstall(upgrade)
+        return upgrade
 
 
 @dataclass(frozen=True)

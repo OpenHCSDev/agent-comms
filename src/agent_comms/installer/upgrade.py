@@ -32,7 +32,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -506,8 +506,8 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(
 
 
 @dataclass(frozen=True)
-class TargetTree:
-    """The temporary worktree of the target revision the install runs from."""
+class TargetTree(AbstractContextManager["TargetTree"]):
+    """The temporary worktree and scratch lifetime owned by one install."""
 
     repo: Path
     scratch: Path
@@ -525,7 +525,13 @@ class TargetTree:
         Checkout.add(self.repo, self.path, self.revision, "--detach", "-q")
 
     def close(self) -> None:
-        subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
+        try:
+            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
+        finally:
+            shutil.rmtree(self.scratch, ignore_errors=True)
+
+    def __exit__(self, *_error: object) -> None:
+        self.close()
 
 
 def carry(step: type[Carry], root: Path, stack: Stack, tree: TargetTree, *flags: str) -> Carried:
@@ -605,9 +611,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
-    current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
-    try:
+    with report.running(tree):
+        current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
                            target]).returncode:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
@@ -629,18 +635,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         rehearsal = install.rehearsal()
         names = tuple(step.name() for step in pending)
         if rehearse_only:
-            return RehearsedUpgrade(current, target, root, names, rehearsal)
-        install.announce(report)
+            return report.complete(RehearsedUpgrade(current, target, root, names, rehearsal))
         result = InstalledUpgrade(current, target, root, names, rehearsal,
                                   install.install(rehearsal), harnesses())
-        report.finished(result)
-        return result
-    except UpgradeRefused as error:
-        report.failed(error)
-        raise
-    finally:
-        tree.close()
-        shutil.rmtree(scratch, ignore_errors=True)
+        return report.complete(result)
 
 
 @dataclass(frozen=True)
@@ -659,10 +657,6 @@ class Install[Rehearsed: Rehearsal](ABC):
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
-
-    def announce(self, report: InstallReport) -> None:
-        report.starting(Upgrade(self.current, self.target, self.root,
-                                tuple(step.name() for step in self.pending)))
 
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
@@ -754,9 +748,6 @@ class FreshInstall(Install[FreshRehearsal]):
            installer: InstallerChoice, spill_dir: Path) -> Install:
         return cls(checkout, root, current, target, chain, pending, installed, staged,
                    tree, installer, spill_dir)
-
-    def announce(self, report: InstallReport) -> None:
-        """A fresh bus has nowhere to publish a start message yet."""
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()

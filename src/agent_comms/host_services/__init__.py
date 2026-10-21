@@ -27,23 +27,18 @@ class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
 
 
-@dataclass(frozen=True, init=False)
-class BoundListener:
-    """Evidence from a started site's actual listening sockets."""
+class SystemdSite(TCPSite):
+    """The listening site notifies its supervisor only after binding succeeds."""
 
-    site: TCPSite
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's supervisor socket
 
-    def __new__(cls):
-        raise TypeError("Use BoundListener.of(site)")
-
-    @classmethod
-    def of(cls, site: TCPSite) -> Self:
-        server = site._server
-        if server is None or not server.is_serving() or not server.sockets:
-            raise ServiceNotServingError("The service has no bound listening socket")
-        listener = object.__new__(cls)
-        object.__setattr__(listener, "site", site)
-        return listener
+    async def start(self) -> None:
+        await super().start()
+        address = os.environ[self.notify_variable]
+        target = "\0" + address[1:] if address.startswith("@") else address
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect(target)
+            notify.sendall(b"READY=1")
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -103,21 +98,6 @@ class SystemdUserService(HostService, declared_name=None):
 
     program: ClassVar[str]
     unit: ClassVar[str]
-    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
-
-    @classmethod
-    def ready(cls, listener: BoundListener) -> None:
-        """Tell the supervisor this process serves on a proved listener.
-
-        Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
-        for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
-        """
-        address = os.environ[cls.notify_variable]
-        target = "\0" + address[1:] if address.startswith("@") else address
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
-            notify.connect(target)
-            notify.sendall(b"READY=1")
-
     @property
     def unit_file(self) -> Path:
         return Path.home() / ".config/systemd/user" / self.unit

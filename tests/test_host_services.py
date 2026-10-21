@@ -9,13 +9,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from aiohttp import web
+from aiohttp import ClientSession, web
 
 from connector_readiness import ConnectorReadiness
 from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.host_services import (
-    BoundListener, HostService, ServiceNotServingError, SystemdUserService,
+    HostService, ServiceNotServingError, SystemdSite,
 )
 from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
 from agent_comms.installer.backup import StoreBackup
@@ -23,31 +23,45 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 
 
-def test_readiness_requires_a_real_bound_listener(monkeypatch):
+def test_site_notifies_only_after_successful_start(monkeypatch):
     address = f"@p404-ready-{os.getpid()}"
-    monkeypatch.setenv(SystemdUserService.notify_variable, address)
+    monkeypatch.setenv(SystemdSite.notify_variable, address)
 
     async def serve():
-        runner = web.AppRunner(web.Application())
+        app = web.Application()
+
+        async def read(request):
+            return web.Response(text="serving")
+
+        app.router.add_get("/", read)
+        runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
         try:
-            with pytest.raises(ServiceNotServingError):
-                BoundListener.of(site)
-            with pytest.raises(TypeError):
-                BoundListener()
-            with pytest.raises(TypeError):
-                SystemdUserService.ready()
-            await site.start()
-            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as supervisor:
+            with (socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as supervisor,
+                  socket.socket() as occupied):
                 supervisor.bind("\0" + address[1:])
-                supervisor.settimeout(1)
-                SystemdUserService.ready(BoundListener.of(site))
+                supervisor.settimeout(.02)
+                site = SystemdSite(runner, "127.0.0.1", 0)
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
+                occupied.bind(("127.0.0.1", 0))
+                occupied.listen()
+                blocked = SystemdSite(runner, "127.0.0.1", occupied.getsockname()[1])
+                with pytest.raises(OSError):
+                    await blocked.start()
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
+                await site.start()
                 assert supervisor.recv(64) == b"READY=1"
+                port = runner.addresses[0][1]
+                async with ClientSession() as client:
+                    async with client.get(f"http://127.0.0.1:{port}/") as reply:
+                        assert await reply.text() == "serving"
+                await site.stop()
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
         finally:
             await runner.cleanup()
-        with pytest.raises(ServiceNotServingError):
-            BoundListener.of(site)
 
     asyncio.run(serve())
 

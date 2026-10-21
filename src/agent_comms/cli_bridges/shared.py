@@ -601,8 +601,11 @@ class ReplacedBridge(BridgeResume):
 
 @dataclass(frozen=True)
 class UnobservedBridge(BridgeResume):
+    reason: str
+
     def lines(self) -> tuple[str, ...]:
-        return (f"Session bridge {self.name}: new runtime was not observed; re-arm this bridge",)
+        return (f"Session bridge {self.name}: new runtime was not observed "
+                f"({self.reason}); re-arm this bridge",)
 
 
 @dataclass(frozen=True)
@@ -638,8 +641,8 @@ class PausedSessionBridge(ResumableBridge):
             return OwnerExitedBridge(name)
         try:
             self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
-        except OSError:
-            return UnobservedBridge(name)
+        except OSError as error:
+            return UnobservedBridge(name, f"{type(error).__name__}: {error}")
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
@@ -647,14 +650,15 @@ class PausedSessionBridge(ResumableBridge):
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
-            except OSError:
-                return UnobservedBridge(name)
+            except OSError as error:
+                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
             if current.process != observed.process or current.owner != observed.owner:
                 return ReplacedBridge(name, observed.process, current.process)
             if current.runtime.prefix != runtime.prefix:
-                return UnobservedBridge(name)
+                return UnobservedBridge(
+                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
             return ResumedBridge(name, observed.runtime, current.runtime)
-        return UnobservedBridge(name)
+        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
 
 
 class Enrol(Operation):

@@ -51,7 +51,7 @@ from .field_codec import (
     Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
 )
 from .goal_actions import DirectiveGoalAction
-from .host_services import BoundListener, HostService, SystemdUserService
+from .host_services import HostService, SystemdSite
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
@@ -868,9 +868,7 @@ class ServeVerb(ConnectorOptions):
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stopped.set)
         try:
-            site = web.TCPSite(runner, LOOPBACK, self.port)
-            await site.start()
-            SystemdUserService.ready(BoundListener.of(site))
+            await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
         finally:
             await runner.cleanup()

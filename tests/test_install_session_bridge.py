@@ -1,8 +1,10 @@
 """Real session endpoint retirement; no live home, provider, or package mutation."""
 
+import errno
 import json
 import os
 import select
+import socket
 import subprocess
 import sys
 import time
@@ -13,7 +15,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
-from agent_comms.cli_bridges.shared import MONITOR_FRAME, Binding, MonitorProbe, Serve
+from agent_comms.cli_bridges.shared import MONITOR_FRAME, Binding, MonitorProbe, Serve, UnobservedBridge
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
@@ -140,6 +142,19 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         assert child.wait(timeout=15) == 0, log.read_text()
         with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy') as db:
             assert Binding.select(db)[0].thread == claim.thread
+
+
+def test_closed_resume_socket_preserves_its_actual_error_and_never_relaunches(tmp_path, bridge_home):
+    with session_bridge(tmp_path, bridge_home) as (home, _, _, child, log):
+        (bridge,) = Serve.running(home)
+        with ExitStack() as resources:
+            paused = bridge.pause(resources)
+            paused.peer.shutdown(socket.SHUT_WR)
+            outcome = paused.resume()
+        assert isinstance(outcome, UnobservedBridge)
+        assert f"[Errno {errno.EPIPE}]" in outcome.reason
+        assert outcome.reason in outcome.lines()[0]
+        assert child.wait(timeout=15) == 0, log.read_text()
 
 
 def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_path):
