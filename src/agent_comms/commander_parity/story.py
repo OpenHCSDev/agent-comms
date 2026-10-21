@@ -10,7 +10,9 @@ from agent_comms.todos import SendBackVerdict, StrikeReason, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsFleetStoryTool,
+    CommsInboxTool,
     CommsOrderStoryTool,
+    InboxPageRead,
     CommsTodoCreateTool,
     CommsVerdictTool,
 )
@@ -74,7 +76,20 @@ class StoryCase(LifecycleCase):
     ) -> tuple[tuple[str, bool], ...]:
         orders = tuple(result for result in native if isinstance(result, OrderStory))
         fleets = tuple(result for result in native if isinstance(result, FleetStory))
+        current = rows[-1]
+        inbox = run.commander.call(CommsInboxTool(thread=run.worker, ack=False))
+        assert isinstance(inbox, InboxPageRead)
+        worker = run.commander.comms.registry.require(run.worker)
+        goal = worker.goal.require()
+        assigned = goal.order.todos(run.commander.comms.goals, worker.incarnation, goal.id)
         return (
+            ("replacement message recorded", len(current.messages) == len(rows[0].messages) + 1),
+            ("replacement delivered to worker", any(
+                message.message_id == current.latest_message.message_id
+                for message in inbox.messages)),
+            ("replacement is worker's current order", any(
+                todo.id == current.id and todo.order.checked().id == current.order.checked().id
+                for todo in assigned)),
             ("two actual order reads", len(orders) == 2),
             ("one actual fleet read", len(fleets) == 1),
             ("record unchanged by reads", rows[-2] == rows[-1]),
