@@ -21,7 +21,7 @@ from pydantic import JsonValue
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
-from .channel_targets import ChannelTarget, CommandTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
@@ -116,7 +116,6 @@ from agent_comms.todos import (
     StrikeReason,
     Todo,
     TodoOperation,
-    VerdictAudience,
 )
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .thread_identity import ThreadIncarnation
@@ -467,9 +466,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    HeldBusWrite, ToolRequest[Caller], declared_name=None
-):
+class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -477,6 +474,12 @@ class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+):
+    """Native declarations using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -1064,7 +1067,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
             )
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            MessageReference(original.seq, original.message_id), store=comms.goals.todos,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
@@ -1316,7 +1319,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(PublishingToolRequest):
+class SendTool(PublishingTool):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1338,17 +1341,25 @@ class CommsSendTool(PublishingToolRequest):
     ] = NoChangeReport()
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        return self.send_message(comms, caller, CommandTarget.named(self.target))
+
+    def send_message(
+        self, comms: Comms, caller: ToolCaller, target: NamedTarget,
+    ) -> MessagePublished:
         try:
             caller.require_directive(comms, self.body)
-            body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            body = target.addressed(self.audience, self.body)
+            result = comms.messaging.send(self.sender, target.name, body, self.type, report=self.report)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
-        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
+
+
+class CommsSendTool(SendTool, ToolRequest):
+    """The native send declaration; its fields and publication belong to SendTool."""
 
 
 @dataclass(frozen=True, kw_only=True)

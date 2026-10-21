@@ -15,7 +15,6 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .messages import Message
     from .tools import ToolRequest
 
 
@@ -64,11 +63,6 @@ class ToolCaller(ABC):
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller whose sends direct units refuses a body its directive checks refuse."""
 
-    @abstractmethod
-    def sent(self, comms: Comms, message: Message) -> None:
-        """What a message this caller sent records beyond the bus."""
-
-
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
@@ -97,10 +91,6 @@ class NoThreadCaller(ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """A message sent without a calling thread records nothing more."""
-
 
 @dataclass(frozen=True)
 class ThreadCaller(ToolCaller):
@@ -135,9 +125,6 @@ class ThreadCaller(ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """An agent's message is only the bus record."""
 
     def retire(self, comms: Comms) -> None:
         raise RelationViolationError('Only a commander fork can retire through this verb.')

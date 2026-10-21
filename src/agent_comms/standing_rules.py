@@ -23,8 +23,8 @@ from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.goals import RequestDirective
     from agent_comms.messages import Message
+    from agent_comms.owner_requests import OwnerRequestId, RequestDirective
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
@@ -328,24 +328,23 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
 
-    request: str
+    request: OwnerRequestId
     directive: RequestDirective
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(directive.original(comms.goals), goal.id, directive)
-            for goal in thread.goal.active()
-            for directive in goal.order.overdue_directives(
-                goal, comms.goals, thread.incarnation, now
-            )
+            cls(directive.original(comms.goals), request.id, directive)
+            for request in comms.goals.todos.open_requests(thread.incarnation)
+            for directive in request.overdue_directives(comms.goals, now)
         )
 
     @classmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return tuple(message for goal in comms.registry.require(commander).goal.active()
-                     for message in goal.order.directive_messages(comms.goals))
+        thread = comms.registry.require(commander)
+        return tuple(message for request in comms.goals.todos.open_requests(thread.incarnation)
+                     for message in request.directive_messages(comms.goals))
 
     def began(self) -> float:
         return self.directive.deadline
@@ -353,7 +352,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def line(self) -> str:
         return (
             f"DIRECTIVE UNACTED: owner directive {self.cited}"
-            f" on request {self.request},"
+            f" on request {self.request.value},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
@@ -364,7 +363,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
+            f"DIRECTIVE UNACTED: request {self.request.value}: {len(current)} owner directives; "
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"

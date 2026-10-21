@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active, Settled
+from agent_comms.lifecycle_capability import Active
 
 import json
 import os
@@ -11,7 +11,6 @@ import shlex
 import signal
 import subprocess
 import tempfile
-import time
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
@@ -38,7 +37,7 @@ from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
+    from agent_comms.goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
     from .agent_activity import AgentActivity
@@ -54,8 +53,6 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
     from .todos import Todo
-    from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -483,14 +480,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
 
-    def require_request(self) -> None:
-        raise ValueError("An order serves an open owner request: request add records one.")
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ()
-
     def instructions(self, todos: Sequence[Todo]) -> str:
         return ""
 
@@ -508,17 +497,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
 
     def require_model_block(self) -> None:
         pass
-
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """Only a thread holding owner requests records an owner directive."""
-        return goal
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return ()
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return ()
 
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
@@ -538,79 +516,6 @@ class UnorderedGoalOrder(GoalOrder):
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
-
-
-@dataclass(frozen=True)
-class RequestDirective:
-    """One original directive; only a reply linked to that message answers it."""
-
-    window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
-    seq: int
-    deadline: float
-
-    @property
-    def due_time(self) -> str:
-        return time.strftime("%H:%M", time.localtime(self.deadline))
-
-    def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
-
-    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
-        if self.deadline >= now:
-            return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
-            replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
-
-
-@dataclass(frozen=True)
-class RequestGoalOrder(GoalOrder):
-    """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each owner directive the commander
-    receives is recorded on it when it arrives."""
-
-    directives: tuple[RequestDirective, ...] = ()
-
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        pass
-
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goal.state.items_with(Settled, goal):
-            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
-
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if self.serving(goal, goals, owner):
-            raise ValueError(f"Request {goal.id} still has open orders.")
-
-    def require_request(self) -> None:
-        pass
-
-    def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
-        return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
-
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """A closed request is replaced by one the directive opens; an open one records it."""
-        if not goal.state.items_with(Settled, goal):
-            return replace(goal, revision=goal.revision + 1, order=replace(
-                self, directives=(*self.directives, directive.directive())))
-        return directive.request(goal, ctx)
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return tuple(directive.original(goals) for directive in self.directives)
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return tuple(directive for directive in self.directives
-                     if directive.overdue(goals, owner, now))
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ((goal, self.serving(goal, goals, owner)),)
 
 
 @dataclass(frozen=True)

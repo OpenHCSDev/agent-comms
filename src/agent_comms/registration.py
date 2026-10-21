@@ -13,7 +13,6 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
-from .goals import RequestGoalOrder
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
@@ -86,7 +85,7 @@ class Registration:
             self._commit_registration(edit, change)
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
-        """Declare or resume one child and its own request under the registry's lock."""
+        """Declare or resume one child and its own goal under the registry's lock."""
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
             if edit.document.canonical_name(name) != name:
@@ -101,10 +100,10 @@ class Registration:
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution)
-            request = ('\n'.join(goal.text for goal in parent.goal.active())
-                       or f'Coordinate assigned work for {parent.name}.')
+            text = ('\n'.join(goal.text for goal in parent.goal.active())
+                    or f'Coordinate assigned work for {parent.name}.')
             with self._preparing_declaration(edit, child, _RUNNING_STATUS) as change:
-                goal = SetGoalAction(text=request, order=RequestGoalOrder()).create(
+                goal = SetGoalAction(text=text).create(
                     GoalActionContext(goals, change.thread))
                 return self._commit_registration(edit, replace(
                     change, thread=replace(change.thread, goal=goal))).thread
