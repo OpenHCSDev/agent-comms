@@ -25,8 +25,9 @@ zero parse omissions** at the main above. Core's existing inventory parsed 427
 modules with zero omissions. Declaration/import/call evidence is retained at
 `/home/ts/.cache/agent-scratch/unit-goalblock/toad-controls-ast.txt` and
 `final-owner-ast.txt`. Dynamic Python rebinding is outside that syntactic proof.
-Patterns: remove IMPL-2 enum dispatch, BOUND-8 recovered execution at the control
-boundary, and TIME-3 imports of the deleted execution alias. Do not add aliases.
+Patterns: remove IMPL-2 enum-based fixture constructors and IMPL-12 copied Pause
+behavior. Keep controls dependent on the execution owner. Do not introduce TIME-3
+compatibility aliases for the deleted ThreadGoalExecution base.
 The Core checkpoint also removes the stale state-toggle test and its literal
 caption table; actual turn tests now check Retry versus Pause on the resulting
 execution. StandbyExecution composes ActiveExecution and WaitingExecution so the
