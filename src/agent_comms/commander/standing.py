@@ -39,8 +39,7 @@ class Detached(UndatedStandingRule):
         for todo in cls.todos(comms, commander):
             owed.setdefault(todo.holder, []).append(todo.id)
         registry = comms.registry.snapshot()
-        away = [unit for unit in sorted(owed)
-                if unit not in registry.threads or not registry.status(unit).receiving]
+        away = [unit for unit in sorted(owed) if not registry.receiving(unit)]
         unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in registry.threads))
         return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
 
@@ -113,7 +112,9 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[FlatWheelSpin, ...]:
-        held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
+        presence = comms.registry.snapshot()
+        held = tuple(todo for todo in cls.todos(comms, commander)
+                     if todo.pending and presence.receiving(todo.holder))
         pulls = PullRequests(held)
         storage = comms.registry.storage_rule
         trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
@@ -203,7 +204,7 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
         """Assign eligible work; refused replacements preserve the observed row."""
-        available = comms.goals.todos.reassignable(comms.registry.storage_rule)
+        available = comms.goals.todos.reassignable(comms.registry)
         for commander in {todo.creator_identity.name for todo in available}:
             mine = (todo for todo in available if todo.creator_identity.name == commander)
             for rule in cls.paired(comms, commander, mine, StallWatcherIncarnation.watcher()):

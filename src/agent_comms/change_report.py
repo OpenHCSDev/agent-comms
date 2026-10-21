@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
+from agent_comms.errors import ToolRefusedError
 from .field_codec import MalformedRecord, WireValue, boundary_decoder
+
+
+class MissingSourceLine(ToolRefusedError):
+    """A cited file:line is not in the checkout it must exist in; the caller cites another."""
 
 
 class SourceReference(ABC):
@@ -62,7 +67,7 @@ class FileLine(WireValue, SourceReference):
                 for line, _ in enumerate(source, 1):
                     if line == self.line:
                         return
-        raise ValueError(f"Source owner {path}:{self.line} does not exist.")
+        raise MissingSourceLine(f"Source owner {path}:{self.line} does not exist.")
 
     def to_wire(self) -> str:
         return f"{self.file}:{self.line}"

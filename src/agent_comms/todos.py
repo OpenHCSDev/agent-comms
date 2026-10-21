@@ -661,6 +661,13 @@ class PresentCheckout(ProgressCheckout):
     def published(self, pattern: str) -> Iterator[ProgressPoint]:
         return self.commits(pattern, self.origin_refs, *self.default_refs)
 
+    def edits(self) -> Iterator[float]:
+        """When each uncommitted change in this checkout was last written; a deletion has none."""
+        changed = (*self.git("diff", "--name-only", "-z", "HEAD").split("\0"),
+                   *self.git("ls-files", "--others", "--exclude-standard", "-z").split("\0"))
+        return (path.stat().st_mtime for path in (self.path / name for name in changed if name)
+                if path.exists())
+
     def readings(self, source: ProgressSource) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
         if not self.default_refs:
@@ -702,6 +709,7 @@ class ProgressSource:
     checkout: ProgressCheckout
     pulls: PullRequests
     references: tuple[str, ...] = ()
+    worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
     def of(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> Self:
@@ -711,7 +719,8 @@ class ProgressSource:
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
         checkout = PresentCheckout(path) if (path / ".git").exists() else MissingCheckout(path)
-        return cls(todo, checkout, pulls, checkout.references(storage, owner))
+        return cls(todo, checkout, pulls, checkout.references(storage, owner),
+                   tuple(PresentCheckout(path) for path in owned if (path / ".git").exists()))
 
     @property
     def since(self) -> float:
@@ -738,9 +747,15 @@ class ProgressSource:
                      for sha, at in self.checkout.pushes(self.todo.reference_pattern))
 
     @cached_property
+    def edited_at(self) -> tuple[float, ...]:
+        """The newest uncommitted change in the holder's own checkouts: work no commit shows yet."""
+        return tuple(sorted((edited for worktree in self.worktrees for edited in worktree.edits()),
+                            reverse=True)[:1])
+
+    @cached_property
     def moved_at(self) -> float:
         return max((self.since, *(commit.at for commit in self.commits()),
-                    *(push.at for push in self.pushes)))
+                    *(push.at for push in self.pushes), *self.edited_at))
 
     def readings(self) -> DistanceReadings:
         """Progress observation does not run the order's Check."""
@@ -793,10 +808,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def stalled(self, ordered: float, now: float) -> bool:
         return False
 
-    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
-        """Whether this work entered its stall after ``since`` and before ``now``."""
-        return False
-
     def untouched(self, now: float) -> bool:
         """An open pull request nobody has touched for five minutes."""
         return False
@@ -843,9 +854,6 @@ class Stalling:
     def stalled(self, ordered: float, now: float) -> bool:
         return now >= self.stall_at(ordered)
 
-    def stalled_between(self, ordered: float, since: float, now: float) -> bool:
-        return since < self.stall_at(ordered) <= now
-
 
 @dataclass(frozen=True)
 class Moving(Stalling):
@@ -876,6 +884,23 @@ class NoCommitProgress(Stalling, OrderProgress):
 
     def last_move(self, ordered: float) -> float:
         return ordered
+
+
+@dataclass(frozen=True)
+class EditingProgress(Moving, NoCommitProgress, FoundProgress):
+    """Uncommitted changes in the holder's own checkout: work is moving, nothing is delivered.
+
+    Its last edit is its last move, so a unit fixing a send-back before committing is never
+    stalled; its deadline still waits on a commit."""
+    precedence: ClassVar[int] = 6
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(at=edited) for edited in source.edited_at)
+
+    @property
+    def state(self) -> str:
+        return f"uncommitted edits at {RecordedEventTime(self.at).clock()}, no commit"
 
 
 @dataclass(frozen=True)
@@ -3152,16 +3177,20 @@ class TodoStore(TypedStore, DurableTables):
                 for strike in current.order.observe_objective(failure, goals, current, now, pulls):
                     strike.record(goals, current.id)
 
-    def reassignable(self, storage: StorageRule) -> tuple[Todo, ...]:
-        """Include Core-released work, never a commander's deliberately released backlog."""
+    def reassignable(self, registry: Registration) -> tuple[Todo, ...]:
+        """Include Core-released work, never a commander's deliberately released backlog.
+
+        A holder that is not receiving (stopped, archived, unregistered) is detached, not stalled:
+        the commander's Detached rule owns it, and no stall strike lands on a unit nobody runs."""
         pending = tuple(todo for todo in self._open("1", (), OpenTodoState) if todo.pending)
         released = tuple(todo for todo in pending if not todo.holder and todo.released
                          and todo.released[-1].actor == StallWatcherIncarnation.watcher())
-        held = tuple(todo for todo in pending if todo.holder)
+        presence = registry.snapshot()
+        held = tuple(todo for todo in pending if todo.holder and presence.receiving(todo.holder))
         pulls = PullRequests(held)
         return released + tuple(todo for todo in held
                                 if OrderProgress.from_source(
-                                    source := ProgressSource.of(todo, storage, pulls))
+                                    source := ProgressSource.of(todo, registry.storage_rule, pulls))
                                 .stalled(source.since, time.time()))
 
     def reconcile_merges(self, commander: ThreadIncarnation, storage: StorageRule) -> None:
