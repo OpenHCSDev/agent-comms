@@ -339,9 +339,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(directive.original(comms.goals), goal.id, directive)
+            cls(original, goal.id, directive)
             for goal in thread.goal.active()
-            for directive in goal.order.overdue_directives(
+            for directive, original in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
             )
         )

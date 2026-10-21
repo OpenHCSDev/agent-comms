@@ -119,23 +119,3 @@ class CarryChain:
             if dry_run(step).changed:
                 return self.steps[position:]
         return ()
-
-
-class RetiredFiles(Carry):
-    """A step that deletes files the bus no longer reads."""
-
-    @classmethod
-    @abstractmethod
-    def retired(cls) -> tuple[str, ...]:
-        """The files' names relative to the bus root."""
-
-    def backup_files(self) -> tuple[Path, ...]:
-        return tuple(self.root / name for name in self.retired())
-
-    def carry(self) -> Carried:
-        paths = tuple(path for path in self.backup_files() if path.exists())
-        for path in paths:
-            self.require_confined(self.root, path)
-            if self.apply:
-                path.unlink()
-        return Carried(len(paths), {}, tuple(path.name for path in paths) if self.apply else ())

@@ -181,7 +181,8 @@ class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
+class SenderMessages(MessageReadRequest[tuple[Message, ...]]):
+    """Messages from the other side, with one captured SQL paging lifetime."""
     scope: RepliesDisplayScope
     since: float
     before: float
@@ -191,9 +192,12 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
         return self.since
 
     def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
-        return source.unanswered_page(
-            self.scope.second_names - self.scope.first_names, self.scope.first_names,
-            since=lower, before=self.before, upper=upper,
+        requesters = tuple(self.scope.second_names - self.scope.first_names)
+        marks = ",".join("?" for _ in requesters)
+        predicate = f"sender IN ({marks}) AND " + Message.table._sql(
+            "{timestamp} >= ? AND {timestamp} <= ?")
+        return source.scoped_page(
+            predicate, (*requesters, lower, self.before), upper=upper, descending=True,
         )
 
     def read_opened(self, source: BusReader) -> tuple[Message, ...]:
@@ -208,20 +212,18 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class SenderMessages(UnansweredUnitAsks):
-    """Everything the other side sent the commander in the window, answered or not."""
+class UnansweredUnitAsks(SenderMessages):
+    """Individual messages without an answer to their original reference."""
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            return tuple(row.message for row in self.indexed_records(source, offsets)
-                         if row.message.sender not in self.scope.first_names
-                         and row.message.timestamp <= self.before)
+    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
+        return source.unanswered_page(
+            self.scope.second_names - self.scope.first_names, self.scope.first_names,
+            since=lower, before=self.before, upper=upper,
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class UnansweredBurst(UnansweredUnitAsks):
+class UnansweredBurst(SenderMessages):
     """A sender whose messages arrive as one burst: an answer to any of its messages covers
     everything it sent before that answer, so the commander answers a burst once, not once per
     line. Only what it sent after the newest such answer is still open."""
@@ -232,15 +234,6 @@ class UnansweredBurst(UnansweredUnitAsks):
             since=self.since,
         )
         return max(self.since, math.nextafter(covered, math.inf))
-
-    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
-        requesters = tuple(self.scope.second_names - self.scope.first_names)
-        marks = ",".join("?" for _ in requesters)
-        predicate = f"sender IN ({marks}) AND " + Message.table._sql(
-            "{timestamp} >= ? AND {timestamp} <= ?")
-        return source.scoped_page(
-            predicate, (*requesters, lower, self.before), upper=upper, descending=True,
-        )
 
 
 class PlanRule(UndatedStandingRule, declared_name=None):

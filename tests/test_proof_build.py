@@ -23,7 +23,6 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
     CommitRecord,
@@ -53,7 +52,6 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from order_scope_fixture import FIX_SCOPE
-from cutover.carry_install_schedule import InstallSchedule
 from source_revision_fixture import SourceRepository
 
 
@@ -413,24 +411,3 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     assert graph.newer in due.why
     assert "oldest 30 min" in due.why
 
-
-def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path):
-    root = tmp_path / "bus"
-    root.mkdir()
-    schedule = root / "install-deadline.json"
-    schedule.write_text('{"at": 0, "installer": "retired"}')
-    history = root / "saved-session"
-    history.write_bytes(b"preserved original history")
-    assert InstallSchedule in CarryChain.at(Path(__file__).resolve().parents[1]).steps
-    migration = InstallSchedule(root, root, tmp_path / 'spill', False)
-    assert migration.backup_files() == (schedule,)
-    assert migration.carry().changed == 1
-    assert schedule.exists()
-    migration = replace(migration, apply=True)
-    result = migration.carry()
-
-    assert result.changed == 1
-    assert schedule.name in result.rewritten
-    assert not schedule.exists()
-    assert history.read_bytes() == b"preserved original history"
-    assert migration.carry().changed == 0

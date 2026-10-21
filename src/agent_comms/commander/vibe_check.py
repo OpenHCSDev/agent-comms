@@ -56,11 +56,12 @@ class EscalationSender(ServiceSender):
     @classmethod
     def sent(cls, comms: Comms, commander: str, line: str) -> bool:
         snapshot = comms.registry.snapshot()
-        return any(message.body == line for message in comms.bus.log.read_page(SenderMessages(
+        messages = SenderMessages(
             RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
             time.time() - cls.horizon,
             time.time(),
-        )))
+        ).read_opened(comms.bus.bus)
+        return any(message.body == line for message in messages)
 
     @classmethod
     def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
@@ -156,8 +157,9 @@ class PlanStalledDegradation(Degradation):
 
 
 class OverloadDegradation(Degradation):
-    """More owed orders, expired timers and unjudged edits than one commander keeps up with;
-    load moves every beat, so it stops the commander once per round while it stays over."""
+    """More owed orders, expired timers and unjudged edits per reader than one thread keeps up
+    with. Forking adds readers, so a commander relieves this by forking; load moves every beat,
+    so it stops the commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -165,7 +167,7 @@ class OverloadDegradation(Degradation):
     @classmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         load = Load.of(comms, commander)
-        if load.total < cls.ceiling:
+        if load.share < cls.ceiling:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
                      f"{load}, over {cls.ceiling:.0f}"),)

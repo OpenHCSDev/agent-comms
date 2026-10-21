@@ -2,17 +2,14 @@
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
-from dataclasses import replace
 
 import pytest
-from cutover.carry_goal_execution import FAILED_BACKEND_REASON, BackendGoalBlocks
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
-    BlockedGoalAction,
     PausedGoalAction,
     RetryGoalAction,
     SetGoalAction,
@@ -23,10 +20,9 @@ from agent_comms.goal_presentation import (
     RunnableExecution,
     RunningExecution,
 )
-from agent_comms.goal_states import ActiveGoal, BlockedGoal
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_terminal import OwnerStop
-from test_goal_answers import copied_goal_bus
 
 
 @pytest.fixture
@@ -128,22 +124,3 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
     assert comms.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(comms) == 1  # The old failure remains evidence, never replayed.
 
-
-def test_cutover_retires_backend_text_and_preserves_owner_block(execution_bus):
-    comms = execution_bus
-    owner = comms.registry.require("worker")
-    comms.registry.register(replace(owner, goal=replace(
-        owner.goal.require(),
-        state=BlockedGoal(FAILED_BACKEND_REASON),
-    )))
-    comms.registry.declare(comms.registry.new_thread("explicit", frozenset(), owner.worktree))
-    comms.goals.update_goal("explicit", SetGoalAction(text="Needs owner decision"))
-    decided = comms.goals.update_goal("explicit", BlockedGoalAction(progress="Waiting for owner approval"))
-    dry = BackendGoalBlocks.carry(comms.root, apply=False)
-    assert dry.detail == {"migrated": 1, "preserved": 1}
-    assert comms.registry.require("worker").goal.state != ActiveGoal()
-    carried = BackendGoalBlocks.carry(comms.root, apply=True)
-    assert carried.detail == dry.detail
-    assert comms.registry.require("worker").goal.state == ActiveGoal()
-    assert comms.registry.require("explicit").goal == decided
-    assert BackendGoalBlocks.carry(comms.root, apply=True).changed == 0
