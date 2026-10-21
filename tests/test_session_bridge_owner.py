@@ -17,9 +17,10 @@ from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
 from agent_comms.comms import Comms
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
@@ -27,6 +28,8 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     home = bridge_home
     session = 'copied-session'
     comms = Comms(tmp_path / 'bus')
+    # The serve runs from the source programs' runtime, which owns this root as an install's would.
+    RootRuntime.publish(comms.root, source_programs.runtime())
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
@@ -88,9 +91,9 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             assert observed.process.alive()
             (bridge,) = Serve.running(home)
             with ExitStack() as resources:
-                (paused,) = bridge.pause(resources)
+                paused = bridge.pause(resources)
                 assert paused.bridge.observed.owner == expected
-                assert isinstance(claim.state(), LapsedWatch)
+                assert isinstance(claim.state(), LiveWatch)
                 assert owner.poll() is None
             # Installer EOF stops the retired process; it grants no replay or
             # fallback launch. Waiting on its identity does not require parenthood.

@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
-from agent_comms.cli_bridges.shared import BridgeResume, Serve
+from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
@@ -636,9 +636,13 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         names = tuple(step.name() for step in pending)
         if rehearse_only:
             return report.complete(RehearsedUpgrade(current, target, root, names, rehearsal))
+        bridges = SessionBridgeResumes()
         result = InstalledUpgrade(current, target, root, names, rehearsal,
-                                  install.install(rehearsal), harnesses())
-        return report.complete(result)
+                                  install.install(rehearsal, bridges), harnesses())
+        report.complete(result)
+    # The finished result is posted with every bridge outcome before a failed resume fails the run.
+    bridges.require_resumed()
+    return result
 
 
 @dataclass(frozen=True)
@@ -685,7 +689,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
 
-    def install(self, rehearsal: Rehearsed) -> LiveRun:
+    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -693,17 +697,17 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            paused = tuple(bridge.pause(resources)
-                           for bridge in Serve.running(self.installed.home))
+            for bridge in Serve.running(self.installed.home):
+                bridges.pause(bridge, resources)
             try:
                 result = self.live(rehearsal)
             finally:
                 # A failed live pass has restored the outgoing runtime; resume onto it too.
-                resumed = tuple(bridge.resume() for bridge in paused)
+                bridges.resume()
         # Observe after bridge transfer. Discovery never grants stop authority
         # over another app; installer-started children keep their launch handles.
         processes = RuntimeProcesses.observe(self.staged.runtime).outcomes
-        return replace(result, bridges=resumed, processes=processes)
+        return replace(result, bridges=tuple(bridges.outcomes), processes=processes)
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...

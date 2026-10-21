@@ -8,7 +8,8 @@ import pytest
 from agent_comms.cli_commands import HistoryCliCommand, InstallResult
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.shared import (
-    BridgeResume, OwnerExitedBridge, ReplacedBridge, ResumedBridge, UnobservedBridge,
+    BridgeResume, OwnerExitedBridge, ReplacedBridge, ResumedBridge, SessionBridgeResumes,
+    UnobservedBridge,
 )
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -65,6 +66,25 @@ def test_bridge_outcome_family_survives_the_run_codec_and_report(reported_instal
     started, finished = messages(comms)
     assert started.body.startswith("Install starting\n")
     assert all(line in finished.body for line in bridge.lines())
+
+
+@pytest.mark.parametrize("bridge,unresumed", (
+    (ResumedBridge("session", LaunchRuntime(Path("/old/bin/python")),
+                   LaunchRuntime(Path("/new/bin/python"))), False),
+    (OwnerExitedBridge("session"), False),
+    (ReplacedBridge("session", ProcessIdentity(101, 10), ProcessIdentity(102, 20)), True),
+    (UnobservedBridge("session", "resume deadline expired"), True),
+))
+def test_only_a_bridge_that_did_not_come_back_fails_the_install(bridge, unresumed):
+    bridges = SessionBridgeResumes(paused=[bridge])
+    bridges.resume()
+    assert bridges.outcomes == [bridge]
+    if not unresumed:
+        bridges.require_resumed()
+        return
+    with pytest.raises(ExceptionGroup) as caught:
+        bridges.require_resumed()
+    assert [str(error) for error in caught.value.exceptions] == list(bridge.lines())
 
 
 @pytest.mark.parametrize("live", (

@@ -14,7 +14,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from contextlib import ExitStack, closing, contextmanager, suppress
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -51,7 +51,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -479,6 +479,13 @@ class Inbox(Operation[OperationBridge]):
     def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup) -> None:
         tasks.create_task(bridge.watch())
 
+    def claimed(self, claim: WatchClaim,
+                record: WatchRecord) -> AbstractContextManager[HeldClaim]:
+        return claim.held(record)
+
+    def keep(self, bridge: OperationBridge, held: HeldClaim) -> None:
+        """Only a session-owned serve has a successor to keep its claim for."""
+
     async def execute(self, bridge: OperationBridge) -> None:
         await bridge.registered_watch(self)
 
@@ -514,10 +521,19 @@ class Serve(Watch):
     def command(self, record: WatchRecord, runtime: LaunchRuntime) -> tuple[str, ...]:
         return (
             str(runtime.interpreter.with_name(Path(record.command[0]).name)),
-            type(self).__name__.lower(), *record.command[2:],
-            '--owner', json.dumps(FieldCodec.encode_record(self.owner)),
-            '--transcript', str(self.transcript),
+            type(self).__name__.lower(), *record.command[2:], *self.arguments(),
         )
+
+    def arguments(self) -> tuple[str, ...]:
+        return ('--owner', json.dumps(FieldCodec.encode_record(self.owner)),
+                '--transcript', str(self.transcript))
+
+    def successor(self, claim: int) -> ResumedServe:
+        """The same owner's serve, holding this one's claim across exec."""
+        return ResumedServe(owner=self.owner, transcript=self.transcript, claim=claim)
+
+    def keep(self, bridge: LineMonitorBridge, held: HeldClaim) -> None:
+        bridge.retirement = bridge.retirement.keeping(held)
 
     @classmethod
     def launch(cls, claim: WatchClaim, owner: Callable[[], ProcessIdentity],
@@ -577,6 +593,20 @@ class Serve(Watch):
         tasks.create_task(MonitorService(bridge, self.owner, bridge.stop).run())
 
 
+@dataclass(frozen=True, kw_only=True)
+class ResumedServe(Serve):
+    """A serve exec'd in place by an install: it adopts the claim its predecessor kept."""
+
+    claim: Annotated[int, field_codec.Argument(flags=("--claim",), options={"type": int})]
+
+    def arguments(self) -> tuple[str, ...]:
+        return (*super().arguments(), '--claim', str(self.claim))
+
+    def claimed(self, claim: WatchClaim,
+                record: WatchRecord) -> AbstractContextManager[HeldClaim]:
+        return claim.adopted(self.claim, record)
+
+
 class ResumableBridge(ABC):
     @abstractmethod
     def resume(self) -> BridgeResume: ...
@@ -589,8 +619,19 @@ class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
     def resume(self) -> Self:
         return self
 
+    def failures(self) -> tuple[SessionBridgeResumeError, ...]:
+        """A bridge that came back, or whose owner left, fails nothing."""
+        return ()
+
     @abstractmethod
     def lines(self) -> tuple[str, ...]: ...
+
+
+class UnresumedBridge(BridgeResume):
+    """A bridge that should have come back on the new runtime and did not."""
+
+    def failures(self) -> tuple[SessionBridgeResumeError, ...]:
+        return (SessionBridgeResumeError(*self.lines()),)
 
 
 @dataclass(frozen=True)
@@ -610,7 +651,7 @@ class OwnerExitedBridge(BridgeResume):
 
 
 @dataclass(frozen=True)
-class ReplacedBridge(BridgeResume):
+class ReplacedBridge(UnresumedBridge):
     observed: ProcessIdentity
     current: ProcessIdentity
 
@@ -620,7 +661,7 @@ class ReplacedBridge(BridgeResume):
 
 
 @dataclass(frozen=True)
-class UnobservedBridge(BridgeResume):
+class UnobservedBridge(UnresumedBridge):
     reason: str
 
     def lines(self) -> tuple[str, ...]:
@@ -646,6 +687,30 @@ class SessionBridge:
         stream = resources.enter_context(peer.makefile('rb'))
         REPLIES.validate_json(stream.readline(4096)).require()
         return PausedSessionBridge(self, peer)
+
+
+class SessionBridgeResumeError(ValueError):
+    """A paused session bridge did not come back as the same process on the new runtime."""
+
+
+@dataclass
+class SessionBridgeResumes:
+    """Every bridge an install paused. One failed resume cancels neither another resume nor
+    the install steps after it: each outcome is reported, then the install exits non-zero."""
+
+    paused: list[ResumableBridge] = field(default_factory=list)
+    outcomes: list[BridgeResume] = field(default_factory=list)
+
+    def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
+        self.paused.append(bridge.pause(resources))
+
+    def resume(self) -> None:
+        self.outcomes.extend(paused.resume() for paused in self.paused)
+
+    def require_resumed(self) -> None:
+        failures = [error for outcome in self.outcomes for error in outcome.failures()]
+        if failures:
+            raise ExceptionGroup('Session bridges not resumed', failures)
 
 
 @dataclass(frozen=True)
@@ -750,9 +815,13 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         with ExitStack() as endpoint:
             await self.comms.bus.when_open(lambda: endpoint.enter_context(
                 registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))))
-            with WatchClaim(self.binding.thread).held(self.watch_record()):
-                async with asyncio.TaskGroup() as tasks:
-                    operation.start(self, tasks)
+            with operation.claimed(WatchClaim(self.binding.thread), self.watch_record()) as held:
+                try:
+                    async with asyncio.TaskGroup() as tasks:
+                        operation.start(self, tasks)
+                finally:
+                    # A pause ends the tasks by cancellation; the claim is kept either way.
+                    operation.keep(self, held)
 
     async def watch_operation(self, operation: Watch) -> None:
         await self.registered_watch(operation)
