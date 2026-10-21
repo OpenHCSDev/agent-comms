@@ -86,17 +86,26 @@ jobs:
         run: python -m pip install uv==0.12.0
       - name: Install non-editable Core and test dependencies
         run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
-      - name: Install and qualify the running interpreter's native artifact
+      - name: Build the installer's private runtime and rehearse through its CLI
         run: |
           python - <<'PY'
+          import shutil
           from pathlib import Path
-          from agent_comms.installer.upgrade import Stack
+          from agent_comms.installer.upgrade import Stack, run
           from agent_comms.launch_runtime import LaunchRuntime
 
-          Stack(Path.cwd(), runtime=LaunchRuntime.running()).install_native()
+          checkout = Path.cwd()
+          bootstrap = Stack(checkout, runtime=LaunchRuntime.running())
+          bootstrap.uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+          bootstrap.uv.symlink_to(shutil.which('uv'))
+          installed = Stack.build(checkout)
+          run(bootstrap.uv, 'pip', 'install', '--python', installed.python,
+              '-r', 'pyproject.toml', '--extra', 'dev', cwd=checkout)
+          print(run('timeout', '300', installed.python, '-m', 'pytest', '-n', '0', '-q',
+                    '-o', 'pythonpath=. tools', '-o', 'faulthandler_timeout=60',
+                    '-p', 'no:cacheprovider', 'tests/test_install_rehearsal.py',
+                    cwd=checkout, env=installed.environment()))
           PY
-      - name: Rehearse an install through the installed CLI
-        run: timeout 300 python -m pytest -n 0 -q -o 'pythonpath=. tools' -o faulthandler_timeout=60 -p no:cacheprovider tests/test_install_rehearsal.py
 
   review-verdict:
     name: review-verdict
