@@ -374,10 +374,10 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
         checkout = c.registry.storage_rule.order_checkout(lead.name, released.id)
-        source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout))
         merged = PullRequests((original,)).listed(
             source.github, MergedListedPullRequest, original,
-        )[0].merge.oid
+        )[0].merge
+        source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         with practice_copy(ctx.root, copied_path) as (root, _measurement):
             copied = Comms(root)
