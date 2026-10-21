@@ -92,6 +92,8 @@ class Repository:
         command = (
             sys.executable, str(source / "tools/debt_ratchet.py"),
             "--root", self.root, "--base", base, "--head", head,
+            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+            "--workers", "2",
         )
         environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
             (str(source / "src"), os.environ["PYTHONPATH"]))}
