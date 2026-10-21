@@ -26,6 +26,14 @@ class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
 
+class UnclaimedError(RelationViolationError):
+    """The requested bus sequence has no committed claim transition."""
+
+    def __init__(self, seq: int) -> None:
+        self.seq = seq
+        super().__init__(f"Bus row {seq} has no committed claim transition")
+
+
 class MessageAcknowledgmentError(RelationViolationError):
     """Core could not confirm every requested message; no partial read is committed."""
 

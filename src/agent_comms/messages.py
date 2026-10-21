@@ -569,10 +569,18 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimMessage(Message):
-    """An original claim envelope, distinct from a fresh conversation message."""
+class Claimed(BusCapability):
+    """The transition attesting this row, stored in its append transaction."""
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
+
+    def require_claim_transition(self) -> ClaimTransition:
+        return self.claim_transition
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimMessage(Claimed, Message):
+    """A claimed message binds its transition to its public envelope identity."""
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> Self:
@@ -595,9 +603,6 @@ class ClaimMessage(Message):
 
     def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
         return (table(self.claim_transition),)
-
-    def require_claim_transition(self) -> ClaimTransition:
-        return self.claim_transition
 
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
