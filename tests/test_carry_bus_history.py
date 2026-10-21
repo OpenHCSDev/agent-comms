@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -86,6 +87,8 @@ def publish_predecessor_history(directory: Path) -> None:
     archived = HistoryArchive(destination / "bus.jsonl").attach(comms.root)
     ReadLedger.at(archived.root).replace(replace(
         document, bus_identity=RecordedBusIdentity.capture(Path(archived.root) / "bus.jsonl")))
+    empty = Comms(directory / "empty")
+    empty.messaging.initialize_private_initial_protocol(history=())
 
 
 def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
@@ -121,8 +124,10 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         ["git", "rev-parse", PREDECESSOR], cwd=checkout, text=True).strip()
     WheelStamp(commit).write(predecessor / "src" / "agent_comms" / "package_stamp.py")
     generated = tmp_path / "generated"
+    runner = predecessor / Path(__file__).name
+    shutil.copyfile(__file__, runner)
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), str(generated)],
+        [sys.executable, str(runner), str(generated)],
         cwd=predecessor,
         env={**os.environ, "PYTHONPATH": os.pathsep.join(
             (str(predecessor / "src"), str(predecessor / "tests")))},
@@ -144,7 +149,9 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     modes = {relative: (root / relative / BusHistory.filename).stat().st_mode
              for relative in relatives}
     dry = BusHistory(root, original, spill, False)
-    assert dry.carry().detail == dict(rows=8, continuous=8, round_tripped=8)
+    pending = dry.carry()
+    assert pending.changed > 0
+    assert pending.detail == dict(rows=8, continuous=8, round_tripped=8)
     assert all(not Bus.path_in(root / relative).exists() for relative in relatives)
     assert not tuple(spill.iterdir())
     request = replace(dry, apply=True)
@@ -201,6 +208,12 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     converted, = HistoryArchive(Bus.path_in(root)).sources()
     converted.validate()
     assert converted.root == str(root / archived.relative_to(original))
+    catalog = HistoryArchive.path_in(root)
+    catalog_before = catalog.stat()
+    assert request.carry().changed == 0
+    assert dry.carry().changed == 0
+    assert catalog.stat().st_ino == catalog_before.st_ino
+    assert catalog.stat().st_mtime_ns == catalog_before.st_mtime_ns
     assert request.after_acceptance().changed == 4
     staged, = spill.iterdir()
     for relative in relatives:
@@ -210,6 +223,18 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         assert retained.read_bytes() == originals[relative]
         assert retained.stat().st_mode & 0o777 == 0o400
     assert request.after_acceptance().changed == 0
+    assert request.carry() == dry.carry() == Carried(0)
+    for relative in relatives:
+        with Bus(Bus.path_in(root / relative)).observing() as db:
+            assert not HistoryOffset.present(db)
+    empty = generated / "empty"
+    empty_request = BusHistory(empty, empty, spill, False)
+    assert empty_request.carry().changed > 0
+    replace(empty_request, apply=True).carry()
+    assert Bus.path_in(empty).exists()
+    assert empty_request.carry().changed == 0
+    assert replace(empty_request, apply=True).after_acceptance().changed == 2
+    assert empty_request.carry() == Carried(0)
     fresh = tmp_path / "fresh-sqlite"
     fresh.mkdir()
     fresh_bus = Bus.install(Bus.path_in(fresh))

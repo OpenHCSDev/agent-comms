@@ -11,13 +11,21 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from itertools import batched
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, cast
 
 from agent_comms.audience_manifest import FrozenAudience
-from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import (
+    Bus,
+    BusSnapshot,
+    ClaimRecord,
+    KeyedPrivateRecord,
+    PrivateRecord,
+    PublicRecord,
+)
 from agent_comms.bus_tables import BusRow
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.envelope_claim_transitions import (
@@ -83,26 +91,33 @@ class HistoryMetadata(BusFile):
         )
 
 
-@dataclass(frozen=True)
-class HistoryCatalogSource:
-    """The retired archive catalogue, consumed once before its snapshots move."""
+class CarryCatalogSource(SubclassUnion, ABC, affix=""):
+    """Decode the archive's stored state once, including an already converted source."""
 
     root: str
-    original_root: str
-    wire_root_id: str
-    bus_identity: RecordedBusIdentity
-    size: int
-    snapshot_bus_revision: FileObservation
-    snapshot_registry_revision: FileObservation
-    provenance: RegistryProvenance
+
+    @property
+    @abstractmethod
+    def pending(self) -> int: ...
+
+    @abstractmethod
+    def require_snapshot(self) -> None: ...
+
+    @abstractmethod
+    def converted(
+        self,
+        root: Path,
+        original_root: Path,
+        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
+    ) -> HistorySource: ...
 
     @classmethod
-    def read(cls, root: Path, original_root: Path) -> tuple[HistoryCatalogSource, ...]:
+    def read(cls, root: Path, original_root: Path) -> tuple[CarryCatalogSource, ...]:
         path = HistoryArchive.path_in(root)
         if not path.exists():
             return ()
         sources = FieldCodec.decode(
-            tuple[HistoryCatalogSource, ...],
+            tuple[CarryCatalogSource, ...],
             FieldCodec.parse(path.read_bytes()),
         )
         for source in sources:
@@ -115,7 +130,7 @@ class HistoryCatalogSource:
         cls,
         root: Path,
         original_root: Path,
-        sources: tuple[HistoryCatalogSource, ...],
+        sources: tuple[CarryCatalogSource, ...],
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
     ) -> Carried:
         path = HistoryArchive.path_in(root)
@@ -123,15 +138,39 @@ class HistoryCatalogSource:
             return Carried(0)
         converted = tuple(source.converted(root, original_root, bindings) for source in sources)
         # BusHistory holds the catalog lock from the old read through this publication.
-        _atomic_write_text(path, json.dumps(FieldCodec.encode(converted)))
+        payload = json.dumps(FieldCodec.encode(converted))
+        if path.read_bytes() == payload.encode():
+            return Carried(0)
+        _atomic_write_text(path, payload)
         return Carried(len(converted), rewritten=(HistoryArchive.filename,))
 
     def mapped_root(self, root: Path, original_root: Path) -> Path:
         original = Path(self.root)
+        if original.is_relative_to(root):
+            Carry.require_confined(root, original)
+            return original
         Carry.require_confined(original_root, original)
         mapped = root / original.relative_to(original_root)
         Carry.require_confined(root, mapped)
         return mapped
+
+
+@dataclass(frozen=True)
+class HistoryCatalogSource(RecordMember, CarryCatalogSource):
+    """The retired archive catalogue, consumed once before its snapshots move."""
+
+    root: str
+    original_root: str
+    wire_root_id: str
+    bus_identity: RecordedBusIdentity
+    size: int
+    snapshot_bus_revision: FileObservation
+    snapshot_registry_revision: FileObservation
+    provenance: RegistryProvenance
+
+    @property
+    def pending(self) -> int:
+        return 1
 
     def require_snapshot(self) -> None:
         original = Path(self.root)
@@ -158,6 +197,36 @@ class HistoryCatalogSource:
             bus.revision(),
             FileRevision.capture(RegistryFile.path_in(mapped)),
             self.provenance,
+        )
+        source.validate()
+        return source
+
+
+@dataclass(frozen=True)
+class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
+    """The current archive declaration supplies its shape and validation unchanged."""
+
+    @property
+    def pending(self) -> int:
+        return 0
+
+    def require_snapshot(self) -> None:
+        self.validate()
+
+    def converted(
+        self,
+        root: Path,
+        original_root: Path,
+        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
+    ) -> HistorySource:
+        mapped = self.mapped_root(root, original_root)
+        bus = Bus(Bus.path_in(mapped))
+        source = replace(
+            self,
+            root=str(mapped),
+            snapshot_bus_identity=RecordedBusIdentity.capture(bus.path),
+            snapshot_bus_revision=bus.revision(),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
         )
         source.validate()
         return source
@@ -617,6 +686,65 @@ class UnclaimedHistoryLine(HistoryLine[ClaimHistoryRow]):
         return self.row.with_message(record).line()
 
 
+class HistoryReadback(ABC):
+    """One source scan; the admitted destination owns how each row is checked."""
+
+    minimum_change: ClassVar[int]
+
+    @classmethod
+    @contextmanager
+    def opened(cls, bus: Bus) -> Iterator[HistoryReadback]:
+        for _ in FileRevision.capture(bus.path).revisions():
+            with bus.observing() as db:
+                Bus.require_schema(db)
+                yield cast(StoredHistory, StoredHistory.from_connection(db))
+            return
+        yield UnstoredHistory()
+
+    @abstractmethod
+    def pending(self, line: HistoryLine) -> int: ...
+
+    def inspect(self, source: Path, metadata: HistoryMetadata) -> Carried:
+        count = changed = 0
+        for line in HistoryLine.rows(source, metadata):
+            changed += self.pending(line)
+            count = line.number
+        return Carried(
+            max(changed, self.minimum_change),
+            detail=dict(rows=count, continuous=count, round_tripped=count),
+        )
+
+
+class UnstoredHistory(HistoryReadback):
+    minimum_change = 1
+
+    def pending(self, line: HistoryLine) -> int:
+        line.verify(line.record())
+        return 1
+
+
+class StoredHistory(BusSnapshot, UnstoredHistory):
+    minimum_change = 0
+
+    def pending(self, line: HistoryLine) -> int:
+        if line.row.seq > self.revision():
+            return super().pending(line)
+        line.verify(self.lookup(line.row.seq))
+        if HistoryOffset.select(self._connection, offset=line.offset) != [
+            HistoryOffset(line.offset, line.row.seq)
+        ]:
+            raise RelationViolationError(
+                f"Bus history seq {line.row.seq}: committed offset mapping differs"
+            )
+        return 0
+
+    def inspect(self, source: Path, metadata: HistoryMetadata) -> Carried:
+        result = super().inspect(source, metadata)
+        if BusRow.count(self._connection) > result.detail["rows"]:
+            raise RelationViolationError("Stored history extends beyond its retained input")
+        return result
+
+
 @dataclass(frozen=True)
 class HistoryInput:
     """The source and its original read binding survive the rollback window unchanged."""
@@ -633,22 +761,38 @@ class HistoryInput:
         original = original_root / BusHistory.filename
         Carry.require_confined(original_root, original)
         bus = Bus(Bus.path_in(root))
-        if not source.is_file() and not original.is_file():
-            # A fresh SQLite bus has no retired history. An interrupted cutover
-            # also lacks JSONL here, but its offset table proves input was moved.
-            if bus.path.is_file():
+        if not source.is_file():
+            # Successful retirement also drops its one-use offset map. The
+            # original may remain outside this practice copy indefinitely.
+            for _ in FileRevision.capture(bus.path).revisions():
                 with bus.observing() as db:
+                    Bus.require_schema(db)
                     if HistoryOffset.present(db):
                         raise RelationViolationError(
                             "History input was already staged; restore its backup "
                             f"before retry: {source}"
                         )
-            return ()
-        if not source.is_file() or not original.is_file():
+                return ()
+            if not original.is_file():
+                return ()
+            raise RelationViolationError(f"History source is absent: {source}")
+        if not original.is_file():
             raise RelationViolationError(f"History source or its original is absent: {source}")
         return (
             cls(bus, source, HistoryMetadata.read(root), RecordedBusIdentity.capture(original)),
         )
+
+    def inspect(self) -> Carried:
+        with HistoryReadback.opened(self.bus) as destination:
+            result = destination.inspect(self.source, self.metadata)
+        changed = result.changed
+        for _ in FileRevision.capture(ReadLedger.path_in(self.source.parent)).revisions():
+            changed += (
+                ReadLedger.at(self.source.parent)
+                .read()
+                .bus_identity.matches(self.original_identity)
+            )
+        return replace(result, changed=changed)
 
     @staticmethod
     def moved(root: Path, directory: Path, spill: Path) -> tuple[str, ...]:
@@ -675,7 +819,7 @@ class BusHistory(Carry, BusFile):
 
     def backup_files(self) -> tuple[Path, ...]:
         root = self.root
-        sources = HistoryCatalogSource.read(root, self.original_root)
+        sources = CarryCatalogSource.read(root, self.original_root)
         roots = (root, *(source.mapped_root(root, self.original_root) for source in sources))
         paths = {HistoryArchive.path_in(root)}
         for directory in roots:
@@ -727,7 +871,7 @@ class BusHistory(Carry, BusFile):
 
     def carry(self) -> Carried:
         with _store_lock(HistoryArchive.path_in(self.root)):
-            catalog = HistoryCatalogSource.read(self.root, self.original_root)
+            catalog = CarryCatalogSource.read(self.root, self.original_root)
             roots = (
                 self.root,
                 *(source.mapped_root(self.root, self.original_root) for source in catalog),
@@ -742,12 +886,15 @@ class BusHistory(Carry, BusFile):
             if not inputs:
                 return Carried(0)
             if not self.apply:
-                count = 0
-                for source in inputs:
-                    for line in HistoryLine.rows(source.source, source.metadata):
-                        line.verify(line.record())
-                        count += 1
-                return Carried(0, detail=dict(rows=count, continuous=count, round_tripped=count))
+                inspected = tuple(source.inspect() for source in inputs)
+                return Carried(
+                    sum(result.changed for result in inspected)
+                    + sum(source.pending for source in catalog),
+                    detail={
+                        key: sum(result.detail[key] for result in inspected)
+                        for key in ("rows", "continuous", "round_tripped")
+                    },
+                )
             results = []
             read_results = []
             bindings = {}
@@ -762,7 +909,7 @@ class BusHistory(Carry, BusFile):
                 rewritten.update(
                     str(directory / name) for name in (*result.rewritten, *read.rewritten)
                 )
-            catalog_result = HistoryCatalogSource.publish(
+            catalog_result = CarryCatalogSource.publish(
                 self.root, self.original_root, catalog, bindings
             )
             rewritten.update(catalog_result.rewritten)
@@ -793,6 +940,12 @@ class BusHistory(Carry, BusFile):
             )
             if not rewritten:
                 stage.rmdir()
+            for directory in roots:
+                bus = Bus(Bus.path_in(directory))
+                for _ in FileRevision.capture(bus.path).revisions():
+                    with bus.writing() as db:
+                        if HistoryOffset.present(db):
+                            HistoryOffset.drop(db)
         return Carried(len(rewritten), rewritten=rewritten)
 
     @classmethod
@@ -814,32 +967,32 @@ class BusHistory(Carry, BusFile):
         changed = 0
         # File reads, field decoding and record construction happen outside the write lock.
         for batch in batched(HistoryLine.rows(source, metadata), 1000, strict=False):
-            records = tuple(line.record() for line in batch)
+            records = tuple((line, line.record()) for line in batch if line.row.seq > committed)
             with bus.reading() as reader:
                 for line in batch:
                     if line.row.seq <= committed:
                         line.verify(reader.lookup(line.row.seq))
             with bus.writing() as db:
-                for line, record in zip(batch, records, strict=True):
-                    if record.seq > committed:
-                        seq = record.append_to(db, record.seq)
-                        if seq != record.seq:
-                            raise RelationViolationError(
-                                f"Bus history seq {record.seq}: duplicate publication key "
-                                f"resolves to {seq}"
-                            )
-                        HistoryOffset(line.offset, seq).insert(db)
-                        changed += 1
-                    elif HistoryOffset.select(db, offset=line.offset) != [
-                        HistoryOffset(line.offset, record.seq)
+                for line, record in records:
+                    seq = record.append_to(db, record.seq)
+                    if seq != record.seq:
+                        raise RelationViolationError(
+                            f"Bus history seq {record.seq}: duplicate publication key "
+                            f"resolves to {seq}"
+                        )
+                    HistoryOffset(line.offset, seq).insert(db)
+                    changed += 1
+                for line in batch:
+                    if HistoryOffset.select(db, offset=line.offset) != [
+                        HistoryOffset(line.offset, line.row.seq)
                     ]:
                         raise RelationViolationError(
-                            f"Bus history seq {record.seq}: committed offset mapping differs"
+                            f"Bus history seq {line.row.seq}: committed offset mapping differs"
                         )
             with bus.reading() as reader:
-                for line in batch:
+                for line, _ in records:
                     line.verify(reader.lookup(line.row.seq))
-                    count = line.number
+            count = batch[-1].number
         with bus.observing() as db:
             if BusRow.count(db) != count or HistoryOffset.count(db) != count:
                 raise RelationViolationError(
