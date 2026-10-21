@@ -27,10 +27,10 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass, field
 
 
-from ..comms import Comms
-from ..change_report import FileLine
-from ..field_codec import Argument, FieldCodec
-from ..todos import (
+from agent_comms.comms import Comms
+from agent_comms.change_report import FileLine
+from agent_comms.field_codec import Argument, FieldCodec
+from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
     Derivation,
@@ -42,11 +42,11 @@ from ..todos import (
     Todo,
     ToolCallVerdict,
 )
-from ..tools import CommsUnjudgedTool, CommsVerdictTool
-from ..tool_caller import ThreadCaller
-from ..tool_declaration import EditCall, ReplacementEdit
-from . import order
-from .order import CommanderVerb
+from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_declaration import EditCall, ReplacementEdit
+from agent_comms.commander import order
+from agent_comms.commander.order import CommanderVerb
 
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
 
@@ -164,8 +164,8 @@ class VerdictVerb(JudgeVerb):
         Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
     ]
     why: str
-    msg: Annotated[
-        str, Argument(options={"help": "BUSID of my order message to the unit"})
+    problem: Annotated[
+        str, Argument(options={"metavar": "PROBLEM", "help": "the held problem id from order board"})
     ] = ""
     lines: Annotated[
         tuple[str, ...],
@@ -192,7 +192,7 @@ class VerdictVerb(JudgeVerb):
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
         orders = {todo.id: todo for todo in ctx.held_orders()
-                  if not self.msg or todo.sent_in(self.msg)}
+                  if not self.problem or todo.id == self.problem}
         edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
                  if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
@@ -263,7 +263,7 @@ class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
     by: Annotated[
         str,
-        Argument(flags=("--by",), options={"help": "the replacing order's message"}),
+        Argument(flags=("--by",), options={"metavar": "PROBLEM", "help": "the replacing held problem id from order board"}),
     ]
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
@@ -281,9 +281,9 @@ class SupersededVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
-    # A bare annotation would inherit VerdictVerb's empty message; field() keeps it required.
-    msg: Annotated[
-        str, Argument(options={"help": "the required order message"})
+    # A bare annotation would inherit VerdictVerb's default; field() keeps it required.
+    problem: Annotated[
+        str, Argument(options={"metavar": "PROBLEM", "help": "the required held problem id from order board"})
     ] = field()
     roast: Annotated[
         str, Argument(options={"help": "blunt, why it is stupid, with because"})

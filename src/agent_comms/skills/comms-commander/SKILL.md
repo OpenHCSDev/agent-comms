@@ -76,7 +76,7 @@ Pick the next unit. Read its actual state, not its message: worktree, `git log -
 One line per unit touched, then the next unit.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **A hunt is `order hunt FILE:LINE --why ... --sent ORDER`** (rules/send-backs-and-strikes.md says when).
+- **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/send-backs-and-strikes.md says when).
 
 ## Slop is a defined term
 

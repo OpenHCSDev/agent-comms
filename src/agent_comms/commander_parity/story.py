@@ -2,18 +2,18 @@
 
 from dataclasses import replace
 
-from ..commander.order import OrderFile
-from ..goal_actions import CreateProblemGoalAction
-from ..order_story import FleetStory, OrderStory
-from ..todos import ReplacedMessage, SendBackVerdict, StrikeReason, Todo
-from ..tool_result import ToolResult
-from ..tools import (
+from agent_comms.commander.order import OrderFile
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.order_story import FleetStory, OrderStory
+from agent_comms.todos import SendBackVerdict, StrikeReason, Todo
+from agent_comms.tool_result import ToolResult
+from agent_comms.tools import (
     CommsFleetStoryTool,
     CommsOrderStoryTool,
     CommsTodoCreateTool,
     CommsVerdictTool,
 )
-from .lifecycle import LifecycleCase, LifecycleRun
+from agent_comms.commander_parity.lifecycle import LifecycleCase, LifecycleRun
 
 
 class StoryCase(LifecycleCase):
@@ -35,12 +35,10 @@ class StoryCase(LifecycleCase):
         )
         run.commander.call(CommsVerdictTool(problem=created.id, operation=verdict))
         document = replace(OrderFile.read(run.document.read_text()), problems=(created.id,))
-        sent_back = run.commander.comms.goals.todos.get(created.id)
         run.commander.send(
             run.worker,
             document,
             clean=True,
-            replaces=ReplacedMessage(sent_back.messages[-1].message_id),
         )
         run.commander.strike(run.worker, created.id, cls.strike_reason,
                              evidence=(created.order.checked().owner,))

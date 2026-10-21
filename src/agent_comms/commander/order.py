@@ -32,13 +32,13 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
-from ..change_report import FileLine, NoSourceReference
-from ..child_process import BoundedRun
-from ..cli_commands import DeclaredOptions
-from ..comms import Comms
-from ..declared_family import DeclaredFamily
-from ..errors import RelationViolationError
-from ..field_codec import (
+from agent_comms.change_report import FileLine, NoSourceReference
+from agent_comms.child_process import BoundedRun
+from agent_comms.cli_bridges.shared import DeclaredOptions
+from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,
@@ -48,18 +48,18 @@ from ..field_codec import (
     Argument,
     Normalize,
 )
-from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import OrderCheck, ProblemGoalOrder
-from ..message_reference import MessageReference
-from ..native_tool_call import SelectedToolDenied
-from ..plan_phases import OrderPhase, PlanPhase
-from ..progress_claims import MergedClaim, WorkingClaim
-from ..recorded_time import RecordedEventTime
-from ..repo import Repo
-from ..standing_rules import HuntDue
-from ..storage_rules import UnitStorage
-from ..thread_identity import ThreadIncarnation
-from ..todos import (
+from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
+from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.message_reference import MessageReference
+from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.plan_phases import OrderPhase, PlanPhase
+from agent_comms.progress_claims import MergedClaim, WorkingClaim
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
+from agent_comms.standing_rules import HuntDue
+from agent_comms.storage_rules import UnitStorage
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.todos import (
     BluntText,
     CleanHunt,
     CommitDelivery,
@@ -68,7 +68,6 @@ from ..todos import (
     LocatedProblemFinding,
     MeasuredReview,
     NoDeliveryEvidence,
-    NoReplacement,
     NoSuccessor,
     OperationDelivery,
     OrderedHunt,
@@ -78,7 +77,6 @@ from ..todos import (
     PlannedInstallDeadline,
     PullRequestLink,
     RecordPullRequest,
-    Replacement,
     Slop,
     StrikeReason,
     StrikeTodo,
@@ -89,8 +87,8 @@ from ..todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from ..tool_caller import NoThreadCaller, ThreadCaller
-from ..tools import (
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
@@ -102,7 +100,7 @@ from ..tools import (
     CommsTodoListTool,
     TodoList,
 )
-from .config import CommanderConfig, CommanderRole
+from agent_comms.commander.config import CommanderConfig, CommanderRole
 from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
@@ -395,7 +393,7 @@ class Commander(CommanderContext):
     def send(self, unit, document: OrderFile, clean=False,
              reassign: Reassignment = NoReassignment(), new=None,
              traced: FileLine | NoSourceReference = NoSourceReference(),
-             replaces: Replacement = NoReplacement(), disk=False, finding=UnlocatedProblemFinding(),
+             disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
@@ -478,12 +476,11 @@ class Commander(CommanderContext):
             try:
                 with MalformedRecord.refusing(pid):
                     if replacing:
-                        listed[pid].require_replacement(replaces)
+                        listed[pid].require_replacement()
                     if pid in listed:
                         listed[pid].holder_state.require_trace(unit, traced)
             except MalformedRecord as error:
                 problems.append(str(error))
-        problems.extend(replaces.refusals(replacing))
         problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
@@ -858,12 +855,6 @@ class SendVerb(OrderVerb, DirectiveVerb):
             flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
         ),
     ] = NoReassignment()
-    replaces: Annotated[
-        Replacement,
-        Argument(
-            flags=("--replaces",), options={"help": "the current message this order replaces"}
-        ),
-    ] = NoReplacement()
     disk: Annotated[
         bool,
         Argument(
@@ -885,7 +876,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
-             replaces=self.replaces, disk=self.disk, answers=self.answer_references(ctx))
+             disk=self.disk, answers=self.answer_references(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -980,8 +971,8 @@ class WithdrawVerb(OrderVerb):
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
-    message: Annotated[
-        str, Argument(flags=("message",), options={"metavar": "ORDER"})
+    problem: Annotated[
+        str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})
     ]
     sha: Annotated[
         str,
@@ -1009,7 +1000,7 @@ class DoneVerb(OrderVerb):
     ] = ""
 
     def run(self, ctx: Commander) -> None:
-        todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.message)
+        todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
         ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
 
 
@@ -1154,12 +1145,12 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
 class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
     unit: Annotated[str, Argument(flags=("unit",))]
-    message: Annotated[str, Argument(flags=("message",))]
-    by: Annotated[str, Argument(flags=("--by",))]
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})]
+    by: Annotated[str, Argument(flags=("--by",), options={"metavar": "PROBLEM", "help": "the newer held problem id from order board"})]
 
     def run(self, ctx: Commander) -> None:
-        ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.message, self.by)
-        print(f'{self.unit}: {self.message} replaced by {self.by}')
+        ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.problem, self.by)
+        print(f'{self.unit}: {self.problem} replaced by {self.by}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1179,11 +1170,11 @@ class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
     pid: Annotated[str, Argument(flags=("pid",))]
     unit: Annotated[str, Argument(flags=("unit",))]
-    message: Annotated[str, Argument(flags=("message",))]
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM", "help": "the held problem id from order board"})]
 
     def run(self, ctx: Commander) -> None:
-        ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.message)
-        print(f'{self.pid} held by {self.unit} through {self.message}')
+        ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.problem)
+        print(f'{self.pid} held by {self.unit} through {self.problem}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1214,8 +1205,8 @@ class HuntVerb(OrderVerb):
         Argument(
             flags=("--sent",),
             options={
-                "metavar": "ORDER",
-                "help": "the open order the hunt became; omitted means clean",
+                "metavar": "PROBLEM",
+                "help": "the held problem id from order board; omitted means clean",
             },
         ),
     ] = ""
