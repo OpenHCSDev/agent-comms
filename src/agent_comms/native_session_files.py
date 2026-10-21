@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import RelationViolationError
+from .locked_store import DurableFile, PatternFile
 
 
 class SessionFiles:
@@ -130,3 +131,23 @@ class NativeSessionFiles(SessionFiles):
             *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
             self.writer_lock,
         )
+
+
+class SavedSessionFile(PatternFile):
+    """A bus location holding saved native sessions, each with its input proof beside it."""
+
+    __slots__ = ()
+
+
+class PrivateSession(DurableFile, SavedSessionFile):
+    """A thread's own session, created fresh for it."""
+
+    __slots__ = ()
+    filename = "sessions/enrolled-{session_id}.jsonl"
+
+
+class CheckSession(DurableFile, SavedSessionFile):
+    """A check root's copy of one selected worker's history, under its record's slot."""
+
+    __slots__ = ()
+    filename = "native-sessions/{slot}/enrolled-{session_id}.jsonl"

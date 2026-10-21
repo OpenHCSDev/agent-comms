@@ -6,9 +6,9 @@ from agent_comms.native_entries import NativeEntry, SessionEntry
 
 
 def test_fresh_session_creates_unique_private_sdk_headers(tmp_path: Path) -> None:
-    directory = tmp_path / "sessions"
-    first = create_fresh_private_session(directory, worktree=tmp_path)
-    second = create_fresh_private_session(directory, worktree=tmp_path)
+    first = create_fresh_private_session(tmp_path, worktree=tmp_path)
+    second = create_fresh_private_session(tmp_path, worktree=tmp_path)
+    directory = first.path.parent
     assert first != second and first.path != second.path
     for session in (first, second):
         encoded = session.path.read_bytes()

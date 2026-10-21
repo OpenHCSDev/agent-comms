@@ -11,21 +11,22 @@ from uuid import uuid4
 from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_pi import NativePiUnavailable, _durable_private_session_dir
+from .native_session_files import PrivateSession, SavedSessionFile
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import NativeSessionFileRole, fsync_directory
 
 
 def create_fresh_private_session(
-    session_dir: Path, *, worktree: Path
+    root: Path, *, worktree: Path, location: type[SavedSessionFile] = PrivateSession, **parts: str
 ) -> NativeSessionIdentity:
     """Exclusively create and sync the SDK header; never reuse an uncertain file."""
-    session_dir = Path(session_dir).absolute()
     worktree = Path(worktree).absolute()
     if not worktree.is_dir():
         raise NativePiUnavailable("Fresh-session worktree is unavailable")
-    _durable_private_session_dir(session_dir)
     session_id = uuid4().hex
-    path = session_dir / f"enrolled-{session_id}.jsonl"
+    path = location.path_in(Path(root).absolute(), session_id=session_id, **parts)
+    session_dir = path.parent
+    _durable_private_session_dir(session_dir)
     header = SessionEntry(
         id=session_id, version=3, cwd=str(worktree),
         timestamp=RecordedTimestamp.written(datetime.now(UTC)),

@@ -211,7 +211,7 @@ class PiNativeBackend(
 
     @classmethod
     def new_location(cls, root, worktree) -> PiSessionFile:
-        return PiSessionFile(str(create_fresh_private_session(root / "sessions", worktree=worktree).path))
+        return PiSessionFile(str(create_fresh_private_session(root, worktree=worktree).path))
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""

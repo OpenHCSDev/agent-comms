@@ -27,10 +27,7 @@ class StoreSchemaReport:
         from another database's rows.
         """
         paths = set(comms.root.rglob("*.sqlite3"))
-        paths.update(path
-                     for thread in comms.registry.all_threads().values()
-                     for files in thread.runtime.storage_files()
-                     for path in files.schema_paths)
+        paths.update(comms.registry.schema_paths())
         reports = []
         for path in sorted(paths):
             if not path.is_file():

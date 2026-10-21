@@ -151,6 +151,12 @@ class RootFile:
         return frozenset((path, store_lock_path(path)))
 
     @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        """The declared files themselves that exist, without their locks."""
+        path = cls.path_in(root)
+        return frozenset((path,)) if path.is_file() else frozenset()
+
+    @classmethod
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
         pending: list[type[RootFile]] = [cls]
@@ -191,12 +197,18 @@ class PatternFile(RootFile):
     __slots__ = ()
 
     @classmethod
+    def pattern(cls) -> Path:
+        return Path(cls.filename.format_map(defaultdict(lambda: "*")))
+
+    @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        """The declared files themselves, without their locks."""
+        return frozenset(path for path in root.glob(str(cls.pattern())) if path.is_file())
+
+    @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
-        pattern = Path(cls.filename.format_map(defaultdict(lambda: "*")))
-        return frozenset(
-            path for name in (pattern, store_lock_path(pattern))
-            for path in root.glob(str(name)) if path.is_file()
-        )
+        return cls.matching_in(root) | frozenset(
+            path for path in root.glob(str(store_lock_path(cls.pattern()))) if path.is_file())
 
 
 class DurableFile(RootFile):
