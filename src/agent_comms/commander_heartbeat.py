@@ -27,8 +27,13 @@ class CommanderReview:
     def wake(self, comms: Comms, sender: str, commander: Thread) -> None:
         rules = StandingRule.broken(comms, commander.name)
         found = frozenset(rules)
-        if found == self.violations:
+        previous = self.violations
+        if found == previous:
             return
+        # Mark the observation before any effect; an uncertain publication is not replayed.
+        self.violations = found
+        StandingRule.enforce_all(comms, commander.name,
+                                 (rule for rule in rules if rule not in previous))
         lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
         owed = comms.goals.todos.held_for_commander(commander.incarnation)
         units = sorted({todo.held().owner for todo in owed})
@@ -37,12 +42,9 @@ class CommanderReview:
             orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
             lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
             self.turn += 1
-        lines.extend(StandingRule.heartbeat_changes(self.violations, rules))
+        lines.extend(StandingRule.heartbeat_changes(previous, rules))
         if not found:
             lines.append("Standing rules clear.")
-        # A publication can fail after append. Remember the attempted set before sending;
-        # unchanged observations must not replay an uncertain side effect.
-        self.violations = found
         comms.messaging.send(sender, commander.name, "\n".join(lines))
 
 
@@ -86,10 +88,5 @@ class CommanderHeartbeat(WatchPass):
         }
         for thread in commanders:
             comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry)
-            if thread.incarnation not in self.reviews:
-                # First observation, including connector startup, only establishes a baseline.
-                self.reviews[thread.incarnation] = CommanderReview(
-                    frozenset(StandingRule.broken(comms, thread.name))
-                )
-            else:
-                self.reviews[thread.incarnation].wake(comms, self.sender, thread)
+            review = self.reviews.setdefault(thread.incarnation, CommanderReview(frozenset()))
+            review.wake(comms, self.sender, thread)

@@ -25,7 +25,7 @@ from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .recorded_bus import RecordedBusIdentity
@@ -867,6 +867,20 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         """Apply the captured predicate to a validated authoritative message."""
 
 
+class AnyTargetDisplayScope(MessageDisplayScope, declared_name=None):
+    """A scope matching arbitrary targets cannot trim by named conversations."""
+
+    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
+        return values.values()
+
+    def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
+                ) -> Iterable[tuple[Conversation, ConversationCursor]]:
+        return cursor.conversations.items()
+
+    def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
+        return cursor.for_conversation(AllConversation()).high_water
+
+
 @dataclass(frozen=True, slots=True)
 class DMDisplayScope(MessageDisplayScope):
     first_names: frozenset[str]
@@ -903,6 +917,21 @@ class DMDisplayScope(MessageDisplayScope):
         return (message.sender in self.first_names and message.target in self.second_names) or (
             message.sender in self.second_names and message.target in self.first_names
         )
+
+
+@dataclass(frozen=True)
+class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
+    """Direct peer messages and every message authored by the first participant."""
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        direct, bindings = super().index_predicate
+        names = tuple(self.first_names)
+        marks = ",".join("?" for _ in names)
+        return f"sender IN ({marks}) OR ({direct})", (*names, *bindings)
+
+    def includes(self, message: Message) -> bool:
+        return message.sender in self.first_names or super().includes(message)
 
 
 @dataclass(frozen=True, slots=True)
@@ -966,20 +995,10 @@ class ChannelDisplayScope(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class AllTargetsDisplayScope(ChannelDisplayScope, declared_name=None):
-    """A scope that may match any target cannot reduce cursors to target names."""
+class AllTargetsDisplayScope(AnyTargetDisplayScope, ChannelDisplayScope, declared_name=None):
+    """The complete wire or a participant's activity across arbitrary targets."""
 
     targets: frozenset[str] = frozenset()
-
-    def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
-        return values.values()
-
-    def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
-                ) -> Iterable[tuple[Conversation, ConversationCursor]]:
-        return cursor.conversations.items()
-
-    def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
-        return cursor.for_conversation(AllConversation()).high_water
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
