@@ -30,7 +30,7 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
-from .repo import Checkout
+from .repo import ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
@@ -381,14 +381,14 @@ class OrderCheck:
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
-            Checkout.add(repository, tree, sha, "--detach")
+            checkout = ScratchCheckout.add(repository, tree, sha, "--detach")
             try:
                 run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
                                      timeout=self.timeout)
             except subprocess.TimeoutExpired:
                 return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
             finally:
-                CheckedCommit.git(repository, "worktree", "remove", "--force", tree)
+                checkout.retire()
         checked = CheckedCommit(self.command, ChildOutcome.from_returncode(run.returncode),
                                 run.stdout.decode(errors="replace"))
         checked.store(repository, sha)

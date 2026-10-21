@@ -49,7 +49,7 @@ from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 from agent_comms.installer import publication, step_worker
@@ -504,10 +504,12 @@ class TargetTree:
         return self.path / "src", self.path / STEPS.parent
 
     def add(self) -> None:
-        Checkout.add(self.repo, self.path, self.revision, "--detach", "-q")
+        ScratchCheckout.add(self.repo, self.path, self.revision, "--detach", "-q")
 
     def close(self) -> None:
-        subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(self.path)])
+        """Retire the tree; a failed add left nothing to retire."""
+        if self.path.is_dir():
+            ScratchCheckout(self.path).retire()
 
 
 def carry(step: type[Carry], root: Path, stack: Stack, tree: TargetTree, *flags: str) -> Carried:
