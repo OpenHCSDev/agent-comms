@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
 from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus
 
@@ -48,7 +48,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         raise RelationViolationError("live owner is stopped or unavailable")
 
     def require_stopped(self) -> None:
-        raise RelationViolationError("Retired owner is no longer stopped")
+        raise ThreadNotStoppedError("Retired owner is no longer stopped")
 
     def require_self_rename(self) -> None:
         """Only the thread's present participant may rename it."""

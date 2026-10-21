@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from xdist import is_xdist_worker
+from source_programs import SourcePrograms
 
 from agent_comms import candidate_maintenance
 from agent_comms.bus_publication import AgentOrigin
@@ -53,6 +54,11 @@ class TranscriptRecords:
 
 
 transcript_records = TranscriptRecords()
+
+
+@pytest.fixture
+def source_programs(tmp_path):
+    return SourcePrograms.create(tmp_path)
 
 
 @pytest.fixture
@@ -182,9 +188,10 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
     """A developer's live managed process is not a test wire or native child."""
     from agent_comms.launch_root import LaunchRoot
 
-    monkeypatch.setattr(LaunchRoot, "_current", LaunchRoot.unstarted())
-    for name in _MANAGED_RUNTIME_ENVIRONMENT:
-        monkeypatch.delenv(name, raising=False)
+    with LaunchRoot.unstarted().selected():
+        for name in _MANAGED_RUNTIME_ENVIRONMENT:
+            monkeypatch.delenv(name, raising=False)
+        yield
 
 
 @contextmanager
