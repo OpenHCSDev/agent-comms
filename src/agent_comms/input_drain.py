@@ -1078,7 +1078,7 @@ class InputDrain(InputObservation):
                         {
                             key: restored
                             for key, item in remaining.items()
-                            if (restored := item.restore_after_turn()) is not None
+                            for restored in item.restore_after_turn()
                         }
                     )
         await self.emit_input_delivery_changed(session_id)
