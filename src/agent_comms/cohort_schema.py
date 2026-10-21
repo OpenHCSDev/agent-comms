@@ -29,7 +29,7 @@ from .typed_table import (
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class CohortTable(PrivateRuntimeSchema):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()

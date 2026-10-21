@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+
+from .typed_table import DurableTables, SharedFileTables
 
 
-class PrivateRuntimeSchema(ABC):
-    """Installation capability on the canonical private schema declarations."""
+class PrivateRuntimeSchema(SharedFileTables, DurableTables):
+    """Durable private tables own both installation and stored-state discovery."""
 
     @classmethod
     @abstractmethod

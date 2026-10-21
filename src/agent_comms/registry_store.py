@@ -388,10 +388,10 @@ class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
             return PrivateRegistryGuard.load(self.path)
         coordinator = CoordinationStore.path_in(self.path.parent)
         if coordinator.exists() or coordinator.is_symlink():
-            from .native_runtime_input import NativeRuntimeTable
+            from .private_runtime_schema import PrivateRuntimeSchema
 
             with CoordinationStore.observing(coordinator) as db:
-                if NativeRuntimeTable.stored_schema(db):
+                if PrivateRuntimeSchema.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
         return PublicRegistry()
 

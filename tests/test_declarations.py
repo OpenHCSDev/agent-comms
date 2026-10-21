@@ -19,7 +19,6 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
-from agent_comms.message_bus import MessageBus
 from agent_comms.messages import HandoffKind, InfoKind, Message
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.pi_counts import PiCount
@@ -388,7 +387,7 @@ class TestRegistration:
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
-        from agent_comms.cohort_schema import install_private_cohort_schema
+        from agent_comms.cohort_schema import CohortTable
         from agent_comms.coordination_database import CoordinationStore
         from agent_comms.coordinator import Coordination
 
@@ -398,7 +397,7 @@ class TestRegistration:
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
         with Coordination(str(CoordinationStore.path_in(root))) as store:
-            install_private_cohort_schema(store)
+            CohortTable.install(store)
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"
