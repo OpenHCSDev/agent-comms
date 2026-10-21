@@ -270,8 +270,8 @@ class QueuedInput:
     def after_clear(self) -> QueuedInput | None:
         return None
 
-    def restore_after_turn(self) -> QueuedInput | None:
-        return self if self.echo else None
+    def restore_after_turn(self) -> tuple[QueuedInput, ...]:
+        return (self,) if self.echo else ()
 
     async def started(self, inputs: InputDrain) -> str | None:
         """The running turn proved this input's start; the text the client shows as the user's."""
@@ -517,8 +517,8 @@ class DeliveredInput(QueuedInput):
     def after_clear(self) -> DeliveredInput:
         return self  # Clearing the user's queue cannot withdraw a bus message.
 
-    def restore_after_turn(self) -> None:
-        return None
+    def restore_after_turn(self) -> tuple[QueuedInput, ...]:
+        return ()
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(
@@ -593,5 +593,5 @@ class InitialInput(QueuedInput):
     def after_clear(self) -> InitialInput:
         return self  # Clearing follow-ups cannot withdraw the original dispatch.
 
-    def restore_after_turn(self) -> None:
-        return None  # Its original terminal disposition owns cancellation/UNKNOWN.
+    def restore_after_turn(self) -> tuple[QueuedInput, ...]:
+        return ()  # Its original terminal disposition owns cancellation/UNKNOWN.

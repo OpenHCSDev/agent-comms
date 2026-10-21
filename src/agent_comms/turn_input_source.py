@@ -11,7 +11,7 @@ from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .started_input import StartedInput
-from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -51,7 +51,7 @@ class TurnInputSource(StartedInput, ABC):
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
-    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
+    def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
         return False
 
 
@@ -180,10 +180,10 @@ class SelectedOriginalInput(RoutedOriginalInput):
     """The messages a selected turn answers: their assignments record them, not input rows."""
 
     @classmethod
-    def answering(cls, prompt: str) -> SelectedOriginalInput:
+    def answering(cls, prompt: str, permission: TurnGoalPermission) -> SelectedOriginalInput:
         return cls(
             accepted_id=None,
-            goal_permission=TurnGoalPermission(InactiveGoalPermission()),
+            goal_permission=permission,
             prompt=prompt,
             original_display=None,
             origins=(),
@@ -219,16 +219,12 @@ class FollowingTurnInput(TurnInputSource):
         row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
 
-    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
-        return original.defers_following_to(current)
+    def defers_for_goal(self, original: GoalPermission, current: GoalDeclaration) -> bool:
+        return not original.allows(current)
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
     bypasses_goal_permit = True
-
-
-class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)

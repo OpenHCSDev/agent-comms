@@ -415,7 +415,7 @@ class SendArguments(argparse.Namespace):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Send(Operation):
+class SendRequest(DeclaredOptions):
     help = "Send to a thread (DM), #channel, or #all"
     sender: Annotated[str, field_codec.Argument(flags=("--from",))] = ""
     target: Annotated[str, field_codec.Argument(flags=("--to",))]
@@ -442,7 +442,10 @@ class Send(Operation):
         return comms.messaging.send(self.sender, self.target, self.body, self.type,
                                     role=self.role(), report=self.report)
 
-    async def execute(self, bridge: CliBridge) -> None:
+
+@dataclass(frozen=True, kw_only=True)
+class Send(SendRequest, Operation[OperationBridge]):
+    async def execute(self, bridge: OperationBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
         await bridge.show_sent(await asyncio.to_thread(request.sent, bridge.comms))
 

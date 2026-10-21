@@ -108,7 +108,7 @@ class TestCliSuccess:
         assert out == {"messages": []}
 
     def test_send_notice_and_conversation_record_channel_wake_modes(self, cli, comms):
-        from agent_comms.cli_commands import Send
+        from agent_comms.cli_bridges.shared import Send
         from agent_comms.messages import SendableRole, NoticeRole
         import argparse
 

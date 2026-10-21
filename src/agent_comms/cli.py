@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_bridges.shared import SendArguments
@@ -49,23 +50,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def execute(arguments: Sequence[str], output: TextIO) -> int:
+    """Own parsing, root selection and dispatch for every registered command."""
+    arguments = list(arguments)
+    args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
+    if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
+        raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
+    declaration = CliCommand.member_named(args.command)
+    LaunchRoot.startup(
+        arguments,
+        lambda: (LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()),
+    )
+    route = resolve_comms_route(args.root)
+    with LaunchRoot.from_path(route.root).selected():
+        command = declaration.from_arguments(args)
+        return command.execute(route, output)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        arguments = list(argv) if isinstance(argv, Sequence) else sys.argv[1:]
-        args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
-        if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
-            raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
-        declaration = CliCommand.member_named(args.command)
-        LaunchRoot.startup(
-            arguments,
-            lambda: (
-                LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()
-            ),
-        )
-        route = resolve_comms_route(args.root)
-        with LaunchRoot.from_path(route.root).selected():
-            command = declaration.from_arguments(args)
-            return command.execute(route, sys.stdout)
+        arguments = argv if isinstance(argv, Sequence) else sys.argv[1:]
+        return execute(arguments, sys.stdout)
     except KeyboardInterrupt:
         return 130
     except (ValueError, OSError, CoordinationError) as exc:

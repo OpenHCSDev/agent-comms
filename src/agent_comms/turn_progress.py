@@ -180,9 +180,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        keys = self.inputs.input_keys(self.session_id)
-        document = await Coordination.run_worker(
-            partial(self.inputs.dispositions.read, (*keys, *self.original.notice_keys)))
+        sent = await Coordination.run_worker(
+            partial(self.inputs.dispositions.in_turn, self.turn_lease.turn_id))
+        keys = tuple(sent.rows)
+        document = await Coordination.run_worker(partial(
+            self.inputs.dispositions.read, (*keys, *self.original.keys, *self.original.notice_keys),
+        ))
         unknown_attempts = not document.all_started(keys)
         if event.ok is True and unknown_attempts:
             # A final assistant stop can prove the original turn,

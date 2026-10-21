@@ -42,6 +42,7 @@ from .tracked_turn import (
     TrackedTurnSession,
 )
 from .turn_context import RenderedInput
+from agent_comms.turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
@@ -60,6 +61,9 @@ class PrivateSendClaim(PromptBoundary):
     prompt: RenderedInput
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    def following_original(self, prompt: str):
+        return SelectedOriginalInput.answering(prompt, self.selected.goal_permission)
 
     @property
     def bus(self) -> MessageBus:
