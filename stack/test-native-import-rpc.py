@@ -342,4 +342,4 @@ if __name__ == "__main__":
         package = native_root / PACKAGE_LAYOUT
         package.parent.mkdir(parents=True, mode=0o700)
         shutil.copytree(pinned_native_package(), package)
-        main(VerifiedNativePackage.acquire(package), root)
+        main(VerifiedNativePackage.qualify(package), root)

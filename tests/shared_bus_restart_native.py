@@ -55,9 +55,9 @@ from agent_comms.thread_model import DeclaredModel
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
     """Share the original installed/configured private receiving preparation."""
-    from agent_comms.native_package import verify_native_package
+    from agent_comms.native_package import VerifiedNativePackage
 
-    verify_native_package(arguments.package)
+    VerifiedNativePackage.acquire(arguments.package)
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
     if not continue_existing:

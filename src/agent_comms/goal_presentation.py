@@ -4,22 +4,21 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, fields
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .field_codec import NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
-from .goals import Goal, GoalChangedError, GoalCheckpoint, GoalDeclaration
+from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
-from .thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .bus_publication import Delivered
-    from .comms import Comms
     from .goal_actions import GoalAction
     from .goal_attempts import Generation
     from .goal_failure_observation import GoalFailureEvidence
@@ -226,27 +225,7 @@ class BlockedExecution(WaitingExecution, ControlledExecution, declared_name=None
 
     def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"BLOCKED {unit}: orders {', '.join(orders)}; goal {self.goal_id}; "
-                f"{self.reason} -> Core reissues the orders")
-
-    def enforce_unit_block(
-        self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal,
-    ) -> None:
-        from .goal_actions import GoalPrecondition, ReissuedOrderGoalAction
-
-        if comms.goals.goal_execution(unit) != self:
-            raise GoalChangedError(comms.registry.require(unit), goal.captured)
-        observed = goal
-        for problem in orders:
-            todo = comms.goals.todos.get(problem)
-            todo.require_assignee(comms.registry.require(unit).incarnation, observed.id)
-            action = ReissuedOrderGoalAction.for_todo(
-                todo, commander, CoreWatcherIncarnation.watcher())
-            observed = comms.goals.update_goal(unit, replace(
-                action, expect=GoalPrecondition(
-                    goal_id=observed.id, expected_state=observed.state,
-                    expected_checkpoint=observed.captured,
-                ),
-            ))
+                f"{self.reason} -> inspect the failed work; never replay")
 
 
 @dataclass(frozen=True)
@@ -274,12 +253,6 @@ class AttemptUnresolvedExecution(BlockedExecution):
     def unit_block_line(self, unit: str, orders: tuple[str, ...]) -> str:
         return (f"UNRESOLVED BLOCK {unit}: orders {', '.join(orders)}; "
                 f"goal {self.goal_id} -> {self.reason}")
-
-    def enforce_unit_block(
-        self, comms: Comms, commander: str, unit: str, orders: tuple[str, ...], goal: Goal,
-    ) -> None:
-        pass
-
 
 @dataclass(frozen=True)
 class AttemptFailedExecution(BlockedExecution):
