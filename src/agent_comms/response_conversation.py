@@ -3,15 +3,18 @@
 import hashlib
 from dataclasses import dataclass, replace
 
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement, public_envelope_digest
+from agent_comms.response_acknowledgement import (
+    KeyedResponseAcknowledgement,
+    public_envelope_digest,
+)
 
 from .audience_manifest import FrozenRecipient, freeze_audience
 from .bus_publication import CommittedDelivery
 from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
-from .messages import Message
-from .message_reference import MessageReference
 from .coordination_tables.responses import ResponseObligation
+from .message_reference import MessageReference
+from .messages import Message
 
 
 @dataclass(frozen=True)
@@ -101,7 +104,7 @@ class ResponseConversation:
         decisions = ResponseDeliveryPolicy.resolve(
             stored, audience, ControlClassification.ORDINARY,
         )
-        return KeyedPrivateRecord.of(
+        return KeyedPrivateRecord.from_message(
             stored, audience=audience, decisions=decisions,
             control=ControlClassification.ORDINARY.value,
             acknowledgement=KeyedResponseAcknowledgement(

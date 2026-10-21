@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from .message_reference import MessageReference
+from typing import TYPE_CHECKING
+
+from agent_comms.message_reference import MessageReference
+
+if TYPE_CHECKING:
+    from agent_comms.messages import BusRecord
 
 
 class ToolRefusedError(ValueError):
@@ -46,6 +51,16 @@ class ClaimEnvelopeUnknownError(RelationViolationError):
 
 class HumanSendRefusedError(ToolRefusedError):
     """The send transaction rolled back; the human's message was not sent."""
+
+
+class MessageNotificationError(RuntimeError):
+    """The message committed; only notifying its readers failed."""
+
+    def __init__(self, record: BusRecord) -> None:
+        self.record = record
+        super().__init__(
+            f"Message {record.seq}/{record.message_id} was sent, but notification failed."
+        )
 
 
 class HumanClaimBlockedError(RelationViolationError):
