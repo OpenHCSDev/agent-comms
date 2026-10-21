@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, TurnContext, UserInputSegment
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 # The provider measures the real tokens (about four bytes per token); the
 # declared file's byte size is the bound the reviewer controls when appending
@@ -31,7 +31,7 @@ def test_the_segment_derives_its_text_from_the_declared_file(tmp_path: Path):
 
 
 def test_owner_context_does_not_repeat_project_maintenance_rules(tmp_path: Path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     for name in ("Alice", "Bob", "outsider"):
         context = TurnContext.for_owner(
             comms.registry.require(name), NextContextTurn(), "original task", (), (), comms.goals

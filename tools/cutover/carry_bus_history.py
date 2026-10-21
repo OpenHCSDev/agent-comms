@@ -39,7 +39,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import BusFile, RegistryFile
 from agent_comms.messages import BusRecord, Message
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
@@ -59,7 +59,7 @@ from agent_comms.wake_policy import (
 
 
 @dataclass(frozen=True)
-class HistoryMetadata:
+class HistoryMetadata(BusFile):
     """Only the retired stream boundary is needed, never its root ID or activation."""
 
     last_seq: int
@@ -668,7 +668,7 @@ class HistoryInput:
         return tuple(rewritten)
 
 
-class BusHistory(Carry):
+class BusHistory(Carry, BusFile):
     """Validate and stream the retired history through the bus's one insert path."""
 
     filename = "bus.jsonl"
@@ -850,3 +850,9 @@ class BusHistory(Carry):
             detail=dict(rows=count, continuous=count, round_tripped=count),
             rewritten=(bus.path.name,),
         )
+
+
+class CorruptHistory(BusFile):
+    """A retained repair input is never permission to create an empty bus."""
+
+    filename = BusHistory.filename + ".corrupt"

@@ -26,7 +26,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.locked_store import DurableFile
+from agent_comms.locked_store import BusFile
 
 STEPS = Path("tools/cutover")
 
@@ -129,7 +129,7 @@ class LedgerRecord:
 
 
 @dataclass(frozen=True)
-class CarryLedger(DurableFile):
+class CarryLedger(BusFile):
     """The steps applied to one bus, oldest first."""
 
     root: Path

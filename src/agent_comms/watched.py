@@ -10,7 +10,7 @@ import select
 import struct
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -295,14 +295,14 @@ class Watched(WireWakeFile, ABC):
         return ChangedSources(*sources)
 
     @staticmethod
-    async def watch_sources(*sources: ChangeSource) -> AsyncIterator[ChangeSignal]:
+    async def watch_sources(*sources: ChangeSource) -> AsyncGenerator[ChangeSignal]:
         async with ChangeSignal.opened(*sources) as changes:
             while True:
                 changes.prepare()
                 yield changes
                 await changes.wait()
 
-    def watch(self, *sources: ChangeSource) -> AsyncIterator[ChangeSignal]:
+    def watch(self, *sources: ChangeSource) -> AsyncGenerator[ChangeSignal]:
         return self.watch_sources(
             *(FileSource(path) for path in WireWakeFile.watched_paths_in(self.path.parent)),
             *sources,

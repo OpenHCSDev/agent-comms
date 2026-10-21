@@ -206,10 +206,10 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
 
 
 def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
     from test_turn_context_wire import manifest
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(comms.registry.require('Alice')))
     with comms.views.presentation.snapshot(viewer=NamedViewer('Alice')) as (_, source):
@@ -260,9 +260,9 @@ def test_opened_cut_rejects_context_and_unknown_observations(tmp_path, kind, *, 
 
 
 def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
     # This is the original durable state between reservation and append.
     # No second input or fabricated successful append resolves that uncertainty.

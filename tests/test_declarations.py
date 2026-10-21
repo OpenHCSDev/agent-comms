@@ -1,5 +1,6 @@
 
 from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 import json
 import os
@@ -22,8 +23,8 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.messages import HandoffKind, InfoKind, Message
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.pi_counts import PiCount
-from agent_comms.publisher import InitialWrites
 from agent_comms.registration import Registration
+from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
@@ -34,7 +35,7 @@ from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
+def test_native_root_checks_relative_and_absolute_ancestor_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     unsafe = tmp_path / "nonsticky-writable"
@@ -42,21 +43,20 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     unsafe.chmod(0o777)
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
+        candidate = Comms(root)
         with pytest.raises(RelationViolationError):
-            Bus.install(Bus.path_in(Comms(root).root))
-        assert not (root / "bus_meta.json").exists()
-        assert not (root / "bus.jsonl").exists()
+            prepare_native_comms(candidate)
+        assert not Bus.path_in(root).exists()
+        assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
-    safe = Comms(Path("safe-relative"))
-    assert len(safe.messaging.initialize_private_initial_protocol()) == 32
+    safe = prepare_native_comms(Comms(Path("safe-relative")))
+    assert safe.registry.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
-def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
-    registry = Registration(tmp_path / "registry.json")
-    bus = MessageBus(tmp_path / "bus.jsonl", registry, InitialWrites)
+def test_native_root_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
     with pytest.raises(RelationViolationError):
-        bus.publisher.initialize_private_protocol()
+        prepare_native_comms(Comms(tmp_path))
 
 
 class TestAgentRuntimeInfo:
@@ -325,24 +325,24 @@ class TestRegistration:
 
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-    def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
+    def test_native_guard_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
         comms = Comms(root)
-        Bus.install(Bus.path_in(comms.root))
+        prepare_native_comms(comms)
         reopened = Comms(root)
         reopened.registry.declare(reopened.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-    def test_private_marker_does_not_bootstrap_stripped_owner_generation(
+    def test_native_guard_does_not_bootstrap_stripped_owner_generation(
         self, tmp_path: Path
     ) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        Bus.install(Bus.path_in(comms.root))
+        prepare_native_comms(comms)
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
         for field in ("owners", "claims"):
@@ -355,33 +355,6 @@ class TestRegistration:
 
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
-    def test_private_marker_directory_fsync_failure_leaves_guard_pending(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        root = tmp_path / "new-private"
-        comms = Comms(root)
-        comms.registry.declare(comms.registry.new_thread(name='sender', tags=frozenset(), worktree='/wt'))
-        original_fsync = os.fsync
-        def fsync(fd: int) -> None:
-            # Target the actual marker publication rather than an ordinal:
-            # current private sidecars fsync this directory before the guard.
-            if (os.readlink(f"/proc/self/fd/{fd}") == str(root)
-                    and (root / "bus_meta.json").exists()):
-                raise OSError("injected marker directory fsync failure")
-            original_fsync(fd)
-
-        monkeypatch.setattr(os, "fsync", fsync)
-        with pytest.raises(OSError):
-            Bus.install(Bus.path_in(comms.root))
-        monkeypatch.undo()
-        assert (root / ".registry-owner-guard").exists()
-        assert (root / "bus_meta.json").exists()
-        with pytest.raises(RelationViolationError):
-            Registration(root / "registry.json")
-        with pytest.raises(RelationViolationError):
-            Bus.install(Bus.path_in(comms.root))  # never auto-repair
-
-    @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])
     def test_torn_guard_slot_never_falls_back_to_older_commit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
@@ -389,7 +362,7 @@ class TestRegistration:
         root = tmp_path / "private"
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
-        Bus.install(Bus.path_in(comms.root))
+        prepare_native_comms(comms)
         original_pwrite = os.pwrite
         guard_calls = 0
 
@@ -415,10 +388,17 @@ class TestRegistration:
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
+        from agent_comms.cohort_schema import install_private_cohort_schema
+        from agent_comms.coordination_database import CoordinationStore
+        from agent_comms.coordinator import Coordination
+
         root = tmp_path / "guarded"
         comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
-        Bus.install(Bus.path_in(comms.root))
+        prepare_native_comms(comms)
+        # A native coordinator is retained evidence of private mode even if its guard vanishes.
+        with Coordination(str(CoordinationStore.path_in(root))) as store:
+            install_private_cohort_schema(store)
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"

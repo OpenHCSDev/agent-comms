@@ -70,11 +70,12 @@ def test_nonobject_registry_is_refused_by_the_codec(tmp_path, raw):
 
 def test_conversion_keeps_the_private_guard_authoritative(tmp_path):
     from agent_comms.comms import Comms
+    from bus_record_fixture import prepare_native_comms
 
     store, raw = old_registry(tmp_path)
     path = store.path
     store.convert_format()
-    Comms(tmp_path).bus.publisher.initialize_private_protocol()
+    prepare_native_comms(Comms(tmp_path))
     # Recreate old bytes through the existing private writer, so the guard
     # commits those bytes before the installer is asked to convert them.
     with store.locked():

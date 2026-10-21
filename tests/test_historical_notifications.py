@@ -1,6 +1,7 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 from agent_comms.wire_log import WireLog
+from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
 from dataclasses import replace
@@ -27,12 +28,12 @@ SENDER = "sender"  # the notification carries its sender's lookup; these tests r
 
 @pytest.fixture
 def archived_notification(tmp_path, *, thread_registration):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = (prepare_native_comms(Comms(tmp_path / name)) for name in ("old", "live"))
     for comms in (old, live):
         comms.registry.declare(thread_registration.new_thread('sender', frozenset(), str(tmp_path), created_at=10.0))
         comms.registry.declare(thread_registration.new_thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
         comms.registry.declare(thread_registration.new_thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
-    root_id = old.messaging.initialize_private_initial_protocol()
+    root_id = old.registry.prepare_native_root().namespace
     messages = (
         publish_initial(old, "sender", "agent", "authored pending delivery"),
         publish_initial(old, "sender", "reader", "painted historical delivery"),

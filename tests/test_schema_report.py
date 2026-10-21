@@ -9,7 +9,7 @@ from agent_comms.cli_commands import SchemaReportCliCommand
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo
 from agent_comms.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 
@@ -48,8 +48,8 @@ def test_comparison_names_changed_missing_and_extra_objects():
             SQLiteSchemaDifference("missing", None, "sql"))
 
 
-def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, monkeypatch):
-    comms, _ = _root(tmp_path)
+def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, durable_home):
+    comms = context_comms(tmp_path)
     path = comms.root / "todos.sqlite3"
     _old_todo(path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -63,7 +63,7 @@ def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, m
 
 
 def test_unknown_and_unavailable_stores_do_not_look_clean(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     with closing(sqlite3.connect(comms.root / "unknown.sqlite3")) as db:
         db.execute("CREATE TABLE unowned (x)")
     (comms.root / "broken.sqlite3").write_bytes(b"not a database")
