@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve
@@ -501,7 +501,7 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(
 
 
 @dataclass(frozen=True)
-class TargetTree(AbstractContextManager["TargetTree"]):
+class TargetTree(AbstractContextManager):
     """The temporary worktree and scratch lifetime owned by one install."""
 
     repo: Path
@@ -526,6 +526,9 @@ class TargetTree(AbstractContextManager["TargetTree"]):
                 ScratchCheckout(self.path).retire()
         finally:
             shutil.rmtree(self.scratch, ignore_errors=True)
+
+    def __enter__(self) -> Self:
+        return self
 
     def __exit__(self, *_error: object) -> None:
         self.close()
