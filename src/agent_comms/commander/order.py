@@ -28,12 +28,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from pydantic import PrivateAttr
+from pydantic import Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -55,8 +55,8 @@ from agent_comms.plan_phases import OrderPhase
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HuntDue
 from agent_comms.problem_number import ProblemNumber
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -88,7 +88,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
@@ -235,6 +235,7 @@ def revision(repo: str, ref: str) -> str:
 class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
+    actor: Annotated[InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
@@ -260,15 +261,23 @@ class CommanderContext(CommanderConfig):
     def incarnation(self) -> ThreadIncarnation:
         return self.comms.registry.require(self.commander).incarnation
 
+    @property
+    def actor_name(self) -> str:
+        return self.actor.acting_name(self.commander)
+
+    @property
+    def actor_identity(self) -> ThreadIncarnation:
+        return self.actor.as_thread(self.commander).identity(self.comms)
+
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        published = self.comms.messaging.send(self.commander, target,
+        published = self.comms.messaging.send(self.actor_name, target,
             audience.addressed(target, body), answers=answers)
         return published.message.message_id
 
     def call(self, tool):
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
+        return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -285,13 +294,14 @@ class CommanderContext(CommanderConfig):
         return tuple(todo for todo in self.todos() if todo.holder)
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_by(self.incarnation, unit)
+        return self.comms.goals.todos.held_by(
+            self.incarnation, self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
         return self.comms.goals.todos.units(self.incarnation)
 
     def progress(self) -> dict[str, OrderProgress]:
-        listed: TodoList = self.call(CommsTodoListTool())
+        listed: TodoList = self.call(CommsTodoListTool(thread=self.commander))
         return listed.progress
 
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
@@ -499,18 +509,19 @@ class Commander(CommanderContext):
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, review_at=review_at, commander=self.commander)))
+                order=order, request=request, review_at=review_at, commander=self.commander,
+                assigner=self.actor_identity)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=traced,
+                assigner=self.actor_identity, traced=traced,
                 order=order, request=request, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
+                self.comms.goals.todos.get(pid).revision, self.actor_identity, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
         print(f'{measured.summary}; review timer {review_at.clock()}')
@@ -609,7 +620,7 @@ class Commander(CommanderContext):
         todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
+        self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
                                       f'{why} (caught by {caught})',
                                       evidence=evidence), answers)
 
@@ -742,12 +753,12 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     ] = NoThreadCaller()
 
     def who(self, ctx: Commander) -> str:
-        return self.fork.acting_name(ctx.commander)
+        return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
         self.require_commander(ctx.comms.registry.require(ctx.commander))
-        ctx = ctx.model_copy(update={
-            'commander': self.fork.commanding(ctx.comms, ctx.commander).name})
+        self.fork.commanding(ctx.comms, ctx.commander)
+        ctx = ctx.model_copy(update={'actor': self.fork})
         self.gate(ctx)
         self.run(ctx)
 
@@ -779,27 +790,22 @@ class DirectiveVerb(CommanderVerb):
     ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        thread = ctx.comms.registry.require(self.who(ctx))
-        answerable = (*(message for goal in thread.goal.active()
-                        for message in goal.order.directive_messages(ctx.comms.goals)),
-                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
-        originals = tuple(message for message in answerable if message.message_id in self.answers)
+        originals = tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                          if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
             sys.exit('REFUSED: --answers must name original directives on this request '
                      'or unanswered unit messages to this commander.')
         return tuple(message.reference for message in originals)
 
     def gate(self, ctx: Commander) -> None:
-        answers = self.answer_references(ctx)
-        thread = ctx.comms.registry.require(self.who(ctx))
-        overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
-        if overdue and not answers:
-            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
-            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        self.answer_references(ctx)
+        owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
+                     if rule.message.message_id not in self.answers)
+        if owed:
+            lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
+                     'that must wait is sent now: "waiting on X, owner Y".')
         super().gate(ctx)
 
 
@@ -1099,8 +1105,8 @@ class RetireVerb(OrderVerb):
     help = "stop a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
-        self.fork.retire(ctx.comms)
-        print(f'{ctx.commander} retired')
+        ctx.actor.retire(ctx.comms)
+        print(f'{ctx.actor_name} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

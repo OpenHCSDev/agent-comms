@@ -97,11 +97,11 @@ class Goals:
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
-    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
-        actor = self.registry.require(commander).incarnation
+    def fire(self, unit: str, reason: StrikeReason, actor: ThreadIncarnation) -> tuple[Todo, ...]:
+        owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
         with _store_lock(self._wire_lock_path):
-            return store.fire(unit, actor, reason)
+            return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
