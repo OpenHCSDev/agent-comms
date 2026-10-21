@@ -66,7 +66,7 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
     catalog = Slop.catalog()
     readme = catalog / "README.md"
     assert text.split("\n\n", 1)[1] == "\n\n".join((
-        VoiceReminder.text(),
+        CommanderConfig.packaged_voice().read_text(),
         CommanderConfig.packaged_indictment().read_text(),
         CommanderConfig.packaged_spine().read_text(),
         "# Recorded failures\n\n" + PostmortemFailure.catalog(),
@@ -93,11 +93,12 @@ def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, 
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     hook = member.decode(hook_record(transcript))
-    assert hook.take(250_000) is None  # not a commander session: no parts were written
+    assert hook.take(250_000) == ()  # not a commander session: no parts were written
     hook.parts.mkdir()
     (hook.parts / "01.md").write_text("sources")
+    hook.voice.write_text("voice")
     assert hook.take(250_000)
-    assert hook.take(250_000 + member.every - 1) is None
+    assert hook.take(250_000 + member.every - 1) == ()
     assert hook.take(250_000 + member.every)
     assert hook.take(20_000)  # compaction shrank the context below the mark
 
@@ -122,11 +123,11 @@ def test_every_due_reminder_goes_out_in_one_hook_output_with_the_voice_inline(
     assert run_hook(skill, transcript, "SessionStart", monkeypatch, capsys, usage(250_000))
     first = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_001))
     (document,) = first.splitlines()
-    assert json.loads(document)["hookSpecificOutput"]["additionalContext"] == VoiceReminder.text()
+    assert json.loads(document)["hookSpecificOutput"]["additionalContext"] == CommanderConfig.packaged_voice().read_text()
     both = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(350_000))
     (document,) = both.splitlines()
     context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
-    assert VoiceReminder.text() in context
+    assert CommanderConfig.packaged_voice().read_text() in context
     assert all(str(part) in context for part in sorted(transcript.with_suffix(".reread").iterdir()))
 
 

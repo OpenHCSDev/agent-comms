@@ -69,6 +69,11 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
         """The commander's sources, written by the session start hook beside the transcript."""
         return Path(self.transcript_path).with_suffix(".reread")
 
+    @property
+    def voice(self) -> Path:
+        """The commander's voice, written by the session start hook beside the transcript."""
+        return Path(self.transcript_path).with_suffix(".voice.md")
+
     def context_tokens(self) -> int:
         """The prompt size of the latest model reply; zero before the first one."""
         with open(self.transcript_path, "rb") as transcript:
@@ -99,13 +104,13 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
     @abstractmethod
     def message(self) -> str: ...
 
-    def take(self, tokens: int) -> str | None:
+    def take(self, tokens: int) -> tuple[str, ...]:
         """The member's message when due, marking the context size it was given at."""
         if not self.due(tokens):
-            return None
+            return ()
         self.prepare()
         self.mark.write_text(json.dumps(asdict(RereadMark(tokens))))
-        return self.message()
+        return (self.message(),)
 
     @staticmethod
     def remind(*members: type[ContextCadence]) -> None:
@@ -113,7 +118,7 @@ class ContextCadence(ClaudeTranscriptHook, ABC):
         record = json.load(sys.stdin)
         hooks = [member.decode(record) for member in members]
         tokens = hooks[0].context_tokens()
-        messages = [message for hook in hooks if (message := hook.take(tokens))]
+        messages = [message for hook in hooks for message in hook.take(tokens)]
         if messages:
             hooks[0].warn("\n\n".join(messages))
 
@@ -141,14 +146,9 @@ class VoiceReminder(ContextCadence):
 
     every: ClassVar[int] = 25_000
     mark_suffix: ClassVar[str] = ".voice.json"
-    source: ClassVar[Path] = Path(__file__).resolve().parent.parent / "agent_comms" / "commander" / "voice.md"
-
-    @classmethod
-    def text(cls) -> str:
-        return cls.source.read_text(encoding="utf-8")
 
     def message(self) -> str:
-        return self.text()
+        return self.voice.read_text(encoding="utf-8")
 
 
 class RereadProgram(ClaudeHookProgram):

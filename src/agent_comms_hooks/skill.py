@@ -19,7 +19,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import CommanderReread, ContextCadence, VoiceReminder
+from agent_comms_hooks.reread import CommanderReread, ContextCadence
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ class CommanderStart(CommanderReread):
         return True
 
     def prepare(self) -> None:
+        self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
             old.unlink()
@@ -52,7 +53,7 @@ class CommanderStart(CommanderReread):
         return "\n\n".join(
             (
                 cls.notice(),
-                VoiceReminder.text(),
+                CommanderConfig.packaged_voice().read_text(encoding="utf-8", newline=""),
                 CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
                 CommanderConfig.packaged_spine().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
