@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
-from .bus_publication import AgentOrigin, HumanOrigin
+from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
@@ -35,6 +37,19 @@ if TYPE_CHECKING:
 from .todos import TodoError, TodoStore
 
 
+@dataclass
+class WireCommit:
+    """Messages published under one wire lock, each kept with the origin that sent it."""
+
+    publisher: OwnerPublisher
+    published: list[tuple[InitialOrigin, Message]] = field(default_factory=list)
+
+    def publish(self, message: Message, origin: InitialOrigin) -> Message:
+        committed = self.publisher.publish_ordinary(message, origin=origin)
+        self.published.append((origin, committed))
+        return committed
+
+
 class Messaging:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
         self.root = root
@@ -42,6 +57,18 @@ class Messaging:
         self.bus = bus
         self.goals = goals
         self._wire_lock_path = root / "wire"
+
+    @contextmanager
+    def _wire_write(self) -> Iterator[WireCommit]:
+        """Publish under the wire lock; once it is released, each origin records what its
+        committed messages mean beyond the bus, so no send path can publish without it."""
+        commit = WireCommit(self.bus.publisher)
+        try:
+            with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+                yield commit
+        finally:
+            for origin, message in commit.published:
+                origin.published(self.goals, message)
 
     def send(
         self,
@@ -58,7 +85,7 @@ class Messaging:
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with self._wire_write() as commit:
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -81,9 +108,7 @@ class Messaging:
                 report=report,
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
-            publisher: OwnerPublisher = self.bus.publisher
-            committed = publisher.publish_ordinary(message, origin=origin)
-        origin.published(self.goals, committed)
+            committed = commit.publish(message, origin)
         try:
             todos.correct(owner.name, committed.message_id, body)
         except TodoError as error:
@@ -134,11 +159,9 @@ class Messaging:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with self._wire_write() as commit:
             origin = HumanOrigin.of(self._user_identity_under_wire_lock(worktree))
-            message = self._publish_user_under_wire_lock(origin, target, body, task)
-        origin.published(self.goals, message)
-        return message
+            return commit.publish(Message(origin.sender, target, body, InfoKind, task=task), origin)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
@@ -163,24 +186,18 @@ class Messaging:
 
     def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
                         **declaration_options):
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with self._wire_write() as commit:
             user = self._user_identity_under_wire_lock(worktree)
             origin = HumanOrigin.of(user)
             owner = self.registry.require(recipient)
             task = declaration(scope=scope.select_human(owner), subject=subject,
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
-            message = self._publish_user_under_wire_lock(
-                origin, owner.name, "Pinned constraint from its original source",
-                task, role=NoticeRole())
-        origin.published(self.goals, message)
-        return message
-
-    def _publish_user_under_wire_lock(self, origin: HumanOrigin, target, body, task, *,
-                                      role=ConversationRole()):
-        return self.bus.publisher.publish_ordinary(
-            Message(origin.sender, target, body, InfoKind, task=task, role=role), origin=origin,
-        )
+            return commit.publish(
+                Message(origin.sender, owner.name, "Pinned constraint from its original source",
+                        InfoKind, task=task, role=NoticeRole()),
+                origin,
+            )
 
     def acknowledge(
         self, name: str, references: Sequence[MessageReference]

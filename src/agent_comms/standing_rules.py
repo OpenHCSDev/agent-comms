@@ -300,7 +300,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 @dataclass(frozen=True)
 class DirectiveUnacted(DatedStandingRule):
-    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+    """An owner directive recorded on an open request, past its deadline with no order since."""
 
     request: str
     directive: RequestDirective
@@ -321,7 +321,7 @@ class DirectiveUnacted(DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f"DIRECTIVE UNACTED: owner directive {self.directive.seq} on request {self.request},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
@@ -332,7 +332,7 @@ class DirectiveUnacted(DatedStandingRule):
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"
