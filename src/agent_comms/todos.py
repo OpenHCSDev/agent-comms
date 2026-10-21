@@ -59,7 +59,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import BuildIdentity, UnrecordedBuildIdentity
 from .locked_store import DurableFile, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import InfoKind, Message

@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
-from abc import abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from pydantic import BaseModel
-
-
-from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
-from .field_codec import (
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import (
     FieldCodec,
-    GitCommitText,
     JsonShapeFamily,
     JsonShapeMember,
     PathText,
@@ -30,11 +24,11 @@ from .field_codec import (
     WireName,
     WireOmitDefault,
 )
-from .launch_root import LaunchRoot
-from .thread_text import AbsentText, GivenText, NoParent, NoThreadText, TextChoice, ThreadParent, ThreadText
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.thread_text import AbsentText, GivenText, NoParent, NoThreadText, TextChoice, ThreadParent, ThreadText
 
 if TYPE_CHECKING:
-    from .threads import Thread
+    from agent_comms.threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -83,93 +77,6 @@ class LaunchRuntime:
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
-
-
-class ProofBuildMismatchError(ValueError):
-    """A retained proof does not identify the currently installed pair."""
-
-
-class DeliveredCommitNotInstalledError(ValueError):
-    """The installed Core does not contain the order's delivered change."""
-
-
-class InstalledBuildManifest(BaseModel):
-    """Commit fields in the installer's build.json; unrelated build details remain there."""
-
-    core_commit: str
-    toad_commit: str
-
-
-class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
-    @abstractmethod
-    def recorded(self) -> RecordedBuildIdentity: ...
-
-    @abstractmethod
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None: ...
-
-
-@dataclass(frozen=True)
-class UnrecordedBuildIdentity(BuildIdentity):
-    def recorded(self) -> RecordedBuildIdentity:
-        return RecordedBuildIdentity.installed()
-
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None:
-        installed = RecordedBuildIdentity.installed()
-        raise ProofBuildMismatchError(
-            f"Proof build is unrecorded; installed Core {installed.core}, "
-            f"Toad {installed.toad}; run and record a new proof."
-        )
-
-
-@dataclass(frozen=True)
-class RecordedBuildIdentity(BuildIdentity):
-    """The installed pair, observed from its interpreter rather than this caller's imports."""
-
-    core: Annotated[str, GitCommitText]
-    toad: Annotated[str, GitCommitText]
-
-    def recorded(self) -> RecordedBuildIdentity:
-        return self
-
-    @classmethod
-    def installed(cls) -> RecordedBuildIdentity:
-        runtime = LaunchRuntime.installed()
-        runtime.require_available()
-        # The installer records both source commits for this exact runtime. A wheel's
-        # direct_url.json names its local archive, not the commit it was built from.
-        build = InstalledBuildManifest.model_validate_json(
-            (runtime.prefix / "build.json").read_bytes()
-        )
-        return FieldCodec.decode(
-            cls,
-            {"kind": cls.declared_name, "core": build.core_commit, "toad": build.toad_commit},
-        )
-
-    def contains(self, commit: str, directory: Path) -> bool:
-        """Prove membership in this exact Core build, not the checkout's current head."""
-        result = subprocess.run(
-            ("git", "merge-base", "--is-ancestor", commit, self.core),
-            cwd=directory,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode not in (0, 1):
-            result.check_returncode()
-        return result.returncode == 0
-
-    def require_installed(self, commits: tuple[str, ...], directory: Path) -> None:
-        installed = self.installed()
-        if self != installed:
-            raise ProofBuildMismatchError(
-                f"Proof build Core {self.core}, Toad {self.toad} differs from installed "
-                f"Core {installed.core}, Toad {installed.toad}; run the proof again."
-            )
-        for commit in commits:
-            if not installed.contains(commit, directory):
-                raise DeliveredCommitNotInstalledError(
-                    f"Delivered commit {commit} is not contained in installed Core {installed.core}."
-                )
 
 
 class RestoredRuntime(LaunchRuntime):
