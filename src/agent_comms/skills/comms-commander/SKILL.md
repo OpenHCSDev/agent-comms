@@ -21,7 +21,7 @@ All tools are `agent-comms-commander <tool> ...`, configured by `~/.config/agent
 - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of the pinned refactor-audit catalog (`src/agent_comms/skills/refactor-audit/references/patterns/README.md`); read a rung file when an order or roast cites one of its pattern IDs. The session hook rereads them at every start and compaction; `rules review` prints every rule with its file:line. A summary or memory note is a paraphrase that drifts and never counts.
 - **Memory files point at this skill; they never restate its rules.**
 
-Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `agent-comms-commander tool-watch` shows unit tool calls and storage violations. Neither replaces the heartbeat, and no other poll is kept beside it.
+Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `agent-comms-commander tool-watch` prints every native unit's tool calls per turn, its final words, and storage refusals. Neither replaces the heartbeat, and no other poll is kept beside it.
 
 ## Why a dictator
 
