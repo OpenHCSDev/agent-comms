@@ -426,7 +426,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
 
 def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
     from test_holder_standing_rules import blocked_holder
-    from agent_comms.commander.standing import Blocked
+    from agent_comms.commander.standing import GoalCannotRun
     from agent_comms.goal_actions import RetryGoalAction
     from agent_comms.goals import GoalChangedError
     from agent_comms.input_disposition import InputDispositions
@@ -435,7 +435,7 @@ def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
     caplog.set_level(logging.INFO)
     with LaunchRoot.from_path(held_bus.root).selected():
         blocked_holder(held_bus)
-        observed, = Blocked.violations(held_bus, "lead")
+        observed, = GoalCannotRun.violations(held_bus, "lead")
         recovered = held_bus.goals.update_goal("worker", RetryGoalAction())
         rows = tuple(held_bus.goals.todos.get(problem) for problem in observed.orders)
         generation = held_bus.goals.open_goal_store().require_generation(recovered.id)
@@ -459,14 +459,15 @@ def test_blocked_enforcement_rejects_a_recovered_goal(held_bus, caplog):
 
 def test_blocked_enforcement_preserves_reassigned_orders(held_bus):
     from test_holder_standing_rules import blocked_holder
-    from agent_comms.commander.standing import Blocked, UnownedWheelSpin
+    from agent_comms.commander.standing import GoalCannotRun
+    from agent_comms.goal_actions import ReissuedOrderGoalAction
     from agent_comms.standing_rules import StandingRule
 
     with LaunchRoot.from_path(held_bus.root).selected():
         blocked_holder(held_bus)
-        observed, = Blocked.violations(held_bus, "lead")
+        observed, = GoalCannotRun.violations(held_bus, "lead")
         row = held_bus.goals.todos.get(observed.orders[0])
-        reassigned = held_bus.goals.update_goal("outsider", UnownedWheelSpin.order_for(row, "lead"))
+        reassigned = held_bus.goals.update_goal("outsider", ReissuedOrderGoalAction.for_todo(row, "lead"))
         assigned = held_bus.goals.todos.get(row.id)
         generation = held_bus.goals.open_goal_store().require_generation(observed.goal.id)
         with held_bus.bus.locked(), pytest.raises(TodoError):

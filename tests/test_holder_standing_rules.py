@@ -17,7 +17,11 @@ from conftest import declare_test_bus
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
+from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms import agent_events as events
+import asyncio
+from test_goal_execution import turn_on
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
@@ -25,16 +29,14 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.standing import (
     HeartbeatSilent,
-    Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
+    GoalCannotRun, Detached, HolderCannotRun, UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.goal_actions import (
-    BlockedGoalAction, CreateProblemGoalAction, DirectiveGoalAction, SetGoalAction,
-)
+from agent_comms.goal_actions import CreateProblemGoalAction, DirectiveGoalAction, SetGoalAction
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
-from agent_comms.goal_generation import GenerationState, ReadyGeneration, RetryableGeneration
-from agent_comms.goal_states import ActiveGoal, BlockedGoal
+from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
@@ -99,15 +101,17 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
 
 
 def blocked_holder(comms):
-    """An actual failed ledger reservation, not merely a displayed blocked label."""
-    goal = comms.registry.require("worker").goal.require()
-    store = comms.goals.open_goal_store()
-    generation = store.require_generation(goal.id)
-    store.recover_unreserved_ready(goal.id, generation.number)
-    reservation = store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
-    reservation.fail(store, "The previous attempt has an uncertain result")
-    comms.goals.update_goal("worker", BlockedGoalAction(progress="A reason unrelated to matching text"))
-    return reservation
+    """Settle a real failed turn; never manufacture a stored backend block."""
+    owner = comms.registry.require("worker")
+    comms.registry.register(replace(owner, process_identity=ProcessIdentity.capture(os.getpid())))
+
+    async def fail_turn():
+        async with turn_on(comms) as turn:
+            permit, = turn.goal_permit.claims
+            await turn.progress.done(events.Done("The previous attempt failed", False))
+        return permit.reservation
+
+    return asyncio.run(fail_turn())
 
 
 def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(held_bus):
@@ -117,35 +121,12 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     store.recover_unreserved_ready(goal.id, generation.number)
     store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
     reserved = store.require_generation(goal.id)
-    assert Blocked.violations(held_bus, "lead") == ()
-    violation, = UnresolvedBlock.violations(held_bus, "lead")
+    violation, = GoalCannotRun.violations(held_bus, "lead")
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal.require() == goal
     assert isinstance(goal.state, ActiveGoal)
     assert store.require_generation(goal.id) == reserved
-
-
-@pytest.fixture(params=[member() for member in GenerationState.members_with(GenerationState)])
-def holder_generation(request):
-    return request.param
-
-
-def test_unresolved_block_accepts_ledger_state_independently_of_goal_state(holder_generation):
-    generation = holder_generation
-    goal = Goal("Held work", "goal", published_seq=0)
-    expected = not isinstance(generation, RetryableGeneration)
-    assert UnresolvedBlock.accepts(goal, generation) == expected
-    blocked = replace(goal, state=BlockedGoal("Failed turn"))
-    assert UnresolvedBlock.accepts(blocked, generation) == expected
-
-
-def test_blocked_accepts_only_real_goal_blocks_with_retryable_generations(holder_generation):
-    generation = holder_generation
-    goal = Goal("Held work", "goal", published_seq=0)
-    assert not Blocked.accepts(goal, generation)
-    blocked = replace(goal, state=BlockedGoal("Failed turn"))
-    assert Blocked.accepts(blocked, generation) == isinstance(generation, RetryableGeneration)
 
 
 def publish(comms, sender, target, timestamp, *, answers=()):
@@ -160,9 +141,7 @@ def test_blocked_holder_republishes_every_order_without_replaying_unknown(held_b
     original = comms.registry.require("worker").goal.require()
     inputs = InputDispositions(held_bus.root)
     unresolved = inputs.lookup("unresolved-input")
-    violation, = Blocked.violations(held_bus, "lead")
-    assert violation.block_record.is_file()
-    print(violation.line())
+    violation, = GoalCannotRun.violations(held_bus, "lead")
     previous_orders = {todo.id: todo.order.checked().id
                        for todo in held_bus.goals.todos.held_orders()}
     violation.enforce(held_bus, "lead")
@@ -177,7 +156,7 @@ def test_blocked_holder_republishes_every_order_without_replaying_unknown(held_b
         assert AttemptRecord.read_in(connection, reservation.attempt_id).holds(reservation, ResolvedAttempt())
     assert inputs.lookup("unresolved-input") == unresolved
     assert comms.registry.require("worker").goal.require() == original
-    assert Blocked.violations(held_bus, "lead") == ()
+    assert GoalCannotRun.violations(held_bus, "lead") == ()
 
 
 def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
@@ -186,7 +165,7 @@ def test_blocked_holder_reissues_only_undelivered_orders(held_bus):
         delivered.revision, held_bus.registry.require("lead").incarnation,
         OperationDelivery(at=RecordedEventTime(time.time())), delivered.order.id))
     blocked_holder(held_bus)
-    violation, = Blocked.violations(held_bus, "lead")
+    violation, = GoalCannotRun.violations(held_bus, "lead")
     assert violation.orders == ("P1",)
     violation.enforce(held_bus, "lead")
     assert held_bus.goals.todos.get("P2") == delivered
@@ -205,7 +184,7 @@ def test_blocked_holder_reissues_pending_sibling_but_never_the_claimed_order(hel
     claimed = held_bus.goals.todos.get("P2")
     pending = held_bus.goals.todos.get("P1")
     blocked_holder(held_bus)
-    violation, = Blocked.violations(held_bus, "lead")
+    violation, = GoalCannotRun.violations(held_bus, "lead")
     assert violation.orders == ("P1",)
     violation.enforce(held_bus, "lead")
     assert held_bus.goals.todos.get("P2") == claimed
@@ -227,17 +206,17 @@ def test_blocked_holder_is_reissued_its_accepted_order_after_editing_its_scope(h
     accepted = held_bus.goals.todos.get("P3").order.checked().id
     owner.write_text('"""The unit moved its class while working the order."""\n\n\nclass Owner:\n    pass\n')
     blocked_holder(held_bus)
-    violation, = Blocked.violations(held_bus, "lead")
+    violation, = GoalCannotRun.violations(held_bus, "lead")
     violation.enforce(held_bus, "lead")
     assert held_bus.goals.todos.get("P3").order.checked().id != accepted
-    assert Blocked.violations(held_bus, "lead") == ()
+    assert GoalCannotRun.violations(held_bus, "lead") == ()
 
 
 def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", UnownedWheelSpin.order_for(todo, "lead"))
+    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(todo, "lead"))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(
@@ -265,7 +244,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     lease = owner.thread.turn_lease
     assert lease is not None
     try:
-        assert Blocked.violations(held_bus, "lead") == ()
+        assert GoalCannotRun.violations(held_bus, "lead") == ()
     finally:
         held_bus.agents.finish_turn(lease)
 
@@ -426,16 +405,16 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
 
 
-def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus, installed_runtime):
+def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, installed_runtime):
     blocked_holder(held_bus)
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
     assert detached.unit == "worker" and set(detached.orders) == {"P1", "P2"}
     family = HolderCannotRun.violations(held_bus, "lead")
     assert detached in family
-    blocked, = Blocked.violations(held_bus, "lead")
-    assert blocked in family
+    blocked, = GoalCannotRun.violations(held_bus, "lead")
     broken = StandingRule.broken(held_bus, "lead")
+    assert blocked in broken
     assert all(rule in broken for rule in family)
 
 
@@ -502,7 +481,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
-        *Blocked.violations(held_bus, "lead"), *UnitAskUnanswered.violations(held_bus, "lead"),
+        *GoalCannotRun.violations(held_bus, "lead"), *UnitAskUnanswered.violations(held_bus, "lead"),
     ))
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
