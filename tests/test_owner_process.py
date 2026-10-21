@@ -237,7 +237,11 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         selected = ["batch-a", "batch-renamed"]
         before = comms.registry.snapshot()
         last = before.require_active("batch-renamed")
-        busy = comms.agents.begin_turn(last.name, "protected-turn")
+        # Seed the foreign owner's busy record through its owning edit, without
+        # pretending this fixture process is that owner's local caller.
+        with comms.registry.store.editing() as edit:
+            busy, _ = edit.lease_turn(last, "protected-turn", None)
+            edit.commit()
         refusal_source = comms.registry.snapshot()
         with pytest.raises(RelationViolationError):
             await Coordination.run_worker(partial(comms.owners.restart_owners, selected, cutover=cutover))
