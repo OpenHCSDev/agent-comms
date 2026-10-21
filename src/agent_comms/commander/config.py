@@ -109,9 +109,15 @@ class CommanderConfig(CommanderRole, BaseModel):
         return rules
 
     def repo_directory(self, name: str) -> Path:
-        """A configured repository name takes precedence over a directory spelling."""
-        return next((repo.checkout for repo in self.repos
-                     if repo.github.named(name)), Path(name)).resolve()
+        """Only the configured repositories can supply an order's check checkout."""
+        for repo in self.repos:
+            if repo.named(name):
+                return repo.checkout
+        configured = ', '.join(f'{repo.github.to_wire()} ({repo.checkout})' for repo in self.repos)
+        raise ValueError(
+            f'Unknown check repository {name!r}. Configured repositories: {configured}. '
+            'Rerun agent-comms install with --repos to configure the checkouts.'
+        )
 
     def module_repo(self, module: str) -> Repo:
         """The configured repository whose checkout holds ``module``; none is an error."""
