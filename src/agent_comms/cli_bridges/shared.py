@@ -9,17 +9,18 @@ import json
 import os
 import signal
 import socket
-import time
 import sys
+import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -54,16 +55,16 @@ from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
+    REPLIES,
+    BridgeExit,
+    InspectSession,
     MonitorAttachment,
     MonitorPeer,
     MonitorService,
-    BridgeExit,
-    InspectSession,
-    PauseSession,
-    REPLIES,
-    SessionInformation,
     NoReader,
+    PauseSession,
     ReaderState,
+    SessionInformation,
     read_monitor,
 )
 
@@ -495,8 +496,8 @@ class Serve(Watch):
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
         running = []
-        for state in sorted((home / '.local/state/agent-comms').glob('*-bridge-*')):
-            journal = state / 'delivery.sqlite3'
+        for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
+            journal = state / BridgeStateTable.filename
             if not journal.is_file():
                 continue
             with closing(CoordinationStore.read_snapshot(journal)) as db:
@@ -905,10 +906,8 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, options.binding.bind(db), db)
-            try:
+            with suppress(asyncio.CancelledError):
                 runner.run(bridge.run())
-            except* asyncio.CancelledError:
-                pass
         options.operation.retired(bridge)
     except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
