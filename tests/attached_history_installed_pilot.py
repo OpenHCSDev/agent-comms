@@ -5,6 +5,8 @@ The supplied original immutable prefix records are checked read-only.
 History references preserve the source inodes and seals; no archive index,
 registry guard or prefix record is rebuilt.
 """
+
+from agent_comms.bus import Bus
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import asyncio
 from importlib.resources import files
@@ -67,7 +69,7 @@ async def main():
         os.environ.update(AGENT_COMMS_ROOT=str(root/'wire'),XDG_CONFIG_HOME=str(root/'config'),
                           XDG_STATE_HOME=str(root/'state'),XDG_DATA_HOME=str(root/'data'))
         comms=wire(root/'wire')
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         for name, parent in [('openhcs-architecture-memory',NoParent()),('openhcs-pr159-viewer-bind-owner',ForkedParent('openhcs-architecture-memory'))]:
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'openhcs', 'comms'}), str(root), parent=parent))
         originals=reference_actual_history(comms.root,live)

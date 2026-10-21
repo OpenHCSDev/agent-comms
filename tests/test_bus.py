@@ -15,7 +15,9 @@ from agent_comms.bus import (
     PublicRecord,
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import BusRow, BusTables, DirectReplySource
+from agent_comms.bus_tables import (
+    AnsweredSource, BusProjectionTables, BusRow, BusTables, DirectReplySource, MessageIdentitySource,
+)
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     HumanSendRefusedError,
@@ -32,7 +34,46 @@ from agent_comms.messages import (
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import TypedTable
+from agent_comms.typed_table import SQLiteTableName, TypedTable
+
+
+def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path / "not-installed"))
+    assert not bus.path.parent.exists()
+    with bus.writer_connection() as db:
+        assert not SQLiteTableName.stored(db)
+    with pytest.raises(sqlite3.OperationalError):
+        bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "worker", "not admitted", InfoKind, seq=seq),
+        ))
+    with bus.observing() as db:
+        assert not SQLiteTableName.stored(db)
+    installed = Bus.install(bus.path)
+    record = installed.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "installed", InfoKind, seq=seq),
+    ))
+    assert record.seq == 1 and Bus(bus.path).lookup(1) == record
+
+
+def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
+    record = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "original", InfoKind, seq=seq),
+    ))
+    with bus.writing() as db:
+        db.execute(f'DROP TABLE "{AnsweredSource.declared_name}"')
+        stored = {row: row.select(db) for row in BusTables.schema_rows()}
+    with pytest.raises(RelationViolationError):
+        Bus.install(bus.path)
+    # The actual page needs no reply index. Normal reads/writes do not inspect DDL.
+    assert bus.page(2, 1) == (record,)
+    second = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "second", InfoKind, seq=seq),
+    ))
+    with bus.writing() as db:
+        assert all(row.select(db)[:len(rows)] == rows for row, rows in stored.items())
+        BusProjectionTables.reset_schema(db)
+    Bus.install(bus.path)
+    assert bus.page(3, 2) == (second, record)
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
@@ -44,8 +85,7 @@ from agent_comms.typed_table import TypedTable
         for notice in (False, True)
     ),
 )
-def test_real_message_record_round_trip(tmp_path, declaration, role):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_real_message_record_round_trip(bus, declaration, role):
     message = Message("author", "worker", "hello", InfoKind, seq=1, role=role)
     record = record_from(declaration, message)
     stored = bus.append(lambda seq, db: replace(record, seq=seq))
@@ -64,6 +104,7 @@ def test_real_message_record_round_trip(tmp_path, declaration, role):
     )
     assert intent.matches_publication(stored)
     assert stored.messages() == (stored,)
+    assert tuple(bus.message_history()) == (Message.from_message(stored),)
     assert stored.deliveries() == ((stored,) if issubclass(declaration, Delivered) else ())
     for delivery in stored.deliveries():
         assert not delivery.direct_for("unaddressed")
@@ -71,8 +112,36 @@ def test_real_message_record_round_trip(tmp_path, declaration, role):
         bus.lookup(stored.seq + 1)
 
 
-def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+@pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
+def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, declaration, tmp_path):
+    original = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "original", InfoKind, seq=seq),
+    ))
+    record = bus.append(lambda seq, db: record_from(
+        declaration, Message("author", "worker", "kept reply", InfoKind, seq=seq,
+                             answers=(original.reference,)),
+    ))
+    with bus.writing() as db:
+        stored = {row: row.select(db) for row in BusTables.schema_rows()}
+        projected = {row: row.select(db) for row in BusProjectionTables.schema_rows()}
+        assert MessageIdentitySource.count(db) == 2
+        BusProjectionTables.reset_schema(db)
+        BusProjectionTables.require_schema(db)
+        assert {row: row.select(db) for row in BusProjectionTables.schema_rows()} == projected
+        assert {row: row.select(db) for row in BusTables.schema_rows()} == stored
+    assert bus.lookup(record.seq) == record
+    assert bus.lookup_message(record.message_id) == record
+    assert bus.page(record.seq + 1, 10) == (record, original)
+    copied = Bus.install(Bus.path_in(tmp_path / "selected-history"), history=(record,))
+    public = copied.lookup(record.seq)
+    assert type(public) is PublicRecord
+    assert public.publication_snapshot == record.history_snapshot.publication_snapshot
+    assert copied.lookup_message(record.message_id) == public
+    assert copied.received("b" * 32) == ()
+    assert copied.page(record.seq + 1, 10) == (public,)
+
+
+def test_acknowledgement_is_idempotent_without_extra_rows(bus):
     first = bus.append(
         lambda seq, db: record_from(
             KeyedPrivateRecord, Message("author", "worker", "first", InfoKind, seq=seq)
@@ -103,8 +172,7 @@ def test_acknowledgement_is_idempotent_without_extra_rows(tmp_path):
         assert snapshot.keyed_messages(first.acknowledgement.publication_key) == (first,)
 
 
-def test_publication_key_is_unique_in_sql_even_when_receipts_differ(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_publication_key_is_unique_in_sql_even_when_receipts_differ(bus):
     first = bus.append(lambda seq, db: record_from(
         KeyedPrivateRecord, Message("author", "worker", "first", InfoKind, seq=seq),
     ))
@@ -120,8 +188,7 @@ def test_publication_key_is_unique_in_sql_even_when_receipts_differ(tmp_path):
     assert bus.keyed_messages(first.acknowledgement.publication_key) == (first,)
 
 
-def test_every_bus_table_rejects_update_and_delete(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_every_bus_table_rejects_update_and_delete(bus):
     stored = tuple(
         bus.append(
             lambda seq, db: record_from(
@@ -139,8 +206,7 @@ def test_every_bus_table_rejects_update_and_delete(tmp_path):
     assert all(bus.lookup(record.seq) == record for record in stored)
 
 
-def test_inbox_filters_target_and_orders_by_sequence(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_inbox_filters_target_and_orders_by_sequence(bus):
     first = bus.append(
         lambda seq, db: PublicRecord.from_message(Message("author", "worker", "one", InfoKind, seq=seq))
     )
@@ -161,8 +227,7 @@ def test_inbox_filters_target_and_orders_by_sequence(tmp_path):
     assert bus.page(last.seq + 1, 2) == (last, other)
 
 
-def test_scoped_and_frozen_source_queries_are_sequence_bounded(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     original = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "#other", "original", InfoKind, seq=seq)))
     notice = bus.append(lambda seq, db: record_from(PrivateRecord,
@@ -179,6 +244,21 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(tmp_path):
     assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
+
+
+def test_bulk_history_keeps_one_snapshot_across_pages(tmp_path):
+    bus = Bus(Bus.path_in(tmp_path))
+    assert tuple(bus.message_history()) == ()
+    originals = tuple(Message.from_message(bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", f"message {seq}", InfoKind, seq=seq),
+    ))) for _ in range(101))
+    history = bus.message_history()
+    assert next(history) == originals[0]
+    later = Message.from_message(bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "after export started", InfoKind, seq=seq),
+    )))
+    assert tuple(history) == originals[1:]
+    assert tuple(bus.message_history()) == (*originals, later)
 
 
 def append_until_header(path, ready):
@@ -206,8 +286,7 @@ def append_until_header(path, ready):
     )
 
 
-def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_sigkill_after_header_rolls_back_every_capability_table(bus):
     with bus.writing() as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
     reader, writer = publication_processes.Pipe(duplex=False)
@@ -238,8 +317,7 @@ def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
         reader.close()
 
 
-def test_human_refusal_rolls_back_the_header(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_human_refusal_rolls_back_the_header(tmp_path, bus):
     with bus.writing() as db:
         db.execute(
             f'CREATE TRIGGER refuse_message BEFORE INSERT ON "{Message.table.declared_name}" '
@@ -257,8 +335,7 @@ def test_human_refusal_rolls_back_the_header(tmp_path):
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
 
-def test_notification_failure_carries_the_committed_message(tmp_path):
-    bus = Bus(Bus.path_in(tmp_path))
+def test_notification_failure_carries_the_committed_message(tmp_path, bus):
     bus.path.with_suffix(".changed").mkdir()
     origin = HumanOrigin("author", 1, str(tmp_path))
     with pytest.raises(CommittedMessageError) as failed:
@@ -279,9 +356,7 @@ def test_notification_failure_carries_the_committed_message(tmp_path):
 def test_readonly_archive_and_backup_use_the_same_bus(tmp_path):
     bus = Bus(Bus.path_in(tmp_path / "source"))
     assert not bus.path.parent.exists()
-    bus.path.parent.mkdir()
-    with bus.writing():
-        pass
+    bus = Bus.install(bus.path)
     assert bus.revision() == 0
     committed = bus.append(
         lambda seq, db: PublicRecord.from_message(

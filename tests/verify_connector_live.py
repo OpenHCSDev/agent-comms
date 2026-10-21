@@ -5,6 +5,8 @@ The caller selects scratch; each subprocess run retires its temporary directory.
 """
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import shutil
@@ -15,7 +17,6 @@ import tempfile
 from pathlib import Path
 
 from connector_readiness import ConnectorReadiness
-from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -35,8 +36,6 @@ def curl_call(port, token, body, *, arguments=None):
 def maintenance_proof(comms):
     bus = comms.bus.bus
     message = comms.messaging.send("worker", "claude-ai", "scratch original").message
-    maintenance.schedule_candidate_catchup(bus, message.seq)
-    maintenance.drain_candidate_catchup(comms.root)
     index = WakeCandidateIndex(bus)
     assert index.through_seq >= message.seq
     assert bus.path.parent not in maintenance._pending
@@ -52,7 +51,7 @@ def main(scratch: Path):
         comms = Comms(root)
         for name in ("claude-ai", "worker"):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(base)))
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)

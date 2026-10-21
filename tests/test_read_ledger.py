@@ -1,5 +1,7 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from agent_comms.bus import Bus
+
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.wire_log import WireLog
 
@@ -102,7 +104,7 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
     comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))

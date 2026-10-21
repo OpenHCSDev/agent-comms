@@ -18,9 +18,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.cursor_owner import ActivationFloorCursor
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex,
-)
 from test_private_human_ingress import _root
 
 
@@ -46,7 +43,6 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
             reopened = Comms(comms.root)
-            WakeCandidateIndex(reopened.bus.bus).rebuild()
             assert (
                 await _accept_visible_deliveries(
                     reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"

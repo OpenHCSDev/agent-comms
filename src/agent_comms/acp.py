@@ -58,7 +58,7 @@ from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
-from .native_source_cursor import NativeSourceCursor
+from .cursor_owner import CursorOwner
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime import (
@@ -341,7 +341,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
         delivery = self.cursors.delivery(session_id)
         async with delivery.reading() as source_reads:
-            state = await NativeSourceCursor.read_async(
+            state = await CursorOwner.read_async(
                 bus, owner_name=thread_name, source_reads=source_reads,
             )
         after_seq = state.covered_seq

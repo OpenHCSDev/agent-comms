@@ -2,12 +2,19 @@ import asyncio
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
+
+
+@pytest.fixture(autouse=True)
+def installed_bus(tmp_path):
+    """Install the base bus; the external transcript store remains lazy."""
+    Bus.install(Bus.path_in(tmp_path / "wire"))
 
 
 def test_finished_cli_items_append_once_and_page(tmp_path):

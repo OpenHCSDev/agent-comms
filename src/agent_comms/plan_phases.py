@@ -177,7 +177,7 @@ class BusWriterPhase(VirtualBusPhase):
 
     after = (BusInterfacePhase,)
     evidence = PatternAbsent(
-        "append_private_unlocked",
+        "[a]ppend_private_unlocked",
         ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"),
     )
 

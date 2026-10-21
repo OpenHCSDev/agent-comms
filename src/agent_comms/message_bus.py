@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus
-from agent_comms.bus_activity_index import ActivityClocks, BusActivityIndex
-from agent_comms.bus_route_counts import OpenedRouteCounts
+from agent_comms.bus_activity_index import ActivityClocks
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinator import Coordination
@@ -65,24 +64,21 @@ class WatchPass[Observed](HeldBusWrite, ABC):
 
 class MessageBus[Writes: Publisher]:
     def __init__(
-        self, root: Path, registry: Registration, publisher: type[Writes], *,
-        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
+        self, root: Path, registry: Registration, publisher: type[Writes],
     ):
         from agent_comms.catalog_store import ChannelCatalog
         from agent_comms.read_ledger import ReadLedger
 
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
-        self.projection = projection
         self.history = HistoryArchive(self.bus.path)
         self._registry = registry
         self._channels = ChannelCatalog.at(root)
-        self.activity_index = BusActivityIndex(self.bus.path)
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
 
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
-        yield self.activity_index.snapshot(self.bus)
+        yield self.bus.activity_clocks()
 
     def require_channel(self, target: str):
         with self.opened_activity() as activity:
@@ -96,7 +92,7 @@ class MessageBus[Writes: Publisher]:
     def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, Bus]]:
         with CapturedSelection.reading(
             self._registry, self._channels, self.reads, viewer,
-            self.activity_index.snapshot(self.bus),
+            self.bus.activity_clocks(),
         ) as basis:
             yield basis, self.bus
 
@@ -118,19 +114,21 @@ class MessageBus[Writes: Publisher]:
         document = self.reads.read()
         seen = self.reads.cursor(delivery.actor, snapshot, document=document)
         self.bus.messages_for_references(after.references())
-        with self.projection(self.bus.path, self.bus, snapshot, {delivery.actor: delivery}) as index:
-            cursor = after.cursor()
-            unread = index.unseen_deliveries(
-                delivery.actor, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
+        cursor = after.cursor()
+        with self.bus.reading() as source:
+            unread = source.unseen_deliveries(
+                snapshot, delivery, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
             )
-            counts = index.unseen_counts({delivery.actor: seen}, after=cursor)[delivery.actor]
-            total = target.pending_count(counts, snapshot, self.require_channel)
-            listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
-                                      frozenset(row.target for row in unread))
-            result = MessagePageRequest(
-                listed, PageBounds(NewerTraversal(cursor), bounds.limit),
-            ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
-            return InboxPage(result.page, result.displayed, total - len(result.page.messages))
+            counts = source.unseen_counts(
+                snapshot, {delivery.actor: delivery}, {delivery.actor: seen}, after=cursor,
+            )[delivery.actor]
+        total = target.pending_count(counts, snapshot, self.require_channel)
+        listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
+                                  frozenset(row.target for row in unread))
+        result = MessagePageRequest(
+            listed, PageBounds(NewerTraversal(cursor), bounds.limit),
+        ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
+        return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
     async def watch(
         self, name: str, *, acknowledgment: type[WatchAcknowledgment],
@@ -197,8 +195,7 @@ class MessageBus[Writes: Publisher]:
                       for actor in set(actors.values())}
         seen = {actor: basis.document.cursor(actor, basis.registry, ObservedPath.at(source.path))
                 for actor in deliveries}
-        with self.projection(self.bus.path, source, basis.registry, deliveries) as index:
-            counts = index.unseen_counts(seen)
+        counts = source.unseen_counts(basis.registry, deliveries, seen)
         return {name: counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(
@@ -207,8 +204,9 @@ class MessageBus[Writes: Publisher]:
         actor = selection.require_viewer()
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
         counts = dict.fromkeys(conversations, 0)
-        with self.projection(self.bus.path, source, selection.registry, {actor: delivery}) as index:
-            counts.update(index.unseen_counts({actor: selection.seen(source)})[actor])
+        counts.update(source.unseen_counts(
+            selection.registry, {actor: delivery}, {actor: selection.seen(source)},
+        )[actor])
         return counts
 
     def delivered(self, name: str, references: Sequence[MessageReference]) -> DisplayBasis:

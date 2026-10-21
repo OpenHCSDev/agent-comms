@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 from conftest import publish_initial
 import asyncio
 import json
@@ -109,7 +111,7 @@ def test_sparse_imported_prefix_keeps_references_and_accepts_fresh_human_send(tm
     copied = Comms(tmp_path / 'selected')
     for thread in source.registry.snapshot().threads.values():
         copied.registry.declare(thread)
-    copied.messaging.initialize_private_initial_protocol(history=(first, second))
+    Bus.install(Bus.path_in(copied.root), history=(first, second))
     before = copied.bus.log.path.read_bytes()
     with copied.bus.log.checked_read() as checked:
         PublicMessages.require_contiguous(checked.connection)

@@ -1,5 +1,7 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
+from agent_comms.bus import Bus
+
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import AllChannelDisplayScope, NamedViewer
@@ -42,7 +44,7 @@ def setup(root, count=5):
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(root), created_at=10.0))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(root), created_at=11.0))
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}").message.message_id
