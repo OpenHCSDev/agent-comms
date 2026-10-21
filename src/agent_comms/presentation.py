@@ -25,7 +25,7 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
-from .display_references import DisplayReferences
+from agent_comms.display_references import CurrentDisplayReferences
 from .external_transcript import ExternalTranscript
 from .field_codec import (
     FieldCodec,
@@ -717,7 +717,7 @@ class CoordinationSnapshot:
     unread: Mapping[str, UnreadPresentation]
     channel_unread: Mapping[str, UnreadPresentation]
     last_sent: Mapping[str, float]
-    references: DisplayReferences
+    references: CurrentDisplayReferences
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, UnreadPresentation] = field(default_factory=dict)
     read_marker_notice: ReadNotice = field(default_factory=NoReadNotice)
@@ -745,7 +745,7 @@ class CoordinationSnapshot:
             channel_unread={name: ExactUnread(count) for name, count in channel_unread.items()},
             last_sent=sent,
             thread_unread={name: UnobservedUnread() for name in threads},
-            references=DisplayReferences.capture(root, registry, declarations),
+            references=CurrentDisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )
 

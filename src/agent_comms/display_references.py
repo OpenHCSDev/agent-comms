@@ -9,9 +9,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 import re
+from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
-from .thread_identity import ThreadIncarnation
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.thread_identity import ThreadIncarnation
+
+if TYPE_CHECKING:
+    from agent_comms.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -143,15 +147,6 @@ class DisplayReferences(RootedReferences):
     targets: Mapping[str, DisplayReference] = field(default_factory=dict)
 
     @classmethod
-    def capture(cls, root, registry, channels) -> DisplayReferences:
-        targets = {name: ThreadDisplayReference(str(root), thread.incarnation)
-                   for name, thread in registry.threads.items()}
-        targets.update((alias, targets[name]) for alias, name in registry.aliases.items()
-                       if name in targets)
-        targets.update((name, ChannelDisplayReference(str(root), name)) for name in channels)
-        return cls(str(root), targets)
-
-    @classmethod
     def recorded(cls, root, source) -> DisplayReferences:
         registry = source.provenance
         targets = {name: HistoricalDisplayReference(str(root), thread.incarnation, source.key)
@@ -188,3 +183,27 @@ class DisplayReferences(RootedReferences):
 
     def contains(self, reference: DisplayReference) -> bool:
         return self.targets.get(reference.name) == reference
+
+
+@dataclass(frozen=True)
+class CurrentDisplayReferences(DisplayReferences):
+    """Current targets retain their registry cut, not another identity index.
+
+    Recorded catalogs share name recognition but cannot resolve a live target.
+    """
+
+    registry: RegistrySnapshot = field(kw_only=True, repr=False, compare=False)
+
+    @classmethod
+    def capture(cls, root, registry: RegistrySnapshot, channels) -> CurrentDisplayReferences:
+        targets = {name: ThreadDisplayReference(str(root), thread.incarnation)
+                   for name, thread in registry.threads.items()}
+        targets.update((alias, targets[name]) for alias, name in registry.aliases.items()
+                       if name in targets)
+        targets.update((name, ChannelDisplayReference(str(root), name)) for name in channels)
+        return cls(str(root), targets, registry=registry)
+
+    def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
+        """Resolve an exact birth to its current name; a missing birth fails."""
+        current = self.registry.by_lookup[incarnation.require_recorded().lookup]
+        return ThreadDisplayReference(self.root, current.incarnation)

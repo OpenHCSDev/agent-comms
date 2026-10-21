@@ -6,7 +6,7 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Annotated
 
@@ -709,6 +709,15 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     owner_generations: Mapping[str, int]
     _claimed_generations: Mapping[str, int] = field(repr=False)
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+
+    def __getstate__(self) -> list[dict[str, object]]:
+        """Dataclass state crosses preparation processes as ordinary mappings."""
+        return [dict(getattr(self, declaration.name)) for declaration in fields(self)]
+
+    def __setstate__(self, state: list[dict[str, object]]) -> None:
+        """Restore every declared map as immutable, without a second field roster."""
+        for declaration, values in zip(fields(self), state, strict=True):
+            object.__setattr__(self, declaration.name, MappingProxyType(values))
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
