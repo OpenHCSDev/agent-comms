@@ -12,10 +12,13 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
+
+if TYPE_CHECKING:
+    import sqlite3
 
 T = TypeVar("T")
 
@@ -237,6 +240,23 @@ class SQLiteFile(RootFile):
         return super().files_in(root) | frozenset((
             *cls.files(path), StoreOwner.snapshot_lock(path), StoreOwner.snapshot_intent(path),
         ))
+
+    @classmethod
+    def _begin_transaction(cls, connection: sqlite3.Connection) -> None:
+        connection.execute("BEGIN IMMEDIATE")
+
+    @classmethod
+    @contextmanager
+    def write_transaction(cls, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        """The one write transaction: committed when the block returns, rolled back when it raises."""
+        cls._begin_transaction(connection)
+        try:
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
 
 
 class RuntimeFile(RootFile):
