@@ -57,6 +57,7 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
 def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
     root = tmp_path / 'ROOT'
     spill_dir = tmp_path / 'spill'
+    assert StoreBackup.retain(spill_dir, root) == ()
     spill_dir.mkdir()
     backups = tuple(spill_dir / f'ROOT.upgrade-20260101T00000{n}' for n in range(4))
     for backup in backups:
@@ -78,6 +79,23 @@ def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):
                for path in (unrelated, other_root, retired_run))
     assert ordinary_file.read_text() == 'untouched'
     assert StoreBackup.retain(spill_dir, root) == ()
+
+
+def test_backup_retention_preserves_restored_archives(tmp_path):
+    root = tmp_path / 'ROOT'
+    spill_dir = tmp_path / 'spill'
+    spill_dir.mkdir()
+    backups = tuple(spill_dir / f'ROOT.upgrade-20260101T00000{n}' for n in range(3))
+    for backup in backups:
+        backup.mkdir()
+    archive = spill_dir / f'{backups[0].name}.restored-123456789'
+    archive.mkdir()
+    (archive / 'saved').write_text('restored evidence')
+
+    assert StoreBackup.retain(spill_dir, root) == backups[:1]
+    assert not backups[0].exists()
+    assert all(path.is_dir() for path in backups[1:])
+    assert (archive / 'saved').read_text() == 'restored evidence'
 
 
 def test_ledger_does_not_repeat_a_recorded_conversion(tmp_path):

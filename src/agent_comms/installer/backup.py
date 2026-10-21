@@ -201,9 +201,14 @@ class StoreBackup(ResourceBackup[str]):
     contents: ClassVar[type] = str
     kept: ClassVar[int] = 2
 
+    @staticmethod
+    def directory_format(root: Path) -> str:
+        """One name declaration for creation and recognition; the root is literal data."""
+        return f'{root.name.replace("%", "%%")}.upgrade-%Y%m%dT%H%M%S'
+
     @classmethod
     def directory(cls, spill_dir: Path, root: Path) -> Path:
-        return spill_dir / f'{root.name}.upgrade-{time.strftime("%Y%m%dT%H%M%S")}'
+        return spill_dir / time.strftime(cls.directory_format(root))
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
@@ -213,9 +218,20 @@ class StoreBackup(ResourceBackup[str]):
 
     @classmethod
     def retain(cls, spill_dir: Path, root: Path) -> tuple[Path, ...]:
-        backups = sorted(path for path in spill_dir.glob(f'{root.name}.upgrade-*')
-                         if path.is_dir())
-        retired = tuple(backups[:-cls.kept])
+        name_format = cls.directory_format(root)
+        try:
+            entries = tuple(spill_dir.iterdir())
+        except FileNotFoundError:
+            return ()  # A runtime-only install may never have needed a spill directory.
+        backups = []
+        for path in entries:
+            try:
+                timestamp = time.strptime(path.name, name_format)
+            except ValueError:
+                continue
+            if time.strftime(name_format, timestamp) == path.name and path.is_dir():
+                backups.append(path)
+        retired = tuple(sorted(backups)[:-cls.kept])
         for path in retired:
             shutil.rmtree(path)
         return retired
