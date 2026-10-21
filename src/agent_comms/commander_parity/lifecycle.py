@@ -201,10 +201,8 @@ class LifecycleRun:
         return asyncio.run(BoundedRun.run(command, timeout=120, **options))
 
     def create(self) -> Todo:
-        self.commander.problem(
-            str(self.document), self.worker,
-            f"{self.commander.module_repo(__name__).module_file(__name__)}:1",
-        )
+        owner = OrderFile.read(self.document.read_text()).order.owner
+        self.commander.problem(str(self.document), self.worker, owner.to_wire())
         rows = tuple(self.commander.comms.goals.todos.for_commander(self.commander.incarnation))
         if len(rows) != 1:
             raise ValueError(f"A fresh copied workflow must create one problem, got {len(rows)}")
