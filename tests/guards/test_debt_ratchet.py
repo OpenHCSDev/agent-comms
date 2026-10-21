@@ -961,6 +961,18 @@ def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only(word)
     assert FrozenFieldWrite.count(b'text = "object.__setattr__(x, y, z)"\n', "values.py") == 0
 
 
+def test_a_frozen_write_counts_except_in_its_own_classes_post_init():
+    source = b"""class Snapshot:
+    def __post_init__(self):
+        object.__setattr__(self, "maps", dict(self.maps))
+    def refresh(self):
+        object.__setattr__(self, "maps", {})
+def __post_init__(self):
+    object.__setattr__(self, "maps", {})
+"""
+    assert FrozenFieldWrite.count(source, "values.py") == 2
+
+
 def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
     original = 'key = "admission_generation"\n# clean wording\n'
     base = repo.commit({"words.py": original})
@@ -997,6 +1009,7 @@ def test_string_identity_reads_declared_names_compared_kinds_and_named_access():
     source = b"""after = "carry_hunts"
 step = "CarryStep"
 table = "pkg.route_table"
+loaded = sys.modules["pkg.route_table"]
 if kind == "release": pass
 if mode in {"fast", "slow"}: pass
 match shape:
@@ -1038,6 +1051,24 @@ Bound = TypeVar("Bound", bound="Claimed")
         ("Claimed", NamedDeclaration),
         ("Claimed", NamedDeclaration),
         ("Claimed", NamedDeclaration),
+    ]
+
+
+def test_a_module_name_counts_only_where_a_string_selects_a_module():
+    source = b"""migrate = numbers and "route_table" in stored
+path = "pkg.route_table"
+spec = importlib.util.find_spec("pkg.route_table")
+cached = sys.modules.get("pkg.route_table")
+present = "pkg.route_table" in sys.modules
+skills = files("pkg.route_table") / "skills"
+command = (interpreter, "-m", "pkg.route_table", root)
+"""
+    assert string_identity_readings(source) == [
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
     ]
 
 
