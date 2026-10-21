@@ -56,7 +56,7 @@ class UnrecordedBuildIdentity(BuildIdentity):
 
 @dataclass(frozen=True)
 class RecordedBuildIdentity(BuildIdentity):
-    """Every installed source revision, identified by its repository."""
+    """Declared runtime source revisions, each identified by its repository."""
 
     commits: tuple[RepositoryCommit, ...]
 
@@ -72,10 +72,7 @@ class RecordedBuildIdentity(BuildIdentity):
     def installed(cls) -> RecordedBuildIdentity:
         runtime = LaunchRuntime.installed()
         runtime.require_available()
-        return cls.from_resolution(RuntimeResolution.at(runtime.prefix))
-
-    @classmethod
-    def from_resolution(cls, resolution: RuntimeResolution) -> RecordedBuildIdentity:
+        resolution = RuntimeResolution.at(runtime.prefix)
         return cls(
             tuple(
                 RepositoryCommit(member.repository, GitCommitText.decode(member.commit(resolution)))

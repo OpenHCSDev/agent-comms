@@ -1,4 +1,4 @@
-"""Carry old proof pairs once, using the exact installed build's package records.
+"""Clear incomplete old proof pairs once; never infer their Textual revision.
 
 Run through agent-comms install after owners stop. Delete this step once every
 bus has run it; no old-proof reader remains in production.
@@ -11,14 +11,12 @@ from contextlib import closing, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.build_identity import BuildIdentity, RecordedBuildIdentity, UnrecordedBuildIdentity
+from agent_comms.build_identity import RecordedBuildIdentity, UnrecordedBuildIdentity
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.todos import Todo, TodoStore
+from agent_comms.todos import CheckedDelivery, OrderDelivery, Todo, TodoStore
 from agent_comms.typed_table import JsonStorage, TypedRow
 
 
@@ -26,12 +24,7 @@ from agent_comms.typed_table import JsonStorage, TypedRow
 class StoredProofBuild(TypedRow):
     problem: str
     path: str
-    core: str
-
-    def carried(
-        self, resolution: RuntimeResolution, installed: RecordedBuildIdentity
-    ) -> BuildIdentity:
-        return installed if self.core == resolution.core_commit else UnrecordedBuildIdentity()
+    incomplete: bool
 
 
 class ProofBuildCommits(Carry):
@@ -47,14 +40,15 @@ class ProofBuildCommits(Carry):
         path = TodoStore.path_in(root)
         cls.require_confined(root, path)
         if not path.exists():
-            return Carried(0, {"recorded": 0, "unrecorded": 0})
-        runtime = LaunchRuntime.installed()
-        runtime.require_available()
-        resolution = RuntimeResolution.at(runtime.prefix)
-        installed = RecordedBuildIdentity.from_resolution(resolution)
-        recorded = unrecorded = 0
+            return Carried(0, {"cleared": 0, "unchanged": 0})
+        cleared = unchanged = 0
         table = Todo.declared_name
         identity = Todo._column_list(("id",))
+        kinds = tuple(
+            member.declared_name for member in OrderDelivery.members_with(CheckedDelivery)
+        )
+        placeholders = ",".join("?" for _ in kinds)
+        unrecorded = json.dumps(FieldCodec.encode(UnrecordedBuildIdentity()))
         connection = (
             CoordinationStore.writer(path) if apply else CoordinationStore.read_snapshot(path)
         )
@@ -64,35 +58,35 @@ class ProofBuildCommits(Carry):
                     if not issubclass(declared.storage, JsonStorage):
                         continue
                     column = Todo._column_list((declared.name,))
-                    proofs = StoredProofBuild.read(
-                        db.execute(
-                            f"SELECT todo.{identity} AS problem, entry.path AS path, "
-                            f"json_extract(todo.{column}, entry.path || '.core') AS core "
-                            f'FROM "{table}" AS todo, json_tree(todo.{column}) AS entry '
-                            f"WHERE entry.key='kind' AND entry.value=? "
-                            f"AND json_type(todo.{column}, entry.path || '.core')='text' "
-                            f"AND json_type(todo.{column}, entry.path || '.toad')='text'",
-                            (RecordedBuildIdentity.declared_name,),
+                    proofs = tuple(
+                        StoredProofBuild.read(
+                            db.execute(
+                                f"SELECT todo.{identity} AS problem, entry.fullkey AS path, "
+                                f"(json_extract(entry.value, '$.kind') IS ? "
+                                f"AND json_type(entry.value, '$.core') IS 'text' "
+                                f"AND json_type(entry.value, '$.toad') IS 'text') AS incomplete "
+                                f'FROM "{table}" AS todo, json_tree(todo.{column}) AS entry '
+                                f"WHERE entry.key='proof_build' "
+                                f"AND json_extract(todo.{column}, entry.path || '.kind') IN ({placeholders})",
+                                (RecordedBuildIdentity.declared_name, *kinds),
+                            )
                         )
                     )
                     for proof in proofs:
-                        carried = proof.carried(resolution, installed)
-                        matching = carried == installed
-                        recorded += matching
-                        unrecorded += not matching
-                        if apply:
+                        cleared += proof.incomplete
+                        unchanged += not proof.incomplete
+                        if apply and proof.incomplete:
                             db.execute(
                                 f'UPDATE "{table}" SET {column}=json_set({column}, ?, json(?)) WHERE {identity}=?',
-                                (proof.path, json.dumps(FieldCodec.encode(carried)), proof.problem),
+                                (proof.path, unrecorded, proof.problem),
                             )
                 if apply:
                     # Reject the whole transaction if any resulting canonical row cannot decode.
                     for _ in Todo.stream(db):
                         pass
-        changed = recorded + unrecorded
         rewritten = (
             tuple(str(file.relative_to(root)) for file in SQLiteFile.files(path))
-            if apply and changed
+            if apply and cleared
             else ()
         )
-        return Carried(changed, {"recorded": recorded, "unrecorded": unrecorded}, rewritten)
+        return Carried(cleared, {"cleared": cleared, "unchanged": unchanged}, rewritten)
